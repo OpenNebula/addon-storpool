@@ -1,0 +1,198 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# mvds host:remote_system_ds/disk.i host:remote_system_ds/disk.i vmId datastoreId
+#-------------------------------------------------------------------------------
+
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+
+#-------------------------------------------------------------------------------
+# Set up the environment to source common tools
+#-------------------------------------------------------------------------------
+
+if [ -n "${ONE_LOCATION}" ]; then
+    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+else
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+fi
+
+DRIVER_PATH=$(dirname $0)
+
+source $TMCOMMON
+
+#-------------------------------------------------------------------------------
+# Get mvds arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC=$1
+DST=$2
+VM_ID=$3
+DS_ID=$4
+
+splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
+
+
+#-------------------------------------------------------------------------------
+# Compute the destination image name
+#-------------------------------------------------------------------------------
+
+
+SRC_HOST=`arg_host $SRC`
+SRC_PATH=`arg_path $SRC`
+SRC_DIR="${SRC_PATH%/*}"
+DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
+
+onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
+
+#-------------------------------------------------------------------------------
+# Get Image information
+#-------------------------------------------------------------------------------
+
+XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
+
+unset i XPATH_ELEMENTS
+
+while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+        done < <(onevm show -x $VM_ID| $XPATH  \
+                            /VM/STATE \
+                            /VM/LCM_STATE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SOURCE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE_ID \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/CLONE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/PERSISTENT \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/HOTPLUG_SAVE_AS \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/HOTPLUG_SAVE_AS_ACTIVE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/HOTPLUG_SAVE_AS_SOURCE)
+
+unset i
+VMSTATE="${XPATH_ELEMENTS[i++]}"
+LCM_STATE="${XPATH_ELEMENTS[i++]}"
+SOURCE="${XPATH_ELEMENTS[i++]}"
+IMAGE_ID="${XPATH_ELEMENTS[i++]}"
+IMAGE="${XPATH_ELEMENTS[i++]}"
+CLONE="${XPATH_ELEMENTS[i++]}"
+PERSISTENT="${XPATH_ELEMENTS[i++]}"
+HOTPLUG_SAVE_AS="${XPATH_ELEMENTS[i++]}"
+HOTPLUG_SAVE_AS_ACTIVE="${XPATH_ELEMENTS[i++]}"
+HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
+
+splog "\
+${VMSTATE:+VMSTATE=$VMSTATE }\
+${LCM_STATE:+LCM_STATE=$LCM_STATE }\
+${SOURCE:+SOURCE=$SOURCE }\
+${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
+${CLONE:+CLONE=$CLONE }\
+${SAVE_AS:+SAVE_AS=$SAVE_AS }\
+${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+${IMAGE:+IMAGE=$IMAGE }\
+"
+
+msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
+[ -n "$msg" ] && splog "$msg"
+
+SP_VOL="${DST##*/}"
+SP_TEMPLATE="${DST%%/*}"
+
+if [ -n "$HOTPLUG_SAVE_AS" ]; then
+
+case "$PERSISTENT" in
+    [yY1]*)
+        PERSISTENT="YES"
+        SP_SNAP="$SP_VOL"
+        SP_VOL="${SOURCE##*/}-${VM_ID}-${DISK_ID}"
+        SP_TEMPLATE="${SOURCE%%/*}"
+        splog "persistent SP_SNAP=$SP_VOL SP_VOL=$SP_VOL SP_TEMPLATE=$SP_TEMPLATE"
+        ;;
+    *)
+        PERSISTENT=
+esac
+
+SP_LINK="/dev/storpool/$SP_VOL"
+splog "SRC_HOST=$SRC_HOST SP_LINK=$SP_LINK ${SP_SNAP:+SP_SNAP=$SP_SNAP }"
+
+#-------------------------------------------------------------------------------
+# Move the image
+#-------------------------------------------------------------------------------
+MVDS_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/sbin:/usr/bin:/usr/sbin/:$PATH
+    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+
+    splog "attach volume $SP_VOL here"
+    storpool attach volume "$SP_VOL" here
+
+    t=15
+    while [ ! -L "$SP_LINK" ]; do
+        if [ \$t -lt 1 ]; then
+            splog "Timeout waiting for $SP_LINK"
+            echo "Timeout waiting for $SP_LINK" >&2
+            exit -1
+        fi
+        sleep .5
+        t=\$((t-1))
+    done
+
+    mkdir -p "$SRC_DIR"
+
+    if [ -L "$SRC_PATH" ]; then
+        splog "symlink $SRC_PATH exists removing"
+        rm -f "$SRC_PATH"
+    fi
+    splog "ln $SP_LINK $SRC_PATH"
+    ln -s "$SP_LINK" "$SRC_PATH"
+
+    # lame solve of a slow NFS issue ?
+    sleep 2
+
+    splog "END MVDS_CMD"
+EOF
+)
+
+else
+#-------------------------------------------------------------------------------
+# Detach only. HOTPLUG_SAVE_AS is empty
+#-------------------------------------------------------------------------------
+MVDS_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/sbin:/usr/bin:/usr/sbin/:$PATH
+    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+
+    if [ -L "$SRC_PATH" ]; then
+        splog "$SRC_PATH exists. Cleanup"
+        rm -f "$SRC_PATH"
+    fi
+
+    splog "detach volume $SP_VOL all"
+    storpool detach volume "$SP_VOL" all
+
+    splog "END MVDS_CMD"
+EOF
+)
+fi
+
+splog "run MVDS_CMD on $SRC_HOST"
+ssh_exec_and_log "$SRC_HOST" "$MVDS_CMD" \
+                 "Error moving $SP_VOL to $DST_PATH"
+
+splog "END"
+exit 0

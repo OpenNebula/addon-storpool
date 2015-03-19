@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# stat base64drvActionXML id
+#-------------------------------------------------------------------------------
+
+function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
+
+#-------------------------------------------------------------------------------
+# Set up the environment to source common tools
+#-------------------------------------------------------------------------------
+
+if [ -n "${ONE_LOCATION}" ]; then
+    LIB_LOCATION=$ONE_LOCATION/lib
+else
+    LIB_LOCATION=/usr/lib/one
+fi
+
+. $LIB_LOCATION/sh/scripts_common.sh
+
+DRIVER_PATH=$(dirname $0)
+source ${DRIVER_PATH}/../libfs.sh
+
+#-------------------------------------------------------------------------------
+# Get stat and datastore arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+DRV_ACTION=$1
+ID=$2
+
+if type base64 2>&1 >/dev/null; then
+    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
+fi
+
+XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
+
+unset i XPATH_ELEMENTS
+
+while IFS= read -r -d '' element; do
+    XPATH_ELEMENTS[i++]="$element"
+done < <($XPATH /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
+                /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
+                /DS_DRIVER_ACTION_DATA/IMAGE/SIZE)
+
+unset i
+IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
+SOURCE="${XPATH_ELEMENTS[i++]}"
+SIZE="${XPATH_ELEMENTS[i++]}"
+
+splog "\
+${ID:+ID=$ID }\
+${SOURCE:+SOURCE=$SOURCE }\
+${SIZE:+SIZE=$SIZE }\
+${IMAGE_PATH:+IMAGE_PATH=$IMAGE_PATH }\
+"
+
+#-------------------------------------------------------------------------------
+# Compute the size
+#-------------------------------------------------------------------------------
+
+SIZE=`fs_size $IMAGE_PATH`
+
+if [ "$SIZE" = "0" ]; then
+    log_error "Cannot determine size for $IMAGE_PATH"
+    exit -1
+fi
+
+splog "END:$SIZE"
+echo "$SIZE"

@@ -1,0 +1,106 @@
+#!/bin/sh
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+# Portions copyright Asociacion Clubs Baloncesto (acb.com)                   #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# postmigrate srcHost dstHost template vmId datastoreId remote_system_dir diskId src_dsid persistent
+#-------------------------------------------------------------------------------
+
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+
+#-------------------------------------------------------------------------------
+# Set up the environment to source common tools
+#-------------------------------------------------------------------------------
+
+if [ -z "${ONE_LOCATION}" ]; then
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+else
+    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+fi
+
+. $TMCOMMON
+
+TM_PATH=$(dirname $0)
+
+#-------------------------------------------------------------------------------
+# Get premigrate arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC_HOST=$1
+DST_HOST=$2
+TEMPLATE=$3
+
+VM_ID=$4
+DS_ID=$5
+
+VM_PATH=$6
+DISK_ID=$7
+SRC_DSID=$8
+PERSISTENT=$9
+
+splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_ID=$VM_ID DS_ID=$DS_ID VM_PATH=$VM_PATH"
+#splog "TEMPLATE=$TEMPLATE"
+splog "DISK_ID=$DISK_ID SRC_DSID=$SRC_DSID PERSISTENT=$PERSISTENT"
+
+if type base64 2>&1 >/dev/null; then
+    echo $TEMPLATE | base64 -d >"/tmp/tm_sp_${0##*/}-$VM_ID"
+fi
+
+SP_VOL="${VM_PATH##*/}"
+[ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+
+DST_DIR="/var/lib/one/datastores/${DS_ID}/${VM_ID}"
+DISK_PATH="$DST_DIR/disk.${DISK_ID}"
+SP_LINK="/dev/storpool/$SP_VOL"
+
+PRE_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/sbin:/usr/bin:/usr/sbin/:$PATH
+    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+
+    splog "attach volume $SP_VOL here"
+    storpool attach volume "$SP_VOL" here
+
+    t=15
+    while [ ! -L "$SP_LINK" ]; do
+        if [ \$t -lt 1 ]; then
+            splog "Timeout waiting for $SP_LINK"
+            echo "Timeout waiting for $SP_LINK" >&2
+            exit -1
+        fi
+        sleep .5
+        t=\$((t-1))
+    done
+
+    mkdir -p "$DST_DIR"
+
+    splog "ln -s $SP_LINK $DISK_PATH"
+    ln -s "$SP_LINK" "$DISK_PATH" || true
+
+    splog "END PRE_CMD"
+EOF
+)
+
+splog "run PRE_CMD on $DST_HOST"
+ssh_exec_and_log "$DST_HOST" "$PRE_CMD"
+                 "Log in error at $DST_HOST:$DISK_PATH"
+
+splog "END ($SP_VOL)"
+exit 0

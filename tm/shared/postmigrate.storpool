@@ -1,0 +1,97 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+# Portions copyright Asociacion Clubs Baloncesto (acb.com)                   #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# postmigrate srcHost dstHost vmPath vmId datasourceId template
+#-------------------------------------------------------------------------------
+
+function splog() { logger -t "tm_shared_${0##*/}" "$*"; }
+
+#-------------------------------------------------------------------------------
+# Set up the environment to source common tools
+#-------------------------------------------------------------------------------
+
+if [ -n "${ONE_LOCATION}" ]; then
+    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+else
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+fi
+
+source $TMCOMMON
+
+TM_PATH=$(dirname $0)
+
+#-------------------------------------------------------------------------------
+# Get cmd arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC_HOST=$1
+DST_HOST=$2
+VM_PATH=$3
+
+VM_ID=$4
+DS_ID=$5
+
+TEMPLATE=$6
+
+XPATH="${TM_PATH}/../../datastore/xpath_multi.py -b $TEMPLATE"
+
+unset i XPATH_ELEMENTS
+while read -r element; do
+    XPATH_ELEMENTS[i++]="$element"
+done < <($XPATH     /VM/TEMPLATE/DISK/TM_MAD \
+                    /VM/TEMPLATE/DISK/SOURCE \
+                    /VM/TEMPLATE/DISK/DISK_ID \
+                    /VM/TEMPLATE/DISK/DATASTORE_ID \
+                    /VM/TEMPLATE/DISK/PERSISTENT)
+
+unset i
+
+TM_MAD=${XPATH_ELEMENTS[i++]}
+DISK_SOURCE=${XPATH_ELEMENTS[i++]}
+DISK_ID=${XPATH_ELEMENTS[i++]}
+DISK_DS=${XPATH_ELEMENTS[i++]}
+DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
+
+OLDIFS=$IFS
+IFS=";"
+TM_MAD_ARRAY=($TM_MAD)
+DISK_SOURCE_ARRAY=($DISK_SOURCE)
+DISK_ID_ARRAY=($DISK_ID)
+DISK_DS_ARRAY=($DISK_DS)
+DISK_PERSISTENT_ARRAY=($DISK_PERSISTENT)
+IFS=$OLDIFS
+
+SELF=${0##*/}
+for i in "${!TM_MAD_ARRAY[@]}"; do
+    if [ ${TM_MAD_ARRAY[i]} = "storpool" ]; then
+        CALL="${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST $TEMPLATE $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
+        CWD=$(pwd)
+        if cd "${TM_PATH}/../${TM_MAD_ARRAY[i]}"; then
+            splog "i=$i ${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST {TEMPLATE} $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
+            bash $CALL
+            cd "$CWD"
+        fi
+    fi
+done
+
+splog "END"
+exit 0
