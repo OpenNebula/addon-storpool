@@ -58,7 +58,7 @@ git clone https://github.com/OpenNebula/addon-storpool
 ```bash
 bash addon-storpool/install.sh
 ```
-* Restart opennebula and opennebula-sunstone services
+* Restart `opennebula` and `opennebula-sunstone` services
 
 ## Configuration
 
@@ -91,6 +91,7 @@ The following example illustrates the creation of a StorPool datastore of hybrid
 Sunstone -> Infrastructure -> Datastores -> Add [+]
 
 * Name: StorPool
+* Presets: StorPool
 * Host Bridge List: node1 node2 node3
 * StorPool Replication: 3
 * StorPool PlaceAll: hdd
