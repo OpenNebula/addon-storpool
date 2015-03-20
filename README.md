@@ -42,7 +42,7 @@ A working StorPool cluster is required.
 ## Limitations
 
 1. compatible only with the KVM hypervisor
-1. no support for VM snapshot and Deferred storage snapshot, because they are handled internally by libvirt instead of in the ONE datastore driver
+1. no support for VM snapshot because it is handled internally by libvirt
 1. no support volatile disks
 1. imported images are thick provisioned
 
