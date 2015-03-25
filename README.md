@@ -11,8 +11,8 @@ To contribute bug patches or new features, you can use the github Pull Request m
 More info:
 
 * [How to Contribute](http://opennebula.org/addons/contribute/)
-* Support: [OpenNebula user forum](http://opennebula.org/community:mailinglists)
-* Development: [OpenNebula developers forum](http://opennebula.org/community:mailinglists)
+* Support: [OpenNebula user forum](https://forum.opennebula.org/c/support)
+* Development: [OpenNebula developers forum](https://forum.opennebula.org/c/development)
 * Issues Tracking: GitHub issues (https://github.com/OpenNebula/addon-storpool/issues)
 
 ## Authors
