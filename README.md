@@ -64,7 +64,7 @@ bash addon-storpool/install.sh
 
 ### Configuring the System Datastore
 
-The system datastore must be configured as shared. This system datastore will hold only the symbolic links to the StorPool block devices, so it will not take much space. See more details on the [System Datastore Guide](http://docs.opennebula.org/4.10/administration/storage/system_ds.html).
+The system datastore must be configured with transfer manager (TM_MAD) backend of type shared or ssh. This system datastore will hold only the symbolic links to the StorPool block devices and context configuration, so it will not take much space. See more details on the [System Datastore Guide](http://docs.opennebula.org/4.10/administration/storage/system_ds.html).
 
 ### Configuring the Image Datastore
 
@@ -73,7 +73,7 @@ Some configuration attributes must be set to enable an image datastore as StorPo
 * **DS_MAD**: [mandatory] The DS driver for the datastore. String, use value `storpool`
 * **TM_MAD**: [mandatory] Transfer driver for the datastore. String, use value `storpool`
 * **DISK_TYPE**: [mandatory] Type for the VM disks using images from this datastore. String, use value `block`
-* **BRIDGE_LIST**: [mandatory] Nodes to use for image datastore operations. String (1) 
+* **BRIDGE_LIST**: [mandatory] Nodes to use for image datastore operations. String (1)
 * **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (2)
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
 * **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)

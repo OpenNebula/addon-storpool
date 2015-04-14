@@ -57,20 +57,23 @@ cp $CP_ARG datastore/xpath_multi.py "$XPATH_MULTI"
 chown "$ONE_USER" "$XPATH_MULTI"
 chmod u+x "$XPATH_MULTI"
 
-# install oremigrate and postmigrate hooks in shared
-for MIGRATE in premigrate postmigrate; do
-    if [ "$(egrep -v '^#|^$' $ONE_VAR/remotes/tm/shared/$MIGRATE)" = "exit 0" ]; then
-        M_FILE="$ONE_VAR/remotes/tm/shared/${MIGRATE}"
-        echo "*** Installing $M_FILE"
-        cp $CP_ARG tm/shared/${MIGRATE}.storpool "$M_FILE"
-    else
-        M_FILE="$ONE_VAR/remotes/tm/shared/${MIGRATE}.storpool"
-        echo "*** ${M_FILE%.storpool} file not empty!"
-        echo "*** Please merge carefully ${M_FILE%.storpool} to $M_FILE"
-        cp $CP_ARG tm/shared/${MIGRATE}.storpool "$M_FILE"
-    fi
-    chown "$ONE_USER" "$M_FILE"
-    chmod u+x "$M_FILE"
+# install premigrate and postmigrate hooks in shared and ssh
+for TM_MAD in shared ssh; do
+    for MIGRATE in premigrate postmigrate; do
+        M_FILE="$ONE_VAR/remotes/tm/${TM_MAD}/${MIGRATE}.storpool"
+        cp $CP_ARG "tm/${TM_MAD}/${MIGRATE}.storpool" "$M_FILE"
+        chown "$ONE_USER" "$M_FILE"
+        chmod u+x "$M_FILE"
+        M_FILE="${M_FILE%.storpool}"
+        if [ "$(egrep -v '^#|^$' $M_FILE)" = "exit 0" ]; then
+            echo "*** Installing ${M_FILE}"
+            cp $CP_ARG "$M_FILE" "${M_FILE}.backup"
+            mv $MV_ARG "${M_FILE}.storpool" "$M_FILE"
+        else
+            echo "*** $M_FILE file not empty!"
+            echo "*** Please merge carefully ${M_FILE}.storpool to $M_FILE"
+        fi
+    done
 done
 
 # patch sunstone's datastores-tab.js
