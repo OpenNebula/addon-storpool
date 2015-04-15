@@ -52,12 +52,15 @@ DS_ID=$5
 TEMPLATE=$6
 
 #-------------------------------------------------------------------------------
-# Copy VM related content to the new host. Mostly the context ISO image
+# Create DST path
 #-------------------------------------------------------------------------------
 
 DST_DIR="$VM_PATH"
-CMD="$SSH $DST_HOST 'mkdir -p $DST_DIR'"
-exec_and_log "eval $CMD" "Error creating destination path $DST_DIR"
+ssh_make_path $DST_HOST $DST_DIR
+
+#-------------------------------------------------------------------------------
+# Copy VM related content to the new host. Mostly the context ISO image
+#-------------------------------------------------------------------------------
 
 TAR_COPY="$SSH $SRC_HOST '$TAR -C $DST_DIR --sparse -cf - .'"
 TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
