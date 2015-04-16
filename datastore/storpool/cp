@@ -166,93 +166,148 @@ http://*|https://*)
     ;;
 esac
 
-#-------------------------------------------------------------------------------
-# Get Image
-#-------------------------------------------------------------------------------
-
-splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$TMP_DST bs=64k"
-exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$TMP_DST bs=64k" \
-             "Error dumping $IMAGE_PATH to $DST_HOST:$TMP_DST"
 
 SP_VOL="one-img-${ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 SP_DST="$SP_TEMPLATE/$SP_VOL"
+SP_TEMP_VOL="$(echo $SP_VOL | md5sum | awk '{print $1}')"
+SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"
 
 #-------------------------------------------------------------------------------
-# Import Image to datastore
+# Prepare image to temp volume
 #-------------------------------------------------------------------------------
 
-CP_CMD=$(cat <<EOF
+PRE_COPY_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    trap '$RM -f "$TMP_DST"' EXIT TERM INT HUP
-
-    FORMAT=\$($QEMU_IMG info $TMP_DST | grep "^file format:" | $AWK '{print \$3}')
-    splog "$TMP_DST FORMAT=\$FORMAT SIZE=$SIZE $QEMU_IMG status:$?"
-
-    if [ "\$FORMAT" != "$DRIVER" ]; then
-        splog "$QEMU_IMG detected format \$FORMAT but DRIVER=$DRIVER in the image template"
-    fi
-
-    if [ "\$FORMAT" = "raw" ]; then
-        SP_SIZE=\$(du -b $TMP_DST | cut -f1)
-        SP_SIZE=\$(( (SP_SIZE +511) /512 *512 ))
-    else
-        SP_SIZE="${SIZE}M"
-    fi
+    SP_SIZE="${SIZE}M"
 
     splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
     storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
 
-    splog "create volume=$SP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
-    storpool volume "$SP_VOL" size "\${SP_SIZE}" template "$SP_TEMPLATE"
+    splog "create volume=$SP_TEMP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
+    storpool volume "$SP_TEMP_VOL" size "\${SP_SIZE}" template "$SP_TEMPLATE"
 
-    trap '$RM -f "$TMP_DST"; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
+    trap 'storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"' EXIT TERM INT HUP
 
-    splog "attach volume $SP_VOL here"
-    storpool attach volume "$SP_VOL" here
+    splog "attach volume $SP_TEMP_VOL here"
+    storpool attach volume "$SP_TEMP_VOL" here
 
-    trap '$RM -f "$TMP_DST"; storpool detach volume "$SP_VOL" all; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
+    trap 'storpool detach volume "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"' EXIT TERM INT HUP
 
     t=15
-    while [ ! -L "$SP_LINK" ]; do
+    while [ ! -L "$SP_TEMP_LINK" ]; do
         if [ \$t -lt 1 ]; then
-            splog "Timeout waiting for $SP_LINK"
-            echo "Timeout waiting for $SP_LINK" >&2
+            splog "Timeout waiting for $SP_TEMP_LINK"
+            echo "Timeout waiting for $SP_TEMP_LINK" >&2
             exit -1
         fi
         sleep .5
         t=\$((t-1))
     done
 
+    trap - EXIT TERM INT HUP
+    splog "END PRE_COPY_CMD"
+EOF)
+
+splog "run CP_PRE_CMD on $DST_HOST"
+ssh_exec_and_log    "$DST_HOST" "$PRE_COPY_CMD" \
+                    "Error registering $SP_TEMP_VOL in $DST_HOST"
+
+#-------------------------------------------------------------------------------
+# Import image to temp volume
+#-------------------------------------------------------------------------------
+
+splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k"
+exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k" \
+             "Error dumping $IMAGE_PATH to $DST_HOST:$TMP_DST"
+
+#-------------------------------------------------------------------------------
+# Process imported image
+#-------------------------------------------------------------------------------
+
+POST_COPY_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
+    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
+
+    SP_SIZE="${SIZE}M"
+
+    trap 'storpool detach "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"' EXIT TERM INT HUP
+
+    FORMAT=\$($QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print \$3}')
+    splog "$SP_TEMP_LINK FORMAT=\$FORMAT SIZE=$SIZE $QEMU_IMG status:$?"
+
+    if [ "\$FORMAT" != "$DRIVER" ]; then
+        splog "$QEMU_IMG detected format \$FORMAT but DRIVER=$DRIVER in the image template"
+    fi
+
     if [ "\$FORMAT" = "raw" ]; then
-        splog "\$FORMAT dd if=$TMP_DST of=$SP_LINK bs=256k conv=fsync"
-        dd if=$TMP_DST of=$SP_LINK bs=256k conv=fsync
+        splog "rename $SP_TEMP_VOL to $SP_VOL"
+        storpool volume "$SP_TEMP_VOL" rename "$SP_VOL"
     else
-        splog "\$FORMAT $QEMU_IMG convert -O raw -S 4k  $TMP_DST $SP_LINK"
-        $QEMU_IMG convert -O raw -S 4k "$TMP_DST" "$SP_LINK"
+        splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
+        storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
+
+
+        splog "create volume=$SP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
+        storpool volume "$SP_VOL" size "\${SP_SIZE}" template "$SP_TEMPLATE"
+
+        trap 'storpool detach "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
+
+        splog "attach volume $SP_VOL here"
+        storpool attach volume "$SP_VOL" here
+
+        trap 'storpool detach "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"; storpool detach "$SP_VOL" all; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
+
+        t=15
+        while [ ! -L "$SP_LINK" ]; do
+            if [ \$t -lt 1 ]; then
+                splog "Timeout waiting for $SP_LINK"
+                echo "Timeout waiting for $SP_LINK" >&2
+                exit -1
+            fi
+            sleep .5
+            t=\$((t-1))
+        done
+
+        splog "\$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
+        $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
         sync
+
+        splog "detach volume $SP_TEMP_VOL all"
+        storpool detach volume "$SP_TEMP_VOL" all
+
+        trap 'storpool detach volume "$SP_VOL" all;' EXIT TERM INT HUP
+
+        splog "volume "$SP_TEMP_VOL" delete"
+        storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"
     fi
 
     splog "detach volume $SP_VOL all"
     storpool detach volume "$SP_VOL" all
 
-    trap '$RM -f "$TMP_DST"' EXIT TERM INT HUP
+    trap - EXIT TERM INT HUP
 
-    splog "END CP_CMD"
+    splog "END POST_COPY_CMD"
 EOF
 )
 
-splog "run CP_CMD on $DST_HOST"
-ssh_exec_and_log    "$DST_HOST" "$CP_CMD" \
+splog "run POST_COPY_CMD on $DST_HOST"
+ssh_exec_and_log    "$DST_HOST" "$POST_COPY_CMD" \
                     "Error registering $SP_VOL in $DST_HOST"
 
-if [ "$DERIVER" != "raw" ]; then
+#-------------------------------------------------------------------------------
+# fix image DRIVER to raw
+#-------------------------------------------------------------------------------
+
+if [ "$DRIVER" != "raw" ]; then
     splog "Image template DRIVER=$DRIVER updating to DRIVER=raw"
-    TMP_XML=$(mktemp)
+    TMP_XML="$(mktemp)"
+    trap 'rm -f "$TMP_XML"' EXIT TERM INT HUP
     echo "DRIVER=raw" >"$TMP_XML"
     oneimage update -a $ID "$TMP_XML"
     rm -f "$TMP_XML"
