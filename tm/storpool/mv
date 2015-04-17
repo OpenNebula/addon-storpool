@@ -108,7 +108,18 @@ SP_TEMPLATE="${SOURCE%%/*}"
 log "vm $VM_ID moving $SRC to $DST"
 
 #-------------------------------------------------------------------------------
-# Delete the source device
+# run only DETACH_CMD on EPILOG_STOP, EPILOG_UNDEPLOY
+#-------------------------------------------------------------------------------
+
+if [ $LCM_STATE = "10" ]; then
+    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_STOP)"
+fi
+if [ $LCM_STATE = "30" ]; then
+    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+fi
+
+#-------------------------------------------------------------------------------
+# Detach source device but keep symlink if migrating
 #-------------------------------------------------------------------------------
 
 DETACH_CMD=$(cat <<EOF
@@ -116,10 +127,12 @@ DETACH_CMD=$(cat <<EOF
     export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
     splog(){ logger -t tm_sp_${0##*/} "\$*"; }
 
+    if [ -n "$DETACH_ONLY" ]; then
+        rm -f "$DST_PATH"
+    fi
+
     splog "detach $SP_VOL all"
     storpool detach volume "$SP_VOL" all
-
-    rm -f "$SRC_PATH"
 
     splog "END DETACH_CMD"
 EOF
@@ -129,17 +142,12 @@ splog "run DETACH_CMD on $SRC_HOST"
 ssh_exec_and_log "$SRC_HOST" "$DETACH_CMD" \
                  "Error detaching $SP_VOL in $DST_HOST($DST_PATH)"
 
-
 #-------------------------------------------------------------------------------
 # Do nothing on EPILOG_STOP, EPILOG_UNDEPLOY
 #-------------------------------------------------------------------------------
 
-if [ $LCM_STATE = "10" ]; then
-    splog "END (LCM_STATE=$LCM_STATE EPILOG_STOP)"
-    exit 0
-fi
-if [ $LCM_STATE = "30" ]; then
-    splog "END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+if [ -n "$DETACH_ONLY" ]; then
+    splog "$DETACH_ONLY"
     exit 0
 fi
 
@@ -155,6 +163,8 @@ ATTACH_CMD=$(cat <<EOF
     splog "attach volume $SP_VOL here"
     storpool attach volume "$SP_VOL" here
 
+    trap 'storpool detach volume "$SP_VOL" here' EXIT TERM INT HUP
+
     t=15
     while [ ! -L "$SP_LINK" ]; do
         if [ \$t -lt 1 ]; then
@@ -166,12 +176,18 @@ ATTACH_CMD=$(cat <<EOF
         t=\$((t-1))
     done
 
-    mkdir -p "$DST_DIR"
+    if [ -d "$DST_DIR" ]; then
+        splog "rm -f $DST_PATH"
+        rm -f "$DST_PATH"
+    else
+        splog "mkdir -p $DST_DIR"
+        mkdir -p "$DST_DIR"
+    fi
 
-    rm -f "$DST_PATH"
-
-    splog "ln $SP_LINK $DST_PATH"
+    splog "ln -s $SP_LINK $DST_PATH"
     ln -s "$SP_LINK" "$DST_PATH"
+
+    trap - EXIT TERM INT HUP
 
     splog "END ATTACH_CMD"
 EOF
