@@ -108,17 +108,6 @@ SP_TEMPLATE="${SOURCE%%/*}"
 log "vm $VM_ID moving $SRC to $DST"
 
 #-------------------------------------------------------------------------------
-# run only DETACH_CMD on EPILOG_STOP, EPILOG_UNDEPLOY
-#-------------------------------------------------------------------------------
-
-if [ $LCM_STATE = "10" ]; then
-    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_STOP)"
-fi
-if [ $LCM_STATE = "30" ]; then
-    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
-fi
-
-#-------------------------------------------------------------------------------
 # Detach source device but keep symlink if migrating
 #-------------------------------------------------------------------------------
 
@@ -126,10 +115,6 @@ DETACH_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
     splog(){ logger -t tm_sp_${0##*/} "\$*"; }
-
-    if [ -n "$DETACH_ONLY" ]; then
-        rm -f "$DST_PATH"
-    fi
 
     splog "detach $SP_VOL all"
     storpool detach volume "$SP_VOL" all
