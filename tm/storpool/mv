@@ -108,6 +108,17 @@ SP_TEMPLATE="${SOURCE%%/*}"
 log "vm $VM_ID moving $SRC to $DST"
 
 #-------------------------------------------------------------------------------
+# run only DETACH_CMD on EPILOG_STOP, EPILOG_UNDEPLOY
+#-------------------------------------------------------------------------------
+
+if [ $LCM_STATE = "10" ]; then
+    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_STOP)"
+fi
+if [ $LCM_STATE = "30" ]; then
+    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+fi
+
+#-------------------------------------------------------------------------------
 # Detach source device but keep symlink if migrating
 #-------------------------------------------------------------------------------
 
