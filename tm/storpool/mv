@@ -24,6 +24,80 @@
 
 function splog() { echo "$(date) $0 $*" >>/tmp/tm_sp_${0##*/}; logger -t "tm_sp_${0##*/}" "$*"; }
 
+function mvRemote()
+{
+    local _SRC_HOST="$1" _DST_HOST="$2" _SP_VOL="$3" _DST_PATH="$4" _DETACH_ONLY="$5"
+    splog "_SRC_HOST=$_SRC_HOST _DST_HOST=$_DST_HOST _SP_VOL=$_SP_VOL _DST_PATH=$_DST_PATH"
+    _SP_LINK="/dev/storpool/$_SP_VOL"
+    _DST_DIR="${_DST_PATH%%disk*}"
+    splog "_DST_DIR=$_DST_DIR _DST_PATH=$_DST_PATH"
+
+    _DETACH_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
+    splog(){ logger -t tm_sp_${0##*/} "[mvRemote] \$*"; }
+
+    if storpool attach list | grep -q " $_SP_VOL " &>/dev/null; then
+        splog "detach volume $_SP_VOL all"
+        storpool detach volume "$_SP_VOL" all
+    else
+        splog "volume not attached $_SP_VOL"
+    fi
+EOF
+)
+
+    _ATTACH_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
+    splog(){ logger -t tm_sp_${0##*/} "[mvRemote] \$*"; }
+
+    splog "attach volume $_SP_VOL here"
+    storpool attach volume "$_SP_VOL" here
+
+    trap 'storpool detach volume "$_SP_VOL" here' EXIT TERM INT HUP
+
+    t=15
+    while [ ! -L "$_SP_LINK" ]; do
+        if [ \$t -lt 1 ]; then
+            splog "Timeout waiting for $_SP_LINK"
+            echo "Timeout waiting for $_SP_LINK" >&2
+            exit -1
+        fi
+        sleep .5
+        t=\$((t-1))
+    done
+
+    if [ -d "$_DST_DIR" ]; then
+        splog "rm -f $_DST_PATH"
+        rm -f "$_DST_PATH"
+    else
+        splog "mkdir -p $_DST_DIR"
+        mkdir -p "$_DST_DIR"
+    fi
+
+    splog "ln -s $_SP_LINK $_DST_PATH"
+    ln -s "$_SP_LINK" "$_DST_PATH"
+
+    trap - EXIT TERM INT HUP
+
+#    splog "END ATTACH_CMD"
+EOF
+)
+
+    splog "run _DETACH_CMD on $_SRC_HOST ($_DST_PATH)"
+    ssh_exec_and_log "$_SRC_HOST" "$_DETACH_CMD" \
+                 "Error detaching $_SP_VOL from $_SRC_HOST($_DST_PATH)"
+
+    if [ -n "$_DETACH_ONLY" ]; then
+        splog "Only Detach: $_DETACH_ONLY"
+    else
+        splog "run _ATTACH_CMD on $_DST_HOST ($_DST_PATH)"
+        ssh_exec_and_log "$_DST_HOST" "$_ATTACH_CMD" \
+                 "Error attaching $_SP_VOL to $_DST_HOST($_DST_PATH)"
+    fi
+#    splog "_END_MVREMOTE"
+}
+
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -59,11 +133,14 @@ DST_PATH=`arg_path $DST`
 DST_HOST=`arg_host $DST`
 DST_DIR=`dirname $DST_PATH`
 
+
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
 DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
+IS_DISK=`is_disk $DST_PATH`
+#splog "DISK_ID=$DISK_ID IS_DISK=$IS_DISK"
 
 onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
 
@@ -90,7 +167,21 @@ IMAGE_ID="${XPATH_ELEMENTS[i++]}"
 IMAGE="${XPATH_ELEMENTS[i++]}"
 CLONE="${XPATH_ELEMENTS[i++]}"
 PERSISTENT="${XPATH_ELEMENTS[i++]}"
+
+#-------------------------------------------------------------------------------
+# Get Datastore type
+#-------------------------------------------------------------------------------
+
+unset i XPATH_ELEMENTS
+while IFS= read -r -d '' element; do
+    XPATH_ELEMENTS[i++]="$element"
+done < <(onedatastore show -x $DS_ID| $XPATH \
+                    /DATASTORE/TEMPLATE/TYPE)
+unset i
+DS_TYPE="${XPATH_ELEMENTS[i++]}"
+
 splog "\
+${DS_TYPE:+DS_TYPE=$DS_TYPE }\
 ${VMSTATE:+VMSTATE=$VMSTATE }\
 ${LCM_STATE:+LCM_STATE=$LCM_STATE }\
 ${SOURCE:+SOURCE=$SOURCE }\
@@ -99,11 +190,6 @@ ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
 ${IMAGE:+IMAGE=$IMAGE }\
 "
-
-SP_VOL="${SOURCE##*/}"
-[ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-SP_LINK="/dev/storpool/$SP_VOL"
-SP_TEMPLATE="${SOURCE%%/*}"
 
 log "vm $VM_ID moving $SRC to $DST"
 
@@ -119,79 +205,83 @@ if [ $LCM_STATE = "30" ]; then
 fi
 
 #-------------------------------------------------------------------------------
-# Detach source device but keep symlink if migrating
+# check if it is called in SYSTEM_DS context
 #-------------------------------------------------------------------------------
+#if [ "${DST_PATH%[[:digit:]]}" = "$DST_PATH" ]; then
+if [ "$DS_TYPE" = "SYSTEM_DS" ]; then
 
-DETACH_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+    ssh_make_path "$DST_HOST" "$DST_DIR"
 
-    splog "detach $SP_VOL all"
-    storpool detach volume "$SP_VOL" all
 
-    splog "END DETACH_CMD"
-EOF
-)
+    # onevm show 6 -x | ./xpath_multi.py -s /VM/TEMPLATE/DISK/DISK_ID /VM/TEMPLATE/DISK/TYPE /VM/CONTEXT/DISK_ID /VM/TEMPLATE/DISK/CLUSTER_ID
+    unset i XPATH_ELEMENTS
+    XPATH="${DRIVER_PATH}/../../datastore/xpath_multi.py -s"
 
-splog "run DETACH_CMD on $SRC_HOST"
-ssh_exec_and_log "$SRC_HOST" "$DETACH_CMD" \
-                 "Error detaching $SP_VOL in $DST_HOST($DST_PATH)"
+    while read -r element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(onevm show -x $VM_ID| $XPATH \
+                           /VM/TEMPLATE/DISK/DISK_ID \
+                           /VM/TEMPLATE/DISK/TYPE \
+                           /VM/TEMPLATE/DISK/TM_MAD \
+                           /VM/TEMPLATE/DISK/FORMAT \
+                           /VM/CONTEXT/DISK_ID )
+    unset i
+    TDISK_ID=${XPATH_ELEMENTS[i++]}
+    TDISK_TYPE=${XPATH_ELEMENTS[i++]}
+    TDISK_TM=${XPATH_ELEMENTS[i++]}
+    TDISK_FORMAT=${XPATH_ELEMENTS[i++]}
+    CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
 
-#-------------------------------------------------------------------------------
-# Do nothing on EPILOG_STOP, EPILOG_UNDEPLOY
-#-------------------------------------------------------------------------------
+    OLDIFS=$IFS
+    IFS=";"
+    DISK_ID_ARRAY=($TDISK_ID)
+    DISK_TYPE_ARRAY=($TDISK_TYPE)
+    DISK_TM_ARRAY=($TDISK_TM)
+    DISK_FORMAT_ARRAY=($TDISK_FORMAT)
+    IFS=$OLDIFS
 
-if [ -n "$DETACH_ONLY" ]; then
-    splog "$DETACH_ONLY"
-    exit 0
-fi
+    if [ $IS_DISK == 0 ]; then
+        SP_VOL="one-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
+        mvRemote "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_DIR/disk.${CONTEXT_DISK_ID}" "$DETACH_ONLY"
 
-#-------------------------------------------------------------------------------
-# Enable the destination device
-#-------------------------------------------------------------------------------
+        SRC_DS_DIR=`dirname  $SRC_PATH`
+        SRC_VM_DIR=`basename $SRC_PATH`
 
-ATTACH_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+        TAR_COPY="$SSH $SRC_HOST '$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR'"
+        TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
 
-    splog "attach volume $SP_VOL here"
-    storpool attach volume "$SP_VOL" here
+        splog "Copy $SRC_HOST:$SRC_VM_DIR $DST_HOST:$DST_DIR"
+        exec_and_log "eval $TAR_COPY" "Error copying SYSTEM_DS from $SRC_HOST to $DST_HOST"
 
-    trap 'storpool detach volume "$SP_VOL" here' EXIT TERM INT HUP
-
-    t=15
-    while [ ! -L "$SP_LINK" ]; do
-        if [ \$t -lt 1 ]; then
-            splog "Timeout waiting for $SP_LINK"
-            echo "Timeout waiting for $SP_LINK" >&2
-            exit -1
-        fi
-        sleep .5
-        t=\$((t-1))
-    done
-
-    if [ -d "$DST_DIR" ]; then
-        splog "rm -f $DST_PATH"
-        rm -f "$DST_PATH"
+        splog "Cleanup $SRC_HOST rm -rf $SRC_PATH"
+        ssh_exec_and_log "$SRC_HOST" "rm -rf $SRC_PATH" \
+                         "failed removing $SRC_HOST $SRC_PATH"
     else
-        splog "mkdir -p $DST_DIR"
-        mkdir -p "$DST_DIR"
+        for i in ${!DISK_ID_ARRAY[@]}; do
+            if [ "${DISK_TM_ARRAY[i]}" = "" ]; then
+                FORMAT="${DISK_FORMAT_ARRAY[i]}"
+                if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
+                    FORMAT="swap"
+                fi
+#                splog "volatile $i ${DISK_ID_ARRAY[i]} ${DISK_TYPE_ARRAY[i]} $FORMAT ${DISK_TM_ARRAY[i]}"
+                if [ $IS_DISK == 1 ]; then
+                    if [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
+#                        splog "skip ${DISK_ID_ARRAY[i]} != $DISK_ID"
+                        continue
+                    fi
+                fi
+                SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
+                mvRemote "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$DETACH_ONLY"
+            fi
+        done
     fi
+else
+    # IMAGE_DS
+    SP_VOL="${SOURCE##*/}"
+    [ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
-    splog "ln -s $SP_LINK $DST_PATH"
-    ln -s "$SP_LINK" "$DST_PATH"
-
-    trap - EXIT TERM INT HUP
-
-    splog "END ATTACH_CMD"
-EOF
-)
-
-splog "run ATTACH_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$ATTACH_CMD" \
-                 "Error attaching $SP_VOL to $DST"
+    mvRemote "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$ATTACH"
+fi
 
 splog "END"
 exit 0

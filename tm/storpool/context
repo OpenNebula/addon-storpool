@@ -1,0 +1,215 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+# context context.sh file1 file2 ... fileN host:remote_system_ds/disk.i vmid 0
+#   - context.sh file are the contents of the context ISO
+#   - host is the target host to deploy the VM
+#   - remote_system_ds is the path for the system datastore in the host
+#   - vmid is the id of the VM
+#   - 0 is the target datastore (system)
+
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+
+ARGV=("$@")
+
+DS_ID="${ARGV[$(($#-1))]}"
+VM_ID="${ARGV[$(($#-2))]}"
+DST="${ARGV[$(($#-3))]}"
+SRC=("${ARGV[@]:0:$(($#-3))}")
+
+splog "DS_ID=$DS_ID VM_ID=$VM_ID DST=$DST SRC=$SRC"
+
+if [ -z "${ONE_LOCATION}" ]; then
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+else
+    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+fi
+
+. $TMCOMMON
+
+function exit_error
+{
+    error_message "$ERROR"
+    [ -d "$ISO_DIR" ] && rm -rf "$ISO_DIR" > /dev/null 2>&1
+    exit -1
+}
+
+DRIVER_PATH=$(dirname $0)
+
+#-------------------------------------------------------------------------------
+# Get Image information
+#-------------------------------------------------------------------------------
+
+XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
+
+unset i XPATH_ELEMENTS
+
+while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+        done < <(onedatastore show -x $DS_ID | $XPATH  \
+                            /DATASTORE/TEMPLATE/SP_REPLICATION \
+                            /DATASTORE/TEMPLATE/SP_PLACEALL \
+                            /DATASTORE/TEMPLATE/SP_PLACETAIL)
+unset i
+SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
+SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
+SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+
+if [ "$SP_PLACEALL" = "" ]; then
+    error_message "Datastore template missing 'SP_PLACEALL' attribute."
+    exit -1
+fi
+if [ "$SP_PLACETAIL" = "" ]; then
+    SP_PLACETAIL="$SP_PLACEALL"
+fi
+if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
+    error_message "Datastore template with unknown value for 'SP_REPLICATION' attribute '$SP_REPLICATION'."
+    exit -1
+fi
+
+#-------------------------------------------------------------------------------
+# Set dst path and dirs
+#-------------------------------------------------------------------------------
+
+DST_PATH=`arg_path $DST`
+DST_HOST=`arg_host $DST`
+DST_DIR=`dirname $DST_PATH`
+
+DISK_ID=$(echo $DST | awk -F. '{print $NF}')
+
+#-------------------------------------------------------------------------------
+# Create DST path
+#-------------------------------------------------------------------------------
+
+ssh_make_path "$DST_HOST" "$DST_DIR"
+
+#-------------------------------------------------------------------------------
+# Build the Context Block device (locally) and copy it remotely
+#-------------------------------------------------------------------------------
+
+log "Generating context block device at $DST"
+
+ISO_DIR="$DS_DIR/.isofiles/$VM_ID"
+ISO_FILE="$ISO_DIR/$VM_ID.iso"
+
+exec_and_set_error "mkdir -p $ISO_DIR" \
+    "Could not create tmp dir to make context dev"
+[ -n "$ERROR" ] && exit_error
+
+for f in "${SRC[@]}"; do
+    case "$f" in
+    http://*)
+        exec_and_set_error "$WGET -P $ISO_DIR $f" "Error downloading $f"
+        ;;
+    *)
+        if echo "$f" | grep -q ':'; then
+            target=$(echo "$f"|cut -d':' -f2-)
+            target="'$target'"
+            f=$(echo "$f"|cut -d':' -f1)
+        else
+            target=""
+        fi
+
+        exec_and_set_error "cp -R $f $ISO_DIR/$target" \
+            "Error copying $f to $ISO_DIR"
+        ;;
+    esac
+
+    [ -n "$ERROR" ] && exit_error
+done
+
+exec_and_set_error "$MKISOFS -o $ISO_FILE -V CONTEXT -J -R $ISO_DIR" \
+    "Error creating iso fs"
+[ -n "$ERROR" ] && exit_error
+
+SP_SIZE=$(du -b $ISO_FILE | cut -f1)
+SP_SIZE=$(( (SP_SIZE +511) /512 *512 ))
+SP_VOL="one-sys-${VM_ID}-${DISK_ID}-iso"
+SP_LINK="/dev/storpool/$SP_VOL"
+SP_TEMPLATE="one-ds-$DS_ID"
+
+PRE_CONTEXT_CMD=$(cat <<EOF
+    set -e
+    export PATH=/sbin:/usr/sbin/:$PATH
+    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+
+    if storpool volume "$SP_VOL" info &>/dev/null; then
+        if storpool attach list | grep "$SP_VOL"; then
+            splog "detach volume $SP_VOL"
+            storpool detach volume "$SP_VOL" all
+        fi
+        splog "delete $SP_VOL"
+        storpool volume "$SP_VOL" delete "$SP_VOL"
+    fi
+
+    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
+    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
+
+    splog "volume $SP_VOL size "${SP_SIZE}" template $SP_TEMPLATE"
+    storpool volume "$SP_VOL" size "${SP_SIZE}" template "$SP_TEMPLATE"
+
+    splog "attach volume $SP_VOL here"
+    storpool attach volume "$SP_VOL" here
+
+    t=15
+    while [ ! -L "$SP_LINK" ]; do
+        if [ \$t -lt 1 ]; then
+            splog "Timeout waiting for $SP_LINK"
+            echo "Timeout waiting for $SP_LINK" >&2
+            exit -1
+        fi
+        sleep .5
+        t=\$((t-1))
+    done
+
+    splog "END PRE_CONTEXT_CMD"
+EOF
+)
+
+splog "run PRE_CONTEXT_CMD on $DST_HOST"
+ssh_exec_and_log "$DST_HOST" "$PRE_CONTEXT_CMD" \
+                 "Error preparing context placeholder volume $SP_VOL on $DST_HOST"
+
+#-------------------------------------------------------------------------------
+# Import image to the context volume
+#-------------------------------------------------------------------------------
+
+PIPE_CMD="cat $ISO_FILE"
+
+splog "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$SP_LINK bs=64k"
+exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$SP_LINK bs=64k" \
+             "Error importing $ISO_FILE to $DST_HOST:$SP_LINK"
+
+#-------------------------------------------------------------------------------
+# Remove ISO file and source dir
+#-------------------------------------------------------------------------------
+
+rm -rf "$ISO_FILE" > /dev/null 2>&1
+rm -rf "$ISO_DIR" > /dev/null 2>&1
+
+#-------------------------------------------------------------------------------
+# Create symbolic links
+#-------------------------------------------------------------------------------
+
+splog "symlink $SP_LINK to ${DST_PATH} and ${DST_PATH##*/}.iso"
+ssh_exec_and_log "$DST_HOST" "$LN -sf $SP_LINK ${DST_PATH}; $LN -sf $DST_PATH ${DST_PATH}.iso" \
+                 "Error creating symbolic links to $SP_VOL"
+splog "END"
+exit 0

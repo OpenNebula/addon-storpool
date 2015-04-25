@@ -144,8 +144,8 @@ CLONE_CMD=$(cat <<EOF
         rm -f "$DST_PATH"
     fi
 
-    splog "ln -s $SP_LINK $DST_PATH"
-    ln -s "$SP_LINK" "$DST_PATH"
+    splog "ln -sf $SP_LINK $DST_PATH"
+    ln -sf "$SP_LINK" "$DST_PATH"
 
     splog "END CLONE_CMD"
 EOF

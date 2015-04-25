@@ -83,10 +83,10 @@ IFS=$OLDIFS
 SELF=${0##*/}
 for i in "${!TM_MAD_ARRAY[@]}"; do
     if [ ${TM_MAD_ARRAY[i]} = "storpool" ]; then
-        CALL="${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST $TEMPLATE $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
+        CALL="${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST ${DISK_SOURCE_ARRAY[i]} $VM_ID $DS_ID $TEMPLATE ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
         CWD=$(pwd)
         if cd "${TM_PATH}/../${TM_MAD_ARRAY[i]}"; then
-            splog "i=$i ${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST {TEMPLATE} $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
+            splog "i=$i ${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST ${DISK_SOURCE_ARRAY[i]} $VM_ID $DS_ID {TEMPLATE} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
             bash $CALL
             cd "$CWD"
         fi

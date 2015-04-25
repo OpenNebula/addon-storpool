@@ -45,27 +45,29 @@ TM_PATH=$(dirname $0)
 
 SRC_HOST=$1
 DST_HOST=$2
-TEMPLATE=$3
+VM_PATH=$3
 
 VM_ID=$4
 DS_ID=$5
 
-VM_PATH=$6
+TEMPLATE=$6
 DISK_ID=$7
 SRC_DSID=$8
 PERSISTENT=$9
 
 splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_ID=$VM_ID DS_ID=$DS_ID VM_PATH=$VM_PATH"
 #splog "TEMPLATE=$TEMPLATE"
-splog "DISK_ID=$DISK_ID SRC_DSID=$SRC_DSID PERSISTENT=$PERSISTENT"
 
-SP_VOL="${VM_PATH##*/}"
-[ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+if [ -n "$DISK_ID" ]; then
+    splog "DISK_ID=$DISK_ID SRC_DSID=$SRC_DSID PERSISTENT=$PERSISTENT"
 
-DST_DIR="/var/lib/one/datastores/${DS_ID}/${VM_ID}"
-DISK_PATH="$DST_DIR/disk.${DISK_ID}"
+    SP_VOL="${VM_PATH##*/}"
+    [ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
-POST_CMD=$(cat <<EOF
+    DST_DIR="/var/lib/one/datastores/${DS_ID}/${VM_ID}"
+    DISK_PATH="$DST_DIR/disk.${DISK_ID}"
+
+    POST_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin/:$PATH
     splog(){ logger -t tm_sp_${0##*/} "\$*"; }
@@ -77,9 +79,17 @@ POST_CMD=$(cat <<EOF
 EOF
 )
 
-splog "run POST_CMD on $SRC_HOST"
-ssh_exec_and_log "$SRC_HOST" "$POST_CMD" \
+    splog "run POST_CMD on $SRC_HOST"
+    ssh_exec_and_log "$SRC_HOST" "$POST_CMD" \
                  "Error postmigrate $SRC_HOST:$DISK_PATH"
+else
+    splog "TODO: SYSTEM_DS"
+    if type base64 2>&1 >/dev/null; then
+        echo $TEMPLATE | base64 -d >"/tmp/tm_sp_${0##*/}-${VM_ID}.xml"
+    fi
+    exit -1
+fi
+
 
 splog "END ($SP_VOL)"
 exit 0
