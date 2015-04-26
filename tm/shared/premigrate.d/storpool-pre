@@ -20,7 +20,7 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# postmigrate srcHost dstHost vmPath vmId datasourceId template
+# premigrate srcHost dstHost vmPath vmId datasourceId template
 #-------------------------------------------------------------------------------
 
 function splog() { logger -t "tm_shared_${0##*/}" "$*"; }
@@ -46,10 +46,8 @@ TM_PATH=$(dirname $0)
 SRC_HOST=$1
 DST_HOST=$2
 VM_PATH=$3
-
 VM_ID=$4
 DS_ID=$5
-
 TEMPLATE=$6
 
 XPATH="${TM_PATH}/../../datastore/xpath_multi.py -b $TEMPLATE"
@@ -58,16 +56,16 @@ unset i XPATH_ELEMENTS
 while read -r element; do
     XPATH_ELEMENTS[i++]="$element"
 done < <($XPATH     /VM/TEMPLATE/DISK/TM_MAD \
-                    /VM/TEMPLATE/DISK/SOURCE \
                     /VM/TEMPLATE/DISK/DISK_ID \
+                    /VM/TEMPLATE/DISK/SOURCE \
                     /VM/TEMPLATE/DISK/DATASTORE_ID \
                     /VM/TEMPLATE/DISK/PERSISTENT)
 
 unset i
 
 TM_MAD=${XPATH_ELEMENTS[i++]}
-DISK_SOURCE=${XPATH_ELEMENTS[i++]}
 DISK_ID=${XPATH_ELEMENTS[i++]}
+DISK_SOURCE=${XPATH_ELEMENTS[i++]}
 DISK_DS=${XPATH_ELEMENTS[i++]}
 DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
 
@@ -83,10 +81,10 @@ IFS=$OLDIFS
 SELF=${0##*/}
 for i in "${!TM_MAD_ARRAY[@]}"; do
     if [ ${TM_MAD_ARRAY[i]} = "storpool" ]; then
-        CALL="${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST $TEMPLATE $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
+        CALL="${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST ${DISK_SOURCE_ARRAY[i]} $VM_ID $DS_ID $TEMPLATE ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
         CWD=$(pwd)
         if cd "${TM_PATH}/../${TM_MAD_ARRAY[i]}"; then
-            splog "i=$i ${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST {TEMPLATE} $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
+            splog "i=$i ${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST ${DISK_SOURCE_ARRAY[i]} $VM_ID $DS_ID {TEMPLATE} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
             bash $CALL
             cd "$CWD"
         fi

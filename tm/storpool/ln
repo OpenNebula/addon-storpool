@@ -22,21 +22,9 @@
 # ln host:datastore/image host:remote_system_ds/disk.i vmId datastoreId
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+TM_PATH="${0%/*}"
 
-#-------------------------------------------------------------------------------
-# Set up the environment to source common tools
-#-------------------------------------------------------------------------------
-
-if [ -n "${ONE_LOCATION}" ]; then
-    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
-else
-    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
-fi
-
-DRIVER_PATH=$(dirname $0)
-
-source $TMCOMMON
+source "${TM_PATH}/storpool_common.sh"
 
 SRC=$1
 DST=$2
@@ -67,46 +55,13 @@ DST_PATH=`arg_path $DST`
 DST_HOST=`arg_host $DST`
 DST_DIR=`dirname $DST_PATH`
 
+DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
+
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
-
-onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
-
-XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <(onevm show -x $VM_ID| $XPATH \
-                    /VM/STATE \
-                    /VM/LCM_STATE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SOURCE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE_ID \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/CLONE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/PERSISTENT)
-
-unset i
-VMSTATE="${XPATH_ELEMENTS[i++]}"
-LCM_STATE="${XPATH_ELEMENTS[i++]}"
-SOURCE="${XPATH_ELEMENTS[i++]}"
-IMAGE_ID="${XPATH_ELEMENTS[i++]}"
-IMAGE="${XPATH_ELEMENTS[i++]}"
-CLONE="${XPATH_ELEMENTS[i++]}"
-PERSISTENT="${XPATH_ELEMENTS[i++]}"
-splog "\
-${VMSTATE:+VMSTATE=$VMSTATE }\
-${LCM_STATE:+LCM_STATE=$LCM_STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${CLONE:+CLONE=$CLONE }\
-${IMAGE:+IMAGE=$IMAGE }\
-"
+oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 SP_TEMPLATE="${SOURCE%%/*}"
@@ -117,44 +72,7 @@ splog "SP_VOL=$SP_VOL ${PERSISTENT:+SP_SNAP=$SP_SNAP}"
 # Enable the destination device
 #-------------------------------------------------------------------------------
 
-SP_LINK="/dev/storpool/$SP_VOL"
-LN_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
-
-
-    splog "attach volume $SP_VOL here"
-    storpool attach volume "$SP_VOL" here
-
-    t=15
-    while [ ! -L "$SP_LINK" ]; do
-        if [ \$t -lt 1 ]; then
-            splog "Timeout waiting for $SP_LINK"
-            echo "Timeout waiting for $SP_LINK" >&2
-            exit -1
-        fi
-        sleep .5
-        t=\$((t-1))
-    done
-
-    mkdir -p "$DST_DIR"
-
-    if [ -L "$DST_PATH" ]; then
-        splog "$DST_PATH exists. Cleanup"
-        rm -f "$DST_PATH"
-    fi
-
-    splog "ln -s $SP_LINK $DST_PATH"
-    ln -s "$SP_LINK" "$DST_PATH"
-
-    splog "END LN_CMD"
-EOF
-)
-
-splog "run LN_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$LN_CMD" \
-                 "Error attaching $SP_VOL to $DST"
+storpoolAction "LN" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$PERSISTENT"
 
 splog "END"
 exit 0

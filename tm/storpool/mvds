@@ -22,21 +22,9 @@
 # mvds host:remote_system_ds/disk.i host:remote_system_ds/disk.i vmId datastoreId
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+TM_PATH="${0%/*}"
 
-#-------------------------------------------------------------------------------
-# Set up the environment to source common tools
-#-------------------------------------------------------------------------------
-
-if [ -n "${ONE_LOCATION}" ]; then
-    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
-else
-    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
-fi
-
-DRIVER_PATH=$(dirname $0)
-
-source $TMCOMMON
+source "${TM_PATH}/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Get mvds arguments from OpenNebula core
@@ -49,54 +37,21 @@ DS_ID=$4
 
 splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
-
 #-------------------------------------------------------------------------------
 # Compute the destination image name
 #-------------------------------------------------------------------------------
 
-
 SRC_HOST=`arg_host $SRC`
 SRC_PATH=`arg_path $SRC`
 SRC_DIR="${SRC_PATH%/*}"
-DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
 
-onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
+DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-        XPATH_ELEMENTS[i++]="$element"
-        done < <(onevm show -x $VM_ID| $XPATH  \
-                            /VM/STATE \
-                            /VM/LCM_STATE \
-                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SOURCE \
-                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE_ID \
-                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE \
-                            /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/PERSISTENT)
-
-unset i
-VMSTATE="${XPATH_ELEMENTS[i++]}"
-LCM_STATE="${XPATH_ELEMENTS[i++]}"
-SOURCE="${XPATH_ELEMENTS[i++]}"
-IMAGE_ID="${XPATH_ELEMENTS[i++]}"
-IMAGE="${XPATH_ELEMENTS[i++]}"
-PERSISTENT="${XPATH_ELEMENTS[i++]}"
-
-splog "\
-${VMSTATE:+VMSTATE=$VMSTATE }\
-${LCM_STATE:+LCM_STATE=$LCM_STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
-${SAVE_AS:+SAVE_AS=$SAVE_AS }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${IMAGE:+IMAGE=$IMAGE }\
-"
+oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 if [ "$PERSISTENT" != "YES" ]; then
@@ -112,31 +67,8 @@ splog "SRC_HOST=$SRC_HOST ${DEFERRED:+DEFERRED SP_SNAP=$SP_SNAP SP_TEMPLATE=$SP_
 #-------------------------------------------------------------------------------
 # Detach and if it is deferred snapshot "convert" to Image
 #-------------------------------------------------------------------------------
-MVDS_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin/:$PATH
-    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
 
-    if [ -L "$SRC_PATH" ]; then
-        splog "$SRC_PATH exists. Cleanup"
-        rm -f "$SRC_PATH"
-    fi
-
-    splog "detach volume $SP_VOL all"
-    storpool detach volume "$SP_VOL" all
-
-    if [ -n "$DEFERRED" ]; then
-        splog "volume $SP_VOL rename $SP_SNAP template $SP_TEMPLATE"
-        storpool volume "$SP_VOL" rename "$SP_SNAP" template "$SP_TEMPLATE"
-    fi
-
-    splog "END MVDS_CMD"
-EOF
-)
-
-splog "run MVDS_CMD on $SRC_HOST"
-ssh_exec_and_log "$SRC_HOST" "$MVDS_CMD" \
-                 "Error moving $SP_VOL to $DST_PATH"
+storpoolAction "MVDS" "$SRC_HOST" "$DST_HOST" "$SP_SNAP" "$DST_PATH" "$SP_VOL" "$SP_TEMPLATE" "$DEFERRED"
 
 splog "END"
 exit 0
