@@ -43,17 +43,60 @@ splog "DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 DST_PATH=`arg_path $DST`
 DST_HOST=`arg_host $DST`
 
+DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
+IS_DISK=`is_disk $DST_PATH`
+
+#-------------------------------------------------------------------------------
+# Get Datastore information
+#-------------------------------------------------------------------------------
+
+oneDatastoreInfo "$DS_ID"
+
 #-------------------------------------------------------------------------------
 # Delete and exit if directory
 #-------------------------------------------------------------------------------
 
-if [ `is_disk $DST_PATH` -eq 0 ]; then
-    log "Deleting $DST_PATH on $DST_HOST"
-    ssh_exec_and_log "$DST_HOST" "rm -rf $DST_PATH" "Error deleting $DST_PATH"
+#if [ `is_disk $DST_PATH` -eq 0 ]; then
+#    log "Deleting $DST_PATH on $DST_HOST"
+#    ssh_exec_and_log "$DST_HOST" "rm -rf $DST_PATH" "Error deleting $DST_PATH"
+#    exit 0
+#fi
+
+if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
+    TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
+    oneTemplateInfo "$TEMPLATE"
+    for i in ${!DISK_ID_ARRAY[@]}; do
+        if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ]; then
+#            splog "[SYSTEM_DS] $i id:${DISK_ID_ARRAY[i]} type:${DISK_TYPE_ARRAY[i]} format:$FORMAT tm:${DISK_TM_MAD_ARRAY[i]}"
+            if [ $IS_DISK == 1 ] && [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
+#                splog "[SYSTEM_DS] skip ${DISK_ID_ARRAY[i]} != $DISK_ID"
+                continue
+            fi
+            FORMAT=${DISK_FORMAT_ARRAY[i]}
+            if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
+                FORMAT="swap"
+            fi
+            SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
+            storpoolAction "DELETE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "${DST_PATH}/disk.${DISK_ID_ARRAY[i]}" "${DISK_PERSISTENT_ARRAY[i]}"
+#        else
+#            splog "[SYSTEM_DS] SKIP $i type:${DISK_TYPE_ARRAY[i]} format:${DISK_FORMAT_ARRAY[i]} tm:${DISK_TM_MAD_ARRAY[i]}"
+        fi
+    done
+
+    if [ $IS_DISK == 0 ]; then
+#        splog "[SYSTEM_DS] delete context iso"
+        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        storpoolAction "DELETE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+
+        RM_CMD="rm -rf '$DST_PATH'"
+        splog "run RM_CMD on $DST_HOST ($DST_PATH)"
+        ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+                 "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+    fi
+
+    splog "END [SYSTEM_DS]"
     exit 0
 fi
-
-DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
 # Get Image information

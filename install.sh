@@ -57,22 +57,52 @@ cp $CP_ARG datastore/xpath_multi.py "$XPATH_MULTI"
 chown "$ONE_USER" "$XPATH_MULTI"
 chmod u+x "$XPATH_MULTI"
 
+function patch_hook()
+{
+    local _hook="$1"
+    local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
+    local _is_sh=0 _is_patched=0 _backup=
+    grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
+    grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
+    if [ "$(grep -v -E '^#|^$' "${_hook}")" = "exit 0" ]; then
+        if [ "${_is_patched}" = "1" ]; then
+            echo "*** ${_hook} already patched"
+        else
+            echo "*** patching ${_hook}"
+            _backup="${_hook}.backup$(date +%s)"
+            cp $CP_ARG "${_hook}" "${_backup}"
+            if [ "${_is_sh}" = "1" ]; then
+                grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
+                if [ "${_is_bash}" = "1" ]; then
+                    echo "*** ${_hook} already bash script"
+                else
+                    sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
+                fi
+            fi
+            sed -i -e "s|^exit 0|$_hook_line\nexit 0|" "${_hook}"
+        fi
+    else
+        echo "*** ${_hook} file not empty!"
+        echo "*** Please merge carefully the following line to ${_hook}"
+        echo ">>> ${_hook_line//\\&/&}"
+        if [ "${_is_sh}" = "1" ]; then
+            echo "*** and set script to bash:"
+            echo "***   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
+        fi
+    fi
+}
+
 # install premigrate and postmigrate hooks in shared and ssh
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
-        M_FILE="$ONE_VAR/remotes/tm/${TM_MAD}/${MIGRATE}.storpool"
-        cp $CP_ARG "tm/storpool/${MIGRATE}" "$M_FILE"
-        chown "$ONE_USER" "$M_FILE"
-        chmod u+x "$M_FILE"
-        M_FILE="${M_FILE%.storpool}"
-        if [ "$(egrep -v '^#|^$' $M_FILE)" = "exit 0" ]; then
-            echo "*** Installing ${M_FILE}"
-            cp $CP_ARG "$M_FILE" "${M_FILE}.backup"
-            mv $MV_ARG "${M_FILE}.storpool" "$M_FILE"
-        else
-            echo "*** $M_FILE file not empty!"
-            echo "*** Please merge carefully ${M_FILE}.storpool to $M_FILE"
-        fi
+        M_DIR="$ONE_VAR/remotes/tm/${TM_MAD}"
+        M_FILE="${M_DIR}/${MIGRATE}.d/${MIGRATE}-storpool"
+        mkdir -p "$M_DIR/${MIGRATE}.d"
+        pushd "$M_DIR/${MIGRATE}.d" &>/dev/null
+        ln -sf "../../storpool/${MIGRATE}" "${MIGRATE}-storpool"
+        popd &>/dev/null
+        chown -R "$ONE_USER" "${M_DIR}/${MIGRATE}.d"
+        patch_hook "${M_DIR}/${MIGRATE}"
     done
 done
 
@@ -82,9 +112,9 @@ if [ -f "$SUNSTONE_PLUGINS/datastores-tab.js" ]; then
         echo "*** already applied sunstone integration in $SUNSTONE_PLUGINS/datastores-tab.js"
     else
         echo "*** enabling sunstone integration in $SUNSTONE_PLUGINS/datastores-tab.js"
-        cd "$SUNSTONE_PLUGINS"
+        pushd "$SUNSTONE_PLUGINS" &>/dev/null
         patch -b -p 0 < "$CWD/patches/datastores-tab.js.patch"
-        cd "$CWD"
+        popd &>/dev/null
     fi
 else
     echo "sunstones js plugin datastores-tab.js not found in $ONE_LIB/sunstone/public/js/plugins/"

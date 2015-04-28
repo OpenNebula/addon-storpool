@@ -46,7 +46,7 @@ function storpoolAction()
     splog "$_ACTION $_SRC_HOST $_DST_HOST $_SP_VOL $_DST_PATH $_SP_PARENT $_SP_TEMPLATE $_SP_SIZE"
     local _SP_LINK="/dev/storpool/$_SP_VOL"
     local _DST_DIR="${_DST_PATH%%disk*}"
-    splog "SP_LINK=$_SP_LINK DST_DIR=$_DST_DIR"
+#    splog "SP_LINK=$_SP_LINK DST_DIR=$_DST_DIR"
     _SP_TEMPLATE="${_SP_TEMPLATE:+template $_SP_TEMPLATE}"
 
     local _BEGIN=$(cat <<EOF
@@ -63,7 +63,7 @@ EOF
 )
     local _TEMPLATE=$(cat <<EOF
     #_TEMPLATE
-    if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACE_TAIL" ]; then
+    if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACETAIL" ]; then
         splog "$_SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
         storpool $_SP_TEMPLATE replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
     fi
@@ -177,18 +177,18 @@ EOF
     storpool volume "$_SP_PARENT" rename "$_SP_VOL" $_SP_TEMPLATE
 EOF
 )
+    local _RENAME_COND=$(cat <<EOF
+    #_RENAME_COND
+    if [ -n "$_SP_SIZE" ]; then
+        splog "volume $_SP_VOL rename $_SP_PARENT $_SP_TEMPLATE"
+        storpool volume "$_SP_VOL" rename "$_SP_PARENT" $_SP_TEMPLATE
+    fi
+EOF
+)
     local _EXTRA=$(cat <<EOF
     #_EXTRA
     splog "EXTRA_CMD:$EXTRA_CMD"
     $EXTRA_CMD
-EOF
-)
-    local _RENAME_COND=$(cat <<EOF
-    #_RENAME_COND
-    if [ -n "$_SP_SIZE" ]; then
-        splog "volume $_SP_VOL rename $_SP_SNAP $_SP_TEMPLATE"
-        storpool volume "$_SP_PARENT" rename "$_SP_VOL" $_SP_TEMPLATE
-    fi
 EOF
 )
     local _CMD= _HOST=
@@ -199,7 +199,7 @@ EOF
         ;;
         CPDS)
             _HOST="$_SRC_HOST"
-            _CMD="$_BEGIN$_DELVOL$_CLONE$_ATTACH$_SYMLINK"
+            _CMD="$_BEGIN$_DELVOL$_CLONE"
         ;;
         DELETE)
             _HOST="$_DST_HOST"
@@ -240,6 +240,7 @@ EOF
         *)
     esac
     if [ -n "$_CMD" ]; then
+#        echo "$_CMD" >/tmp/tm_${0##*/}_${_ACTION}-$(date +%s).sh
         if [ -n "$_HOST" ]; then
             splog "run $_ACTION on $_HOST ($_DST_PATH)"
             ssh_exec_and_log "$_HOST" "$_CMD$_END" \
@@ -259,10 +260,8 @@ function lookup_file()
     for _PATH in "$_CWD/"{,../,../../,../../../}; do
         if [ -f "${_PATH}${_FILE}" ]; then
             echo "${_PATH}${_FILE}"
-#            splog "found ${_PATH}${_FILE}"
             break;
         fi
-#        splog "look ${_PATH}${_FILE}"
     done
 }
 
@@ -270,14 +269,14 @@ function oneVmInfo()
 {
     local _VM_ID="$1" _DISK_ID="$2"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
-    splog "TM_PATH=${TM_PATH} _XPATH=$_XPATH"
-    unset i XPATH_ELEMENTS
 
+    unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
         done < <(onevm show -x "$_VM_ID" | "$_XPATH" --stdin \
                             /VM/STATE \
                             /VM/LCM_STATE \
+                            /VM/CONTEXT/DISK_ID \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SOURCE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE_ID \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE \
@@ -290,6 +289,7 @@ function oneVmInfo()
     unset i
     VMSTATE="${XPATH_ELEMENTS[i++]}"
     LCM_STATE="${XPATH_ELEMENTS[i++]}"
+    CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     SOURCE="${XPATH_ELEMENTS[i++]}"
     IMAGE_ID="${XPATH_ELEMENTS[i++]}"
     IMAGE="${XPATH_ELEMENTS[i++]}"
@@ -299,18 +299,18 @@ function oneVmInfo()
     HOTPLUG_SAVE_AS_ACTIVE="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
 
-    #onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-${VM_ID}-${DISK_ID}.xml
-    splog "\
-${VMSTATE:+VMSTATE=$VMSTATE }\
-${LCM_STATE:+LCM_STATE=$LCM_STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
-${CLONE:+CLONE=$CLONE }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${IMAGE:+IMAGE=$IMAGE }\
-"
-    msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
-    [ -n "$msg" ] && splog "$msg"
+#    splog "\
+#${VMSTATE:+VMSTATE=$VMSTATE }\
+#${LCM_STATE:+LCM_STATE=$LCM_STATE }\
+#${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
+#${SOURCE:+SOURCE=$SOURCE }\
+#${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
+#${CLONE:+CLONE=$CLONE }\
+#${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+#${IMAGE:+IMAGE=$IMAGE }\
+#"
+#    msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
+#    [ -n "$msg" ] && splog "$msg"
 }
 
 function oneDatastoreInfo()
@@ -331,7 +331,8 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/TYPE \
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
                             /DATASTORE/TEMPLATE/SP_PLACEALL \
-                            /DATASTORE/TEMPLATE/SP_PLACETAIL)
+                            /DATASTORE/TEMPLATE/SP_PLACETAIL \
+                            /DATASTORE/TEMPLATE/SP_SYSTEM)
     unset i
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_DISK_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -343,18 +344,15 @@ function oneDatastoreInfo()
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+    SP_SYSTEM="${XPATH_ELEMENTS[i++]}"
 
-    splog "${DS_TYPE:+DS_TYPE=$DS_TYPE }\
-${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }\
-${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }\
-${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }\
-${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }\
-${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }\
-${DS_SHARED:+SHARED=$DS_SHARED }\
-${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }\
-${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }\
-${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }\
-"
+#    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
+#    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
+#    _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
+#    _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
+#    _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
+#    _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }"
+#    splog "$_MSG"
 }
 
 function dumpTemplate()
@@ -366,8 +364,9 @@ function dumpTemplate()
 function oneTemplateInfo()
 {
     local _TEMPLATE="$1"
-    dumpTemplate "$_TEMPLATE"
+#    dumpTemplate "$_TEMPLATE"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
+
     unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
@@ -383,7 +382,7 @@ function oneTemplateInfo()
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-    splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+#    splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
     unset i XPATH_ELEMENTS
@@ -407,7 +406,7 @@ function oneTemplateInfo()
     _DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
     _DISK_TYPE=${XPATH_ELEMENTS[i++]}
     _DISK_FORMAT=${XPATH_ELEMENTS[i++]}
-    splog "$_DISK_TM_MAD $_DISK_DATASTORE_ID $_DISK_ID $_DISK_CLUSTER_ID $_DISK_SOURCE $_DISK_PERSISTENT $_DISK_TYPE $_DISK_FORMAT"
+#    splog "[oneTemplateInfo] $_DISK_TM_MAD $_DISK_DATASTORE_ID $_DISK_ID $_DISK_CLUSTER_ID $_DISK_SOURCE $_DISK_PERSISTENT $_DISK_TYPE $_DISK_FORMAT"
 
     _OLDIFS=$IFS
     IFS=";"
@@ -420,5 +419,4 @@ function oneTemplateInfo()
     DISK_TYPE_ARRAY=($_DISK_TYPE)
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
-
 }
