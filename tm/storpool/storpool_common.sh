@@ -19,7 +19,6 @@
 # paranoid
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:$PATH
 
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -253,16 +252,30 @@ EOF
     fi
 }
 
+function lookup_file()
+{
+    local _FILE="$1" _CWD="${2:-$PWD}"
+    local _PATH=
+    for _PATH in "$_CWD/"{,../,../../,../../../}; do
+        if [ -f "${_PATH}${_FILE}" ]; then
+            echo "${_PATH}${_FILE}"
+#            splog "found ${_PATH}${_FILE}"
+            break;
+        fi
+#        splog "look ${_PATH}${_FILE}"
+    done
+}
+
 function oneVmInfo()
 {
     local _VM_ID="$1" _DISK_ID="$2"
-    local _XPATH="${TM_PATH}/../../datastore/xpath.rb --stdin"
-
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
+    splog "TM_PATH=${TM_PATH} _XPATH=$_XPATH"
     unset i XPATH_ELEMENTS
 
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(onevm show -x $_VM_ID| $_XPATH  \
+        done < <(onevm show -x "$_VM_ID" | "$_XPATH" --stdin \
                             /VM/STATE \
                             /VM/LCM_STATE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SOURCE \
@@ -303,19 +316,19 @@ ${IMAGE:+IMAGE=$IMAGE }\
 function oneDatastoreInfo()
 {
     local _DS_ID="$1"
-    local _XPATH="${TM_PATH}/../../datastore/xpath.rb --stdin"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
 
     unset i XPATH_ELEMENTS
-
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(onedatastore show -x $DS_ID | $XPATH  \
+        done < <(onedatastore show -x "$_DS_ID" | "$_XPATH" --stdin \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
                             /DATASTORE/TM_MAD \
                             /DATASTORE/BASE_PATH \
                             /DATASTORE/CLUSTER_ID \
                             /DATASTORE/TEMPLATE/SHARED \
+                            /DATASTORE/TEMPLATE/TYPE \
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
                             /DATASTORE/TEMPLATE/SP_PLACEALL \
                             /DATASTORE/TEMPLATE/SP_PLACETAIL)
@@ -326,11 +339,13 @@ function oneDatastoreInfo()
     DS_BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DS_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
     DS_SHARED="${XPATH_ELEMENTS[i++]}"
+    DS_TEMPLATE_TYPE="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
 
-    splog "${DS_TYPE:+TYPE=$DS_TYPE }\
+    splog "${DS_TYPE:+DS_TYPE=$DS_TYPE }\
+${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }\
 ${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }\
 ${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }\
 ${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }\
@@ -340,4 +355,70 @@ ${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }\
 ${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }\
 ${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }\
 "
+}
+
+function dumpTemplate()
+{
+    local _TEMPLATE="$1"
+    echo "$_TEMPLATE" | base64 -d | xmllint --format - > "/tmp/tm_${0##*/}-$$.xml"
+}
+
+function oneTemplateInfo()
+{
+    local _TEMPLATE="$1"
+    dumpTemplate "$_TEMPLATE"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
+    unset i XPATH_ELEMENTS
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+        done < <("$_XPATH" -b "$_TEMPLATE" \
+                    /VM/ID \
+                    /VM/STATE \
+                    /VM/LCM_STATE \
+                    /VM/PREV_STATE \
+                    /VM/TEMPLATE/CONTEXT/DISK_ID)
+    unset i
+    _VM_ID=${XPATH_ELEMENTS[i++]}
+    _VM_STATE=${XPATH_ELEMENTS[i++]}
+    _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
+    _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
+    _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
+    splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+
+    _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
+    unset i XPATH_ELEMENTS
+    while read -r element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <("$_XPATH" -b "$_TEMPLATE" \
+                    /VM/TEMPLATE/DISK/TM_MAD \
+                    /VM/TEMPLATE/DISK/DATASTORE_ID \
+                    /VM/TEMPLATE/DISK/DISK_ID \
+                    /VM/TEMPLATE/DISK/CLUSTER_ID \
+                    /VM/TEMPLATE/DISK/SOURCE \
+                    /VM/TEMPLATE/DISK/PERSISTENT \
+                    /VM/TEMPLATE/DISK/TYPE \
+                    /VM/TEMPLATE/DISK/FORMAT)
+    unset i
+    _DISK_TM_MAD=${XPATH_ELEMENTS[i++]}
+    _DISK_DATASTORE_ID=${XPATH_ELEMENTS[i++]}
+    _DISK_ID=${XPATH_ELEMENTS[i++]}
+    _DISK_CLUSTER_ID=${XPATH_ELEMENTS[i++]}
+    _DISK_SOURCE=${XPATH_ELEMENTS[i++]}
+    _DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
+    _DISK_TYPE=${XPATH_ELEMENTS[i++]}
+    _DISK_FORMAT=${XPATH_ELEMENTS[i++]}
+    splog "$_DISK_TM_MAD $_DISK_DATASTORE_ID $_DISK_ID $_DISK_CLUSTER_ID $_DISK_SOURCE $_DISK_PERSISTENT $_DISK_TYPE $_DISK_FORMAT"
+
+    _OLDIFS=$IFS
+    IFS=";"
+    DISK_TM_MAD_ARRAY=($_DISK_TM_MAD)
+    DISK_DATASTORE_ID_ARRAY=($_DISK_DATASTORE_ID)
+    DISK_ID_ARRAY=($_DISK_ID)
+    DISK_CLUSTER_ID_ARRAY=($_DISK_CLUSTER_ID)
+    DISK_SOURCE_ARRAY=($_DISK_SOURCE)
+    DISK_PERSISTENT_ARRAY=($_DISK_PERSISTENT)
+    DISK_TYPE_ARRAY=($_DISK_TYPE)
+    DISK_FORMAT_ARRAY=($_DISK_FORMAT)
+    IFS=$_OLDIFS
+
 }

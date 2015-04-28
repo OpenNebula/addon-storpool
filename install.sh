@@ -61,7 +61,7 @@ chmod u+x "$XPATH_MULTI"
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
         M_FILE="$ONE_VAR/remotes/tm/${TM_MAD}/${MIGRATE}.storpool"
-        cp $CP_ARG "tm/${TM_MAD}/${MIGRATE}.storpool" "$M_FILE"
+        cp $CP_ARG "tm/storpool/${MIGRATE}" "$M_FILE"
         chown "$ONE_USER" "$M_FILE"
         chmod u+x "$M_FILE"
         M_FILE="${M_FILE%.storpool}"
