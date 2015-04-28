@@ -22,7 +22,7 @@
 # cpds host:SOURCE host:DEST vmId datastoreId
 #-------------------------------------------------------------------------------
 
-TM_PATH="${0%/*}"
+TM_PATH="$(dirname $0)"
 
 source "${TM_PATH}/storpool_common.sh"
 

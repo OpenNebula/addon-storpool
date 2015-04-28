@@ -22,7 +22,7 @@
 # clone fe:SOURCE host:remote_system_ds/disk.i size
 #-------------------------------------------------------------------------------
 
-TM_PATH="${0%/*}"
+TM_PATH="$(dirname $0)"
 
 source "${TM_PATH}/storpool_common.sh"
 
