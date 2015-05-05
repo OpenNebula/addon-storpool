@@ -51,127 +51,13 @@ source $TMCOMMON
 DST_PATH=`arg_path $DST`
 DST_HOST=`arg_host $DST`
 
-DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
-
 #-------------------------------------------------------------------------------
 # Delete and exit if directory
 #-------------------------------------------------------------------------------
 
-IS_DISK=`is_disk $DST_PATH`
-
-#if [ `is_disk $DST_PATH` -eq 0 ]; then
-#    splog "Deleting $DST_PATH on $DST_HOST"
-#    log "Deleting $DST_PATH on $DST_HOST"
-#    ssh_exec_and_log "$DST_HOST" "rm -rf $DST_PATH" "Error deleting $DST_PATH"
-#    exit 0
-#fi
-
-function deleteRemote()
-{
-    local _DST_HOST="$1" _SP_VOL="$2" _DST_PATH="$3"
-#    splog "_DST_HOST=$1 _SP_VOL=$2 _DST_PATH=$3"
-    DELETE_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "[deleteRemote] \$*"; }
-
-    if [ -L "$_DST_PATH" ]; then
-        splog "rm -f $_DST_PATH"
-        rm -f "$_DST_PATH"
-    fi
-
-    if storpool attach list | grep -q " $_SP_VOL " &>/dev/null; then
-        splog "detach volume $_SP_VOL all"
-        storpool detach volume "$_SP_VOL" all
-    fi
-
-    if [ "$PERSISTENT" != "YES" ]; then
-        if storpool volume "$_SP_VOL" info &>/dev/null; then
-            splog "delete volume $_SP_VOL (non-persistent)"
-            storpool volume "$_SP_VOL" delete "$_SP_VOL"
-        fi
-    fi
-
-    splog "END DELETE_CMD"
-EOF
-)
-    splog "run DELETE_CMD on $_DST_HOST ($_DST_PATH)"
-    ssh_exec_and_log "$_DST_HOST" "$DELETE_CMD" \
-                 "Error deleting $_SP_VOL in $_DST_HOST($_DST_PATH)"
-    splog "_END_DELETE_CMD"
-}
-
-
-#-------------------------------------------------------------------------------
-# Get Datastore type
-#-------------------------------------------------------------------------------
-XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-
-unset i XPATH_ELEMENTS
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <(onedatastore show -x $DS_ID| $XPATH \
-                    /DATASTORE/TEMPLATE/TYPE)
-unset i
-DS_TYPE="${XPATH_ELEMENTS[i++]}"
-
-if [ "$DS_TYPE" = "SYSTEM_DS" ]; then
-    XPATH="${DRIVER_PATH}/../../datastore/xpath_multi.py -s"
-
-    unset i XPATH_ELEMENTS
-    while read -r element; do
-        XPATH_ELEMENTS[i++]="$element"
-    done < <(onevm show -x $VM_ID| $XPATH \
-                           /VM/TEMPLATE/DISK/DISK_ID \
-                           /VM/TEMPLATE/DISK/TYPE \
-                           /VM/TEMPLATE/DISK/FORMAT \
-                           /VM/TEMPLATE/DISK/TM_MAD \
-                           /VM/CONTEXT/DISK_ID )
-    unset i
-    TDISK_ID=${XPATH_ELEMENTS[i++]}
-    DISK_TYPE=${XPATH_ELEMENTS[i++]}
-    DISK_FORMAT=${XPATH_ELEMENTS[i++]}
-    DISK_TM=${XPATH_ELEMENTS[i++]}
-    CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-
-#    splog "DISK_ID=$DISK_ID TDISK_ID=$TDISK_ID DISK_TYPE=$DISK_TYPE DISK_FORMAT=$DISK_FORMAT DISK_TM=$DISK_TM CONTEXT_DISK_ID=$CONTEXT_DISK_ID"
-
-    OLDIFS=$IFS
-    IFS=";"
-    DISK_ID_ARRAY=($TDISK_ID)
-    DISK_TYPE_ARRAY=($DISK_TYPE)
-    DISK_FORMAT_ARRAY=($DISK_FORMAT)
-    DISK_TM_ARRAY=($DISK_TM)
-    IFS=$OLDIFS
-
-    for i in ${!DISK_ID_ARRAY[@]}; do
-        if [ "${DISK_TM_ARRAY[i]}" = "" ]; then
-#            splog "$i ${DISK_ID_ARRAY[i]} ${DISK_TYPE_ARRAY[i]} $FORMAT ${DISK_TM_ARRAY[i]}"
-            if [ $IS_DISK == 1 ] && [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
-#                splog "skip ${DISK_ID_ARRAY[i]} != $DISK_ID"
-                continue
-            fi
-            FORMAT=${DISK_FORMAT_ARRAY[i]}
-            if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
-                FORMAT="swap"
-            fi
-            deleteRemote "$DST_HOST" "one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}" "$DST_PATH"
-#        else
-#            splog "SKIP i type:${DISK_TYPE_ARRAY[i]} format:${DISK_FORMAT_ARRAY[i]} tm:${DISK_TM_ARRAY[i]}"
-        fi
-    done
-
-    if [ $IS_DISK == 0 ]; then
-#        splog "delete context iso"
-        deleteRemote "$DST_HOST" "one-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso" "$DST_PATH"
-
-        RM_CMD="rm -rf '$DST_PATH'"
-        splog "run RM_CMD on $DST_HOST ($DST_PATH)"
-        ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
-                 "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
-    fi
-
-    splog "END"
+if [ `is_disk $DST_PATH` -eq 0 ]; then
+    log "Deleting $DST_PATH on $DST_HOST"
+    ssh_exec_and_log "$DST_HOST" "rm -rf $DST_PATH" "Error deleting $DST_PATH"
     exit 0
 fi
 
@@ -179,8 +65,14 @@ fi
 # Get Image information
 #-------------------------------------------------------------------------------
 
+DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
+
+onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
+
+XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
 
 unset i XPATH_ELEMENTS
+
 while IFS= read -r -d '' element; do
     XPATH_ELEMENTS[i++]="$element"
 done < <(onevm show -x $VM_ID| $XPATH \
@@ -210,9 +102,6 @@ ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${IMAGE:+IMAGE=$IMAGE }\
 "
 
-#splog "SOURCE=$SOURCE"
-#onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
-
 # No need to delete no cloned images
 #if [ "$CLONE" = "NO" ]; then
 #    splog "EXIT CLONE=$CLONE"
@@ -229,7 +118,38 @@ SP_VOL="${SOURCE##*/}"
 
 log "Deleting $DST_PATH"
 
-deleteRemote "$DST_HOST" "$SP_VOL" "$DST_PATH"
+# Note that this command, as opposed to the rest of $RBD commands in this set of
+# drivers, is executed in the worker node and not in the CEPH frontend.
+
+DELETE_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
+    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
+
+    if [ -L "$DST_PATH" ]; then
+        splog "rm -f $DST_PATH"
+        rm -f "$DST_PATH"
+    fi
+
+    if storpool attach list | grep -q " $SP_VOL " &>/dev/null; then
+        splog "detach volume $SP_VOL all"
+        storpool detach volume $SP_VOL all
+    fi
+
+    if [ "$PERSISTENT" != "YES" ]; then
+        if storpool volume "$SP_VOL" info &>/dev/null; then
+            splog "delete volume $SP_VOL (non-persistent)"
+            storpool volume "$SP_VOL" delete "$SP_VOL"
+        fi
+    fi
+
+    splog "END DELETE_CMD"
+EOF
+)
+
+splog "run DELETE_CMD on $DST_HOST"
+ssh_exec_and_log "$DST_HOST" "$DELETE_CMD" \
+                 "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
 
 splog "END"
 exit 0

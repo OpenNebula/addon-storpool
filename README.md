@@ -28,7 +28,6 @@ This add-on is compatible with OpenNebula 4.10, 4.12 and StorPool 15.02+.
 ### OpenNebula Front-end
 
 Password-less SSH access from the front-end `oneadmin` user to the `node` instances.
-BASH shell.
 
 ### OpenNebula Node
 

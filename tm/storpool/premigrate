@@ -25,75 +25,6 @@
 
 function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
 
-function doRemote()
-{
-    local _SRC_HOST="$1" _DST_HOST="$2" _SP_VOL="$3" _DST_PATH="$4" _ACTION="$5"
-    splog "_SRC_HOST=$_SRC_HOST _DST_HOST=$_DST_HOST _SP_VOL=$_SP_VOL _DST_PATH=$_DST_PATH"
-    _SP_LINK="/dev/storpool/$_SP_VOL"
-    _DST_DIR="${_DST_PATH%%disk*}"
-    splog "_DST_DIR=$_DST_DIR _DST_PATH=$_DST_PATH"
-
-    case "$_ACTION" in
-        DETACH)
-            _HOST="$SRC_HOST"
-            _DO_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "[mvRemote] \$*"; }
-
-    if storpool attach list | grep -q " $_SP_VOL " &>/dev/null; then
-        splog "detach volume $_SP_VOL all"
-        storpool detach volume "$_SP_VOL" all
-    else
-        splog "volume not attached $_SP_VOL"
-    fi
-EOF
-)
-        ;;
-        ATTACH)
-            _HOST="$DST_HOST"
-           _DO_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "[mvRemote] \$*"; }
-
-    splog "attach volume $_SP_VOL here"
-    storpool attach volume "$_SP_VOL" here
-
-    trap 'storpool detach volume "$_SP_VOL" here' EXIT TERM INT HUP
-
-    t=15
-    while [ ! -L "$_SP_LINK" ]; do
-        if [ \$t -lt 1 ]; then
-            splog "Timeout waiting for $_SP_LINK"
-            echo "Timeout waiting for $_SP_LINK" >&2
-            exit -1
-        fi
-        sleep .5
-        t=\$((t-1))
-    done
-
-    if [ -d "$_DST_DIR" ]; then
-        splog "rm -f $_DST_PATH"
-        rm -f "$_DST_PATH"
-    else
-        splog "mkdir -p $_DST_DIR"
-        mkdir -p "$_DST_DIR"
-    fi
-
-    splog "ln -s $_SP_LINK $_DST_PATH"
-    ln -s "$_SP_LINK" "$_DST_PATH"
-
-    trap - EXIT TERM INT HUP
-EOF
-)
-        ;;
-    esac
-    splog "run $_ACTION on $_HOST ($_DST_PATH)"
-    ssh_exec_and_log "$_HOST" "$_DO_CMD" \
-                 "Error processing $_ACTION on $_HOST($_DST_PATH)"
-}
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -114,30 +45,32 @@ TM_PATH=$(dirname $0)
 
 SRC_HOST=$1
 DST_HOST=$2
-VM_PATH=$3
+TEMPLATE=$3
+
 VM_ID=$4
 DS_ID=$5
-TEMPLATE=$6
 
+VM_PATH=$6
 DISK_ID=$7
 SRC_DSID=$8
 PERSISTENT=$9
 
 splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_ID=$VM_ID DS_ID=$DS_ID VM_PATH=$VM_PATH"
 #splog "TEMPLATE=$TEMPLATE"
+splog "DISK_ID=$DISK_ID SRC_DSID=$SRC_DSID PERSISTENT=$PERSISTENT"
 
-if [ -n "$DISK_ID" ]; then
-    # script called from other driver (ssh or shared)
-    splog "DISK_ID=$DISK_ID SRC_DSID=$SRC_DSID PERSISTENT=$PERSISTENT"
+if type base64 2>&1 >/dev/null; then
+    echo $TEMPLATE | base64 -d >"/tmp/tm_sp_${0##*/}-$VM_ID"
+fi
 
-    SP_VOL="${VM_PATH##*/}"
-    [ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+SP_VOL="${VM_PATH##*/}"
+[ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
-    DST_DIR="/var/lib/one/datastores/${DS_ID}/${VM_ID}"
-    DISK_PATH="$DST_DIR/disk.${DISK_ID}"
-    SP_LINK="/dev/storpool/$SP_VOL"
+DST_DIR="/var/lib/one/datastores/${DS_ID}/${VM_ID}"
+DISK_PATH="$DST_DIR/disk.${DISK_ID}"
+SP_LINK="/dev/storpool/$SP_VOL"
 
-    PRE_CMD=$(cat <<EOF
+PRE_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin/:$PATH
     splog(){ logger -t tm_sp_${0##*/} "\$*"; }
@@ -159,91 +92,15 @@ if [ -n "$DISK_ID" ]; then
     mkdir -p "$DST_DIR"
 
     splog "ln -s $SP_LINK $DISK_PATH"
-    ln -sf "$SP_LINK" "$DISK_PATH"
+    ln -s "$SP_LINK" "$DISK_PATH" || true
 
     splog "END PRE_CMD"
 EOF
 )
 
-    splog "run PRE_CMD on $DST_HOST"
-    ssh_exec_and_log "$DST_HOST" "$PRE_CMD"
+splog "run PRE_CMD on $DST_HOST"
+ssh_exec_and_log "$DST_HOST" "$PRE_CMD"
                  "Log in error at $DST_HOST:$DISK_PATH"
 
-    splog "END ($SP_VOL)"
-else
-    #script called in SYSTEM_DS context
-    if type base64 2>&1 >/dev/null; then
-        if type xmllint 2>&1 >/dev/null; then
-            echo $TEMPLATE | base64 -d | xmllint --format - >"/tmp/tm_sp_${0##*/}-${VM_ID}.xml"
-        else
-            echo $TEMPLATE | base64 -d >"/tmp/tm_sp_${0##*/}-${VM_ID}.xml"
-        fi
-    fi
-
-    XPATH="${TM_PATH}/../../datastore/xpath_multi.py -b $TEMPLATE"
-
-    unset i XPATH_ELEMENTS
-    while read -r element; do
-        XPATH_ELEMENTS[i++]="$element"
-    done < <($XPATH     /VM/TEMPLATE/DISK/TM_MAD \
-                        /VM/TEMPLATE/DISK/SOURCE \
-                        /VM/TEMPLATE/DISK/DISK_ID \
-                        /VM/TEMPLATE/DISK/DATASTORE_ID \
-                        /VM/TEMPLATE/DISK/PERSISTENT \
-                        /VM/TEMPLATE/DISK/TYPE \
-                        /VM/TEMPLATE/DISK/FORMAT \
-                        /VM/CONTEXT/DISK_ID)
-
-    unset i
-    TM_MAD=${XPATH_ELEMENTS[i++]}
-    TDISK_SOURCE=${XPATH_ELEMENTS[i++]}
-    TDISK_ID=${XPATH_ELEMENTS[i++]}
-    TDISK_DS=${XPATH_ELEMENTS[i++]}
-    TDISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
-    TDISK_TYPE=${XPATH_ELEMENTS[i++]}
-    TDISK_FORMAT=${XPATH_ELEMENTS[i++]}
-    CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-
-    OLDIFS=$IFS
-    IFS=";"
-    TM_MAD_ARRAY=($TM_MAD)
-    DISK_SOURCE_ARRAY=($TDISK_SOURCE)
-    DISK_ID_ARRAY=($TDISK_ID)
-    DISK_DS_ARRAY=($TDISK_DS)
-    DISK_PERSISTENT_ARRAY=($TDISK_PERSISTENT)
-    DISK_TYPE_ARRAY=($TDISK_TYPE)
-    DISK_FORMAT_ARRAY=($TDISK_FORMAT)
-    IFS=$OLDIFS
-
-    ssh_make_path "$DST_HOST" "$VM_PATH"
-
-    SP_VOL="one-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
-    doRemote "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$VM_DIR/disk.${CONTEXT_DISK_ID}" "ATTACH"
-
-    SRC_DS_DIR=`dirname  $VM_PATH`
-
-    TAR_COPY="$SSH $SRC_HOST '$TAR -C $SRC_DS_DIR --sparse -cf - $VM_PATH'"
-    TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $VM_DIR --sparse -xf -'"
-
-    splog "Copy $SRC_HOST:$SRC_VM_DIR $DST_HOST:$DST_DIR"
-    exec_and_log "eval $TAR_COPY" "Error copying SYSTEM_DS from $SRC_HOST to $DST_HOST"
-
-    for i in ${!DISK_ID_ARRAY[@]}; do
-        if [ "${DISK_TM_ARRAY[i]}" = "storpool" ]; then
-            SOURCE="${DISK_SOURCE_ARRAY[i]}"
-            SP_VOL="${SOURCE##*/}"
-            [ -n "${DISK_PERSISTENT_ARRAY[i]}" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID_ARRAY[i]}"
-        else
-            FORMAT="${DISK_FORMAT_ARRAY[i]}"
-            if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
-                FORMAT="swap"
-            fi
-            SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
-        fi
-        doRemote "$SRC_HOST" "$DST_HOST" "$SP_VOL" "${VM_PATH}/disk.${${DISK_ID_ARRAY[i]}}" "ATTACH"
-    done
-
-    splog "END"
-fi
-
+splog "END ($SP_VOL)"
 exit 0
