@@ -45,7 +45,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
         SP_USED=${SP_USED:-0}
         SP_TOTAL=${SP_TOTAL:-0}
         SP_FREE=${SP_FREE:-0}
-        splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED SPTOTAL=$SP_TOTAL SPFREE=$SP_FREE USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
+#        splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED SPTOTAL=$SP_TOTAL SPFREE=$SP_FREE USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
 
         echo "DS = ["
         echo "  ID = $ds,"
