@@ -31,10 +31,6 @@ api = Api(host=cfg['SP_API_HTTP_HOST'], port=cfg['SP_API_HTTP_PORT'], auth=cfg['
 
 DS = 'one-ds-{0}'.format(argv[1])
 
-used_mb = 0
-total_mb = 0
-free_mb = 0
-
 for t in api.volumeTemplatesStatus():
     if t.name == DS:
         estUsed = t.storedSize
@@ -46,7 +42,5 @@ for t in api.volumeTemplatesStatus():
         used_mb = estUsed / 1024 / 1024
         total_mb = estTotal / 1024 / 1024
         free_mb = (estTotal - estUsed) / 1024 / 1024
+        print "{used} {total} {free}".format(used=used_mb, total=total_mb, free=free_mb)
         break
-
-if total_mb:
-    print "{used} {total} {free}".format(used=used_mb, total=total_mb, free=free_mb)
