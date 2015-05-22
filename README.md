@@ -49,6 +49,10 @@ A working StorPool cluster is required.
 
 ## Installation
 
+* Install python bindings for StorPool
+```bash
+pip install storpool
+```
 * Clone the addon-storpool
 ```bash
 cd /usr/src
@@ -92,9 +96,9 @@ Some configuration attributes must be set to enable an image datastore as StorPo
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
 1. The PlaceTail placement group is defined in StorPool as list of drives. used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
-1. It must match SP_API_HTTP_HOST in storpool.conf. Useful when StorPool is not installed on the front end.
-1. It must match SP_API_HTTP_PORT in storpool.conf. Useful when StorPool is not installed on the front end.
-1. It must match SP_AUTH_TOKEN in storpool.conf. Useful when StorPool is not installed on the front end.
+1. It must match **SP_API_HTTP_HOST** in storpool.conf. Useful when StorPool is not installed on the front end.
+1. It must match **SP_API_HTTP_PORT** in storpool.conf. Useful when StorPool is not installed on the front end.
+1. It must match **SP_AUTH_TOKEN** in storpool.conf. Useful when StorPool is not installed on the front end.
 
 The following example illustrates the creation of a StorPool datastore of hybrid type with 3 replicas. In this case the datastore will use hosts node1, node2 and node3 for imports and creating images.
 
