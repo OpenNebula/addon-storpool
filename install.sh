@@ -61,15 +61,15 @@ function patch_hook()
 {
     local _hook="$1"
     local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
-    local _is_sh=0 _is_patched=0 _backup=
+    local _is_sh=0 _is_patched=0 _backup= _is_bash=
     grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
     grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
     if [ "$(grep -v -E '^#|^$' "${_hook}")" = "exit 0" ]; then
         if [ "${_is_patched}" = "1" ]; then
             echo "*** ${_hook} already patched"
         else
-            echo "*** patching ${_hook}"
             _backup="${_hook}.backup$(date +%s)"
+            echo "*** backup ${_hook} as ${_backup}"
             cp $CP_ARG "${_hook}" "${_backup}"
             if [ "${_is_sh}" = "1" ]; then
                 grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
@@ -96,7 +96,6 @@ function patch_hook()
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
         M_DIR="$ONE_VAR/remotes/tm/${TM_MAD}"
-        M_FILE="${M_DIR}/${MIGRATE}.d/${MIGRATE}-storpool"
         mkdir -p "$M_DIR/${MIGRATE}.d"
         pushd "$M_DIR/${MIGRATE}.d" &>/dev/null
         ln -sf "../../storpool/${MIGRATE}" "${MIGRATE}-storpool"
