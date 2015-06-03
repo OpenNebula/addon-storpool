@@ -1,5 +1,5 @@
---- datastores-tab.js.orig	2015-04-07 15:38:38.000000000 +0300
-+++ datastores-tab.js	2015-04-30 10:45:32.342728650 +0300
+--- datastores-tab.js.orig	2015-03-13 10:40:31.129223366 +0200
++++ datastores-tab.js	2015-03-13 11:02:47.409756857 +0200
 @@ -47,6 +47,7 @@
                <option value="ceph">' + tr("Ceph") + '</option>\
                <option value="gluster">' + tr("Gluster") + '</option>\
@@ -24,7 +24,7 @@
                    <option value="custom">' + tr("Custom") + '</option>\
                  </select>\
                  <div>\
-@@ -224,6 +227,30 @@
+@@ -224,6 +227,24 @@
                '</label>\
                <input type="text" name="rbd_format" id="rbd_format" />\
            </div>\
@@ -45,28 +45,21 @@
 +                '<span class="tip">'+tr("PlacementGroup to keep one copy on. This copy (the tail) is used for reads. PlacementGroup must exist the StorPool cluster. Check with 'storpool placementGroup list'.")+'</span>'+
 +              '</label>\
 +              <input type="text" name="sp_placetail" id="sp_placetail" />\
-+           </div>\
-+          <div class="large-6 columns">\
-+              <label for="sp_system">' + tr("StorPool system") +
-+                '<span class="tip">'+tr("Used when SYSTEM datastore type is selected. Set to 'ssh' if the datastore is not on shared fs")+'</span>'+
-+              '</label>\
-+              <input type="text" name="sp_system" id="sp_system" />\
-+           </div>\
++          </div>\
          </div>\
          <div class="reveal-footer">\
            <div class="form_buttons">\
-@@ -866,6 +893,10 @@
+@@ -866,6 +887,9 @@
      $('label[for="rbd_format"],input#rbd_format',context).parent().hide();
      $('label[for="staging_dir"],input#staging_dir',context).parent().hide();
      $('label[for="limit_transfer_bw"],input#limit_transfer_bw',context).parent().hide();
 +    $('label[for="sp_replication"],input#sp_replication',context).parent().hide();
 +    $('label[for="sp_placeall"],input#sp_placeall',context).parent().hide();
 +    $('label[for="sp_placetail"],input#sp_placetail',context).parent().hide();
-+    $('label[for="sp_system"],input#sp_system',context).parent().hide();
      $('label[for="no_decompress"],input#no_decompress',context).parent().hide();
      $('select#ds_mad').removeAttr('disabled');
      $('select#tm_mad').removeAttr('disabled');
-@@ -938,6 +969,9 @@
+@@ -938,6 +962,9 @@
            case 'dev':
              select_devices();
              break;
@@ -76,18 +69,17 @@
            case 'custom':
              select_custom();
              break;
-@@ -976,6 +1010,10 @@
+@@ -976,6 +1003,9 @@
          var rbd_format      = $('#rbd_format',context).val();
          var staging_dir     = $('#staging_dir',context).val();
  
 +        var sp_replication  = $('#sp_replication',context).val();
 +        var sp_placeall     = $('#sp_placeall',context).val();
 +        var sp_placetail    = $('#sp_placetail',context).val();
-+        var sp_system       = $('#sp_system',context).val();
  
          if (!name){
              notifyError("Please provide a name");
-@@ -1051,6 +1089,18 @@
+@@ -1051,6 +1081,15 @@
          if (staging_dir)
              ds_obj.datastore.staging_dir = staging_dir;
  
@@ -100,13 +92,10 @@
 +        if (sp_placetail)
 +            ds_obj.datastore.sp_placetail = sp_placetail;
 +
-+        if (ds_type == "SYSTEM_DS" && sp_system )
-+            ds_obj.datastore.sp_placetail = sp_system;
-+
          Sunstone.runAction("Datastore.create",ds_obj);
          return false;
      });
-@@ -1251,6 +1301,30 @@
+@@ -1251,6 +1290,29 @@
      $('input#restricted_dirs').attr('disabled', 'disabled');
  }
  
@@ -116,12 +105,11 @@
 +    $('select#tm_mad').val('storpool');
 +    $('select#tm_mad').attr('disabled', 'disabled');
 +    $('input#image_ds_type').attr('checked', 'true');
-+    $('input#file_ds_type').attr('disabled', 'disabled');
++    $('input[name=ds_type]').attr('disabled', 'disabled');
 +    $('label[for="sp_replication"],input#sp_replication').parent().fadeIn();
 +    $('label[for="sp_placeall"],input#sp_placeall').parent().fadeIn();
 +    $('label[for="sp_placetail"],input#sp_placetail').parent().fadeIn();
 +    $('label[for="bridge_list"],input#bridge_list').parent().fadeIn();
-+    $('label[for="sp_system"],input#sp_system').parent().fadeIn();
 +    $('label[for="staging_dir"],input#staging_dir').parent().fadeIn();
 +    $('label[for="limit_transfer_bw"],input#limit_transfer_bw').parent().fadeIn();
 +    $('label[for="no_decompress"],input#no_decompress').parent().fadeIn();

@@ -107,17 +107,30 @@ done
 
 # patch sunstone's datastores-tab.js
 if [ -f "$SUNSTONE_PLUGINS/datastores-tab.js" ]; then
-    if grep -q -i storpool $SUNSTONE_PLUGINS/datastores-tab.js; then
-        echo "*** already applied sunstone integration in $SUNSTONE_PLUGINS/datastores-tab.js"
-    else
-        echo "*** enabling sunstone integration in $SUNSTONE_PLUGINS/datastores-tab.js"
-        pushd "$SUNSTONE_PLUGINS" &>/dev/null
-        patch -b -p 0 < "$CWD/patches/datastores-tab.js.patch"
-        popd &>/dev/null
-    fi
+    set +e
+    pushd "$SUNSTONE_PLUGINS" &>/dev/null
+    for p in `ls ${CWD}/patches/*.patch`; do
+        #check if patch is applied
+        patch --dry-run --reverse --forward --input=${p}
+        RET=$?
+        if [ $RET == 0 ]; then
+            echo "*** patch ${p##*/} already applied"
+        else
+            patch --dry-run --forward --input=${p}
+            RET=$?
+            if [ $RET == 0 ]; then
+                echo "*** patch using ${p##*/}"
+                patch --backup --version-control=numbered --strip=0 --forward --input="${p}"
+            else
+                echo "*** Can't apply patch $p! Please fix."
+            fi
+        fi
+    done
+    popd &> /dev/null
+    set -e
 else
-    echo "sunstones js plugin datastores-tab.js not found in $ONE_LIB/sunstone/public/js/plugins/"
-    echo "StorPool integration to sunstone not installed!"
+    echo " ** Can't find ${SUNSTONE_PLUGINS}/datastores-tab.js. Is opennebula-sunstone installed?"
+    echo " ** StorPool integration to sunstone not installed!"
 fi
 
 # Enable StorPool in oned.conf

@@ -1,0 +1,55 @@
+--- datastores-tab.js.orig	2015-06-03 12:30:17.586718780 +0300
++++ datastores-tab.js	2015-06-03 12:29:23.905857053 +0300
+@@ -245,6 +245,12 @@
+               '</label>\
+               <input type="text" name="sp_placetail" id="sp_placetail" />\
+           </div>\
++          <div class="large-6 columns">\
++              <label for="sp_system">' + tr("StorPool system") +
++                '<span class="tip">'+tr("Used when SYSTEM datastore type is selected. Set to 'ssh' if the datastore is not on shared fs")+'</span>'+
++              '</label>\
++              <input type="text" name="sp_system" id="sp_system" />\
++          </div>\
+         </div>\
+         <div class="reveal-footer">\
+           <div class="form_buttons">\
+@@ -890,6 +896,7 @@
+     $('label[for="sp_replication"],input#sp_replication',context).parent().hide();
+     $('label[for="sp_placeall"],input#sp_placeall',context).parent().hide();
+     $('label[for="sp_placetail"],input#sp_placetail',context).parent().hide();
++    $('label[for="sp_system"],input#sp_system',context).parent().hide();
+     $('label[for="no_decompress"],input#no_decompress',context).parent().hide();
+     $('select#ds_mad').removeAttr('disabled');
+     $('select#tm_mad').removeAttr('disabled');
+@@ -1006,6 +1013,7 @@
+         var sp_replication  = $('#sp_replication',context).val();
+         var sp_placeall     = $('#sp_placeall',context).val();
+         var sp_placetail    = $('#sp_placetail',context).val();
++        var sp_system       = $('#sp_system',context).val();
+ 
+         if (!name){
+             notifyError("Please provide a name");
+@@ -1090,6 +1098,9 @@
+         if (sp_placetail)
+             ds_obj.datastore.sp_placetail = sp_placetail;
+ 
++        if (ds_type == "SYSTEM_DS" && sp_system )
++            ds_obj.datastore.sp_system = sp_system;
++
+         Sunstone.runAction("Datastore.create",ds_obj);
+         return false;
+     });
+@@ -1296,11 +1307,12 @@
+     $('select#tm_mad').val('storpool');
+     $('select#tm_mad').attr('disabled', 'disabled');
+     $('input#image_ds_type').attr('checked', 'true');
+-    $('input[name=ds_type]').attr('disabled', 'disabled');
++    $('input#file_ds_type').attr('disabled', 'disabled');
+     $('label[for="sp_replication"],input#sp_replication').parent().fadeIn();
+     $('label[for="sp_placeall"],input#sp_placeall').parent().fadeIn();
+     $('label[for="sp_placetail"],input#sp_placetail').parent().fadeIn();
+     $('label[for="bridge_list"],input#bridge_list').parent().fadeIn();
++    $('label[for="sp_system"],input#sp_system').parent().fadeIn();
+     $('label[for="staging_dir"],input#staging_dir').parent().fadeIn();
+     $('label[for="limit_transfer_bw"],input#limit_transfer_bw').parent().fadeIn();
+     $('label[for="no_decompress"],input#no_decompress').parent().fadeIn();
