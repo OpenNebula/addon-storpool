@@ -62,7 +62,15 @@ git clone https://github.com/OpenNebula/addon-storpool
 ```bash
 bash addon-storpool/install.sh
 ```
+If oned and sunstone services are on different servers it is possible to install only part of the integration:
+ * set environment variable SKIP_SUNSTONE=1 to skip the sunstone integration
+ * set environment variable SKIP_ONED=1 to skip the oned integration
+
 * Restart `opennebula` and `opennebula-sunstone` services
+
+## Upgrade
+
+Follow the installation procedure. Take care if there are special care for the notes printed by the install script and follow.
 
 ## Configuration
 

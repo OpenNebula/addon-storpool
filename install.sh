@@ -41,6 +41,48 @@ SUNSTONE_PLUGINS=${SUNSTONE_PLUGINS:-$ONE_LIB/sunstone/public/js/plugins/}
 
 CWD=$(pwd)
 
+
+end_msg=
+if [ -n "$SKIP_SUNSTONE" ]; then
+    echo "*** Skipping opennebula-sunstone integration patch"
+else
+    # patch sunstone's datastores-tab.js
+    if [ -f "$SUNSTONE_PLUGINS/datastores-tab.js" ]; then
+        set +e
+        pushd "$SUNSTONE_PLUGINS" &>/dev/null
+        for p in `ls ${CWD}/patches/*.patch`; do
+            #check if patch is applied
+            patch --dry-run --reverse --forward --input=${p}
+            RET=$?
+            if [ $RET == 0 ]; then
+                echo "*** Patch file ${p##*/} already applied?"
+            else
+                patch --dry-run --forward --input=${p}
+                RET=$?
+                if [ $RET == 0 ]; then
+                    echo "*** Apply patch ${p##*/}"
+                    patch --backup --version-control=numbered --strip=0 --forward --input="${p}"
+                else
+                    echo " ** Note! Can't apply patch $p! Please merge manually."
+                fi
+            fi
+        done
+        popd &> /dev/null
+        set -e
+        end_msg="opennebula-sunstone"
+    else
+        echo " ** Can't find ${SUNSTONE_PLUGINS}/datastores-tab.js. Wrong path or opennebula-sunstone installed."
+        echo " ** Note! StorPool integration to sunstone not installed."
+    fi
+fi
+
+if [ -n "$SKIP_ONED" ]; then
+    echo "*** Skipping oned integration"
+    [ -n "$end_msg" ] && echo "*** Please restart $end_msg service"
+    exit;
+fi
+
+
 # install datastore and tm MAD
 for MAD in datastore tm; do
     echo "*** Installing $ONE_VAR/remotes/${MAD}/storpool ..."
@@ -69,7 +111,7 @@ function patch_hook()
             echo "*** ${_hook} already patched"
         else
             _backup="${_hook}.backup$(date +%s)"
-            echo "*** backup ${_hook} as ${_backup}"
+            echo "*** Create backup of ${_hook} as ${_backup}"
             cp $CP_ARG "${_hook}" "${_backup}"
             if [ "${_is_sh}" = "1" ]; then
                 grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
@@ -83,11 +125,13 @@ function patch_hook()
         fi
     else
         echo "*** ${_hook} file not empty!"
-        echo "*** Please merge carefully the following line to ${_hook}"
-        echo ">>> ${_hook_line//\\&/&}"
+        echo " ** Note! Please merge the following line to ${_hook}"
+        echo " **"
+        echo " ** ${_hook_line//\\&/&}"
+        echo " **"
         if [ "${_is_sh}" = "1" ]; then
-            echo "*** and set script to bash:"
-            echo "***   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
+            echo " ** Note! Set script to bash:"
+            echo " **   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
         fi
     fi
 }
@@ -104,34 +148,6 @@ for TM_MAD in shared ssh; do
         patch_hook "${M_DIR}/${MIGRATE}"
     done
 done
-
-# patch sunstone's datastores-tab.js
-if [ -f "$SUNSTONE_PLUGINS/datastores-tab.js" ]; then
-    set +e
-    pushd "$SUNSTONE_PLUGINS" &>/dev/null
-    for p in `ls ${CWD}/patches/*.patch`; do
-        #check if patch is applied
-        patch --dry-run --reverse --forward --input=${p}
-        RET=$?
-        if [ $RET == 0 ]; then
-            echo "*** patch ${p##*/} already applied"
-        else
-            patch --dry-run --forward --input=${p}
-            RET=$?
-            if [ $RET == 0 ]; then
-                echo "*** patch using ${p##*/}"
-                patch --backup --version-control=numbered --strip=0 --forward --input="${p}"
-            else
-                echo "*** Can't apply patch $p! Please fix."
-            fi
-        fi
-    done
-    popd &> /dev/null
-    set -e
-else
-    echo " ** Can't find ${SUNSTONE_PLUGINS}/datastores-tab.js. Is opennebula-sunstone installed?"
-    echo " ** StorPool integration to sunstone not installed!"
-fi
 
 # Enable StorPool in oned.conf
 if grep -q -i storpool /etc/one/oned.conf &>/dev/null; then
@@ -150,4 +166,4 @@ TM_MAD_CONF = [
 _EOF_
 fi
 
-echo "*** Please restart opennebula and opennebula-sunstone services"
+echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
