@@ -38,21 +38,25 @@ if [ -f "$SP_MONITOR_DS" ]; then
 
         SP_SIZES=($SP_DS_SIZES)
 
-        SP_USED=${SP_SIZES["0"]}
-        SP_TOTAL=${SP_SIZES["1"]}
-        SP_FREE=${SP_SIZES["2"]}
+        SP_USED_MB=${SP_SIZES["0"]:-0}
+        SP_TOTAL_MB=${SP_SIZES["1"]:-0}
+        SP_FREE_MB=${SP_SIZES["2"]:-0}
 
-        SP_USED=${SP_USED:-0}
-        SP_TOTAL=${SP_TOTAL:-0}
-        SP_FREE=${SP_FREE:-0}
-#        splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED SPTOTAL=$SP_TOTAL SPFREE=$SP_FREE USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
+        CALC_USED_MB=$((USED_MB + SP_USED_MB))
+        if [ $SP_FREE_MB < $FREE_MB ];
+            CALC_FREE_MB=$SP_FREE_MB
+        else
+            CALC_FREE_MB=$FREE_MB
+        fi
+        CALC_TOTAL_MB=$((CALC_USED_MB + CALC_FREE_MB))
+#        splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
 
         echo "DS = ["
         echo "  ID = $ds,"
-        echo "  USED_MB = $USED_MB,"
-        echo "  TOTAL_MB = $TOTAL_MB,"
-        echo "  FREE_MB = $FREE_MB,"
-
+        echo "  USED_MB = $CALC_USED_MB,"
+        echo "  TOTAL_MB = $CALC_TOTAL_MB,"
+        echo "  FREE_MB = $CALC_FREE_MB,"
+        # look like this is not used...
         echo "  VOLATILE_USED_MB = $SP_USED,"
         echo "  VOLATILE_TOTAL_MB = $SP_TOTAL,"
         echo "  VOLATILE_FREE_MB = $SP_FREE"
