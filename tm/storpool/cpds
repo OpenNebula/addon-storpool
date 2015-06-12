@@ -28,10 +28,11 @@ source "${TM_PATH}/storpool_common.sh"
 
 SRC=$1
 DST=$2
-VM_ID=$3
-DS_ID=$4
+SNAP_ID=$3
+VM_ID=$4
+DS_ID=$5
 
-splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=$SRC DST=$DST SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
 
 SRC_HOST=`arg_host $SRC`
 SRC_PATH=`arg_path $SRC`
@@ -56,11 +57,15 @@ SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
 [ "$PERSISTENT" = "YES" ] || SP_PARENT="${SP_PARENT}-${VM_ID}-${DISK_ID}"
 
+if [ "$SNAP_ID" != "-1" ]; then
+    SP_PARENT="${SP_PARENT}-snap${SNAP_ID}"
+fi
+
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
-storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_PARENT"
+storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$SNAP_ID" "$SP_PARENT"
 
 splog "END"
 exit 0

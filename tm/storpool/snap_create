@@ -19,7 +19,7 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# mvds host:remote_system_ds/disk.i host:remote_system_ds/disk.i vmId datastoreId
+# snap_create  host:parent_image snap_id vm_id ds_id
 #-------------------------------------------------------------------------------
 
 TM_PATH="$(dirname $0)"
@@ -27,28 +27,20 @@ TM_PATH="$(dirname $0)"
 source "${TM_PATH}/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
-# Get mvds arguments from OpenNebula core
+# Get clone arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
 SRC=$1
-DST=$2
-SNAP_ID=$3
-VM_ID=$4
-DS_ID=$5
+SNAP_ID=$2
+VM_ID=$3
+DS_ID=$4
 
-splog "SRC=$SRC DST=$DST SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
-
-#-------------------------------------------------------------------------------
-# Compute the destination image name
-#-------------------------------------------------------------------------------
+splog "SRC=$SRC SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
 
 SRC_HOST=`arg_host $SRC`
 SRC_PATH=`arg_path $SRC`
-SRC_DIR="${SRC_PATH%/*}"
-DST_HOST=`arg_host $SRC`
-DST_PATH=`arg_path $SRC`
 
-DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
+DISK_ID=$(echo ${SRC##*/} | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
 # Get Image information
@@ -56,25 +48,27 @@ DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
 
 oneVmInfo "$VM_ID" "$DISK_ID"
 
-SP_VOL="${SOURCE##*/}"
-if [ "$PERSISTENT" != "YES" ]; then
-    SP_VOL+="-${VM_ID}-${DISK_ID}"
-fi
-
-SP_NEW="${DST##*/}"
-if [ "$SP_VOL" != "$SP_NEW" ]; then
-    DEFERRED=1
-fi
-
-SP_TEMPLATE="${DST%%/*}"
-
-splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}"
-
 #-------------------------------------------------------------------------------
-# Detach and if it is deferred snapshot "convert" to Image
+# Compute the source image
 #-------------------------------------------------------------------------------
 
-storpoolAction "MVDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_NEW" "$SP_TEMPLATE" "$DEFERRED"
+SP_PARENT=${SOURCE##*/}
+if [ "$CLONE" = "NO" ]; then
+    # PERSISTENT image
+    SP_VOL="${SP_PARENT}"
+else
+    # NON-PERSISTENT image
+    SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
+fi
+
+DST_HOST=$SRC_HOST
+DST_PATH="$SRC_PATH"
+
+#-------------------------------------------------------------------------------
+# Create snapshot
+#-------------------------------------------------------------------------------
+
+storpoolAction "SNAPSHOT" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "${SP_VOL}-snap$SNAP_ID"
 
 splog "END"
 exit 0

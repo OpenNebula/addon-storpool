@@ -46,6 +46,7 @@ function storpoolAction()
     splog "$_ACTION $_SRC_HOST $_DST_HOST $_SP_VOL $_DST_PATH $_SP_PARENT $_SP_TEMPLATE $_SP_SIZE"
     local _SP_LINK="/dev/storpool/$_SP_VOL"
     local _DST_DIR="${_DST_PATH%%disk*}"
+    local _SP_TMP=$(date +%s)-$(mktemp --dry-run XXXXXXXX)
 #    splog "SP_LINK=$_SP_LINK DST_DIR=$_DST_DIR"
     _SP_TEMPLATE="${_SP_TEMPLATE:+template $_SP_TEMPLATE}"
 
@@ -168,7 +169,11 @@ EOF
     local _CLONE=$(cat <<EOF
     #_CLONE
     splog "volume $_SP_VOL baseOn $_SP_PARENT $_SP_TEMPLATE"
-    storpool volume "$_SP_VOL" baseOn "$_SP_PARENT" $_SP_TEMPLATE
+    if [ "$_DST_PATH" = "-1" ]; then
+        storpool volume "$_SP_VOL" baseOn "$_SP_PARENT" $_SP_TEMPLATE
+    else
+        storpool volume "$_SP_VOL" parent "${_SP_PARENT}" $_SP_TEMPLATE
+    fi
 EOF
 )
     local _RENAME=$(cat <<EOF
@@ -189,6 +194,29 @@ EOF
     #_EXTRA
     splog "EXTRA_CMD:$EXTRA_CMD"
     $EXTRA_CMD
+EOF
+)
+    local _SNAPSHOT=$(cat <<EOF
+    #_SNAPSHOT
+    splog "volume $_SP_VOL snapshot $_SP_PARENT"
+    storpool volume "$_SP_VOL" snapshot "$_SP_PARENT"
+EOF
+)
+    local _SNAPREVERT=$(cat <<EOF
+    #_SNAPREVERT
+    SP_TMP=\$(date +%s)-\$(mktemp --dry-run XXXXXXXX)
+    splog "volume $_SP_VOL rename $_SP_VOL-\$SP_TMP"
+    storpool volume "$_SP_VOL" rename "$_SP_VOL-\$SP_TMP"
+
+    trap 'storpool volume "$_SP_VOL-\$SP_TMP" rename "$_SP_VOL"' EXIT TERM INT HUP
+
+    splog "volume $_SP_VOL parent $_SP_PARENT"
+    storpool volume "$_SP_VOL" parent "$_SP_PARENT"
+
+    trap - EXIT TERM INT HUP
+
+    splog "volume $_SP_VOL-\$SP_TMP delete $_SP_VOL-\$SP_TMP"
+    storpool volume "$_SP_VOL-\$SP_TMP" delete "$_SP_VOL-\$SP_TMP"
 EOF
 )
     local _CMD= _HOST=
@@ -236,6 +264,18 @@ EOF
         PRE_CONTEXT)
             _HOST="$_DST_HOST"
             _CMD="$_BEGIN$_DELVOL_DETACH$_TEMPLATE$_CREATE$_ATTACH$_SYMLINK$_EXTRA"
+        ;;
+        SNAPSHOT)
+            _HOST="$_DST_HOST"
+            _CMD="$_BEGIN$_SNAPSHOT"
+        ;;
+        DELSNAP)
+            _HOST="$_DST_HOST"
+            _CMD="$_BEGIN$_DELSNAP"
+        ;;
+        SNAPREVERT)
+            _HOST="$_DST_HOST"
+            _CMD="$_BEGIN$_DELSNAP"
         ;;
         *)
     esac
