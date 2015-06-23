@@ -92,7 +92,7 @@ else
 fi
 
 # Enable StorPool in oned.conf
-if grep -q -i storpool /etc/one/oned.conf &>/dev/null; then
+if grep -q -i storpool /etc/one/oned.conf >/dev/null 2>&1; then
     echo "*** StorPool is already enabled in /etc/one/oned.conf"
 else
     echo "*** enabling StorPool plugin in /etc/one/oned.conf"

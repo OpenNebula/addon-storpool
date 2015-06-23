@@ -131,13 +131,13 @@ DELETE_CMD=$(cat <<EOF
         rm -f "$DST_PATH"
     fi
 
-    if storpool attach list | grep -q " $SP_VOL " &>/dev/null; then
+    if storpool attach list | grep -q " $SP_VOL " >/dev/null 2>&1; then
         splog "detach volume $SP_VOL all"
         storpool detach volume $SP_VOL all
     fi
 
     if [ "$PERSISTENT" != "YES" ]; then
-        if storpool volume "$SP_VOL" info &>/dev/null; then
+        if storpool volume "$SP_VOL" info >/dev/null 2>&1; then
             splog "delete volume $SP_VOL (non-persistent)"
             storpool volume "$SP_VOL" delete "$SP_VOL"
         fi

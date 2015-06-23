@@ -115,7 +115,7 @@ CLONE_CMD=$(cat <<EOF
     export PATH=/sbin:/usr/sbin/:$PATH
     splog(){ logger -t tm_sp_${0##*/} "\$*"; }
 
-    if storpool volume "$SP_VOL" info &>/dev/null; then
+    if storpool volume "$SP_VOL" info >/dev/null 2>&1; then
         splog "delete $SP_VOL (non-persistent volume)"
         storpool volume "$SP_VOL" delete "$SP_VOL"
     fi

@@ -111,12 +111,12 @@ RM_CMD=$(cat <<EOF
     export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    if storpool attach list | grep -q " $SP_VOL " &>/dev/null; then
+    if storpool attach list | grep -q " $SP_VOL " >/dev/null 2>&1; then
         splog "detach volume $SP_VOL all"
         storpool detach volume "$SP_VOL" all
     fi
 
-    if storpool volume "$SP_VOL" info &>/dev/null; then
+    if storpool volume "$SP_VOL" info >/dev/null 2>&1; then
         splog "delete volume $SP_VOL"
         storpool volume "$SP_VOL" delete "$SP_VOL"
     fi
