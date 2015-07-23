@@ -169,6 +169,19 @@ EOF
     #_CLONE
     splog "volume $_SP_VOL baseOn $_SP_PARENT $_SP_TEMPLATE"
     storpool volume "$_SP_VOL" baseOn "$_SP_PARENT" $_SP_TEMPLATE
+
+EOF
+)
+    local _RESIZE=$(cat <<EOF
+    #_RESIZE
+    if [ -n "$SIZE" ]; then
+        ORIGINAL_SIZE=${ORIGINAL_SIZE:-0}
+        if [ "$SIZE" -ge "$ORIGINAL_SIZE" ]; then
+            splog "volume $_SP_VOL size ${SIZE}M"
+            storpool volume "$_SP_VOL" size ${SIZE}M"
+        fi
+    fi
+
 EOF
 )
     local _RENAME=$(cat <<EOF
@@ -195,7 +208,7 @@ EOF
     case "$_ACTION" in
         CLONE)
             _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DELVOL$_CLONE$_ATTACH$_SYMLINK"
+            _CMD="$_BEGIN$_DELVOL$_CLONE$_RESIZE$_ATTACH$_SYMLINK"
         ;;
         CPDS)
             _HOST="$_SRC_HOST"
@@ -207,7 +220,7 @@ EOF
         ;;
         LN)
             _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_ATTACH$_SYMLINK"
+            _CMD="$_BEGIN$_RESIZE$_ATTACH$_SYMLINK"
         ;;
         DETACH)
             _HOST="$_SRC_HOST"
@@ -284,7 +297,9 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/PERSISTENT \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_ACTIVE \
-                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE)
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE)
 
     unset i
     VMSTATE="${XPATH_ELEMENTS[i++]}"
@@ -298,6 +313,8 @@ function oneVmInfo()
     HOTPLUG_SAVE_AS="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_ACTIVE="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
+    SIZE="${XPATH_ELEMENTS[i++]}"
+    ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
 
 #    splog "\
 #${VMSTATE:+VMSTATE=$VMSTATE }\
