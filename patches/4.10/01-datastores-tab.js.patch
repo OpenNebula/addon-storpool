@@ -1,5 +1,5 @@
---- datastores-tab.js.orig	2015-06-03 12:30:17.586718780 +0300
-+++ datastores-tab.js	2015-06-03 12:29:23.905857053 +0300
+--- js/plugins/datastores-tab.js.orig	2015-06-03 12:30:17.586718780 +0300
++++ js/plugins/datastores-tab.js	2015-06-03 12:29:23.905857053 +0300
 @@ -245,6 +245,12 @@
                '</label>\
                <input type="text" name="sp_placetail" id="sp_placetail" />\

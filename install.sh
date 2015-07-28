@@ -33,7 +33,6 @@ if [ -n "$ONE_LOCATION" ]; then
     ONE_DS="$ONE_LOCATION/var/datastores"
 fi
 
-SUNSTONE_PLUGINS=${SUNSTONE_PLUGINS:-$ONE_LIB/sunstone/public/js/plugins/}
 
 #----------------------------------------------------------------------------#
 
@@ -46,32 +45,59 @@ end_msg=
 if [ -n "$SKIP_SUNSTONE" ]; then
     echo "*** Skipping opennebula-sunstone integration patch"
 else
+    SUNSTONE_PUBLIC=${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}
+    if [ -f "$SUNSTONE_PUBLIC/js/plugins/datastores-tab.js" ]; then
+        SS_VER=4.10
+    fi
+    if [ -f "$SUNSTONE_PUBLIC/app/tabs/datastores-tab/form-panels/create.js" ]; then
+        SS_VER=4.14
+    fi
+    ONE_VER=${ONE_VER:-$SS_VER}
+
     # patch sunstone's datastores-tab.js
-    if [ -f "$SUNSTONE_PLUGINS/datastores-tab.js" ]; then
+    if [ -n "$ONE_VER" ]; then
+        patch_err=
         set +e
-        pushd "$SUNSTONE_PLUGINS" &>/dev/null
-        for p in `ls ${CWD}/patches/*.patch`; do
+        pushd "$SUNSTONE_PUBLIC" &>/dev/null
+        for p in `ls ${CWD}/patches/${ONE_VER}/*.patch`; do
             #check if patch is applied
-            patch --dry-run --reverse --forward --input=${p}
+            patch --dry-run --reverse --forward --strip=0 --input=${p}
             RET=$?
             if [ $RET == 0 ]; then
                 echo "*** Patch file ${p##*/} already applied?"
             else
-                patch --dry-run --forward --input=${p}
+                patch --dry-run --forward --strip=0 --input=${p}
                 RET=$?
                 if [ $RET == 0 ]; then
                     echo "*** Apply patch ${p##*/}"
                     patch --backup --version-control=numbered --strip=0 --forward --input="${p}"
                 else
                     echo " ** Note! Can't apply patch $p! Please merge manually."
+                    patch_err="$p"
                 fi
             fi
         done
-        popd &> /dev/null
+        if [ "$ONE_VER" = "4.14" ]; then
+            bin_err=
+            for b in node npm bower grunt; do
+                which $b
+                if [ $? != 0 ]; then
+                    bin_err=$b
+                    echo " ** Note! $b binary not found! Can't rebuild susnstone interface!"
+                fi
+            done
+            if [ "$bin_err" = "" ]; then
+                npm install
+                bower --allow-root install
+                grunt sass
+                grunt requirejs
+            fi
+        fi
+        popd &>/dev/null
         set -e
         end_msg="opennebula-sunstone"
     else
-        echo " ** Can't find ${SUNSTONE_PLUGINS}/datastores-tab.js. Wrong path or opennebula-sunstone installed."
+        echo " ** Can't determine version fron ${SUNSTONE_PUBLIC}. Wrong path or opennebula-sunstone not installed."
         echo " ** Note! StorPool integration to sunstone not installed."
     fi
 fi
