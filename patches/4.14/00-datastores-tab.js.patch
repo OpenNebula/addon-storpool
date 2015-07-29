@@ -141,7 +141,7 @@
 +        {{tr "StorPool PlaceTail"}}
 +        <span class="tip">
 +          {{tr "PlacementGroup to keep one copy on. This copy (the tail) is used for reads. PlacementGroup must exist the StorPool cluster. Check with 'storpool placementGroup list'."}}
-+        </span>'+
++        </span>
 +      </label>
 +      <input type="text" name="sp_placetail" id="sp_placetail" />
 +    </div>
