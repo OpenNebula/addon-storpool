@@ -71,6 +71,7 @@ else
                 if [ $RET == 0 ]; then
                     echo "*** Apply patch ${p##*/}"
                     patch --backup --version-control=numbered --strip=0 --forward --input="${p}"
+                    $REBUILD_JS=1
                 else
                     echo " ** Note! Can't apply patch $p! Please merge manually."
                     patch_err="$p"
@@ -79,18 +80,24 @@ else
         done
         if [ "$ONE_VER" = "4.14" ]; then
             bin_err=
-            for b in node npm bower grunt; do
-                which $b
-                if [ $? != 0 ]; then
-                    bin_err=$b
-                    echo " ** Note! $b binary not found! Can't rebuild susnstone interface!"
+            if [ -n "$REBUILD_JS" ]; then
+                for b in node npm bower grunt; do
+                    echo "*** check for $b"
+                    $b --version
+                    if [ $? != 0 ]; then
+                        bin_err=$b
+                        echo " ** Note! $b not found!"
+                    fi
+                done
+                if [ -n "$bin_err" ]; then
+                    echo " ** Can't rebuild sunstone interface"
+                else
+                    echo "*** rebuilding synstone javascripts..."
+                    npm install
+                    bower --allow-root install
+                    grunt sass
+                    grunt requirejs
                 fi
-            done
-            if [ "$bin_err" = "" ]; then
-                npm install
-                bower --allow-root install
-                grunt sass
-                grunt requirejs
             fi
         fi
         popd &>/dev/null
@@ -111,11 +118,12 @@ fi
 
 # install datastore and tm MAD
 for MAD in datastore tm; do
-    echo "*** Installing $ONE_VAR/remotes/${MAD}/storpool ..."
-    mkdir -pv "$ONE_VAR/remotes/${MAD}/storpool"
-    cp $CP_ARG ${MAD}/storpool/* "$ONE_VAR/remotes/${MAD}/storpool/"
-    chown -R "$ONE_USER" "$ONE_VAR/remotes/${MAD}/storpool"
-    chmod u+x -R "$ONE_VAR/remotes/${MAD}/storpool"
+    M_DIR="${ONE_VAR}/remotes/${MAD}"
+    echo "*** Installing ${M_DIR}/storpool ..."
+    mkdir -pv "${M_DIR}/storpool"
+    cp $CP_ARG ${MAD}/storpool/* "${M_DIR}/storpool/"
+    chown -R "$ONE_USER" "${M_DIR}/storpool"
+    chmod u+x -R "${M_DIR}/storpool"
 done
 
 # install xpath_multi.py
@@ -162,6 +170,48 @@ function patch_hook()
     fi
 }
 
+function findFile()
+{
+    local c f d="$1" csum="$2"
+    while read c f; do
+        if [ "$c" = "$csum" ]; then
+            echo $f
+            break
+        fi
+    done < <(md5sum $d/* 2>/dev/null)
+}
+
+function tmResetMigrate()
+{
+    local current_csum=$(md5sum "${M_DIR}/${MIGRATE}" | awk '{print $1}')
+    local csum comment found orig_csum
+    while read csum comment; do
+        [ "$comment" = "orig" ] && orig_csum="$csum"
+        if [ "$current_csum" = "$csum" ]; then
+            found="$comment"
+            break;
+        fi
+    done < <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
+    case "$found" in
+         orig)
+            ;;
+         4.10)
+            orig=$(findFile "$M_DIR" "$orig_csum" )
+            if [ -n "$orig" ]; then
+                echo "***   $found variant of $TM_MAD/$MIGRATE"
+                mv "${M_DIR}/${MIGRATE}" "${M_DIR}/${MIGRATE}.backup$(date +%s)"
+                echo "***   restoring from original ${orig##*/}"
+                cp $CP_ARG "$orig" "${M_DIR}/${MIGRATE}"
+            fi
+            ;;
+         4.14)
+            continue
+            ;;
+            *)
+            echo " ** Can't determine the variant of $TM_MAD/$MIGRATE"
+    esac
+}
+
 # install premigrate and postmigrate hooks in shared and ssh
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
@@ -171,6 +221,7 @@ for TM_MAD in shared ssh; do
         ln -sf "../../storpool/${MIGRATE}" "${MIGRATE}-storpool"
         popd &>/dev/null
         chown -R "$ONE_USER" "${M_DIR}/${MIGRATE}.d"
+        tmResetMigrate
         patch_hook "${M_DIR}/${MIGRATE}"
     done
 done
