@@ -169,11 +169,11 @@ EOF
     local _CLONE=$(cat <<EOF
     #_CLONE
     if [ "$_DST_PATH" = "-1" ]; then
-        splog "volume $_SP_VOL baseOn $_SP_PARENT $_SP_TEMPLATE"
-        storpool volume "$_SP_VOL" baseOn "$_SP_PARENT" $_SP_TEMPLATE
-    else
         splog "volume $_SP_VOL parent $_SP_PARENT $_SP_TEMPLATE"
         storpool volume "$_SP_VOL" parent "$_SP_PARENT" $_SP_TEMPLATE
+    else
+        splog "volume $_SP_VOL baseOn $_SP_PARENT $_SP_TEMPLATE"
+        storpool volume "$_SP_VOL" baseOn "$_SP_PARENT" $_SP_TEMPLATE
     fi
 
 EOF
