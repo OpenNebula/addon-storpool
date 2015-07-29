@@ -194,6 +194,7 @@ EOF
     #_RENAME
     splog "volume $_SP_PARENT rename $_SP_VOL $_SP_TEMPLATE"
     storpool volume "$_SP_PARENT" rename "$_SP_VOL" $_SP_TEMPLATE
+
 EOF
 )
     local _RENAME_COND=$(cat <<EOF
@@ -202,35 +203,45 @@ EOF
         splog "volume $_SP_VOL rename $_SP_PARENT $_SP_TEMPLATE"
         storpool volume "$_SP_VOL" rename "$_SP_PARENT" $_SP_TEMPLATE
     fi
+
 EOF
 )
     local _EXTRA=$(cat <<EOF
     #_EXTRA
     splog "EXTRA_CMD:$EXTRA_CMD"
     $EXTRA_CMD
+
 EOF
 )
     local _SNAPSHOT=$(cat <<EOF
     #_SNAPSHOT
     splog "volume $_SP_VOL snapshot $_SP_PARENT"
     storpool volume "$_SP_VOL" snapshot "$_SP_PARENT"
+
 EOF
 )
     local _SNAPREVERT=$(cat <<EOF
     #_SNAPREVERT
-    SP_TMP=\$(date +%s)-\$(mktemp --dry-run XXXXXXXX)
-    splog "volume $_SP_VOL rename $_SP_VOL-\$SP_TMP"
-    storpool volume "$_SP_VOL" rename "$_SP_VOL-\$SP_TMP"
+    splog "volume $_SP_VOL rename ${_SP_VOL}-$_SP_TMP"
+    storpool volume "$_SP_VOL" rename "${_SP_VOL}-$_SP_TMP"
 
-    trap 'storpool volume "$_SP_VOL-\$SP_TMP" rename "$_SP_VOL"' EXIT TERM INT HUP
+    trap 'storpool volume "${_SP_VOL}-$_SP_TMP" rename "$_SP_VOL"' EXIT TERM INT HUP
 
     splog "volume $_SP_VOL parent $_SP_PARENT"
     storpool volume "$_SP_VOL" parent "$_SP_PARENT"
 
     trap - EXIT TERM INT HUP
 
-    splog "volume $_SP_VOL-\$SP_TMP delete $_SP_VOL-\$SP_TMP"
-    storpool volume "$_SP_VOL-\$SP_TMP" delete "$_SP_VOL-\$SP_TMP"
+    splog "volume ${_SP_VOL}-$_SP_TMP delete ${_SP_VOL}-$_SP_TMP"
+    storpool volume "${_SP_VOL}-$_SP_TMP" delete "${_SP_VOL}-$_SP_TMP"
+
+EOF
+)
+    local _DELSNAP=$(cat <<EOF
+    #_DELSNAP
+    splog "delete snapshot $_SP_VOL"
+    storpool snapshot "$_SP_VOL" delete "$_SP_VOL"
+
 EOF
 )
     local _CMD= _HOST=
@@ -289,7 +300,7 @@ EOF
         ;;
         SNAPREVERT)
             _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DELSNAP"
+            _CMD="$_BEGIN$_DETACH_ALL$_SNAPREVERT$_ATTACH"
         ;;
         *)
     esac

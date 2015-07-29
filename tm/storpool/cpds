@@ -59,13 +59,14 @@ SP_PARENT="${SOURCE##*/}"
 
 if [ "$SNAP_ID" != "-1" ]; then
     SP_PARENT="${SP_PARENT}-snap${SNAP_ID}"
+    SP_DST="-1"
 fi
 
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
-storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$SNAP_ID" "$SP_PARENT"
+storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$SP_DST" "$SP_PARENT"
 
 splog "END"
 exit 0
