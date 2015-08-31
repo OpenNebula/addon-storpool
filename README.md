@@ -21,7 +21,7 @@ More info:
 
 ## Compatibility
 
-This add-on is compatible with OpenNebula 4.10, 4.12 and StorPool 15.02+.
+This add-on is compatible with OpenNebula 4.10, 4.12, 4.14 and StorPool 15.02+.
 
 ## Requirements
 
@@ -40,11 +40,18 @@ This add-on is compatible with OpenNebula 4.10, 4.12 and StorPool 15.02+.
 
 A working StorPool cluster is required.
 
+## Features
+* support for datstore configuration via sunstone
+* support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
+* extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
+* support SYSTEM datastore volatile disks and context image as StorPool block devices (see limitations)
+* imported images from the markeplace are thin provisioned (require StorPool 15.03+)
+
 ## Limitations
 
 1. tested only with the KVM hypervisor
 1. no support for VM snapshot because it is handled internally by libvirt
-1. imported images are thick provisioned
+1. reported free/used/total space when used for SUSTEM datastore is not propper because OpenNebula can not handle the case when the volatile disks and the context image are block devices instead of files on filesystem. Extra external monitoring of space usage should be implemented.
 
 
 ## Installation
@@ -70,7 +77,7 @@ If oned and sunstone services are on different servers it is possible to install
 
 ## Upgrade
 
-Follow the installation procedure. Take care if there are special care for the notes printed by the install script and follow.
+Follow the installation procedure. If something can not be upgraded automatically a note is printed with hints what should be done manually. Take care of such notes and follow them.
 
 ## Configuration
 
@@ -84,9 +91,9 @@ If TM_MAD is storpool it is possible to have both shared and ssh datastores, con
 * By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in datastore configuration
 
 
-### Configuring the Image Datastore
+### Configuring the Datastore
 
-Some configuration attributes must be set to enable an image datastore as StorPool enabled one:
+Some configuration attributes must be set to enable an datastore as StorPool enabled one:
 
 * **DS_MAD**: [mandatory] The DS driver for the datastore. String, use value `storpool`
 * **TM_MAD**: [mandatory] Transfer driver for the datastore. String, use value `storpool`
