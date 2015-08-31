@@ -48,6 +48,9 @@ DST_DIR=`dirname $DST_PATH`
 DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
 IS_DISK=`is_disk $DST_PATH`
 
+#default detach action
+DETACH_ACTION="DETACH"
+
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
@@ -74,8 +77,17 @@ fi
 if [ $LCM_STATE = "30" ]; then
     DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
 fi
+#-------------------------------------------------------------------------------
+# run only ATTACH_CMD on PROLOG_UNDEPLOY
+#-------------------------------------------------------------------------------
 if [ $LCM_STATE = "31" ]; then
-    ATTACH_ONLY="(LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+    ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
+fi
+#-------------------------------------------------------------------------------
+# run DETACH on DST host on PROLOG_MIGRATE_UNKNOWN
+#-------------------------------------------------------------------------------
+if [ $LCM_STATE = "60" ]; then
+    DETACH_ACTION="DETACH_VIA_DST"
 fi
 
 #-------------------------------------------------------------------------------
@@ -92,7 +104,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         if [ -n "$ATTACH_ONLY" ]; then
             splog "$ATTACH_ONLY"
         else
-            storpoolAction "DETACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL"
+            storpoolAction "$DETACH_ACTION" "$SRC_HOST" "$DST_HOST" "$SP_VOL"
         fi
         if [ -n "$DETACH_ONLY" ]; then
             splog "$DETACH_ONLY"
@@ -131,7 +143,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 if [ -n "$ATTACH_ONLY" ]; then
                     splog "$ATTACH_ONLY"
                 else
-                    storpoolAction "DETACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL"
+                    storpoolAction "$DETACH_ACTION" "$SRC_HOST" "$DST_HOST" "$SP_VOL"
                 fi
                 if [ -n "$DETACH_ONLY" ]; then
                     splog "$DETACH_ONLY"
@@ -147,7 +159,7 @@ else
     if [ -n "$ATTACH_ONLY" ]; then
         splog "$ATTACH_ONLY"
     else
-        storpoolAction "DETACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+        storpoolAction "$DETACH_ACTION" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
     fi
 fi
 
@@ -166,6 +178,7 @@ fi
 
 SP_VOL="${SOURCE##*/}"
 [ -n "$PERSISTENT" ] || SP_VOL+="-${VM_ID}-${DISK_ID}"
+
 storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
 
 splog "END"

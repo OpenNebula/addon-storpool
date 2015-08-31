@@ -266,6 +266,10 @@ EOF
             _HOST="$_SRC_HOST"
             _CMD="$_BEGIN$_DETACH_ALL"
         ;;
+        DETACH_VIA_DST)
+            _HOST="$_DST_HOST"
+            _CMD="$_BEGIN$_DETACH_ALL"
+        ;;
         ATTACH)
             _HOST="$_DST_HOST"
             _CMD="$_BEGIN$_ATTACH$_SYMLINK"
