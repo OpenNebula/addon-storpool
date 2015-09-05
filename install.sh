@@ -59,7 +59,7 @@ else
         patch_err=
         set +e
         pushd "$SUNSTONE_PUBLIC" &>/dev/null
-        for p in `ls ${CWD}/patches/${ONE_VER}/*.patch`; do
+        for p in `ls ${CWD}/sunstone/patches/${ONE_VER}/*.patch`; do
             #check if patch is applied
             patch --dry-run --reverse --forward --strip=0 --input=${p}
             RET=$?
