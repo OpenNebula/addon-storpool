@@ -40,6 +40,29 @@ fi
 
 CWD=$(pwd)
 
+do_patch()
+{
+    local _patch="$1"
+    #check if patch is applied
+    echo "   Test patch ${_patch##*/}"
+    if patch --dry-run --reverse --forward --strip=0 --input="${_patch}"; then
+        echo "*** Patch file ${_patch##*/} already applied?"
+    else
+        if patch --dry-run --forward --strip=0 --input="${_patch}"; then
+            echo "*** Apply patch ${_patch##*/}"
+            if patch --backup --version-control=numbered --strip=0 --forward --input="${_patch}"; then
+                DO_PATCH="done"
+            else
+                DO_PATCH="failed"
+                patch_err="${_patch}"
+            fi
+        else
+            echo " ** Note! Can't apply patch ${_patch}! Please merge manually."
+            patch_err="${_patch}"
+        fi
+    fi
+}
+
 
 end_msg=
 if [ -n "$SKIP_SUNSTONE" ]; then
@@ -59,24 +82,9 @@ else
         patch_err=
         set +e
         pushd "$SUNSTONE_PUBLIC" &>/dev/null
-        for p in `ls ${CWD}/sunstone/patches/${ONE_VER}/*.patch`; do
-            #check if patch is applied
-            patch --dry-run --reverse --forward --strip=0 --input=${p}
-            RET=$?
-            if [ $RET == 0 ]; then
-                echo "*** Patch file ${p##*/} already applied?"
-            else
-                patch --dry-run --forward --strip=0 --input=${p}
-                RET=$?
-                if [ $RET == 0 ]; then
-                    echo "*** Apply patch ${p##*/}"
-                    patch --backup --version-control=numbered --strip=0 --forward --input="${p}"
-                    $REBUILD_JS=1
-                else
-                    echo " ** Note! Can't apply patch $p! Please merge manually."
-                    patch_err="$p"
-                fi
-            fi
+        for p in `ls ${CWD}/patches/sunstone/${ONE_VER}/*.patch`; do
+            do_patch "$p"
+            [ -n "$DO_PATCH" ] && [ "$DO_PATCH" = "done" ] && REBUILD_JS=1
         done
         if [ "$ONE_VER" = "4.14" ]; then
             bin_err=
@@ -242,5 +250,16 @@ TM_MAD_CONF = [
 ]
 _EOF_
 fi
+
+echo "*** VMM poll patch for OpenNebula v4.14 ..."
+pushd "$ONE_VAR"
+    #check if patch is applied
+    do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch"
+    do_patch "$CWD/patches/vmm/4.14/02-disk_info.patch"
+    [ "$DO_PATCH" = "done" ] && chmod a+x remotes/vmm/kvm/poll_disk_info
+popd
+
+cp "misc/one_disk_info" "/usr/bin/one_disk_info"
+echo "*** Please sync hosts (onehost sync --force)"
 
 echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"

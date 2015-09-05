@@ -1,0 +1,40 @@
+--- remotes/vmm/kvm/poll.orig
++++ remotes/vmm/kvm/poll
+@@ -332,6 +332,9 @@ module KVM
+             protocol = ele.attributes['protocol'] rescue nil
+             name = ele.attributes['name'] rescue nil
+ 
++            # get dev attribute (for block devices)
++            dev = ele.attributes['dev'] rescue nil
++
+             if protocol == "rbd"
+                 # Ceph
+                 auth = ele.parent.elements["auth"].attributes["username"] rescue nil
+@@ -357,6 +360,27 @@ module KVM
+                     data[:snapshot_size] << { :id => snap_id, :disk_id => disk_id, :size => snapshot_size.round}
+ 
+                 end
++            elsif !dev.nil?
++                # Block device
++                disk_id = dev.split(".")[-1]
++
++                dev_xml = Dir.pwd + `/poll_disk_info "#{dev}"`
++                next if !$? || !$?.success?
++
++                dev_doc = REXML::Document.new( dev_xml )
++                disk_size = dev_doc.elements["disk/size"].text.to_f/1024/1024
++
++                data[:disk_size] << { :id => disk_id, :size => disk_size.round }
++
++                dev_doc.elements.each("disk/snapshot") do |snap|
++
++                    snap_id = snap.elements["id"].text.to_i
++
++                    snapshot_size = snap.elements["size"].text.to_f/1024/1024
++
++                    data[:snapshot_size] << { :id => snap_id, :disk_id => disk_id, :size => snapshot_size.round }
++
++                end
+             else
+                 # Regular Disk
+                 text = `qemu-img info --output=json #{file}`
