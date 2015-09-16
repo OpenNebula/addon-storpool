@@ -60,6 +60,15 @@ A working StorPool cluster is required.
 ```bash
 pip install storpool
 ```
+* Install required dependencies
+```bash
+# node, bower, grunt
+yum -y install npm
+npm install bower -g
+npm install grunt-cli -g
+# patch
+yum -y install patch
+```
 * Clone the addon-storpool
 ```bash
 cd /usr/src
