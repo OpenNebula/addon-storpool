@@ -141,6 +141,9 @@ cp $CP_ARG datastore/xpath_multi.py "$XPATH_MULTI"
 chown "$ONE_USER" "$XPATH_MULTI"
 chmod u+x "$XPATH_MULTI"
 
+# install hooks
+cp -v -a hooks/* "$ONE_VAR/remotes/hooks/"
+
 function patch_hook()
 {
     local _hook="$1"
