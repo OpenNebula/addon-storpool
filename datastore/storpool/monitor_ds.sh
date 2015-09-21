@@ -28,11 +28,11 @@
 
 function splog() { logger -t "ds_sp_monitor_ds" "$*"; }
 
-SP_MONITOR_DS="../../datastore/storpool/monitor_ds"
+SP_MONITOR_DS="../../datastore/storpool/monitor"
 
 if [ -f "$SP_MONITOR_DS" ]; then
 
-    SP_DS_SIZES="$(python $SP_MONITOR_DS $ds)"
+    SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds)"
 
     if [ -n "$SP_DS_SIZES" ]; then
 
@@ -60,7 +60,6 @@ if [ -f "$SP_MONITOR_DS" ]; then
         echo "  VOLATILE_USED_MB = $SP_USED,"
         echo "  VOLATILE_TOTAL_MB = $SP_TOTAL,"
         echo "  VOLATILE_FREE_MB = $SP_FREE"
-
         echo "]"
 
         continue
