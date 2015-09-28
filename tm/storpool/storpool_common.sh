@@ -150,6 +150,14 @@ EOF
             splog "delete volume $_SP_VOL"
             storpool volume "$_SP_VOL" delete "$_SP_VOL"
         fi
+        # delete snapshots too
+        storpool -j snapshot list | \
+        jq -r '.data | map( select( .name | contains( "${_SP_VOL}-snap" ) ) ) | .[] | [ .name ] | @csv' | \
+        while read snap; do
+            snap=\${snap//\"/}
+            splog "delete snapshot \$snap"
+            storpool snapshot \$snap delete \$snap
+        done
     fi
 EOF
 )
