@@ -43,7 +43,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
         SP_FREE_MB=${SP_SIZES["2"]:-0}
 
         CALC_USED_MB=$((USED_MB + SP_USED_MB))
-        if [ $SP_FREE_MB < $FREE_MB ];
+        if [ $SP_FREE_MB -lt $FREE_MB ]; then
             CALC_FREE_MB=$SP_FREE_MB
         else
             CALC_FREE_MB=$FREE_MB
@@ -57,9 +57,9 @@ if [ -f "$SP_MONITOR_DS" ]; then
         echo "  TOTAL_MB = $CALC_TOTAL_MB,"
         echo "  FREE_MB = $CALC_FREE_MB,"
         # look like this is not used...
-        echo "  VOLATILE_USED_MB = $SP_USED,"
-        echo "  VOLATILE_TOTAL_MB = $SP_TOTAL,"
-        echo "  VOLATILE_FREE_MB = $SP_FREE"
+        echo "  VOLATILE_USED_MB = $SP_USED_MB,"
+        echo "  VOLATILE_TOTAL_MB = $SP_TOTAL_MB,"
+        echo "  VOLATILE_FREE_MB = $SP_FREE_MB"
         echo "]"
 
         continue
