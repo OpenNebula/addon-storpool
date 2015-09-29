@@ -1,6 +1,7 @@
---- remotes/vmm/kvm/poll.orig
-+++ remotes/vmm/kvm/poll
-@@ -332,6 +332,9 @@ module KVM
+diff -urN x.orig/var/lib/one/remotes/vmm/kvm/poll x/var/lib/one/remotes/vmm/kvm/poll
+--- remotes/vmm/kvm/poll	2015-09-24 15:34:37.000000000 +0300
++++ remotes/vmm/kvm/poll	2015-09-29 15:45:35.604756431 +0300
+@@ -334,6 +334,9 @@
              protocol = ele.attributes['protocol'] rescue nil
              name = ele.attributes['name'] rescue nil
  
@@ -10,7 +11,7 @@
              if protocol == "rbd"
                  # Ceph
                  auth = ele.parent.elements["auth"].attributes["username"] rescue nil
-@@ -357,6 +360,27 @@ module KVM
+@@ -359,6 +362,27 @@
                      data[:snapshot_size] << { :id => snap_id, :disk_id => disk_id, :size => snapshot_size.round}
  
                  end
@@ -36,5 +37,5 @@
 +
 +                end
              else
-                 # Regular Disk
-                 text = `qemu-img info --output=json #{file}`
+                 # Search the disk in system datastore when the source
+                 # is a persistent image with snapshots
