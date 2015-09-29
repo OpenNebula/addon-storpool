@@ -47,35 +47,43 @@ disk_size=0
 
 dev="$1"
 
+splog()
+{
+	logger -t ${0##*/} "$*"
+}
+
 if [ -L "$dev" ]; then
 	realDev=$(readlink -e $dev)
 else
 	realDev="$dev"
 fi
 
-disk_size=$(blockdev -q --getsize64 "$realDev")
-
-[ -n "$disk_size" ] || exit 1
-echo "<disk>"
-echo " <size>$disk_size</size>"
-
 if [ "${realDev%-*}" = "/dev/sp" ]; then
 	spDev=$(readlink $dev)
 	spVolume=${spDev#/dev/storpool/}
+	storedSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
+	[ -n "$storedSize" ] || exit 1
+	echo "<disk>"
+	echo " <size>$storedSize</size>"
 	echo " <volume>$spVolume</volume>"
-	while IFS=',' read snapName objectsCount; do
-		objectsCount=${objectsCount:-0}
-		snapName=${snapName//\"/}
-		snap_id=${snapName#*snap}
-		snap_size=$((onjectsCount * 32 * 1024 * 1024))
-#		echo $spVolume $snap_id $snapName $snapSize >&2
-	cat <<EOF
+#	splog "$spVolume $storedSize"
+	while IFS=',' read name storedSize spaceUsed; do
+		name=${name//\"/}
+		snap_id=${name#*snap}
+		snap_size=$((storedSize))
+		cat <<EOF
  <snapshot>
   <id>$snap_id</id>
   <size>$snap_size</size>
  </snapshot>
 EOF
-	done < <(storpool -j snapshot list | jq -r ".data | map( select( .onVolume==\"$spVolume\" ) ) | .[] | [ .name, .objectsCount ] | @csv ")
+#		splog "$name $snap_size (used:$spaceUsed)"
+	done < <(storpool -j snapshot space | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .storedSize, .spaceUsed] | @csv" | sort)
+else
+	disk_size=$(blockdev -q --getsize64 "$realDev")
+	[ -n "$disk_size" ] || exit 1
+	echo "<disk>"
+	echo " <size>$disk_size</size>"
+#	splog "$dev $disk_size"
 fi
-
 echo "</disk>"
