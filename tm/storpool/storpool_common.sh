@@ -154,7 +154,7 @@ EOF
         storpool -j snapshot list | \
         jq -r '.data | map( select( .name | contains( "${_SP_VOL}-snap" ) ) ) | .[] | [ .name ] | @csv' | \
         while read snap; do
-            snap=\${snap//\"/}
+            eval snap=\$snap
             splog "delete snapshot \$snap"
             storpool snapshot \$snap delete \$snap
         done
