@@ -1,4 +1,4 @@
-diff -urN x.orig/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels/create/wizard.hbs x/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels/create/wizard.hbs
+diff -urN app/tabs/datastores-tab/form-panels/create/wizard.hbs app/tabs/datastores-tab/form-panels/create/wizard.hbs
 --- app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-09-24 15:34:42.000000000 +0300
 +++ app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-09-29 15:44:31.079564149 +0300
 @@ -32,6 +32,7 @@
@@ -67,9 +67,9 @@ diff -urN x.orig/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels
 +    </div>
    </div>
  </form>
-diff -urN x.orig/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels/create.js x/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels/create.js
---- x.orig/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels/create.js	2015-09-24 15:34:42.000000000 +0300
-+++ x/usr/lib/one/sunstone/public/app/tabs/datastores-tab/form-panels/create.js	2015-09-29 15:44:31.079564149 +0300
+diff -urN app/tabs/datastores-tab/form-panels/create.js app/tabs/datastores-tab/form-panels/create.js
+--- app/tabs/datastores-tab/form-panels/create.js	2015-09-24 15:34:42.000000000 +0300
++++ app/tabs/datastores-tab/form-panels/create.js	2015-09-29 15:44:31.079564149 +0300
 @@ -148,6 +148,9 @@
          case 'dev':
            _selectDevices();
