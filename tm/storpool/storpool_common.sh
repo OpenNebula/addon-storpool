@@ -86,7 +86,7 @@ EOF
 )
     local _DETACH_ALL=$(cat <<EOF
     #_DETACH_ALL
-    if storpool attach list | grep -q " $_SP_VOL " &>/dev/null; then
+    if storpool attach list | grep -q " $_SP_VOL " 2>/dev/null >/dev/null; then
         splog "detach volume $_SP_VOL all"
         storpool detach volume "$_SP_VOL" all
     else
@@ -137,7 +137,7 @@ EOF
 )
     local _DELVOL=$(cat <<EOF
     #_DELVOL
-    if storpool volume "$_SP_VOL" info &>/dev/null; then
+    if storpool volume "$_SP_VOL" info 2>/dev/null >/dev/null; then
         splog "delete $_SP_VOL"
         storpool volume "$_SP_VOL" delete "$SP_VOL"
     fi
@@ -146,7 +146,7 @@ EOF
     local _DELVOL_NONPERSISTENT=$(cat <<EOF
     #_DELVOL_NONPERSISTENT
     if [ "$_SP_PARENT" != "YES" ]; then
-        if storpool volume "$_SP_VOL" info &>/dev/null; then
+        if storpool volume "$_SP_VOL" info 2>/dev/null >/dev/null; then
             splog "delete volume $_SP_VOL"
             storpool volume "$_SP_VOL" delete "$_SP_VOL"
         fi
@@ -163,7 +163,7 @@ EOF
 )
     local _DELVOL_DETACH=$(cat <<EOF
     #_DELVOL_DETACH
-    if storpool volume "$SP_VOL" info &>/dev/null; then
+    if storpool volume "$SP_VOL" info 2>/dev/null >/dev/null; then
         if storpool attach list | grep "$SP_VOL"; then
             splog "detach volume $SP_VOL"
             storpool detach volume "$SP_VOL" all
