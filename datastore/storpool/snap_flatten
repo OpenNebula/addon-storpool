@@ -19,61 +19,81 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# premigrate srcHost dstHost vmPath vmId datasourceId template
+# snap_flatten base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "tm_ssh_${0##*/}" "$*"; }
+function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
 
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
 if [ -n "${ONE_LOCATION}" ]; then
-    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+    LIB_LOCATION=$ONE_LOCATION/lib
 else
-    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+    LIB_LOCATION=/usr/lib/one
 fi
 
-source $TMCOMMON
+. $LIB_LOCATION/sh/scripts_common.sh
 
-TM_PATH=$(dirname $0)
-
-#-------------------------------------------------------------------------------
-# Get cmd arguments from OpenNebula core
-#-------------------------------------------------------------------------------
-
-SRC_HOST=$1
-DST_HOST=$2
-VM_PATH=$3
-
-VM_ID=$4
-DS_ID=$5
-
-TEMPLATE=$6
+DRIVER_PATH=$(dirname $0)
+source ${DRIVER_PATH}/../libfs.sh
 
 #-------------------------------------------------------------------------------
-# Create DST path
+# Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DST_DIR="$VM_PATH"
-ssh_make_path $DST_HOST $DST_DIR
+DRV_ACTION=$1
+ID=$2
 
-#-------------------------------------------------------------------------------
-# Copy VM related content to the new host. Mostly the context ISO image
-#-------------------------------------------------------------------------------
+if type base64 2>&1 >/dev/null; then
+    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
+fi
 
-TAR_COPY="$SSH $SRC_HOST '$TAR -C $DST_DIR --sparse -cf - .'"
-TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
+XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
 
-exec_and_log "eval $TAR_COPY" "Error copying VM directory to target host $DST_DIR"
+unset i XPATH_ELEMENTS
 
-#-------------------------------------------------------------------------------
-# Run the shared tm_mad to move the VM disks too
-#-------------------------------------------------------------------------------
+while IFS= read -r -d '' element; do
+    XPATH_ELEMENTS[i++]="$element"
+done < <($XPATH /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
+                /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
+                /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT)
 
-pushd "${TM_PATH}/../shared/"
-bash "${0##*/}" "$SRC_HOST" "$DST_HOST" "$VM_PATH" "$VM_ID" "$DS_ID" "$TEMPLATE"
-popd
+unset i
+SOURCE="${XPATH_ELEMENTS[i++]}"
+BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
+
+DST_HOST=`get_destination_host $ID`
+
+splog "\
+${ID:+ID=$ID }\
+${SOURCE:+SOURCE=$SOURCE }\
+${DST_HOST:+DST_HOST=$DST_HOST }\
+${TARGET_SNAPSHOT:+TARGET_SNAPSHOT=$TARGET_SNAPSHOT }\
+"
+if [ -z "$DST_HOST" ]; then
+    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
+    exit -1
+fi
+
+SP_VOL="${SOURCE##*/}"
+
+SNAP_FLATTEN_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
+    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
+
+    while read snap; do
+        storpool snapshot "$snap" delete "$snap"
+    done < <(storpool snapshot list | grep ${SP_VOL}-snap | awk '{print $2}')
+
+    splog "END SNAP_FLATTEN_CMD"
+EOF
+)
+
+ssh_exec_and_log "$DST_HOST" "$SNAP_FLATTEN_CMD" \
+                 "Error flatting $SOURCE"
 
 splog "END"
-exit 0

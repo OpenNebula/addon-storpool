@@ -22,7 +22,9 @@
 # delete host:remote_system_ds/disk.i vmId datastoreId
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+TM_PATH="$(dirname $0)"
+
+source "${TM_PATH}/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
@@ -34,16 +36,6 @@ DS_ID=$3
 
 splog "DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
-if [ -n "${ONE_LOCATION}" ]; then
-    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
-else
-    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
-fi
-
-DRIVER_PATH=$(dirname $0)
-
-source $TMCOMMON
-
 #-------------------------------------------------------------------------------
 # Process destination
 #-------------------------------------------------------------------------------
@@ -51,13 +43,58 @@ source $TMCOMMON
 DST_PATH=`arg_path $DST`
 DST_HOST=`arg_host $DST`
 
+DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
+IS_DISK=`is_disk $DST_PATH`
+
+#-------------------------------------------------------------------------------
+# Get Datastore information
+#-------------------------------------------------------------------------------
+
+oneDatastoreInfo "$DS_ID"
+
 #-------------------------------------------------------------------------------
 # Delete and exit if directory
 #-------------------------------------------------------------------------------
 
-if [ `is_disk $DST_PATH` -eq 0 ]; then
-    log "Deleting $DST_PATH on $DST_HOST"
-    ssh_exec_and_log "$DST_HOST" "rm -rf $DST_PATH" "Error deleting $DST_PATH"
+#if [ `is_disk $DST_PATH` -eq 0 ]; then
+#    log "Deleting $DST_PATH on $DST_HOST"
+#    ssh_exec_and_log "$DST_HOST" "rm -rf $DST_PATH" "Error deleting $DST_PATH"
+#    exit 0
+#fi
+
+if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
+    TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
+    oneTemplateInfo "$TEMPLATE"
+    for i in ${!DISK_ID_ARRAY[@]}; do
+        if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ]; then
+#            splog "[SYSTEM_DS] $i id:${DISK_ID_ARRAY[i]} type:${DISK_TYPE_ARRAY[i]} format:$FORMAT tm:${DISK_TM_MAD_ARRAY[i]}"
+            if [ $IS_DISK == 1 ] && [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
+#                splog "[SYSTEM_DS] skip ${DISK_ID_ARRAY[i]} != $DISK_ID"
+                continue
+            fi
+            FORMAT=${DISK_FORMAT_ARRAY[i]}
+            if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
+                FORMAT="swap"
+            fi
+            SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
+            storpoolAction "DELETE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "${DST_PATH}/disk.${DISK_ID_ARRAY[i]}" "${DISK_PERSISTENT_ARRAY[i]}"
+#        else
+#            splog "[SYSTEM_DS] SKIP $i type:${DISK_TYPE_ARRAY[i]} format:${DISK_FORMAT_ARRAY[i]} tm:${DISK_TM_MAD_ARRAY[i]}"
+        fi
+    done
+
+    if [ $IS_DISK == 0 ]; then
+#        splog "[SYSTEM_DS] delete context iso"
+        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        storpoolAction "DELETE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+
+        RM_CMD="rm -rf '$DST_PATH'"
+        splog "run RM_CMD on $DST_HOST ($DST_PATH)"
+        ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+                 "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+    fi
+
+    splog "END [SYSTEM_DS]"
     exit 0
 fi
 
@@ -65,42 +102,7 @@ fi
 # Get Image information
 #-------------------------------------------------------------------------------
 
-DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
-
-onevm show -x $VM_ID 2>&1 >/tmp/tm_sp_${0##*/}-vm${VM_ID}-disk${DISK_ID}.xml
-
-XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <(onevm show -x $VM_ID| $XPATH \
-                    /VM/STATE \
-                    /VM/LCM_STATE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SOURCE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE_ID \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/CLONE \
-                    /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/PERSISTENT)
-
-unset i
-VMSTATE="${XPATH_ELEMENTS[i++]}"
-LCM_STATE="${XPATH_ELEMENTS[i++]}"
-SOURCE="${XPATH_ELEMENTS[i++]}"
-IMAGE_ID="${XPATH_ELEMENTS[i++]}"
-IMAGE="${XPATH_ELEMENTS[i++]}"
-CLONE="${XPATH_ELEMENTS[i++]}"
-PERSISTENT="${XPATH_ELEMENTS[i++]}"
-splog "\
-${VMSTATE:+VMSTATE=$VMSTATE }\
-${LCM_STATE:+LCM_STATE=$LCM_STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
-${CLONE:+CLONE=$CLONE }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${IMAGE:+IMAGE=$IMAGE }\
-"
+oneVmInfo "$VM_ID" "$DISK_ID"
 
 # No need to delete no cloned images
 #if [ "$CLONE" = "NO" ]; then
@@ -118,38 +120,7 @@ SP_VOL="${SOURCE##*/}"
 
 log "Deleting $DST_PATH"
 
-# Note that this command, as opposed to the rest of $RBD commands in this set of
-# drivers, is executed in the worker node and not in the CEPH frontend.
-
-DELETE_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t tm_sp_${0##*/} "\$*"; }
-
-    if [ -L "$DST_PATH" ]; then
-        splog "rm -f $DST_PATH"
-        rm -f "$DST_PATH"
-    fi
-
-    if storpool attach list | grep -q " $SP_VOL " >/dev/null 2>&1; then
-        splog "detach volume $SP_VOL all"
-        storpool detach volume $SP_VOL all
-    fi
-
-    if [ "$PERSISTENT" != "YES" ]; then
-        if storpool volume "$SP_VOL" info >/dev/null 2>&1; then
-            splog "delete volume $SP_VOL (non-persistent)"
-            storpool volume "$SP_VOL" delete "$SP_VOL"
-        fi
-    fi
-
-    splog "END DELETE_CMD"
-EOF
-)
-
-splog "run DELETE_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$DELETE_CMD" \
-                 "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+storpoolAction "DELETE" "$DST_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$PERSISTENT"
 
 splog "END"
 exit 0

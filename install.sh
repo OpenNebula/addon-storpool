@@ -33,7 +33,6 @@ if [ -n "$ONE_LOCATION" ]; then
     ONE_DS="$ONE_LOCATION/var/datastores"
 fi
 
-SUNSTONE_PLUGINS=${SUNSTONE_PLUGINS:-$ONE_LIB/sunstone/public/js/plugins/}
 
 #----------------------------------------------------------------------------#
 
@@ -41,13 +40,98 @@ SUNSTONE_PLUGINS=${SUNSTONE_PLUGINS:-$ONE_LIB/sunstone/public/js/plugins/}
 
 CWD=$(pwd)
 
+do_patch()
+{
+    local _patch="$1"
+    #check if patch is applied
+    echo "   Test patch ${_patch##*/}"
+    if patch --dry-run --reverse --forward --strip=0 --input="${_patch}"; then
+        echo "*** Patch file ${_patch##*/} already applied?"
+    else
+        if patch --dry-run --forward --strip=0 --input="${_patch}"; then
+            echo "*** Apply patch ${_patch##*/}"
+            if patch --backup --version-control=numbered --strip=0 --forward --input="${_patch}"; then
+                DO_PATCH="done"
+            else
+                DO_PATCH="failed"
+                patch_err="${_patch}"
+            fi
+        else
+            echo " ** Note! Can't apply patch ${_patch}! Please merge manually."
+            patch_err="${_patch}"
+        fi
+    fi
+}
+
+
+end_msg=
+if [ -n "$SKIP_SUNSTONE" ]; then
+    echo "*** Skipping opennebula-sunstone integration patch"
+else
+    SUNSTONE_PUBLIC=${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}
+    if [ -f "$SUNSTONE_PUBLIC/js/plugins/datastores-tab.js" ]; then
+        SS_VER=4.10
+    fi
+    if [ -f "$SUNSTONE_PUBLIC/app/tabs/datastores-tab/form-panels/create.js" ]; then
+        SS_VER=4.14
+    fi
+    ONE_VER=${ONE_VER:-$SS_VER}
+
+    # patch sunstone's datastores-tab.js
+    if [ -n "$ONE_VER" ]; then
+        patch_err=
+        set +e
+        pushd "$SUNSTONE_PUBLIC" &>/dev/null
+        for p in `ls ${CWD}/patches/sunstone/${ONE_VER}/*.patch`; do
+            do_patch "$p"
+            [ -n "$DO_PATCH" ] && [ "$DO_PATCH" = "done" ] && REBUILD_JS=1
+        done
+        if [ "$ONE_VER" = "4.14" ]; then
+            bin_err=
+            if [ -n "$REBUILD_JS" ]; then
+                for b in node npm bower grunt; do
+                    echo "*** check for $b"
+                    $b --version
+                    if [ $? != 0 ]; then
+                        bin_err=$b
+                        echo " ** Note! $b not found!"
+                    fi
+                done
+                if [ -n "$bin_err" ]; then
+                    echo " ** Can't rebuild sunstone interface"
+                else
+                    echo "*** rebuilding synstone javascripts..."
+                    npm install
+                    bower --allow-root install
+                    grunt sass
+                    grunt requirejs
+                fi
+            fi
+        fi
+        popd &>/dev/null
+        set -e
+        end_msg="opennebula-sunstone"
+    else
+        echo " ** Can't determine version fron ${SUNSTONE_PUBLIC}. Wrong path or opennebula-sunstone not installed."
+        echo " ** Note! StorPool integration to sunstone not installed."
+    fi
+fi
+
+if [ -n "$SKIP_ONED" ]; then
+    echo "*** Skipping oned integration"
+    [ -n "$end_msg" ] && echo "*** Please restart $end_msg service"
+    exit;
+fi
+
+
 # install datastore and tm MAD
 for MAD in datastore tm; do
-    echo "*** Installing $ONE_VAR/remotes/${MAD}/storpool ..."
-    mkdir -pv "$ONE_VAR/remotes/${MAD}/storpool"
-    cp $CP_ARG ${MAD}/storpool/* "$ONE_VAR/remotes/${MAD}/storpool/"
-    chown -R "$ONE_USER" "$ONE_VAR/remotes/${MAD}/storpool"
-    chmod u+x -R "$ONE_VAR/remotes/${MAD}/storpool"
+    M_DIR="${ONE_VAR}/remotes/${MAD}"
+    echo "*** Installing ${M_DIR}/storpool ..."
+    mkdir -pv "${M_DIR}/storpool"
+    cp $CP_ARG ${MAD}/storpool/* "${M_DIR}/storpool/"
+    chown -R "$ONE_USER" "${M_DIR}/storpool"
+    chmod u+x -R "${M_DIR}/storpool"
 done
 
 # install xpath_multi.py
@@ -57,39 +141,101 @@ cp $CP_ARG datastore/xpath_multi.py "$XPATH_MULTI"
 chown "$ONE_USER" "$XPATH_MULTI"
 chmod u+x "$XPATH_MULTI"
 
+# install hooks
+cp -v -a hooks/* "$ONE_VAR/remotes/hooks/"
+
+function patch_hook()
+{
+    local _hook="$1"
+    local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
+    local _is_sh=0 _is_patched=0 _backup= _is_bash=
+    grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
+    grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
+    if [ "$(grep -v -E '^#|^$' "${_hook}")" = "exit 0" ]; then
+        if [ "${_is_patched}" = "1" ]; then
+            echo "*** ${_hook} already patched"
+        else
+            _backup="${_hook}.backup$(date +%s)"
+            echo "*** Create backup of ${_hook} as ${_backup}"
+            cp $CP_ARG "${_hook}" "${_backup}"
+            if [ "${_is_sh}" = "1" ]; then
+                grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
+                if [ "${_is_bash}" = "1" ]; then
+                    echo "*** ${_hook} already bash script"
+                else
+                    sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
+                fi
+            fi
+            sed -i -e "s|^exit 0|$_hook_line\nexit 0|" "${_hook}"
+        fi
+    else
+        echo "*** ${_hook} file not empty!"
+        echo " ** Note! Please merge the following line to ${_hook}"
+        echo " **"
+        echo " ** ${_hook_line//\\&/&}"
+        echo " **"
+        if [ "${_is_sh}" = "1" ]; then
+            echo " ** Note! Set script to bash:"
+            echo " **   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
+        fi
+    fi
+}
+
+function findFile()
+{
+    local c f d="$1" csum="$2"
+    while read c f; do
+        if [ "$c" = "$csum" ]; then
+            echo $f
+            break
+        fi
+    done < <(md5sum $d/* 2>/dev/null)
+}
+
+function tmResetMigrate()
+{
+    local current_csum=$(md5sum "${M_DIR}/${MIGRATE}" | awk '{print $1}')
+    local csum comment found orig_csum
+    while read csum comment; do
+        [ "$comment" = "orig" ] && orig_csum="$csum"
+        if [ "$current_csum" = "$csum" ]; then
+            found="$comment"
+            break;
+        fi
+    done < <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
+    case "$found" in
+         orig)
+            ;;
+         4.10)
+            orig=$(findFile "$M_DIR" "$orig_csum" )
+            if [ -n "$orig" ]; then
+                echo "***   $found variant of $TM_MAD/$MIGRATE"
+                mv "${M_DIR}/${MIGRATE}" "${M_DIR}/${MIGRATE}.backup$(date +%s)"
+                echo "***   restoring from original ${orig##*/}"
+                cp $CP_ARG "$orig" "${M_DIR}/${MIGRATE}"
+            fi
+            ;;
+         4.14)
+            continue
+            ;;
+            *)
+            echo " ** Can't determine the variant of $TM_MAD/$MIGRATE"
+    esac
+}
+
 # install premigrate and postmigrate hooks in shared and ssh
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
-        M_FILE="$ONE_VAR/remotes/tm/${TM_MAD}/${MIGRATE}.storpool"
-        cp $CP_ARG "tm/${TM_MAD}/${MIGRATE}.storpool" "$M_FILE"
-        chown "$ONE_USER" "$M_FILE"
-        chmod u+x "$M_FILE"
-        M_FILE="${M_FILE%.storpool}"
-        if [ "$(egrep -v '^#|^$' $M_FILE)" = "exit 0" ]; then
-            echo "*** Installing ${M_FILE}"
-            cp $CP_ARG "$M_FILE" "${M_FILE}.backup"
-            mv $MV_ARG "${M_FILE}.storpool" "$M_FILE"
-        else
-            echo "*** $M_FILE file not empty!"
-            echo "*** Please merge carefully ${M_FILE}.storpool to $M_FILE"
-        fi
+        M_DIR="$ONE_VAR/remotes/tm/${TM_MAD}"
+        mkdir -p "$M_DIR/${MIGRATE}.d"
+        pushd "$M_DIR/${MIGRATE}.d" &>/dev/null
+        ln -sf "../../storpool/${MIGRATE}" "${MIGRATE}-storpool"
+        popd &>/dev/null
+        chown -R "$ONE_USER" "${M_DIR}/${MIGRATE}.d"
+        tmResetMigrate
+        patch_hook "${M_DIR}/${MIGRATE}"
     done
 done
-
-# patch sunstone's datastores-tab.js
-if [ -f "$SUNSTONE_PLUGINS/datastores-tab.js" ]; then
-    if grep -q -i storpool $SUNSTONE_PLUGINS/datastores-tab.js; then
-        echo "*** already applied sunstone integration in $SUNSTONE_PLUGINS/datastores-tab.js"
-    else
-        echo "*** enabling sunstone integration in $SUNSTONE_PLUGINS/datastores-tab.js"
-        cd "$SUNSTONE_PLUGINS"
-        patch -b -p 0 < "$CWD/patches/datastores-tab.js.patch"
-        cd "$CWD"
-    fi
-else
-    echo "sunstones js plugin datastores-tab.js not found in $ONE_LIB/sunstone/public/js/plugins/"
-    echo "StorPool integration to sunstone not installed!"
-fi
 
 # Enable StorPool in oned.conf
 if grep -q -i storpool /etc/one/oned.conf >/dev/null 2>&1; then
@@ -108,4 +254,14 @@ TM_MAD_CONF = [
 _EOF_
 fi
 
-echo "*** Please restart opennebula and opennebula-sunstone services"
+echo "*** VMM poll patch for OpenNebula v4.14 ..."
+pushd "$ONE_VAR"
+    #check if patch is applied
+    do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch"
+popd
+cp "$CWD/misc/poll_disk_info" /usr/bin/poll_disk_info
+chmod a+x /usr/bin/poll_disk_info
+
+echo "*** Please sync hosts (onehost sync --force)"
+
+echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"

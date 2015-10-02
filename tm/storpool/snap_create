@@ -19,53 +19,56 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# premigrate srcHost dstHost vmPath vmId datasourceId template
+# snap_create  host:parent_image snap_id vm_id ds_id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "tm_ssh_${0##*/}" "$*"; }
+TM_PATH="$(dirname $0)"
+
+source "${TM_PATH}/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
-# Set up the environment to source common tools
+# Get clone arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-if [ -n "${ONE_LOCATION}" ]; then
-    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+SRC=$1
+SNAP_ID=$2
+VM_ID=$3
+DS_ID=$4
+
+splog "SRC=$SRC SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
+
+SRC_HOST=`arg_host $SRC`
+SRC_PATH=`arg_path $SRC`
+
+DISK_ID=$(echo ${SRC##*/} | awk -F. '{print $NF}')
+
+#-------------------------------------------------------------------------------
+# Get Image information
+#-------------------------------------------------------------------------------
+
+oneVmInfo "$VM_ID" "$DISK_ID"
+
+#-------------------------------------------------------------------------------
+# Compute the source image
+#-------------------------------------------------------------------------------
+
+SP_PARENT=${SOURCE##*/}
+if [ "$CLONE" = "NO" ]; then
+    # PERSISTENT image
+    SP_VOL="${SP_PARENT}"
 else
-    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+    # NON-PERSISTENT image
+    SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
 fi
 
-source $TMCOMMON
-
-TM_PATH=$(dirname $0)
-
-#-------------------------------------------------------------------------------
-# Get cmd arguments from OpenNebula core
-#-------------------------------------------------------------------------------
-
-SRC_HOST=$1
-DST_HOST=$2
-VM_PATH=$3
-
-VM_ID=$4
-DS_ID=$5
-
-TEMPLATE=$6
+DST_HOST=$SRC_HOST
+DST_PATH="$SRC_PATH"
 
 #-------------------------------------------------------------------------------
-# Run the shared tm_mad to cleanup VM disks
+# Create snapshot
 #-------------------------------------------------------------------------------
 
-pushd "${TM_PATH}/../shared/"
-bash "${0##*/}" "$SRC_HOST" "$DST_HOST" "$VM_PATH" "$VM_ID" "$DS_ID" "$TEMPLATE"
-popd
-
-#-------------------------------------------------------------------------------
-# Cleanup old VM files from the old host
-#-------------------------------------------------------------------------------
-
-DST_DIR="$VM_PATH"
-CMD="$SSH $SRC_HOST 'rm -rf $DST_DIR'"
-exec_and_log "eval $CMD" "Error removing $DST_DIR"
+storpoolAction "SNAPSHOT" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "${SP_VOL}-snap$SNAP_ID"
 
 splog "END"
 exit 0

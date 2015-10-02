@@ -20,7 +20,7 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# postmigrate srcHost dstHost vmPath vmId datasourceId template
+# failmigrate srcHost dstHost vmPath vmId datasourceId template
 #-------------------------------------------------------------------------------
 
 TM_PATH="`dirname $0`"
@@ -49,28 +49,35 @@ splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID
 #-------------------------------------------------------------------------------
 oneDatastoreInfo "$DS_ID"
 
+if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+    #-------------------------------------------------------------------------------
+    # Cleanup $VM_PATH at DST_HOST
+    #-------------------------------------------------------------------------------
+    ssh_exec_and_log "$DST_HOST" "[ -d \"$VM_PATH\" ] && rm -rf \"$VM_PATH\"" \
+                 "Error Cleaning up $DST_HOST:$VM_PATH"
+fi
+
 #-------------------------------------------------------------------------------
 # Get VM information
 #-------------------------------------------------------------------------------
 oneTemplateInfo "$TEMPLATE"
 
 #-------------------------------------------------------------------------------
-# Detach storpool volumes
+# Detach storpool volumes from DST_HOST
 #-------------------------------------------------------------------------------
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         SP_VOL="${DISK_SOURCE##*/}"
         [ -n "${DISK_PERSISTENT_ARRAY[i]}" ] || SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
-
         DST_PATH="$VM_PATH/disk.${DISK_ID_ARRAY[i]}"
-        storpoolAction "DETACH_HERE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+        storpoolAction "DETACH_HERE" "$DST_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
     fi
 done
 
 if [ "$DS_TM_MAD" = "storpool" ]; then
     #-------------------------------------------------------------------------------
-    # Detach volatile disk volumes
+    # Detach volatile disk volumes from DST_HOST
     #-------------------------------------------------------------------------------
     for i in ${!DISK_ID_ARRAY[@]}; do
         if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ]; then
@@ -80,26 +87,16 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
             fi
             SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
-            storpoolAction "DETACH_HERE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+            storpoolAction "DETACH_HERE" "$DST_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
         fi
     done
 
     #-------------------------------------------------------------------------------
-    # Detach context ISO volume
+    # Detach context ISO volume from DST_HOST
     #-------------------------------------------------------------------------------
     SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
-    EXTRA_CMD="ln -sf $DST_PATH ${DST_PATH}.iso"
-    storpoolAction "DETACH_HERE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
-fi
-
-if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
-    #-------------------------------------------------------------------------------
-    # Cleanup src VM files from the src host
-    #-------------------------------------------------------------------------------
-    CMD="$SSH $SRC_HOST 'rm -rf $VM_PATH'"
-    splog "$CMD"
-    exec_and_log "eval $CMD" "Error removing $VM_PATH"
+    storpoolAction "DETACH_HERE" "$DST_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
 fi
 
 splog "END"

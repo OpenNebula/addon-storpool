@@ -4,7 +4,6 @@
 # Copyright 2015, StorPool (storpool.com)                                    #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
-# Portions copyright Asociacion Clubs Baloncesto (acb.com)                   #
 #                                                                            #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may    #
 # not use this file except in compliance with the License. You may obtain    #
@@ -20,78 +19,93 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# premigrate srcHost dstHost vmPath vmId datasourceId template
+# snap_revert base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "tm_shared_${0##*/}" "$*"; }
+function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
 
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
 if [ -n "${ONE_LOCATION}" ]; then
-    TMCOMMON=$ONE_LOCATION/var/remotes/tm/tm_common.sh
+    LIB_LOCATION=$ONE_LOCATION/lib
 else
-    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+    LIB_LOCATION=/usr/lib/one
 fi
 
-source $TMCOMMON
+. $LIB_LOCATION/sh/scripts_common.sh
 
-TM_PATH=$(dirname $0)
+DRIVER_PATH=$(dirname $0)
+source ${DRIVER_PATH}/../libfs.sh
 
 #-------------------------------------------------------------------------------
-# Get cmd arguments from OpenNebula core
+# Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-SRC_HOST=$1
-DST_HOST=$2
-VM_PATH=$3
+DRV_ACTION=$1
+ID=$2
 
-VM_ID=$4
-DS_ID=$5
+if type base64 2>&1 >/dev/null; then
+    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
+fi
 
-TEMPLATE=$6
-
-XPATH="${TM_PATH}/../../datastore/xpath_multi.py -b $TEMPLATE"
+XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
 
 unset i XPATH_ELEMENTS
-while read -r element; do
+
+while IFS= read -r -d '' element; do
     XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH     /VM/TEMPLATE/DISK/TM_MAD \
-                    /VM/TEMPLATE/DISK/SOURCE \
-                    /VM/TEMPLATE/DISK/DISK_ID \
-                    /VM/TEMPLATE/DISK/DATASTORE_ID \
-                    /VM/TEMPLATE/DISK/PERSISTENT)
+done < <($XPATH /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
+                /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
+                /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT)
 
 unset i
+SOURCE="${XPATH_ELEMENTS[i++]}"
+BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
 
-TM_MAD=${XPATH_ELEMENTS[i++]}
-DISK_SOURCE=${XPATH_ELEMENTS[i++]}
-DISK_ID=${XPATH_ELEMENTS[i++]}
-DISK_DS=${XPATH_ELEMENTS[i++]}
-DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
+DST_HOST=`get_destination_host $ID`
 
-OLDIFS=$IFS
-IFS=";"
-TM_MAD_ARRAY=($TM_MAD)
-DISK_SOURCE_ARRAY=($DISK_SOURCE)
-DISK_ID_ARRAY=($DISK_ID)
-DISK_DS_ARRAY=($DISK_DS)
-DISK_PERSISTENT_ARRAY=($DISK_PERSISTENT)
-IFS=$OLDIFS
+splog "\
+${ID:+ID=$ID }\
+${SOURCE:+SOURCE=$SOURCE }\
+${DST_HOST:+DST_HOST=$DST_HOST }\
+${TARGET_SNAPSHOT:+TARGET_SNAPSHOT=$TARGET_SNAPSHOT }\
+"
+if [ -z "$DST_HOST" ]; then
+    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
+    exit -1
+fi
 
-SELF=${0##*/}
-for i in "${!TM_MAD_ARRAY[@]}"; do
-    if [ ${TM_MAD_ARRAY[i]} = "storpool" ]; then
-        CALL="${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST $TEMPLATE $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
-        CWD=$(pwd)
-        if cd "${TM_PATH}/../${TM_MAD_ARRAY[i]}"; then
-            splog "i=$i ${TM_PATH}/../${TM_MAD_ARRAY[i]}/$SELF $SRC_HOST $DST_HOST {TEMPLATE} $VM_ID $DS_ID ${DISK_SOURCE_ARRAY[i]} ${DISK_ID_ARRAY[i]} ${DISK_DS_ARRAY[i]} ${DISK_PERSISTENT_ARRAY[i]}"
-            bash $CALL
-            cd "$CWD"
-        fi
-    fi
-done
+SP_VOL="${SOURCE##*/}"
+SP_SNAP="${SP_VOL}-snap$TARGET_SNAPSHOT"
+
+SP_TMPVOL="${SP_VOL}-$(date +%s)$(mktemp --dry-tun XXXXXX)"
+
+SNAP_REVERT_CMD=$(cat <<EOF
+    set -e
+    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
+    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
+
+    splog "volume $SP_VOL rename ${SP_TMPVOL}"
+    storpool volume "$SP_VOL" rename "${SP_TMPVOL}"
+
+    trap 'splog "(\$?) revert $SP_TMPVOL to $SP_VOL"; storpool volume "$SP_TMPVOL" rename "$SP_VOL";' EXIT TERM INT HUP
+
+    splog "volume $SP_VOL parent $SP_SNAP"
+    storpool volume "$SP_VOL" parent "$SP_SNAP"
+
+    trap - EXIT TERM INT HUP
+
+    splog "volume $SP_TMPVOL delete"
+    storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
+
+    splog "END SNAP_REVERT_CMD"
+EOF
+)
+
+ssh_exec_and_log "$DST_HOST" "$SNAP_REVERT_CMD" \
+                 "Error reverting snapshot $SP_SNAP"
 
 splog "END"
-exit 0

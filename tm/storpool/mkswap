@@ -1,8 +1,9 @@
 #!/bin/bash
-#
 
 # -------------------------------------------------------------------------- #
 # Copyright 2015, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may    #
 # not use this file except in compliance with the License. You may obtain    #
@@ -17,23 +18,18 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-XML=$1
-DS_ID=$2
+# mkswap size host:remote_system_ds/disk.i size vmid dsid
+#   - size in MB of the image
+#   - host is the target host to deploy the VM
+#   - remote_system_ds is the path for the system datastore in the host
+#   - vmid is the id of the VM
+#   - dsid is the target datastore (0 is the system datastore)
 
-DS_NAME="one-ds-${DS_ID}"
+TM_PATH="$(dirname $0)"
 
-while IFS=',' read n u t f; do
-	if [ "${n//\"/}" = $DS_NAME ]; then
-		case "${XML:0:6}" in
-			system)
-				echo $((u/1024/1024)) $((t/1024/1024)) $((f/1024/1024))
-				;;
-			*)
-				echo "USED_MB=$((u/1024/1024))"
-				echo "TOTAL_MB=$((t/1024/1024))"
-				echo "FREE_MB=$((f/1024/1024))"
-				;;
-		esac
-		break
-	fi
-done < <(${0%/*}/monitor_helper | jq -r '.data | map( select( .name ) ) | .[] | [ .name, .stored.used, .stored.capacity, .stored.free ] | @csv')
+SIZE=$1
+DST=$2
+VM_ID=$3
+DS_ID=$4
+
+$TM_PATH/mkimage "$SIZE" "swap" "$DST" "$VM_ID" "$DS_ID"

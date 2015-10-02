@@ -1,0 +1,41 @@
+diff -urN x.orig/var/lib/one/remotes/vmm/kvm/poll x/var/lib/one/remotes/vmm/kvm/poll
+--- remotes/vmm/kvm/poll	2015-09-24 15:34:37.000000000 +0300
++++ remotes/vmm/kvm/poll	2015-09-29 15:45:35.604756431 +0300
+@@ -334,6 +334,9 @@
+             protocol = ele.attributes['protocol'] rescue nil
+             name = ele.attributes['name'] rescue nil
+ 
++            # get dev attribute (for block devices)
++            dev = ele.attributes['dev'] rescue nil
++
+             if protocol == "rbd"
+                 # Ceph
+                 auth = ele.parent.elements["auth"].attributes["username"] rescue nil
+@@ -359,6 +362,27 @@
+                     data[:snapshot_size] << { :id => snap_id, :disk_id => disk_id, :size => snapshot_size.round}
+ 
+                 end
++            elsif !dev.nil?
++                # Block device
++                disk_id = dev.split(".")[-1]
++
++                dev_xml = `poll_disk_info "#{dev}"`
++                next if !$? || !$?.success?
++
++                dev_doc = REXML::Document.new( dev_xml )
++                disk_size = dev_doc.elements["disk/size"].text.to_f/1024/1024
++
++                data[:disk_size] << { :id => disk_id, :size => disk_size.round }
++
++                dev_doc.elements.each("disk/snapshot") do |snap|
++
++                    snap_id = snap.elements["id"].text.to_i
++
++                    snapshot_size = snap.elements["size"].text.to_f/1024/1024
++
++                    data[:snapshot_size] << { :id => snap_id, :disk_id => disk_id, :size => snapshot_size.round }
++
++                end
+             else
+                 # Search the disk in system datastore when the source
+                 # is a persistent image with snapshots

@@ -1,0 +1,157 @@
+diff -urN app/tabs/datastores-tab/form-panels/create/wizard.hbs app/tabs/datastores-tab/form-panels/create/wizard.hbs
+--- app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-09-24 15:34:42.000000000 +0300
++++ app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-09-29 15:44:31.079564149 +0300
+@@ -32,6 +32,7 @@
+         <option value="ceph">{{tr "Ceph"}}</option>
+         <option value="gluster">{{tr "Gluster"}}</option>
+         <option value="dev">{{tr "Devices"}}</option>
++        <option value="storpool">{{tr "StorPool"}}</option>
+         <option value="custom">{{tr "Custom"}}</option>
+       </select>
+     </div>
+@@ -68,6 +69,7 @@
+             <option value="vmfs">{{tr "VMFS"}}</option>
+             <option value="ceph">{{tr "Ceph"}}</option>
+             <option value="dev">{{tr "Devices"}}</option>
++            <option value="storpool">{{tr "StorPool"}}</option>
+             <option value="custom">{{tr "Custom"}}</option>
+           </select>
+           <div>
+@@ -86,6 +88,7 @@
+             <option value="vmfs">{{tr "VMFS"}}</option>
+             <option value="ceph">{{tr "Ceph"}}</option>
+             <option value="dev">{{tr "Devices"}}</option>
++            <option value="storpool">{{tr "StorPool"}}</option>
+             <option value="custom">{{tr "Custom"}}</option>
+           </select>
+           <div>
+@@ -258,5 +261,41 @@
+       </label>
+       <input type="text" name="rbd_format" id="rbd_format" />
+     </div>
++    <div class="large-6 columns">
++      <label for="sp_replication">
++        {{tr "StorPool Replication"}}
++        <span class="tip">
++          {{tr "StorPool can keep between 1 and 3 copies of data spread on all servers in the cluster."}}
++        </span>
++      </label>
++      <input type="text" name="sp_replication" id="sp_replication" />
++    </div>
++    <div class="large-6 columns">
++      <label for="sp_placeall">
++        {{tr "StorPool PlaceAll"}}
++        <span class="tip">
++          {{tr "PlacementGroup to allocate data on. PlacementGroup must exists in the StorPool cluster. Check with 'storpool placementGroup list'."}}
++        </span>
++      </label>
++      <input type="text" name="sp_placeall" id="sp_placeall" />
++    </div>
++    <div class="large-6 columns">
++      <label for="sp_placetail">
++        {{tr "StorPool PlaceTail"}}
++        <span class="tip">
++          {{tr "PlacementGroup to keep one copy on. This copy (the tail) is used for reads. PlacementGroup must exist the StorPool cluster. Check with 'storpool placementGroup list'."}}
++        </span>
++      </label>
++      <input type="text" name="sp_placetail" id="sp_placetail" />
++    </div>
++    <div class="large-6 columns">
++      <label for="sp_system">
++        {{tr "StorPool system"}}
++        <span class="tip">
++          {{tr "Used when SYSTEM datastore type is selected. Set to 'ssh' if the datastore is not on shared fs"}}
++        </span>
++      </label>
++      <input type="text" name="sp_system" id="sp_system" />
++    </div>
+   </div>
+ </form>
+diff -urN app/tabs/datastores-tab/form-panels/create.js app/tabs/datastores-tab/form-panels/create.js
+--- app/tabs/datastores-tab/form-panels/create.js	2015-09-24 15:34:42.000000000 +0300
++++ app/tabs/datastores-tab/form-panels/create.js	2015-09-29 15:44:31.079564149 +0300
+@@ -148,6 +148,9 @@
+         case 'dev':
+           _selectDevices();
+           break;
++        case 'storpool':
++          _selectStorpool();
++          break;
+         case 'custom':
+           _selectCustom();
+           break;
+@@ -192,6 +195,12 @@
+     var rbd_format      = $('#rbd_format', dialog).val();
+     var staging_dir     = $('#staging_dir', dialog).val();
+ 
++    var sp_replication  = $('#sp_replication', dialog).val();
++    var sp_placeall     = $('#sp_placeall', dialog).val();
++    var sp_placetail    = $('#sp_placetail', dialog).val();
++    var sp_replication  = $('#sp_replication', dialog).val();
++    var sp_system       = $('#sp_system', dialog).val();
++
+     var ds_obj = {
+       "datastore" : {
+         "name" : name,
+@@ -261,6 +270,18 @@
+     if (staging_dir)
+         ds_obj.datastore.staging_dir = staging_dir;
+ 
++    if (sp_replication)
++        ds_obj.datastore.sp_replication = sp_replication;
++
++    if (sp_placeall)
++        ds_obj.datastore.sp_placeall = sp_placeall;
++
++    if (sp_placetail)
++        ds_obj.datastore.sp_placetail = sp_placetail;
++
++    if (sp_system && ds_type == "SYSTEM_DS")
++        ds_obj.datastore.sp_system = sp_system;
++
+     Sunstone.runAction("Datastore.create", ds_obj);
+     return false;
+   }
+@@ -303,6 +324,10 @@
+     $('label[for="ceph_user"],input#ceph_user', dialog).parent().hide();
+     $('label[for="rbd_format"],input#rbd_format', dialog).parent().hide();
+     $('label[for="staging_dir"],input#staging_dir', dialog).parent().hide();
++    $('label[for="sp_replication"],input#sp_replication', dialog).parent().hide();
++    $('label[for="sp_placeall"],input#sp_placeall', dialog).parent().hide();
++    $('label[for="sp_placetail"],input#sp_placetail', dialog).parent().hide();
++    $('label[for="sp_system"],input#sp_system', dialog).parent().hide();
+     $('label[for="limit_transfer_bw"],input#limit_transfer_bw', dialog).parent().hide();
+     $('label[for="no_decompress"],input#no_decompress', dialog).parent().hide();
+     $('select#ds_mad').removeAttr('disabled');
+@@ -472,6 +497,31 @@
+     $('input#restricted_dirs').attr('disabled', 'disabled');
+   }
+ 
++  function _selectStorpool(dialog) {
++    $('select#ds_mad').val('storpool');
++    $('select#ds_mad').attr('disabled', 'disabled');
++    $('select#tm_mad').val('storpool');
++    $('select#tm_mad').attr('disabled', 'disabled');
++    $('input#image_ds_type').attr('checked', 'true');
++    $('input#file_ds_type').attr('disabled', 'disabled');
++    $('label[for="sp_replication"],input#sp_replication').parent().fadeIn();
++    $('label[for="sp_placeall"],input#sp_placeall').parent().fadeIn();
++    $('label[for="sp_placetail"],input#sp_placetail').parent().fadeIn();
++    $('label[for="bridge_list"],input#bridge_list').parent().fadeIn();
++    $('label[for="sp_system"],input#sp_system').parent().fadeIn();
++    $('label[for="staging_dir"],input#staging_dir').parent().fadeIn();
++    $('label[for="limit_transfer_bw"],input#limit_transfer_bw').parent().fadeIn();
++    $('label[for="no_decompress"],input#no_decompress').parent().fadeIn();
++    $('label[for="datastore_capacity_check"],input#datastore_capacity_check').parent().fadeIn();
++    $('select#disk_type').val('block');
++    $('select#disk_type').attr('disabled', 'disabled');
++    $('input#safe_dirs').removeAttr('disabled');
++    $('input#base_path').removeAttr('disabled');
++    $('input#limit_mb').removeAttr('disabled');
++    $('input#restricted_dirs').removeAttr('disabled');
++  }
++
++
+   function _selectCustom(dialog) {
+     _hideAll(dialog);
+     $('select#ds_mad').val('fs');
