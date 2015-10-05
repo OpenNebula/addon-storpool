@@ -75,7 +75,7 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	while IFS=',' read name storedSize spaceUsed; do
 		name=${name//\"/}
 		snap_id=${name#*snap}
-		if [ -n "spaceUsed" ]; then
+		if [ -n "$spaceUsed" ]; then
 			snap_size=$spaceUsed
 		else
 			snap_size=$storedSize
