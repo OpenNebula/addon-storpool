@@ -61,16 +61,25 @@ fi
 if [ "${realDev%-*}" = "/dev/sp" ]; then
 	spDev=$(readlink $dev)
 	spVolume=${spDev#/dev/storpool/}
-	storedSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
-	[ -n "$storedSize" ] || exit 1
+	if [ -f "~/.${0##*/}.spaceUsed" ]; then
+		spaceUsed=1
+		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.spaceUsed] | @csv")
+	else
+		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
+	fi
+	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
-	echo " <size>$storedSize</size>"
+	echo " <size>$spSize</size>"
 	echo " <volume>$spVolume</volume>"
 #	splog "$spVolume $storedSize"
 	while IFS=',' read name storedSize spaceUsed; do
 		name=${name//\"/}
 		snap_id=${name#*snap}
-		snap_size=$((storedSize))
+		if [ -n "spaceUsed" ]; then
+			snap_size=$spaceUsed
+		else
+			snap_size=$storedSize
+		fi
 		cat <<EOF
  <snapshot>
   <id>$snap_id</id>
