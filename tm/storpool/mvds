@@ -32,11 +32,10 @@ source "${TM_PATH}/storpool_common.sh"
 
 SRC=$1
 DST=$2
-SNAP_ID=$3
-VM_ID=$4
-DS_ID=$5
+VM_ID=$3
+DS_ID=$4
 
-splog "SRC=$SRC DST=$DST SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
 #-------------------------------------------------------------------------------
 # Compute the destination image name
