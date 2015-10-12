@@ -401,7 +401,7 @@ function lookup_file()
 {
     local _FILE="$1" _CWD="${2:-$PWD}"
     local _PATH=
-    for _PATH in "$_CWD/"{,../,../../,../../../}; do
+    for _PATH in "$_CWD/"{,../,../../,../../../,remotes/}; do
         if [ -f "${_PATH}${_FILE}" ]; then
             echo "${_PATH}${_FILE}"
             break;
