@@ -63,7 +63,7 @@ SP_TEMPLATE="${SRC_PATH%%/*}"
 # Clone the image
 #-------------------------------------------------------------------------------
 
-torpoolAction "CLONE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_PARENT" "$SP_TEMPLATE"
+storpoolAction "CLONE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_PARENT" "$SP_TEMPLATE"
 
 splog "END"
 exit 0
