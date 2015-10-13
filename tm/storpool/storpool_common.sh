@@ -155,6 +155,8 @@ EOF
     if storpool volume "$_SP_VOL" info 2>/dev/null >/dev/null; then
         splog "delete $_SP_VOL"
         storpool volume "$_SP_VOL" delete "$SP_VOL"
+    else
+        splog "volume $_SP_VOL not found"
     fi
 EOF
 )
@@ -173,6 +175,8 @@ EOF
             splog "delete snapshot \$snap"
             storpool snapshot \$snap delete \$snap
         done
+    else
+        splog "skipping persistent image. $_SP_PARENT"
     fi
 EOF
 )
@@ -185,6 +189,8 @@ EOF
         fi
         splog "delete $SP_VOL"
         storpool volume "$SP_VOL" delete "$SP_VOL"
+    else
+        splog "volume $_SP_VOL not found"
     fi
 
 EOF
