@@ -32,6 +32,16 @@ fi
 source "$TMCOMMON"
 
 #-------------------------------------------------------------------------------
+# load local configuration parameters (if any)
+#-------------------------------------------------------------------------------
+
+sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
+
+if [ -f "$sprcfile" ]; then
+    source "$sprcfile"
+fi
+
+#-------------------------------------------------------------------------------
 # syslog logger function
 #-------------------------------------------------------------------------------
 
@@ -227,7 +237,7 @@ EOF
     splog "volume $_SP_VOL snapshot $_SP_SNAP"
     storpool volume "$_SP_VOL" snapshot "$_SP_SNAP"
 
-    if [ -f "${_DST_DIR}/checkpoint" ]; then
+    if [ -n "$SP_SAVE_CHECKPOINT" ] && [ -f "${_DST_DIR}/checkpoint" ]; then
         splog "saving checkpoint to ${_DST_DIR}/checkpoint.${_SP_PARENT}"
         cp "${_DST_DIR}/checkpoint" "${_DST_DIR}/checkpoint.${_SP_PARENT}"
     fi
@@ -244,7 +254,9 @@ EOF
     splog "volume $_SP_VOL parent $_SP_SNAP"
     storpool volume "$_SP_VOL" parent "$_SP_SNAP"
 
-    if [ -f "${_DST_DIR}/checkpoint" ]; then
+    trap - EXIT TERM INT HUP
+
+    if [ -n "$SP_SAVE_CHECKPOINT" ] && [ -f "${_DST_DIR}/checkpoint" ]; then
         if [ -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" ]; then
             splog "reverting checkpoint to ${_DST_DIR}/checkpoint.${_SP_PARENT}"
             cp -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" "${_DST_DIR}/checkpoint"
@@ -260,8 +272,6 @@ EOF
         fi
     fi
 
-    trap - EXIT TERM INT HUP
-
     if storpool volume "${_SP_VOL}-$_SP_TMP" info 2>/dev/null >/dev/null; then
         splog "volume ${_SP_VOL}-$_SP_TMP delete ${_SP_VOL}-$_SP_TMP"
         storpool volume "${_SP_VOL}-$_SP_TMP" delete "${_SP_VOL}-$_SP_TMP"
@@ -274,7 +284,7 @@ EOF
     splog "delete snapshot $_SP_SNAP"
     storpool snapshot "$_SP_SNAP" delete "$_SP_SNAP"
 
-    if [ -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" ]; then
+    if [ -n "$SP_SAVE_CHECKPOINT" ] && [ -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" ]; then
         splog "removing checkpoint file ${_DST_DIR}/checkpoint.${_SP_PARENT}"
         rm -f "${_DST_DIR}/checkpoint.${_SP_PARENT}"
     fi
