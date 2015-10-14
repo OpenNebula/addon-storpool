@@ -47,6 +47,7 @@ function storpoolAction()
     local _SP_LINK="/dev/storpool/$_SP_VOL"
     local _DST_DIR="${_DST_PATH%%disk*}"
     local _SP_TMP=$(date +%s)-$(mktemp --dry-run XXXXXXXX)
+    local _SP_SNAP="${_SP_VOL}-snap${_SP_PARENT}"
 #    splog "SP_LINK=$_SP_LINK DST_DIR=$_DST_DIR"
     _SP_TEMPLATE="${_SP_TEMPLATE:+template $_SP_TEMPLATE}"
 
@@ -223,8 +224,13 @@ EOF
 )
     local _SNAPSHOT=$(cat <<EOF
     #_SNAPSHOT
-    splog "volume $_SP_VOL snapshot $_SP_PARENT"
-    storpool volume "$_SP_VOL" snapshot "$_SP_PARENT"
+    splog "volume $_SP_VOL snapshot $_SP_SNAP"
+    storpool volume "$_SP_VOL" snapshot "$_SP_SNAP"
+
+    if [ -f "${_DST_DIR}/checkpoint" ]; then
+        splog "saving checkpoint to ${_DST_DIR}/checkpoint.${_SP_PARENT}"
+        cp "${_DST_DIR}/checkpoint" "${_DST_DIR}/checkpoint.${_SP_PARENT}"
+    fi
 
 EOF
 )
@@ -235,20 +241,43 @@ EOF
 
     trap 'storpool volume "${_SP_VOL}-$_SP_TMP" rename "$_SP_VOL"' EXIT TERM INT HUP
 
-    splog "volume $_SP_VOL parent $_SP_PARENT"
-    storpool volume "$_SP_VOL" parent "$_SP_PARENT"
+    splog "volume $_SP_VOL parent $_SP_SNAP"
+    storpool volume "$_SP_VOL" parent "$_SP_SNAP"
+
+    if [ -f "${_DST_DIR}/checkpoint" ]; then
+        if [ -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" ]; then
+            splog "reverting checkpoint to ${_DST_DIR}/checkpoint.${_SP_PARENT}"
+            cp -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" "${_DST_DIR}/checkpoint"
+        else
+            echo "Missing checkpoint file ${_DST_DIR}/checkpoint.${_SP_PARENT}! Can't revert snapshot."
+            splog "Missing checkpoint file ${_DST_DIR}/checkpoint.${_SP_PARENT}! Can't revert snapshot."
+            splog "delete volume $_SP_VOL"
+            storpool volume "$_SP_VOL" delete "$_SP_VOL"
+            splog "volume ${_SP_VOL}-$_SP_TMP rename $_SP_VOL"
+            storpool volume "${_SP_VOL}-$_SP_TMP" rename "$_SP_VOL"
+            $_ATTACH
+            exit 1
+        fi
+    fi
 
     trap - EXIT TERM INT HUP
 
-    splog "volume ${_SP_VOL}-$_SP_TMP delete ${_SP_VOL}-$_SP_TMP"
-    storpool volume "${_SP_VOL}-$_SP_TMP" delete "${_SP_VOL}-$_SP_TMP"
+    if storpool volume "${_SP_VOL}-$_SP_TMP" info 2>/dev/null >/dev/null; then
+        splog "volume ${_SP_VOL}-$_SP_TMP delete ${_SP_VOL}-$_SP_TMP"
+        storpool volume "${_SP_VOL}-$_SP_TMP" delete "${_SP_VOL}-$_SP_TMP"
+    fi
 
 EOF
 )
     local _DELSNAP=$(cat <<EOF
     #_DELSNAP
-    splog "delete snapshot $_SP_VOL"
-    storpool snapshot "$_SP_VOL" delete "$_SP_VOL"
+    splog "delete snapshot $_SP_SNAP"
+    storpool snapshot "$_SP_SNAP" delete "$_SP_SNAP"
+
+    if [ -f "${_DST_DIR}/checkpoint.${_SP_PARENT}" ]; then
+        splog "removing checkpoint file ${_DST_DIR}/checkpoint.${_SP_PARENT}"
+        rm -f "${_DST_DIR}/checkpoint.${_SP_PARENT}"
+    fi
 
 EOF
 )

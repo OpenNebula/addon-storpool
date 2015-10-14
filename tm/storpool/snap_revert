@@ -68,7 +68,7 @@ DST_PATH="$SRC_PATH"
 # Revert snapshot
 #-------------------------------------------------------------------------------
 
-storpoolAction "SNAPREVERT" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "${SP_VOL}-snap$SNAP_ID"
+storpoolAction "SNAPREVERT" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SNAP_ID"
 
 splog "END"
 exit 0
