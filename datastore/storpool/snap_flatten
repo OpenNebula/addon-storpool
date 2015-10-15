@@ -79,20 +79,37 @@ if [ -z "$DST_HOST" ]; then
 fi
 
 SP_VOL="${SOURCE##*/}"
+SP_TMPVOL="${SP_VOL}-$(date +%s)$(mktemp --dry-run XXXXXX)"
 
 SNAP_FLATTEN_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    while read snap; do
-        storpool snapshot "$snap" delete "$snap"
-    done < <(storpool snapshot list | grep ${SP_VOL}-snap | awk '{print $2}')
+    splog "volume $SP_VOL rename $SP_TMPVOL"
+    storpool volume "$SP_VOL" rename "$SP_TMPVOL"
+
+    splog "volume $SP_VOL parent ${SP_VOL}-snap$TARGET_SNAPSHOT"
+    if storpool volume "$SP_VOL" parent "${SP_VOL}-snap$TARGET_SNAPSHOT" 2>&1 >/dev/null; then
+        splog "volume delete $SP_TMPVOL"
+        storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
+    else
+        splog "Failed to flatten $SP_VOL"
+        splog "volume $SP_TMPVOL rename $SP_VOL"
+        storpool volume "$SP_TMPVOL" rename "$SP_VOL"
+        exit 1
+    fi
+
+    storpool snapshot list | grep ${SP_VOL}-snap | awk '{print \$2}' | while read snap; do
+        splog "snapshot delete \$snap"
+        storpool snapshot "\$snap" delete "\$snap"
+    done
 
     splog "END SNAP_FLATTEN_CMD"
 EOF
 )
 
+splog "RUN SNAP_FLATTEN_CMD on $DST_HOST"
 ssh_exec_and_log "$DST_HOST" "$SNAP_FLATTEN_CMD" \
                  "Error flatting $SOURCE"
 
