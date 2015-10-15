@@ -79,7 +79,7 @@ if [ -z "$DST_HOST" ]; then
 fi
 
 SP_VOL="${SOURCE##*/}"
-SP_TMPVOL="${SP_VOL}-$(date +%s)$(mktemp --dry-run XXXXXX)"
+SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
 
 SNAP_FLATTEN_CMD=$(cat <<EOF
     set -e

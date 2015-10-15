@@ -81,7 +81,7 @@ fi
 SP_VOL="${SOURCE##*/}"
 SP_SNAP="${SP_VOL}-snap$TARGET_SNAPSHOT"
 
-SP_TMPVOL="${SP_VOL}-$(date +%s)$(mktemp --dry-run XXXXXX)"
+SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
 
 SNAP_REVERT_CMD=$(cat <<EOF
     set -e
