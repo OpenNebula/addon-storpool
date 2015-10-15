@@ -85,12 +85,14 @@ SNAP_DELETE_CMD=$(cat <<EOF
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
+    splog "snapshot delete $SP_SNAP"
     storpool snapshot "$SP_SNAP" delete "$SP_SNAP"
 
     splog "END SNAP_DELETE_CMD"
 EOF
 )
 
+splog "RUN SNAP_DELETE_CMD on $DST_HOST"
 ssh_exec_and_log "$DST_HOST" "$SNAP_DELETE_CMD" \
                  "Error deleting snapshot $SP_SNAP"
 
