@@ -175,7 +175,7 @@ EOF
     local _DELVOL_DETACH=$(cat <<EOF
     #_DELVOL_DETACH
     if storpool volume "$SP_VOL" info 2>/dev/null >/dev/null; then
-        if storpool attach list | grep "$SP_VOL"; then
+        if storpool attach list | grep " $SP_VOL "; then
             splog "detach volume $SP_VOL"
             storpool detach volume "$SP_VOL" all
         fi
