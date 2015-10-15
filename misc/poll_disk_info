@@ -52,6 +52,10 @@ splog()
 	logger -t ${0##*/} "$*"
 }
 
+SP_SPACE_USED_LVMWAY=
+
+[ -f "../../addon-storpoolrc" ] && source "../../addon-storpoolrc"
+
 if [ -L "$dev" ]; then
 	realDev=$(readlink -e $dev)
 else
@@ -61,11 +65,10 @@ fi
 if [ "${realDev%-*}" = "/dev/sp" ]; then
 	spDev=$(readlink $dev)
 	spVolume=${spDev#/dev/storpool/}
-	if [ -f "~/.${0##*/}.spaceUsed" ]; then
-		spaceUsed=1
-		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.spaceUsed] | @csv")
-	else
+	if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
 		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
+	else
+		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.spaceUsed] | @csv")
 	fi
 	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
@@ -75,10 +78,10 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	while IFS=',' read name storedSize spaceUsed; do
 		name=${name//\"/}
 		snap_id=${name#*snap}
-		if [ -n "$spaceUsed" ]; then
-			snap_size=$spaceUsed
-		else
+		if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
 			snap_size=$storedSize
+		else
+			snap_size=$spaceUsed
 		fi
 		cat <<EOF
  <snapshot>
