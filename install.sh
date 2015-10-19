@@ -254,6 +254,22 @@ TM_MAD_CONF = [
 _EOF_
 fi
 
+# Enable snap_create_live in vmm_exec/vmm_execrc
+LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' /etc/one/vmm_exec/vmm_execrc | tail -n 1)
+if [ "x${LIVE_DISK_SNAPSHOTS_LINE/kvm-storpool/}" = "x$LIVE_DISK_SNAPSHOTS_LINE"]; then
+    if [ -n "$LIVE_DISK_SNAPSHOTS_LINE" ]; then
+        echo "*** adding StorPool to LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
+        eval $LIVE_DISK_SNAPSHOTS_LINE
+        sed -i -e 's|kvm-qcow2|kvm-qcow2 kvm-storpool|g' /etc/one/vmm_exec/vmm_execrc
+    else
+        echo "*** LIVE_DISK_SNAPSHOTS not defined in /etc/one/vmm_exec/vmm_execrc"
+        echo "*** to enable StorPool add the following line to /etc/one/vmm_exec/vmm_execrc"
+        echo "LIVE_DISK_SNAPSHOTS=\"kvm-storpool\""
+    fi
+else
+    echo "*** StorPool is already enabled for LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
+fi
+
 echo "*** VMM poll patch for OpenNebula v4.14 ..."
 pushd "$ONE_VAR"
     #check if patch is applied

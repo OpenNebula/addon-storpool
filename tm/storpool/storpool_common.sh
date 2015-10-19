@@ -291,6 +291,21 @@ EOF
 
 EOF
 )
+    local _FSFREEZE=$(cat <<EOF
+    #_FSFREEZE
+    if [ -n "$_SP_SIZE" ]; then
+        source /var/tmp/one/vmm/kvm/kvmrc
+        if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
+            splog "VM $VM_ID fsfreeze domain $_SP_SIZE \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-status\"}")"
+            trap 'virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-thaw\"}"; splog "VM $VM_ID fsthaw domain $_SP_SIZE (ret=$?)";' EXIT TERM INT HUP
+        fi
+    else
+        splog "unknown DOMAIN_ID. snapshot creation canceled!" >&2
+        exit 1
+    fi
+
+EOF
+)
     local _CMD= _HOST=
     case "$_ACTION" in
         CLONE)
@@ -345,6 +360,10 @@ EOF
             _HOST="$_DST_HOST"
             _CMD="$_BEGIN$_SNAPSHOT"
         ;;
+        SNAPSHOT_LIVE)
+            _HOST="$_DST_HOST"
+            _CMD="$_BEGIN$_FSFREEZE$_SNAPSHOT"
+        ;;
         DELSNAP)
             _HOST="$_DST_HOST"
             _CMD="$_BEGIN$_DELSNAP"
@@ -390,6 +409,7 @@ function oneVmInfo()
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
         done < <(onevm show -x "$_VM_ID" | "$_XPATH" --stdin \
+                            /VM/DEPLOY_ID \
                             /VM/STATE \
                             /VM/LCM_STATE \
                             /VM/CONTEXT/DISK_ID \
@@ -405,6 +425,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE)
 
     unset i
+    DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
     VMSTATE="${XPATH_ELEMENTS[i++]}"
     LCM_STATE="${XPATH_ELEMENTS[i++]}"
     CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
