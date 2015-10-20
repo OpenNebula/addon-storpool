@@ -56,24 +56,27 @@ A working StorPool cluster is required.
 
 ## Installation
 
-* Install python bindings for StorPool
-```bash
-pip install storpool
-```
+### Pre-install
+
 * Install required dependencies
 ```bash
+# patch
+yum -y install patch git jq
 # node, bower, grunt
 yum -y install npm
 npm install bower -g
 npm install grunt-cli -g
-# patch
-yum -y install patch
 ```
+
 * Clone the addon-storpool
 ```bash
 cd /usr/src
 git clone https://github.com/OpenNebula/addon-storpool
 ```
+
+### automated installation
+The automated instllation is best suitable for new installations. The install script will try to do an upgrade if it detects that addon-storpool is already installed but this feature is not tested well
+
 * Run the install script and chek for any reported errors or warnings
 ```bash
 bash addon-storpool/install.sh
@@ -82,7 +85,132 @@ If oned and sunstone services are on different servers it is possible to install
  * set environment variable SKIP_SUNSTONE=1 to skip the sunstone integration
  * set environment variable SKIP_ONED=1 to skip the oned integration
 
+### manual installation
+
+#### oned related pieces
+
+* * Copy storpool's DATASTORE_MAD driver
+```bash
+cp -a addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
+
+# copy xpath_multi.py to datastore/storpool/
+cp addon-storpool/datastore/xpath_multi.py  /var/lib/one/remotes/datastore/storpool/
+
+# fix files ownership
+chown -R oneadmin.oneadmin /var/lib/one/remotes/datastore/storpool
+
+```
+* Copy storpool's TM_MAD driver
+```bash
+cp -a addon-storpool/tm/storpool /var/lib/one/remotes/tm/
+
+#fix files ownership
+chown -R oneadmin.oneadmin /var/lib/one/remotes/tm/storpool
+```
+* Fix ssh TM_MAD driver
+(When upgrading from previous version remove old code between the header comments and `exit 0` line)
+```bash
+# create pre/post migrate hook folders
+mkdir -p /var/lib/one/remotes/tm/ssh/{pre,post}migrate.d
+
+pushd /var/lib/one/remotes/tm/ssh/premigrate.d
+ln -s ../../storpool/premigrate premigrate-storpool
+popd
+
+pushd /var/lib/one/remotes/tm/ssh/postmigrate.d
+ln -s ../../storpool/postmigrate postmigrate-storpool
+popd
+
+#edit /var/lib/one/remotes/tm/ssh/premigrate
+# change shebang from #!/bin/sh to #!/bin/bash
+sed -i -e 's|^#!/bin/sh$|#!/bin//bash|' /var/lib/one/remotes/tm/ssh/premigrate
+
+# add code to call scripts from ./premigrate.d
+# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
+sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/ssh/premigrate
+
+#edit /var/lib/one/remotes/tm/ssh/postmigrate
+# change shebang from #!/bin/sh to #!/bin/bash
+sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/ssh/postmigrate
+
+# add code to call scripts from ./postmigrate.d
+# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
+sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/ssh/postmigrate
+```
+* Fix shared TM_MAD driver
+(When upgrading from previous version remove old code between the header comments and `exit 0` line)
+```bash
+# create pre/post migrate hook folders
+mkdir -p /var/lib/one/remotes/tm/shared/{pre,post}migrate.d
+
+pushd /var/lib/one/remotes/tm/shared/premigrate.d
+ln -s ../../storpool/premigrate premigrate-storpool
+popd
+
+pushd /var/lib/one/remotes/tm/shared/postmigrate.d
+ln -s ../../storpool/postmigrate postmigrate-storpool
+popd
+
+#edit /var/lib/one/remotes/tm/ssh/premigrate
+# change shebang from #!/bin/sh to #!/bin/bash
+sed -i -e 's|^#!/bin/sh$|#!/bin//bash|' /var/lib/one/remotes/tm/shared/premigrate
+
+# add code to call scripts from ./premigrate.d
+# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
+sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/shared/premigrate
+
+#edit /var/lib/one/remotes/tm/shared/postmigrate
+# change shebang from #!/bin/sh to #!/bin/bash
+sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/shared/postmigrate
+
+# add code to call scripts from ./postmigrate.d
+# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
+sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/shared/postmigrate
+```
+* Patch IM_MAD/kvm-probes.d/monitor_ds.sh
+```bash
+pushd /var/lib/one
+patch --backup -p0 <~/addon-storpool/patches/im/4.14/00-monitor_ds.patch
+popd
+```
+* Patch VMM_MAD/kvm/poll
+```bash
+pushd /var/lib/one
+patch -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
+popd
+```
+* Copy misc/poll_disk_info to /usr/bin
+```bash
+cp addon-storpool/misc/poll_disk_info /usr/bin/
+```
+* Copy FT hook
+```bash
+cp addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
+```
+
+#### sunstone related pieces
+
+* Patch and rebuild sunstone interface
+```bash
+pushd /usr/lib/one/sunstone/public
+patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/4.14/00-datastores-tab.js.patch
+patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/4.14/01-disk-tab.hbs.patch
+
+# rebuild
+npm install
+bower --allow-root install
+grunt sass
+grunt requirejs
+popd
+```
+
+
+### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
+```bash
+service opennebula restart
+service opennebuka-sunstone restart
+```
 
 ## Upgrade
 
