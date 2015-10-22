@@ -200,8 +200,7 @@ EOF
     local _RESIZE=$(cat <<EOF
     #_RESIZE
     if [ -n "$SIZE" ]; then
-        ORIGINAL_SIZE=${ORIGINAL_SIZE:-0}
-        if [ "$SIZE" -ge "$ORIGINAL_SIZE" ]; then
+        if [ $SIZE -gt ${ORIGINAL_SIZE:-0} ]; then
             splog "volume $_SP_VOL size ${SIZE}M"
             storpool volume "$_SP_VOL" size "${SIZE}M"
         fi
