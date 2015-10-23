@@ -54,7 +54,7 @@ splog()
 
 SP_SPACE_USED_LVMWAY=
 SP_CMD_VOLUME_STATUS='storpool -j volume status'
-SP_CMD_SNAP_SPACE='storpool -j snapshot space'
+SP_CMD_SNAPSHOT_SPACE='storpool -j snapshot space'
 BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
 [ -f "../../addon-storpoolrc" ] && source "../../addon-storpoolrc"
@@ -69,33 +69,38 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	spDev=$(readlink $dev)
 	spVolume=${spDev#/dev/storpool/}
 	if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
-		spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
+		used="storedSize"
 	else
-		spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.spaceUsed] | @csv")
+		used="spaceUsed"
 	fi
+	spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
 	echo " <size>$spSize</size>"
 	echo " <volume>$spVolume</volume>"
-#	splog "$spVolume $storedSize"
-	while IFS=',' read name storedSize spaceUsed; do
+#	splog "$spVolume $spSize"
+	while IFS=',' read name snap_size; do
 		name=${name//\"/}
+#		[ "${name%-snap*}" = "$spVolume" ] || continue
 		snap_id=${name#*snap}
-		if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
-			snap_size=$storedSize
-		else
-			snap_size=$spaceUsed
-		fi
+#		splog "$name $snap_size"
 		cat <<EOF
  <snapshot>
   <id>$snap_id</id>
   <size>$snap_size</size>
  </snapshot>
 EOF
-#		splog "$name $snap_size (used:$spaceUsed)"
-	done < <($SP_CMD_SNAP_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .storedSize, .spaceUsed] | @csv" | sort)
+	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
+#	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | .[] | [.name, .${used}] | @csv" | sort)
 else
-	disk_size=$($BLOCKDEV_GET_SIZE "$realDev")
+	if [ -b "$realDev" ]; then
+		disk_size=$($BLOCKDEV_GET_SIZE "$realDev")
+	else
+		 if [ -f "$realDev" ]; then
+			disk_size=$(du -k $realDev | cut -f1)
+			[ -n "$disk_size" ] && disk_size=$(( disk_size * 1024 ))
+		fi
+	fi
 	[ -n "$disk_size" ] || exit 1
 	echo "<disk>"
 	echo " <size>$disk_size</size>"
