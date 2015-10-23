@@ -53,6 +53,9 @@ splog()
 }
 
 SP_SPACE_USED_LVMWAY=
+SP_CMD_VOLUME_STATUS='storpool -j volume status'
+SP_CMD_SNAP_SPACE='storpool -j snapshot space'
+BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
 [ -f "../../addon-storpoolrc" ] && source "../../addon-storpoolrc"
 
@@ -66,9 +69,9 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	spDev=$(readlink $dev)
 	spVolume=${spDev#/dev/storpool/}
 	if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
-		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
+		spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.storedSize] | @csv")
 	else
-		spSize=$(storpool -j volume status | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.spaceUsed] | @csv")
+		spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.spaceUsed] | @csv")
 	fi
 	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
@@ -90,9 +93,9 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
  </snapshot>
 EOF
 #		splog "$name $snap_size (used:$spaceUsed)"
-	done < <(storpool -j snapshot space | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .storedSize, .spaceUsed] | @csv" | sort)
+	done < <($SP_CMD_SNAP_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .storedSize, .spaceUsed] | @csv" | sort)
 else
-	disk_size=$(blockdev -q --getsize64 "$realDev")
+	disk_size=$($BLOCKDEV_GET_SIZE "$realDev")
 	[ -n "$disk_size" ] || exit 1
 	echo "<disk>"
 	echo " <size>$disk_size</size>"
