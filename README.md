@@ -51,7 +51,7 @@ A working StorPool cluster is required.
 
 1. tested only with the KVM hypervisor
 1. no support for VM snapshot because it is handled internally by libvirt
-1. reported free/used/total space when used for SUSTEM datastore is not propper because OpenNebula can not handle the case when the volatile disks and the context image are block devices instead of files on filesystem. Extra external monitoring of space usage should be implemented.
+1. reported free/used/total space when used for SUSTEM datastore is not propper because the volatile disks and the context image are expected to be files instead of a block device. Extra external monitoring of space usage should be implemented.
 
 
 ## Installation
@@ -89,7 +89,7 @@ If oned and sunstone services are on different servers it is possible to install
 
 #### oned related pieces
 
-* * Copy storpool's DATASTORE_MAD driver
+* Copy storpool's DATASTORE_MAD driver
 ```bash
 cp -a addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
 
@@ -181,7 +181,7 @@ popd
 ```
 * Copy misc/poll_disk_info to /usr/bin
 ```bash
-cp addon-storpool/misc/poll_disk_info /usr/bin/
+cp addon-storpool/vmm/kvm/poll_disk_info /var/lib/one/remotes/vmm/kvm/
 ```
 * Copy FT hook
 ```bash
@@ -204,6 +204,59 @@ grunt requirejs
 popd
 ```
 
+### addon configuration
+* Add the `oneadmin` user to group `disk` on all nodes
+```bash
+usermod -a -G disk oneadmin
+```
+* Edit `/etc/one/oned.conf` and add storpool to `TM_MAD` arguments
+```
+TM_MAD = [
+    executable = "one_tm",
+    arguments = "-t 15 -d dummy,lvm,shared,fs_lvm,qcow2,ssh,vmfs,ceph,dev,storpool"
+]
+```
+* Edit `/etc/one/oned.conf` and add storpool to `DATASTORE_MAD` arguments
+```
+DATASTORE_MAD = [
+    executable = "one_datastore",
+    arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool"
+]
+```
+* Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` for storpool
+```
+TM_MAD_CONF = [
+    name = "storpool", ln_target = "NONE", clone_target = "SELF", shared = "yes"
+]
+```
+To enable live disk snapshots support for storpool
+* Edit `/etc/one/kvm_exec/kvm_execrc` and add `kvm-storpool` to `LIVE_DISK_SNAPSHOTS`
+```
+LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-storpool"
+```
+* Edit `/etc/one/oned.conf` and add `-i` argument to `VM_MAD`
+```
+VM_MAD = [
+    name       = "kvm",
+    executable = "one_vmm_exec",
+    arguments  = "-i -t 15 -r 1 kvm",
+    default    = "vmm_exec/vmm_exec_kvm.conf",
+    type       = "kvm" ]
+```
+To enable the StorPool compatible Fault Tolerance `HOST_HOOK`
+* Edit `/etc/one/oned.conf` and define `HOST_HOOK` as follow
+```
+HOST_HOOK = [
+    name      = "error",
+    on        = "ERROR",
+    command   = "ft/sp_host_error.rb",
+    arguments = "$ID -p 2",
+    remote    = "no" ]
+```
+
+The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
+* Define `SCRIPTS_REMOTE_DIR` if it is changed in `/etc/one/oned.conf` if you plan to do live disk snapshots with fsfreeze via qemu-guest-agent
+* To chage disk space usage reporting to be as LVM is reporting it define `SP_SPACE_USED_LVMWAY` variable to anything
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
@@ -211,6 +264,8 @@ popd
 service opennebula restart
 service opennebuka-sunstone restart
 ```
+
+
 
 ## Upgrade
 
