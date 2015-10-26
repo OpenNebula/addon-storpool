@@ -275,7 +275,7 @@ pushd "$ONE_VAR"
     #check if patch is applied
     do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch"
 popd
-cp "$CWD/misc/poll_disk_info" /usr/bin/poll_disk_info
+cp "$CWD/vmm/kvm/poll_disk_info" "${ONE_VAR}/remotes/vmm/kvm/poll_disk_info"
 chmod a+x /usr/bin/poll_disk_info
 
 echo "*** Please sync hosts (onehost sync --force)"

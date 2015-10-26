@@ -19,7 +19,7 @@ diff -urN x.orig/var/lib/one/remotes/vmm/kvm/poll x/var/lib/one/remotes/vmm/kvm/
 +                # Block device
 +                disk_id = dev.split(".")[-1]
 +
-+                dev_xml = `poll_disk_info "#{dev}"`
++                dev_xml = `../../vmm/kvm/poll_disk_info "#{dev}"`
 +                next if !$? || !$?.success?
 +
 +                dev_doc = REXML::Document.new( dev_xml )
