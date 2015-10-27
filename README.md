@@ -70,7 +70,6 @@ npm install grunt-cli -g
 
 * Clone the addon-storpool
 ```bash
-cd /usr/src
 git clone https://github.com/OpenNebula/addon-storpool
 ```
 
@@ -79,7 +78,7 @@ The automated instllation is best suitable for new installations. The install sc
 
 * Run the install script and chek for any reported errors or warnings
 ```bash
-bash addon-storpool/install.sh
+bash ~/addon-storpool/install.sh
 ```
 If oned and sunstone services are on different servers it is possible to install only part of the integration:
  * set environment variable SKIP_SUNSTONE=1 to skip the sunstone integration
@@ -91,10 +90,10 @@ If oned and sunstone services are on different servers it is possible to install
 
 * Copy storpool's DATASTORE_MAD driver
 ```bash
-cp -a addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
+cp -a ~/addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
 
 # copy xpath_multi.py to datastore/storpool/
-cp addon-storpool/datastore/xpath_multi.py  /var/lib/one/remotes/datastore/storpool/
+cp ~/addon-storpool/datastore/xpath_multi.py  /var/lib/one/remotes/datastore/storpool/
 
 # fix files ownership
 chown -R oneadmin.oneadmin /var/lib/one/remotes/datastore/storpool
@@ -102,7 +101,7 @@ chown -R oneadmin.oneadmin /var/lib/one/remotes/datastore/storpool
 ```
 * Copy storpool's TM_MAD driver
 ```bash
-cp -a addon-storpool/tm/storpool /var/lib/one/remotes/tm/
+cp -a ~/addon-storpool/tm/storpool /var/lib/one/remotes/tm/
 
 #fix files ownership
 chown -R oneadmin.oneadmin /var/lib/one/remotes/tm/storpool
@@ -123,7 +122,7 @@ popd
 
 #edit /var/lib/one/remotes/tm/ssh/premigrate
 # change shebang from #!/bin/sh to #!/bin/bash
-sed -i -e 's|^#!/bin/sh$|#!/bin//bash|' /var/lib/one/remotes/tm/ssh/premigrate
+sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/ssh/premigrate
 
 # add code to call scripts from ./premigrate.d
 # [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
@@ -153,7 +152,7 @@ popd
 
 #edit /var/lib/one/remotes/tm/ssh/premigrate
 # change shebang from #!/bin/sh to #!/bin/bash
-sed -i -e 's|^#!/bin/sh$|#!/bin//bash|' /var/lib/one/remotes/tm/shared/premigrate
+sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/shared/premigrate
 
 # add code to call scripts from ./premigrate.d
 # [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
@@ -181,11 +180,11 @@ popd
 ```
 * Copy misc/poll_disk_info to /usr/bin
 ```bash
-cp addon-storpool/vmm/kvm/poll_disk_info /var/lib/one/remotes/vmm/kvm/
+cp ~/addon-storpool/vmm/kvm/poll_disk_info /var/lib/one/remotes/vmm/kvm/
 ```
 * Copy FT hook
 ```bash
-cp addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
+cp ~/addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
 ```
 
 #### sunstone related pieces
@@ -201,6 +200,7 @@ npm install
 bower --allow-root install
 grunt sass
 grunt requirejs
+
 popd
 ```
 
