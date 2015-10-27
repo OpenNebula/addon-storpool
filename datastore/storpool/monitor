@@ -21,7 +21,7 @@ XML=$1
 DS_ID=$2
 
 DS_NAME="one-ds-${DS_ID}"
-echo "$(pwd) $0 $DS_ID" >/tmp/m.log
+
 if [ -f "${0%/*}/../../tm/storpool/storpool_common.sh" ]; then
 	source "${0%/*}/../../tm/storpool/storpool_common.sh"
 	oneDatastoreInfo "$DS_ID"
