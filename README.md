@@ -28,7 +28,7 @@ This add-on is compatible with OpenNebula 4.10, 4.12, 4.14 and StorPool 15.02+.
 ### OpenNebula Front-end
 
 * Password-less SSH access from the front-end `oneadmin` user to the `node` instances.
-* StorPool API access and token
+* StorPool CLI, API access and token
 
 ### OpenNebula Node
 
@@ -294,18 +294,12 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (2)
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
 * **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)
-* **SP_API_HTTP_HOST**: [optional] The ip of the StorPool API. IP address, defaults to 127.0.0.1 (5)
-* **SP_API_HTTP_PORT**: [optional] The port StorPool API listen on. Number, defaults to 81 (6)
-* **SP_AUTH_TOKEN**: [optional] StorPool API authentication token. String (7)
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS. Global datastore configuration for storpol TM_MAD is with *SHARED=yes* set. If the datastore is not on shared filesystem this parameter should be set to *SP_SYSTEM=ssh* to copy non-storpool files from one node to another.
 
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
 1. The PlaceTail placement group is defined in StorPool as list of drives. used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
-1. It must match **SP_API_HTTP_HOST** in storpool.conf. Useful when StorPool is not installed on the front end.
-1. It must match **SP_API_HTTP_PORT** in storpool.conf. Useful when StorPool is not installed on the front end.
-1. It must match **SP_AUTH_TOKEN** in storpool.conf. Useful when StorPool is not installed on the front end.
 
 The following example illustrates the creation of a StorPool datastore of hybrid type with 3 replicas. In this case the datastore will use hosts node1, node2 and node3 for imports and creating images.
 
