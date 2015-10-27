@@ -86,24 +86,33 @@ SNAP_FLATTEN_CMD=$(cat <<EOF
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    splog "volume $SP_VOL rename $SP_TMPVOL"
-    storpool volume "$SP_VOL" rename "$SP_TMPVOL"
+    parent=\$(storpool -j volume list | jq -r ".data|map(select(.name==\"$SP_VOL\"))|.[]|[.parentName]|@csv")
+    parent="\${parent//\"/}"
 
-    splog "volume $SP_VOL parent ${SP_VOL}-snap$TARGET_SNAPSHOT"
-    if storpool volume "$SP_VOL" parent "${SP_VOL}-snap$TARGET_SNAPSHOT" 2>&1 >/dev/null; then
-        splog "volume delete $SP_TMPVOL"
-        storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
+    if [ "\$parent" = "${SP_VOL}-snap$TARGET_SNAPSHOT" ]; then
+        splog "$SP_VOL already based on \$parent"
     else
-        splog "Failed to flatten $SP_VOL"
-        splog "volume $SP_TMPVOL rename $SP_VOL"
-        storpool volume "$SP_TMPVOL" rename "$SP_VOL"
-        exit 1
+        splog "volume $SP_VOL rename $SP_TMPVOL"
+        if storpool volume "$SP_VOL" rename "$SP_TMPVOL"; then
+            splog "volume $SP_VOL parent ${SP_VOL}-snap$TARGET_SNAPSHOT"
+            if storpool volume "$SP_VOL" parent "${SP_VOL}-snap$TARGET_SNAPSHOT" 2>&1 >/dev/null; then
+                splog "volume delete $SP_TMPVOL"
+                storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
+            else
+                splog "Failed to flatten $SP_VOL"
+                splog "volume $SP_TMPVOL rename $SP_VOL"
+                storpool volume "$SP_TMPVOL" rename "$SP_VOL"
+                exit 1
+            fi
+        fi
     fi
 
-    storpool snapshot list | grep ${SP_VOL}-snap | awk '{print \$2}' | while read snap; do
-        splog "snapshot delete \$snap"
-        storpool snapshot "\$snap" delete "\$snap"
-    done
+    storpool -j snapshot list|jq -r ".data|map(select(.name|contains(\"${SP_VOL}-snap\")))|.[]|[.name]|@csv" |\
+        while read snap; do
+            snap="\${snap//\"/}"
+            splog "snapshot delete \$snap"
+            storpool snapshot "\$snap" delete "\$snap"
+        done
 
     splog "END SNAP_FLATTEN_CMD"
 EOF

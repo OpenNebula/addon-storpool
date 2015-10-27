@@ -22,6 +22,29 @@ DS_ID=$2
 
 DS_NAME="one-ds-${DS_ID}"
 
+if [ -f "${0%/*}/../../tm/storpool/storpool_common.sh" ]; then
+	source "${0%/*}/../../tm/storpool/storpool_common.sh"
+	oneDatastoreInfo "$DS_ID"
+	declare arr
+	DO_TEMPLATE=1
+	while read l; do
+		arr=(${l//,/ })
+		DO_TEMPLATE=
+	done < <(storpool -j template list | jq -r ".data|map(select(.name|contains(\"$DS_NAME\")))|.[]|[.replication,.placeAll,.placeTail]|@csv")
+	i=0
+	for e in SP_REPLICATION SP_PLACEALL SP_PLACETAIL SP_IOPS SP_BW; do
+		eval a=\$$e
+		b=${arr[$i]}
+		b=${b//\"/}
+		[ "$a" = "$b" ] || DO_TEMPLATE="$DO_TEMPLATE ${e#SP_}:$b"
+		i=$((i+1))
+	done
+	if [ -n "$DO_TEMPLATE" ] ; then
+		splog "template $DS_NAME replication $SP_REPLICATION placeAll ${SP_PLACEALL} placeTail ${SP_PLACETAIL:-$SP_PLACEALL} (${DO_TEMPLATE#*[[:space:]]})"
+		storpool template "$DS_NAME" replication "$SP_REPLICATION" placeAll "${SP_PLACEALL}" placeTail "${SP_PLACETAIL:-$SP_PLACEALL}" 2>&1 >/dev/null
+	fi
+fi
+
 while IFS=',' read n u t f; do
 	if [ "${n//\"/}" = $DS_NAME ]; then
 		case "${XML:0:6}" in
@@ -36,4 +59,4 @@ while IFS=',' read n u t f; do
 		esac
 		break
 	fi
-done < <(${0%/*}/monitor_helper | jq -r '.data | map( select( .name ) ) | .[] | [ .name, .stored.used, .stored.capacity, .stored.free ] | @csv')
+done < <(${0%/*}/monitor_helper | jq -r '.data|map(select(.name))|.[]|[.name,.stored.used,.stored.capacity,.stored.free]|@csv')
