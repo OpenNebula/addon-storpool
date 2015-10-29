@@ -78,7 +78,7 @@ begin
             when '--pause'
                 repeat = arg.to_i
             when '--timeout'
-                max_xount = arg.to_i
+                max_count = arg.to_i
         end
     end
 rescue Exception => e
