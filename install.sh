@@ -89,21 +89,41 @@ else
         if [ "$ONE_VER" = "4.14" ]; then
             bin_err=
             if [ -n "$REBUILD_JS" ]; then
-                for b in node npm bower grunt; do
+                for b in npm bower grunt; do
                     echo "*** check for $b"
                     $b --version
-                    if [ $? != 0 ]; then
-                        bin_err=$b
+                    if [ $? -ne 0 ]; then
                         echo " ** Note! $b not found!"
+                        case "$b" in
+                            bower)
+                                npm install -g bower
+                                $b --version
+                                [ $? -ne 0 ] && bin_err="$bin_err $b"
+                                ;;
+                            grunt)
+                                npm install -g grunt
+                                npm install -g grunt-cli
+                                $b --version
+                                [ $? -ne 0 ] && bin_err="$bin_err $b"
+                                ;;
+                            *)
+                                bin_err=$b
+                                break
+                                ;;
+                        esac
                     fi
                 done
                 if [ -n "$bin_err" ]; then
-                    echo " ** Can't rebuild sunstone interface"
+                    echo " ** Can't rebuild sunstone interface (missing:$bin_err)"
                 else
                     echo "*** rebuilding synstone javascripts..."
+                    echo "*** npm install"
                     npm install
+                    echo "*** bower install"
                     bower --allow-root install
+                    echo "*** grunt sass"
                     grunt sass
+                    echo "*** grunt requirejs"
                     grunt requirejs
                 fi
             fi
