@@ -276,7 +276,7 @@ fi
 
 # Enable snap_create_live in vmm_exec/vmm_execrc
 LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' /etc/one/vmm_exec/vmm_execrc | tail -n 1)
-if [ "x${LIVE_DISK_SNAPSHOTS_LINE/kvm-storpool/}" = "x$LIVE_DISK_SNAPSHOTS_LINE"]; then
+if [ "x${LIVE_DISK_SNAPSHOTS_LINE/kvm-storpool/}" = "x$LIVE_DISK_SNAPSHOTS_LINE" ]; then
     if [ -n "$LIVE_DISK_SNAPSHOTS_LINE" ]; then
         echo "*** adding StorPool to LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
         eval $LIVE_DISK_SNAPSHOTS_LINE
