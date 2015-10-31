@@ -17,37 +17,90 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-XML=$1
+function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
+
+DRV_ACTION=$1
 DS_ID=$2
 
 DS_NAME="one-ds-${DS_ID}"
 
-if [ -f "${0%/*}/../../tm/storpool/storpool_common.sh" ]; then
-	source "${0%/*}/../../tm/storpool/storpool_common.sh"
-	oneDatastoreInfo "$DS_ID"
-	declare arr
-	DO_TEMPLATE=1
-	while read l; do
-		arr=(${l//,/ })
-		DO_TEMPLATE=
-	done < <(storpool -j template list | jq -r ".data|map(select(.name|contains(\"$DS_NAME\")))|.[]|[.replication,.placeAll,.placeTail]|@csv")
-	i=0
-	for e in SP_REPLICATION SP_PLACEALL SP_PLACETAIL SP_IOPS SP_BW; do
-		eval a=\$$e
-		b=${arr[$i]}
-		b=${b//\"/}
-		[ "$a" = "$b" ] || DO_TEMPLATE="$DO_TEMPLATE ${e#SP_}:$b"
-		i=$((i+1))
-	done
-	if [ -n "$DO_TEMPLATE" ] ; then
-		splog "template $DS_NAME replication $SP_REPLICATION placeAll ${SP_PLACEALL} placeTail ${SP_PLACETAIL:-$SP_PLACEALL} (${DO_TEMPLATE#*[[:space:]]})"
-		storpool template "$DS_NAME" replication "$SP_REPLICATION" placeAll "${SP_PLACEALL}" placeTail "${SP_PLACETAIL:-$SP_PLACEALL}" 2>&1 >/dev/null
+declare ds_data
+while read l; do
+	ds_data=(${l//,/ })
+done < <(storpool -j template list | jq -r ".data|map(select(.name==\"$DS_NAME\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv")
+
+#splog "$PWD datastore $DS_ID (${ds_data[@]})>>>${DRV_ACTION:0:6}"
+
+if [ "${DRV_ACTION:0:6}" = "system" ]; then
+	if [ ${#ds_data[@]} -eq 0  ]; then
+#		splog "no SP definition"
+		exit 0
 	fi
-fi
+else
+	# DRV_ACTION
+	XPATH="${0%/*}/../../datastore/xpath.rb -b $DRV_ACTION"
+	XPATH="${0%/*}/../xpath.rb -b $DRV_ACTION"
+	unset i XPATH_ELEMENTS
+	while IFS= read -r -d '' element; do
+		XPATH_ELEMENTS[i++]="$element"
+	done < <($XPATH \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/ID \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TM_MAD)
+	
+	unset i
+	BASE_PATH="${XPATH_ELEMENTS[i++]}"
+	DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+	BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
+	SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
+	SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
+	SP_PLACETAIL="${XPATH_ELEMENTS[i++]:-$SP_PLACEALL}"
+	SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
+	SP_BW="${XPATH_ELEMENTS[i++]:--}"
+	TM_MAD="${XPATH_ELEMENTS[i++]}"
+	i=0
+	if [ "$TM_MAD" = "storpool" ]; then
+		cmd=
+		DO_TEMPLATE=
+		for e in SP_REPLICATION SP_PLACEALL SP_PLACETAIL SP_IOPS SP_BW; do
+			eval new=\$$e
+			current=${ds_data[$i]}
+			current=${current//\"/}
+			i=$((i+1))
+			if [ "$new" = "$current" ]; then
+				continue
+			else
+				key=${e#SP_}
+				DO_TEMPLATE+="$key:$current "
+				key=${key,,}
+				if [ "$key" = "bw" ]; then
+					[ -n "${new//[[:digit:]]/}" ] || new+="K"
+				fi
+				cmd+="$key $new "
+			fi
+		done
+		if [ -n "$cmd" ] ; then
+			splog "template $DS_NAME $cmd(${DO_TEMPLATE%[[:space:]]})"
+			storpool template $DS_NAME $cmd 2>&1 >/dev/null
+#		else
+#			splog "template $DS_NAME is OK"
+		fi
+	else
+		splog "TM_MAD not StorPool ($TM_MAD)"
+		exit 0
+	fi
+fi # DRV_ACTION
 
 while IFS=',' read n u t f; do
-	if [ "${n//\"/}" = $DS_NAME ]; then
-		case "${XML:0:6}" in
+	if [ "${n//\"/}" = "$DS_NAME" ]; then
+#		splog "$DS_NAME: u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
+		case "${DRV_ACTION:0:6}" in
 			system)
 				echo $((u/1024/1024)) $((t/1024/1024)) $((f/1024/1024))
 				;;
