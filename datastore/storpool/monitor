@@ -33,12 +33,13 @@ done < <(storpool -j template list | jq -r ".data|map(select(.name==\"$DS_NAME\"
 
 if [ "${DRV_ACTION:0:6}" = "system" ]; then
 	if [ ${#ds_data[@]} -eq 0  ]; then
-#		splog "no SP definition"
+#		splog "DATASTORE_ID $DS_ID not SP defined"
 		exit 0
 	fi
 else
-	# DRV_ACTION
-	XPATH="${0%/*}/../../datastore/xpath.rb -b $DRV_ACTION"
+	SP_TEMPLATE_PROPAGATE="YES"
+	[ -f "${0%/*}/../../addon-storpoolrc" ] && source "${0%/*}/../../addon-storpoolrc"
+	
 	XPATH="${0%/*}/../xpath.rb -b $DRV_ACTION"
 	unset i XPATH_ELEMENTS
 	while IFS= read -r -d '' element; do
@@ -52,6 +53,7 @@ else
 		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
 		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
 		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
+		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
 		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TM_MAD)
 	
 	unset i
@@ -63,6 +65,7 @@ else
 	SP_PLACETAIL="${XPATH_ELEMENTS[i++]:-$SP_PLACEALL}"
 	SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
 	SP_BW="${XPATH_ELEMENTS[i++]:--}"
+	SP_TEMPLATE_PROPAGATE="${XPATH_ELEMENTS[i++]:-$SP_TEMPLATE_PROPAGATE}"
 	TM_MAD="${XPATH_ELEMENTS[i++]}"
 	i=0
 	if [ "$TM_MAD" = "storpool" ]; then
@@ -79,15 +82,27 @@ else
 				key=${e#SP_}
 				DO_TEMPLATE+="$key:$current "
 				key=${key,,}
-				if [ "$key" = "bw" ]; then
-					[ -n "${new//[[:digit:]]/}" ] || new+="K"
-				fi
+				case "$key" in
+					bw)
+						[ -n "${new//[[:digit:]]/}" ] || new+="K"
+						;;
+					placeall)
+						key="placeAll"
+						;;
+					placetail)
+						key="placeTail"
+						;;
+				esac
 				cmd+="$key $new "
 			fi
 		done
 		if [ -n "$cmd" ] ; then
 			splog "template $DS_NAME $cmd(${DO_TEMPLATE%[[:space:]]})"
-			storpool template $DS_NAME $cmd 2>&1 >/dev/null
+			storpool template "$DS_NAME" $cmd 2>&1 >/dev/null
+			if [ "$SP_TEMPLATE_PROPAGATE" = "YES" ] && [ ${#ds_data[@]} -gt 0 ]; then
+				splog "template $DS_NAME propagate"
+				storpool template "$DS_NAME" propagate 2>&1 >/dev/null
+			fi
 #		else
 #			splog "template $DS_NAME is OK"
 		fi
