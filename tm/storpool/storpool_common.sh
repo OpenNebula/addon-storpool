@@ -482,6 +482,8 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
                             /DATASTORE/TEMPLATE/SP_PLACEALL \
                             /DATASTORE/TEMPLATE/SP_PLACETAIL \
+                            /DATASTORE/TEMPLATE/SP_IOPS \
+                            /DATASTORE/TEMPLATE/SP_BW \
                             /DATASTORE/TEMPLATE/SP_SYSTEM)
     unset i
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -494,6 +496,8 @@ function oneDatastoreInfo()
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+    SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
+    SP_BW="${XPATH_ELEMENTS[i++]:--}"
     SP_SYSTEM="${XPATH_ELEMENTS[i++]}"
 
 #    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"

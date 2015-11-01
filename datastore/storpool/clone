@@ -62,6 +62,8 @@ done < <($XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
@@ -81,6 +83,8 @@ BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
 SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
 SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
 SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
+SP_BW="${XPATH_ELEMENTS[i++]:--}"
 IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
 PERSISTENT="${XPATH_ELEMENTS[i++]}"
 FSTYPE="${XPATH_ELEMENTS[i++]}"
@@ -101,6 +105,8 @@ ${SIZE:+SIZE=$SIZE }\
 ${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
 ${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
 ${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
+${SP_IOPS+SP_IOPS=$SP_IOPS }\
+${SP_BW+SP_BW=$SP_BW }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${FSTYPE:+FSTYPE=$FSTYPE }\
@@ -151,8 +157,8 @@ CLONE_CMD=$(cat <<EOF
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
-    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
+    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL iops $SP_IOPS bw $SP_BW"
+    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" iops "$SP_IOPS" bw "$SP_BW"
 
     splog "volume $SP_VOL baseOn $SP_PARENT template $SP_TEMPLATE"
     storpool volume "$SP_VOL" baseOn "$SP_PARENT" template "$SP_TEMPLATE"

@@ -64,6 +64,8 @@ done < <($XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/STAGING_DIR \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SIZE \
@@ -87,6 +89,8 @@ BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
 SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
 SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
 SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
+SP_BW="${XPATH_ELEMENTS[i++]:--}"
 STAGING_DIR="${XPATH_ELEMENTS[i++]:-$STAGING_DIR}"
 IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
 SIZE="${XPATH_ELEMENTS[i++]}"
@@ -185,8 +189,8 @@ PRE_COPY_CMD=$(cat <<EOF
 
     SP_SIZE="${SIZE}M"
 
-    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
-    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
+    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL iops $SP_IOPS bw $SP_BW"
+    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" iops "$SP_IOPS" bw "$SP_BW"
 
     splog "create volume=$SP_TEMP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
     storpool volume "$SP_TEMP_VOL" size "\${SP_SIZE}" template "$SP_TEMPLATE"
@@ -249,8 +253,8 @@ POST_COPY_CMD=$(cat <<EOF
         splog "rename $SP_TEMP_VOL to $SP_VOL"
         storpool volume "$SP_TEMP_VOL" rename "$SP_VOL"
     else
-        splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
-        storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
+        splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL iops $SP_IOPS bw $SP_BW"
+        storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" iops "$SP_IOPS" bw "$SP_BW"
 
 
         splog "create volume=$SP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
