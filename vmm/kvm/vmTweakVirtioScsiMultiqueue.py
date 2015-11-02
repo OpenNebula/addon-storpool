@@ -31,9 +31,6 @@ nQueues = argv[2]
 
 et = ET.parse(xmlFile, ET.XMLParser(strip_cdata=False,remove_blank_text=True))
 
-# ugly but working
-domain = et.getroot()[0].getparent()
-
 doExit = 1
 
 did = 0
@@ -78,6 +75,7 @@ controller.set('model','virtio-scsi')
 driver = ET.SubElement(controller, "driver")
 driver.set('queues',"{0}".format(nQueues))
 
-domain.append(controller)
+devices = et.findall(".//devices")[0]
+devices.append(controller)
 
 et.write(xmlFile,pretty_print=True)
