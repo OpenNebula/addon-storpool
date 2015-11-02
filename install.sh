@@ -292,11 +292,15 @@ fi
 
 echo "*** VMM poll patch for OpenNebula v4.14 ..."
 pushd "$ONE_VAR"
-    #check if patch is applied
     do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch"
 popd
 cp "$CWD/vmm/kvm/poll_disk_info" "${ONE_VAR}/remotes/vmm/kvm/poll_disk_info"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/poll_disk_info"
+
+echo "*** IM monitor_ds.sh patch (for OpenNebula 4.14+) ..."
+pushd "$ONE_VAR"
+    do_patch "$CWD/patches/im/4.14/00-monitor_ds.patch"
+popd
 
 echo "*** Please sync hosts (onehost sync --force)"
 
