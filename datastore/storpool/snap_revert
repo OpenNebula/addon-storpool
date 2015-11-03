@@ -89,16 +89,29 @@ SNAP_REVERT_CMD=$(cat <<EOF
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
     splog "volume $SP_VOL rename $SP_TMPVOL"
-    if storpool volume "$SP_VOL" rename "$SP_TMPVOL" 2>&1 > /dev/null; then
+    if storpool volume "$SP_VOL" rename "$SP_TMPVOL" 2>&1 >/dev/null; then
         splog "volume $SP_VOL parent $SP_SNAP"
-        storpool volume "$SP_VOL" parent "$SP_SNAP"
+        if storpool volume "$SP_VOL" parent "$SP_SNAP" 2>&1 >/dev/null; then
+            splog "volume $SP_TMPVOL delete"
+            if ! storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL" 2>&1 >/dev/null; then
+                splog "failed to delete volume $SP_TMPVOL (softfail)"
+            fi
+        else
+            splog "revert $SP_TMPVOL to $SP_VOL"
+            if storpool volume "$SP_TMPVOL" rename "$SP_VOL" 2>&1 >/dev/null; then
+                errmsg="failed to revert volume $SP_VOL to $SP_SNAP"
+            else
+                errmsg="failed to restore after revert failed volume $SP_VOL to $SP_SNAP"
+            fi
+        fi
     else
-        splog "($?) revert $SP_TMPVOL to $SP_VOL"
-        storpool volume "$SP_TMPVOL" rename "$SP_VOL"
+        errmsg="failed to revert volume $SP_VOL to $SP_SNAP"
     fi
-
-    splog "volume $SP_TMPVOL delete"
-    storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
+    if [ -n "\$errmsg" ]; then
+        splog "$errmsg"
+        echo "errmsg" >&2
+        exit 1
+    fi
 
     splog "END SNAP_REVERT_CMD"
 EOF

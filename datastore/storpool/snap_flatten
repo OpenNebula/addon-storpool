@@ -80,6 +80,7 @@ fi
 
 SP_VOL="${SOURCE##*/}"
 SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
+SP_SNAP="${SP_VOL}-snap$TARGET_SNAPSHOT"
 
 SNAP_FLATTEN_CMD=$(cat <<EOF
     set -e
@@ -89,29 +90,37 @@ SNAP_FLATTEN_CMD=$(cat <<EOF
     parent=\$(storpool -j volume list | jq -r ".data|map(select(.name==\"$SP_VOL\"))|.[]|[.parentName]|@csv")
     parent="\${parent//\"/}"
 
-    if [ "\$parent" = "${SP_VOL}-snap$TARGET_SNAPSHOT" ]; then
+    if [ "\$parent" = "$SP_SNAP" ]; then
         splog "$SP_VOL already based on \$parent"
     else
         splog "volume $SP_VOL rename $SP_TMPVOL"
         if storpool volume "$SP_VOL" rename "$SP_TMPVOL"; then
-            splog "volume $SP_VOL parent ${SP_VOL}-snap$TARGET_SNAPSHOT"
-            if storpool volume "$SP_VOL" parent "${SP_VOL}-snap$TARGET_SNAPSHOT" 2>&1 >/dev/null; then
+            splog "volume $SP_VOL parent $SP_SNAP"
+            if storpool volume "$SP_VOL" parent "$SP_SNAP"; then
                 splog "volume delete $SP_TMPVOL"
                 storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
             else
                 splog "Failed to flatten $SP_VOL"
+                echo "Failed to flatten $SP_VOL" >&2
                 splog "volume $SP_TMPVOL rename $SP_VOL"
-                storpool volume "$SP_TMPVOL" rename "$SP_VOL"
+                if ! storpool volume "$SP_TMPVOL" rename "$SP_VOL"; then
+                    splog "Failed to revert $SP_TMPVOL to $SP_VOL"
+                    echo "Failed to revert $SP_TMPVOL to $SP_VOL" >&2
+                fi
                 exit 1
             fi
+        else
+            splog "Failed to rename $SP_VOL to $SP_TMPVOL"
+            echo "Failed to rename $SP_VOL to $SP_TMPVOL" >&2
+            exit 1
         fi
     fi
 
     storpool -j snapshot list|jq -r ".data|map(select(.name|contains(\"${SP_VOL}-snap\")))|.[]|[.name]|@csv" |\
-        while read snap; do
-            snap="\${snap//\"/}"
-            splog "snapshot delete \$snap"
-            storpool snapshot "\$snap" delete "\$snap"
+        while read snapshot; do
+            snapshot="\${snapshot//\"/}"
+            splog "snapshot delete \$snapshot"
+            storpool snapshot "\$snapshot" delete "\$snapshot"
         done
 
     splog "END SNAP_FLATTEN_CMD"
