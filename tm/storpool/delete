@@ -72,7 +72,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
 #                splog "[SYSTEM_DS] skip ${DISK_ID_ARRAY[i]} != $DISK_ID"
                 continue
             fi
-            FORMAT=${DISK_FORMAT_ARRAY[i]}
+            FORMAT=${DISK_FORMAT_ARRAY[i]:-raw}
             if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                 FORMAT="swap"
             fi
