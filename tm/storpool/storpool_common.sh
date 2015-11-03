@@ -297,7 +297,7 @@ EOF
         ;;
         CPDS)
             _HOST="$_SRC_HOST"
-            _CMD="$_BEGIN$_DELVOL$_CLONE"
+            _CMD="$_BEGIN$_DELVOL$_FSFREEZE$_CLONE"
         ;;
         DELETE)
             _HOST="$_DST_HOST"

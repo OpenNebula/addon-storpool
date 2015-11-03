@@ -53,6 +53,7 @@ SP_SRC=${SRC_PATH##*/}
 SP_DST="${SP_SRC}-${VM_ID}-${DISK_ID}"
 splog "DISK_ID=$DISK_ID SP_DST=$SP_DST"
 
+SP_TEMPLATE="one-ds-$DS_ID"
 SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
 [ "$PERSISTENT" = "YES" ] || SP_PARENT="${SP_PARENT}-${VM_ID}-${DISK_ID}"
@@ -66,7 +67,7 @@ fi
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
-storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$SP_DST" "$SP_PARENT"
+storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$SP_DST" "$SP_PARENT" "$SP_TEMPLATE" "$DEPLOY_ID"
 
 splog "END"
 exit 0
