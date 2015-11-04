@@ -39,6 +39,8 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
+[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ] && source "${DRIVER_PATH}/../../addon-storpoolrc"
+
 #-------------------------------------------------------------------------------
 # Get mkfs and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
