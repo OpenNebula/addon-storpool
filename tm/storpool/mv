@@ -100,7 +100,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     if [ $IS_DISK == 0 ]; then
         #context ISO
         SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-        DST_PATH="$DST_DIR/disk.${_CONTEXT_DISK_ID}"
+        DST_PATH="$DST_DIR/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
         if [ -n "$ATTACH_ONLY" ]; then
             splog "$ATTACH_ONLY"
         else
