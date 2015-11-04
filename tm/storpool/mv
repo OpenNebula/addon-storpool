@@ -116,14 +116,18 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`
         if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
-            TAR_COPY="$SSH $SRC_HOST '$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR'"
-            TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
-            splog "Copy $SRC_HOST:$SRC_PATH $DST_HOST:$DST_DIR/$SRC_VM_DIR"
-            exec_and_log "eval $TAR_COPY" "Error copying SYSTEM_DS from $SRC_HOST to $DST_HOST"
+            if [ "$SRC_HOST" = "$DST_HOST" ]; then
+                splog "VM $VM_ID on same host($SRC_HOST)"
+            else
+                TAR_COPY="$SSH $SRC_HOST '$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR'"
+                TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
+                splog "Copy $SRC_HOST:$SRC_PATH $DST_HOST:$DST_DIR/$SRC_VM_DIR"
+                exec_and_log "eval $TAR_COPY" "Error copying SYSTEM_DS from $SRC_HOST to $DST_HOST"
 
-            splog "Cleanup $SRC_HOST rm -rf $SRC_PATH"
-            ssh_exec_and_log "$SRC_HOST" "rm -rf $SRC_PATH" \
+                splog "Cleanup $SRC_HOST rm -rf $SRC_PATH"
+                ssh_exec_and_log "$SRC_HOST" "rm -rf $SRC_PATH" \
                          "failed removing $SRC_HOST $SRC_PATH"
+            fi
         fi
      else
         for i in ${!DISK_ID_ARRAY[@]}; do
