@@ -110,6 +110,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             splog "$DETACH_ONLY"
         else
             EXTRA_CMD="ln -sf \"$DST_HOST\" \"${DST_HOST}.iso\""
+            SP_MODE="ro"
             storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
         fi
 

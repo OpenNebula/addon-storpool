@@ -104,6 +104,7 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
     EXTRA_CMD="ln -sf $DST_PATH ${DST_PATH}.iso"
+    SP_MODE="ro"
     storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
 fi
 

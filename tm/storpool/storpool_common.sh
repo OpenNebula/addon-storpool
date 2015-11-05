@@ -117,8 +117,8 @@ EOF
 )
     local _ATTACH=$(cat <<EOF
     #_ATTACH
-    splog "attach volume $_SP_VOL here"
-    storpool attach volume "$_SP_VOL" here
+    splog "attach volume $_SP_VOL ${SP_MODE:+mode $SP_MODE} here"
+    storpool attach volume "$_SP_VOL" ${SP_MODE:+mode $SP_MODE} here
 
     trap 'storpool detach volume "$_SP_VOL" here' EXIT TERM INT HUP
 
@@ -318,6 +318,7 @@ EOF
         ATTACH)
             _HOST="$_DST_HOST"
             _CMD="$_BEGIN$_ATTACH$_SYMLINK"
+            SP_MODE=
         ;;
         MVDS)
             _HOST="$_SRC_HOST"
