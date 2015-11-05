@@ -141,6 +141,7 @@ exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$DST_PATH bs=512k" \
 # (re)attach readonly
 #-------------------------------------------------------------------------------
 
+SP_MODE="ro"
 storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
 
 #-------------------------------------------------------------------------------
