@@ -79,7 +79,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             storpoolAction "DELETE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "${DST_PATH}/disk.${DISK_ID_ARRAY[i]}" "${DISK_PERSISTENT_ARRAY[i]}"
 #        else
-#            splog "[SYSTEM_DS] SKIP $i type:${DISK_TYPE_ARRAY[i]} format:${DISK_FORMAT_ARRAY[i]} tm:${DISK_TM_MAD_ARRAY[i]}"
+#            splog "[SYSTEM_DS] SKIP $i type:${DISK_TYPE_ARRAY[i]} format:${DISK_FORMAT_ARRAY[i]:-raw} tm:${DISK_TM_MAD_ARRAY[i]}"
         fi
     done
 

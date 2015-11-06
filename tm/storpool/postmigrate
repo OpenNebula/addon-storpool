@@ -74,7 +74,7 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     for i in ${!DISK_ID_ARRAY[@]}; do
         if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ]; then
-            FORMAT="${DISK_FORMAT_ARRAY[i]}"
+            FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
             if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                 FORMAT="swap"
             fi
