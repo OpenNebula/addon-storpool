@@ -57,7 +57,7 @@ include OpenNebula
 require 'getoptlong'
 
 def splog(message)
-    Syslog.open($0, Syslog::LOG_PID | Syslog::LOG_CONS) { |s| s.notice message }
+    Syslog.open($0.split("/").last, Syslog::LOG_PID | Syslog::LOG_CONS) { |s| s.notice message }
 end
 
 if !(host_id=ARGV[0])
@@ -95,7 +95,10 @@ end
 # Retrieve hostname
 host  =  OpenNebula::Host.new_with_id(host_id, client)
 rc = host.info
-exit -1 if OpenNebula.is_error?(rc)
+if OpenNebula.is_error?(rc)
+    splog("Can't get host info for host_id:#{host_id}")
+    exit -1
+end
 host_name = host.name
 
 hstate = host.state
@@ -107,16 +110,22 @@ if repeat
     File.readlines(CONFIG_FILE).each{|line|
          monitor_interval = line.split("=").last.to_i if /MONITORING_INTERVAL/=~line
     }
-    hstate = host.state
-    splog("host_id:#{host_id} host.state:#{hstate} sleep (#{repeat} * #{monitor_interval})")
-    # Sleep through the desired number of monitor interval
-    sleep (repeat * monitor_interval)
-
-    hstate = host.state
-    # If the host came back, exit! avoid duplicated VMs
-    if hstate != 3 and hstate != 5
-        splog("host_id:#{host_id} host.state:#{hstate} END")
-        exit 0
+    if monitor_interval
+        1.upto(repeat) do |i|
+            host.info
+            hstate = host.state
+            # If the host came back, exit! avoid duplicated VMs
+            if hstate != 3 and hstate != 5
+                splog("host_id:#{host_id} host.state:#{hstate} is back. END")
+                exit 0
+            end
+            splog("host_id:#{host_id} host.state:#{hstate} i:#{i} sleep (#{monitor_interval})")
+            # Sleep through the desired number of monitor interval
+            sleep(monitor_interval)
+        end
+    else
+        splog("host_id:#{host_id} host.state:#{hstate} Can't get MONITORING_INTERVAL!")
+        exit -1
     end
 end
 
@@ -154,6 +163,7 @@ if vm_ids_array
             vm_state = vm.state_str
             lcm_state = vm.lcm_state_str
             state =  "#{vm_state}/#{lcm_state}"
+            host.info
             hstate = host.state
             count = vmh["count"]
             prev_action = vmh["prev_action"]
