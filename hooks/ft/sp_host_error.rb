@@ -108,12 +108,16 @@ if repeat
          monitor_interval = line.split("=").last.to_i if /MONITORING_INTERVAL/=~line
     }
     hstate = host.state
-    splog("host_id:#{host_id} #{hstate} sleep #{repeat} #{monitor_interval}")
+    splog("host_id:#{host_id} host.state:#{hstate} sleep (#{repeat} * #{monitor_interval})")
     # Sleep through the desired number of monitor interval
     sleep (repeat * monitor_interval)
 
+    hstate = host.state
     # If the host came back, exit! avoid duplicated VMs
-    exit 0 if host.state != 3
+    if hstate != 3 and hstate != 5
+        splog("host_id:#{host_id} host.state:#{hstate} END")
+        exit 0
+    end
 end
 
 # Loop through all vms
@@ -150,10 +154,11 @@ if vm_ids_array
             vm_state = vm.state_str
             lcm_state = vm.lcm_state_str
             state =  "#{vm_state}/#{lcm_state}"
+            hstate = host.state
             count = vmh["count"]
             prev_action = vmh["prev_action"]
             if state == vmhash[vm_id]["state"]
-                splog("host_id:#{host_id} VM #{vm_id} #{prev_action} #{state} count:#{count}")
+                splog("host_id:#{host_id} VM #{vm_id} #{prev_action} #{state} count:#{count} host.state:#{hstate}")
                 vmhash[vm_id]["count"] = 0 if count < max_count - 1
                 if state == "ACTIVE/UNKNOWN" and prev_action != "resched"
                     n_state = "ACTIVE/BOOT_FAILURE"
@@ -190,7 +195,7 @@ if vm_ids_array
             vmhash[vm_id]["count"] += 1
             if count > max_count
                 vmhash.delete(vm_id)
-                splog("host_id:#{host_id} VM #{vm_id} Max retries reached! Giving up")
+                splog("host_id:#{host_id} VM #{vm_id} Max retries reached! Giving up (state:#{state} nstate:#{n_state} pa:#{prev_action} host.state:#{hstate})")
             elsif state == "ACTIVE/PROLOG_MIGRATE_FAILURE"
                 vmhash.delete(vm_id)
                 splog("host_id:#{host_id} VM #{vm_id} CLEANUP GHOST")
