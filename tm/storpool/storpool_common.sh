@@ -277,7 +277,7 @@ EOF
     local _FSFREEZE=$(cat <<EOF
     #_FSFREEZE
     if [ -n "$_SP_SIZE" ]; then
-        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
             splog "VM $VM_ID fsfreeze domain $_SP_SIZE \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-status\"}")"
             trap 'virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-thaw\"}"; splog "VM $VM_ID fsthaw domain $_SP_SIZE (ret=$?)";' EXIT TERM INT HUP
