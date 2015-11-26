@@ -1,6 +1,6 @@
-diff -urN app/tabs/datastores-tab/form-panels/create/wizard.hbs app/tabs/datastores-tab/form-panels/create/wizard.hbs
---- app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-09-24 15:34:42.000000000 +0300
-+++ app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-09-29 15:44:31.079564149 +0300
+diff -urN app.orig/tabs/datastores-tab/form-panels/create/wizard.hbs app/tabs/datastores-tab/form-panels/create/wizard.hbs
+--- app.orig/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-11-25 21:38:28.000000000 +0200
++++ app/tabs/datastores-tab/form-panels/create/wizard.hbs	2015-11-26 11:55:02.523953444 +0200
 @@ -32,6 +32,7 @@
          <option value="ceph">{{tr "Ceph"}}</option>
          <option value="gluster">{{tr "Gluster"}}</option>
@@ -67,18 +67,18 @@ diff -urN app/tabs/datastores-tab/form-panels/create/wizard.hbs app/tabs/datasto
 +    </div>
    </div>
  </form>
-diff -urN app/tabs/datastores-tab/form-panels/create.js app/tabs/datastores-tab/form-panels/create.js
---- app/tabs/datastores-tab/form-panels/create.js	2015-09-24 15:34:42.000000000 +0300
-+++ app/tabs/datastores-tab/form-panels/create.js	2015-09-29 15:44:31.079564149 +0300
+diff -urN app.orig/tabs/datastores-tab/form-panels/create.js app/tabs/datastores-tab/form-panels/create.js
+--- app.orig/tabs/datastores-tab/form-panels/create.js	2015-11-25 21:38:28.000000000 +0200
++++ app/tabs/datastores-tab/form-panels/create.js	2015-11-26 12:01:32.745875031 +0200
 @@ -148,6 +148,9 @@
          case 'dev':
-           _selectDevices();
+           _selectDevices(dialog);
            break;
 +        case 'storpool':
-+          _selectStorpool();
++          _selectStorpool(dialog);
 +          break;
          case 'custom':
-           _selectCustom();
+           _selectCustom(dialog);
            break;
 @@ -192,6 +195,12 @@
      var rbd_format      = $('#rbd_format', dialog).val();
@@ -122,36 +122,35 @@ diff -urN app/tabs/datastores-tab/form-panels/create.js app/tabs/datastores-tab/
 +    $('label[for="sp_system"],input#sp_system', dialog).parent().hide();
      $('label[for="limit_transfer_bw"],input#limit_transfer_bw', dialog).parent().hide();
      $('label[for="no_decompress"],input#no_decompress', dialog).parent().hide();
-     $('select#ds_mad').removeAttr('disabled');
-@@ -472,6 +497,31 @@
-     $('input#restricted_dirs').attr('disabled', 'disabled');
+     $('select#ds_mad', dialog).removeAttr('disabled');
+@@ -472,6 +497,30 @@
+     $('input#restricted_dirs', dialog).attr('disabled', 'disabled');
    }
  
 +  function _selectStorpool(dialog) {
-+    $('select#ds_mad').val('storpool');
-+    $('select#ds_mad').attr('disabled', 'disabled');
-+    $('select#tm_mad').val('storpool');
-+    $('select#tm_mad').attr('disabled', 'disabled');
-+    $('input#image_ds_type').attr('checked', 'true');
-+    $('input#file_ds_type').attr('disabled', 'disabled');
-+    $('label[for="sp_replication"],input#sp_replication').parent().fadeIn();
-+    $('label[for="sp_placeall"],input#sp_placeall').parent().fadeIn();
-+    $('label[for="sp_placetail"],input#sp_placetail').parent().fadeIn();
-+    $('label[for="bridge_list"],input#bridge_list').parent().fadeIn();
-+    $('label[for="sp_system"],input#sp_system').parent().fadeIn();
-+    $('label[for="staging_dir"],input#staging_dir').parent().fadeIn();
-+    $('label[for="limit_transfer_bw"],input#limit_transfer_bw').parent().fadeIn();
-+    $('label[for="no_decompress"],input#no_decompress').parent().fadeIn();
-+    $('label[for="datastore_capacity_check"],input#datastore_capacity_check').parent().fadeIn();
-+    $('select#disk_type').val('block');
-+    $('select#disk_type').attr('disabled', 'disabled');
-+    $('input#safe_dirs').removeAttr('disabled');
-+    $('input#base_path').removeAttr('disabled');
-+    $('input#limit_mb').removeAttr('disabled');
-+    $('input#restricted_dirs').removeAttr('disabled');
++    $('select#ds_mad', dialog).val('storpool');
++    $('select#ds_mad', dialog).attr('disabled', 'disabled');
++    $('select#tm_mad', dialog).val('storpool');
++    $('select#tm_mad', dialog).attr('disabled', 'disabled');
++    $('input#image_ds_type', dialog).attr('checked', 'true');
++    $('input#file_ds_type', dialog).attr('disabled', 'disabled');
++    $('label[for="sp_replication"],input#sp_replication', dialog).parent().fadeIn();
++    $('label[for="sp_placeall"],input#sp_placeall', dialog).parent().fadeIn();
++    $('label[for="sp_placetail"],input#sp_placetail', dialog).parent().fadeIn();
++    $('label[for="bridge_list"],input#bridge_list', dialog).parent().fadeIn();
++    $('label[for="sp_system"],input#sp_system', dialog).parent().fadeIn();
++    $('label[for="staging_dir"],input#staging_dir', dialog).parent().fadeIn();
++    $('label[for="limit_transfer_bw"],input#limit_transfer_bw', dialog).parent().fadeIn();
++    $('label[for="no_decompress"],input#no_decompress', dialog).parent().fadeIn();
++    $('label[for="datastore_capacity_check"],input#datastore_capacity_check', dialog).parent().fadeIn();
++    $('select#disk_type', dialog).val('block');
++    $('select#disk_type', dialog).attr('disabled', 'disabled');
++    $('input#safe_dirs', dialog).removeAttr('disabled');
++    $('input#base_path', dialog).removeAttr('disabled');
++    $('input#limit_mb', dialog).removeAttr('disabled');
++    $('input#restricted_dirs', dialog).removeAttr('disabled');
 +  }
-+
 +
    function _selectCustom(dialog) {
      _hideAll(dialog);
-     $('select#ds_mad').val('fs');
+     $('select#ds_mad', dialog).val('fs');
