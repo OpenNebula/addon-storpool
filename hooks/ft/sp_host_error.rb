@@ -66,10 +66,12 @@ end
 
 repeat = nil  # By default, don't wait for monitorization cycles"
 max_count = 200
+fencing_script = nil # For backward compatibility by default there is no fencing script
 
 opts = GetoptLong.new(
             ['--pause',    '-p',GetoptLong::REQUIRED_ARGUMENT],
-            ['--timeout',    '-t',GetoptLong::REQUIRED_ARGUMENT]
+            ['--timeout',    '-t',GetoptLong::REQUIRED_ARGUMENT],
+            ['--fencing-script',    '-f',GetoptLong::REQUIRED_ARGUMENT]
         )
 
 begin
@@ -79,6 +81,8 @@ begin
                 repeat = arg.to_i
             when '--timeout'
                 max_count = arg.to_i
+            when '--fencing-script'
+                fencing_script = arg
         end
     end
 rescue Exception => e
@@ -148,6 +152,12 @@ state = "STATE=3"
 vm_ids_array = vms.retrieve_elements("/VM_POOL/VM[#{state}]/HISTORY_RECORDS/HISTORY[HOSTNAME=\"#{host_name}\" and last()]/../../ID")
 
 if vm_ids_array
+
+    if fencing_script
+        system({"FT_ACTION"=>"FENCE","FT_HOSTID"=>host_id,"FT_HOSTNAME"=>host_name}, fencing_script)
+        splog("host_id:#{host_id} (#{$?}) script #{fencing_script} FENCE")
+    end
+
     vmhash = Hash.new
     vm_ids_array.each do |vm_id|
         vm=OpenNebula::VirtualMachine.new_with_id(vm_id, client)
@@ -220,6 +230,12 @@ if vm_ids_array
         end
         sleep(1.0/1.0)
     end while vmhash.size > 0
+
+    if fencing_script
+        system({"FT_ACTION"=>"THAW","FT_HOSTID"=>host_id,"FT_HOSTNAME"=>host_name}, fencing_script)
+        splog("host_id:#{host_id} (#{$?}) script #{fencing_script} THAW")
+    end
+
     splog("host_id:#{host_id} END")
 else
     splog("host_id:#{host_id} Nothing to do. END")
