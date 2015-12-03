@@ -102,7 +102,13 @@ end
 host_name = host.name
 
 hstate = host.state
-splog("host_id:#{host_id} host.state:#{hstate} BEGIN")
+
+if hstate != 3 and hstate != 5
+    splog("host_id:#{host_id} host.state:#{hstate} #{host_name} is back. END")
+    exit 0
+else
+    splog("host_id:#{host_id} host.state:#{hstate} #{host_name} BEGIN")
+end
 
 if repeat
     # Retrieve host monitor interval
@@ -146,14 +152,15 @@ if vm_ids_array
     vm_ids_array.each do |vm_id|
         vm=OpenNebula::VirtualMachine.new_with_id(vm_id, client)
         vm.info
+        vm_state = vm.state_str
+        lcm_state = vm.lcm_state_str
+        state =  "#{vm_state}/#{lcm_state}"
         vmhash[vm_id] = Hash.new
-        vmhash[vm_id]["vm_id"] = vm_id
         vmhash[vm_id]["vm"] = vm
-        vmhash[vm_id]["state"] = "ACTIVE/UNKNOWN"
-        vmhash[vm_id]["lcm_state"] = "UNKNOWN"
+        vmhash[vm_id]["state"] = state
         vmhash[vm_id]["prev_action"] = "none"
         vmhash[vm_id]["count"] = 0
-        splog("host_id:#{host_id} adding VM #{vm_id}")
+        splog("host_id:#{host_id} adding VM #{vm_id} state #{state}")
     end
     # Begin game
     begin
