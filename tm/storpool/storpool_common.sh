@@ -38,6 +38,9 @@ source "$TMCOMMON"
 
 # SCRIPTS_REMOTE_DIR must match same in /etc/one/oned.conf
 SCRIPTS_REMOTE_DIR=/var/tmp/one
+FORCED_DETACH_ALL=
+FORCED_DETACH_HERE=
+FORCED_DELVOL_DETACH=
 
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 
@@ -102,8 +105,8 @@ EOF
     local _DETACH_ALL=$(cat <<EOF
     #_DETACH_ALL
     if storpool attach list | grep -q " $_SP_VOL " 2>/dev/null >/dev/null; then
-        splog "detach volume $_SP_VOL all"
-        storpool detach volume "$_SP_VOL" all
+        splog "detach volume $_SP_VOL all ${FORCED_DETACH_ALL:+force yes}"
+        storpool detach volume "$_SP_VOL" all ${FORCED_DETACH_ALL:+force yes}
     else
         splog "volume not attached $_SP_VOL"
     fi
@@ -111,8 +114,8 @@ EOF
 )
     local _DETACH_HERE=$(cat <<EOF
     #_DETACH_HERE
-    splog "detach volume $_SP_VOL here"
-    storpool detach volume "$_SP_VOL" here
+    splog "detach volume $_SP_VOL here ${FORCED_DETACH_HERE:+force yes}"
+    storpool detach volume "$_SP_VOL" here ${FORCED_DETACH_HERE:+force yes}
 EOF
 )
     local _ATTACH=$(cat <<EOF
@@ -184,8 +187,8 @@ EOF
     #_DELVOL_DETACH
     if storpool volume "$SP_VOL" info 2>/dev/null >/dev/null; then
         if storpool attach list | grep " $SP_VOL "; then
-            splog "detach volume $SP_VOL"
-            storpool detach volume "$SP_VOL" all
+            splog "detach volume $SP_VOL ${FORCED_DELVOL_DETACH:+force yes}"
+            storpool detach volume "$SP_VOL" all ${FORCED_DELVOL_DETACH:+force yes}
         fi
         splog "delete $SP_VOL"
         storpool volume "$SP_VOL" delete "$SP_VOL"
