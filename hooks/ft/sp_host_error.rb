@@ -92,6 +92,7 @@ end
 begin
     client = Client.new()
 rescue Exception => e
+    splog("unknown(#{host_id}) ERROR: Can't get Client object")
     puts "Error: #{e}"
     exit -1
 end
@@ -100,7 +101,7 @@ end
 host  =  OpenNebula::Host.new_with_id(host_id, client)
 rc = host.info
 if OpenNebula.is_error?(rc)
-    splog("Can't get host info for host_id:#{host_id}")
+    splog("unknown(#{host_id}) ERROR: Can't get host info for host_id:#{host_id}")
     exit -1
 end
 host_name = host.name
@@ -108,10 +109,10 @@ host_name = host.name
 hstate = host.state
 
 if hstate != 3 and hstate != 5
-    splog("host_id:#{host_id} host.state:#{hstate} #{host_name} is back. END")
+    splog("#{host_name}(#{host_id}) END: Host is back (host.state:#{hstate})")
     exit 0
 else
-    splog("host_id:#{host_id} host.state:#{hstate} #{host_name} BEGIN")
+    splog("#{host_name}(#{host_id}) BEGIN: (host.state:#{hstate})")
 end
 
 if repeat
@@ -126,15 +127,15 @@ if repeat
             hstate = host.state
             # If the host came back, exit! avoid duplicated VMs
             if hstate != 3 and hstate != 5
-                splog("host_id:#{host_id} host.state:#{hstate} is back. END")
+                splog("#{host_name}(#{host_id}) END: Host is back (host.state:#{hstate})")
                 exit 0
             end
-            splog("host_id:#{host_id} host.state:#{hstate} i:#{i} sleep (#{monitor_interval})")
+            splog("#{host_name}(#{host_id}) SLEEP: #{i} sleep #{monitor_interval} (host.state:#{hstate})")
             # Sleep through the desired number of monitor interval
             sleep(monitor_interval)
         end
     else
-        splog("host_id:#{host_id} host.state:#{hstate} Can't get MONITORING_INTERVAL!")
+        splog("#{host_name}(#{host_id}) ERROR: Can't get MONITORING_INTERVAL! (host.state:#{hstate})")
         exit -1
     end
 end
@@ -143,7 +144,7 @@ end
 vms = VirtualMachinePool.new(client)
 rc = vms.info_all
 if OpenNebula.is_error?(rc)
-    splog("host_id:#{host_id} Can't get host VM-s. Exit -1")
+    splog("#{host_name}(#{host_id}) ERROR: Can't get VM info")
     exit -1
 end
 
@@ -165,21 +166,21 @@ if vm_ids_array
             vmhash[vm_id]["state"] = state
             vmhash[vm_id]["prev_action"] = "none"
             vmhash[vm_id]["count"] = 0
-            splog("host_id:#{host_id} adding VM #{vm_id} state #{state}")
+            splog("#{host_name}(#{host_id}) ADD: VM #{vm_id} state #{state}")
         else
-            splog("host_id:#{host_id} skip VM #{vm_id} state #{state}")
+            splog("#{host_name}(#{host_id}) SKIP: VM #{vm_id} state #{state}")
         end
     end
 
     if vmhash.size == 0
-        splog("host_id:#{host_id} No VM in ACTIVE/UNKNOWN state found. END")
+        splog("#{host_name}(#{host_id}) END: No VM in ACTIVE/UNKNOWN state found")
         exit 0
     end
 
     # Begin game
     if fencing_script
         system({"FT_ACTION"=>"FENCE","FT_HOSTID"=>host_id,"FT_HOSTNAME"=>host_name}, fencing_script)
-        splog("host_id:#{host_id} (#{$?}) script #{fencing_script} FENCE")
+        splog("#{host_name}(#{host_id}) FENCE: script #{fencing_script} (#{$?})")
     end
 
     begin
@@ -194,36 +195,36 @@ if vm_ids_array
             count = vmh["count"]
             prev_action = vmh["prev_action"]
             if state == vmhash[vm_id]["state"]
-                splog("host_id:#{host_id} VM #{vm_id} #{prev_action} #{state} count:#{count} host.state:#{hstate}")
+                splog("#{host_name}(#{host_id}) STATE: #{state} VM #{vm_id} pa:#{prev_action} count:#{count} host.state:#{hstate}")
                 vmhash[vm_id]["count"] = 0 if count < max_count - 1
                 if state == "ACTIVE/UNKNOWN" and prev_action != "resched"
                     n_state = "ACTIVE/BOOT_FAILURE"
                     vmhash[vm_id]["state"] = n_state
                     vmhash[vm_id]["prev_action"] = "resched"
                     vm.resched
-                    splog("host_id:#{host_id} VM #{vm_id} CALLING vm.resched and WAITFOR #{n_state}")
+                    splog("#{host_name}(#{host_id}) CALL: vm.resched VM #{vm_id} wait for #{n_state}")
                 elsif state == "ACTIVE/BOOT_FAILURE" and prev_action != "recover"
                     n_state = "POWEROFF/LCM_INIT"
                     vmhash[vm_id]["state"] = n_state
                     vmhash[vm_id]["prev_action"] = "recover"
                     vm.recover(1)
-                    splog("host_id:#{host_id} VM #{vm_id} CALLING vm.recover(1) and WAITFOR #{n_state}")
+                    splog("#{host_name}(#{host_id}) CALL: vm.recover(1) VM #{vm_id} wait for #{n_state}")
                 elsif state == "POWEROFF/LCM_INIT" and prev_action != "undeploy"
                     n_state = "UNDEPLOYED/LCM_INIT"
                     vmhash[vm_id]["state"] = n_state
                     vmhash[vm_id]["prev_action"] = "undeploy"
                     vm.undeploy
-                    splog("host_id:#{host_id} VM #{vm_id} CALLING vm.undeploy")
+                    splog("#{host_name}(#{host_id}) CALL: vm.undeploy VM #{vm_id} wait for #{n_state}")
                 elsif state == "UNDEPLOYED/LCM_INIT" and prev_action != "resume"
                     n_state = "ACTIVE/RUNNINNG"
                     vmhash[vm_id]["state"] = n_state
                     vmhash[vm_id]["prev_action"] = "resume"
                     vm.resume
-                    splog("host_id:#{host_id} VM #{vm_id} CALLING vm.resume and WAITFOR #{n_state}")
+                    splog("#{host_name}(#{host_id}) CALL: vm.resume VM #{vm_id} wait for #{n_state}")
                 end
             elsif state == "ACTIVE/RUNNING" and (prev_action == "resume" or prev_action == "resched")
                 vmhash.delete(vm_id)
-                splog("host_id:#{host_id} VM #{vm_id} Migrated")
+                splog("#{host_name}(#{host_id}) MIGRATED: VM #{vm_id}")
                 next
             elsif state == "ACTIVE/UNKNOWN" and prev_action == "resched"
                 next
@@ -231,10 +232,10 @@ if vm_ids_array
             vmhash[vm_id]["count"] += 1
             if count > max_count
                 vmhash.delete(vm_id)
-                splog("host_id:#{host_id} VM #{vm_id} Max retries reached! Giving up (state:#{state} nstate:#{n_state} pa:#{prev_action} host.state:#{hstate})")
+                splog("#{host_name}(#{host_id}) GIVUP: VM #{vm_id} Max retries reached! (state:#{state} nstate:#{n_state} pa:#{prev_action} host.state:#{hstate})")
             elsif state == "ACTIVE/PROLOG_MIGRATE_FAILURE"
                 vmhash.delete(vm_id)
-                splog("host_id:#{host_id} VM #{vm_id} CLEANUP GHOST")
+                splog("#{host_name}(#{host_id}) CLEANUP: Ghost VM #{vm_id}")
             end
         end
         sleep(1.0/1.0)
@@ -242,10 +243,10 @@ if vm_ids_array
 
     if fencing_script
         system({"FT_ACTION"=>"THAW","FT_HOSTID"=>host_id,"FT_HOSTNAME"=>host_name}, fencing_script)
-        splog("host_id:#{host_id} (#{$?}) script #{fencing_script} THAW")
+        splog("#{host_name}(#{host_id}) THAW: script #{fencing_script} (#{$?})")
     end
 
-    splog("host_id:#{host_id} END")
+    splog("#{host_name}(#{host_id}) END: Task completed")
 else
-    splog("host_id:#{host_id} Nothing to do. END")
+    splog("#{host_name}(#{host_id}) END: Nothing to do")
 end
