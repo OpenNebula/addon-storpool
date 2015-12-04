@@ -130,7 +130,7 @@ if repeat
                 splog("#{host_name}(#{host_id}) END: Host is back (host.state:#{hstate})")
                 exit 0
             end
-            splog("#{host_name}(#{host_id}) SLEEP: #{i} sleep #{monitor_interval} (host.state:#{hstate})")
+            splog("#{host_name}(#{host_id}) SLEEP: #{i}/#{repeat} sleep #{monitor_interval} (host.state:#{hstate})")
             # Sleep through the desired number of monitor interval
             sleep(monitor_interval)
         end
