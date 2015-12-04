@@ -152,12 +152,6 @@ state = "STATE=3"
 vm_ids_array = vms.retrieve_elements("/VM_POOL/VM[#{state}]/HISTORY_RECORDS/HISTORY[HOSTNAME=\"#{host_name}\" and last()]/../../ID")
 
 if vm_ids_array
-
-    if fencing_script
-        system({"FT_ACTION"=>"FENCE","FT_HOSTID"=>host_id,"FT_HOSTNAME"=>host_name}, fencing_script)
-        splog("host_id:#{host_id} (#{$?}) script #{fencing_script} FENCE")
-    end
-
     vmhash = Hash.new
     vm_ids_array.each do |vm_id|
         vm=OpenNebula::VirtualMachine.new_with_id(vm_id, client)
@@ -165,14 +159,29 @@ if vm_ids_array
         vm_state = vm.state_str
         lcm_state = vm.lcm_state_str
         state =  "#{vm_state}/#{lcm_state}"
-        vmhash[vm_id] = Hash.new
-        vmhash[vm_id]["vm"] = vm
-        vmhash[vm_id]["state"] = state
-        vmhash[vm_id]["prev_action"] = "none"
-        vmhash[vm_id]["count"] = 0
-        splog("host_id:#{host_id} adding VM #{vm_id} state #{state}")
+        if state == "ACTIVE/UNKNOWN"
+            vmhash[vm_id] = Hash.new
+            vmhash[vm_id]["vm"] = vm
+            vmhash[vm_id]["state"] = state
+            vmhash[vm_id]["prev_action"] = "none"
+            vmhash[vm_id]["count"] = 0
+            splog("host_id:#{host_id} adding VM #{vm_id} state #{state}")
+        else
+            splog("host_id:#{host_id} skip VM #{vm_id} state #{state}")
+        end
     end
+
+    if vmhash.size == 0
+        splog("host_id:#{host_id} No VM in ACTIVE/UNKNOWN state found. END")
+        exit 0
+    end
+
     # Begin game
+    if fencing_script
+        system({"FT_ACTION"=>"FENCE","FT_HOSTID"=>host_id,"FT_HOSTNAME"=>host_name}, fencing_script)
+        splog("host_id:#{host_id} (#{$?}) script #{fencing_script} FENCE")
+    end
+
     begin
         vmhash.each do |vm_id, vmh|
             vm = vmh["vm"]
