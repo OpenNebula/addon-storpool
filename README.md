@@ -270,7 +270,11 @@ FORCED_DELVOL_DETACH=1
 service opennebula restart
 service opennebuka-sunstone restart
 ```
-
+* Sync remote scripts as oneadmin user
+```bash
+su - oneadmin
+onehost sync --force
+```
 
 
 ## Upgrade
