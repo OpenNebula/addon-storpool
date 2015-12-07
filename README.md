@@ -51,8 +51,7 @@ A working StorPool cluster is required.
 
 1. tested only with the KVM hypervisor
 1. no support for VM snapshot because it is handled internally by libvirt
-1. reported free/used/total space when used for SYSTEM datastore is not propper because the volatile disks and the context image are expected to be files instead of a block device. Extra external monitoring of space usage should be implemented.
-
+1. in SYSTEM datastore integration the reported free/used/total space is not propper because the volatile disks and the context image are expected to be files instead of a block device. Extra external monitoring of space usage should be implemented.
 
 ## Installation
 
