@@ -51,7 +51,7 @@ A working StorPool cluster is required.
 
 1. tested only with the KVM hypervisor
 1. no support for VM snapshot because it is handled internally by libvirt
-1. reported free/used/total space when used for SUSTEM datastore is not propper because the volatile disks and the context image are expected to be files instead of a block device. Extra external monitoring of space usage should be implemented.
+1. reported free/used/total space when used for SYSTEM datastore is not propper because the volatile disks and the context image are expected to be files instead of a block device. Extra external monitoring of space usage should be implemented.
 
 
 ## Installation
@@ -178,13 +178,14 @@ pushd /var/lib/one
 patch -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
 popd
 ```
-* Copy misc/poll_disk_info to /usr/bin
+* Copy vmm/kvm/poll_disk_info to remotes/vmm/kvm
 ```bash
 cp ~/addon-storpool/vmm/kvm/poll_disk_info /var/lib/one/remotes/vmm/kvm/
 ```
-* Copy FT hook
+* Copy FT hook and the fencing helper script
 ```bash
 cp ~/addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
+cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
 ```
 
 #### sunstone related pieces
@@ -205,6 +206,10 @@ popd
 ```
 
 ### addon configuration
+The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
+* Define `SCRIPTS_REMOTE_DIR` if it is changed in `/etc/one/oned.conf` if you plan to do live disk snapshots with fsfreeze via qemu-guest-agent
+* To chage disk space usage reporting to be as LVM is reporting it define `SP_SPACE_USED_LVMWAY` variable to anything
+
 * Add the `oneadmin` user to group `disk` on all nodes
 ```bash
 usermod -a -G disk oneadmin
@@ -244,19 +249,21 @@ VM_MAD = [
     type       = "kvm" ]
 ```
 To enable the StorPool compatible Fault Tolerance `HOST_HOOK`
-* Edit `/etc/one/oned.conf` and define `HOST_HOOK` as follow
+* Edit `/etc/one/oned.conf` and define `HOST_HOOK` as follow(tweak the arguments if needed)
 ```
 HOST_HOOK = [
     name      = "error",
     on        = "ERROR",
     command   = "ft/sp_host_error.rb",
-    arguments = "$ID -p 2",
+    arguments = "$ID -p 2 -f fencing-script.sh",
     remote    = "no" ]
 ```
-
-The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
-* Define `SCRIPTS_REMOTE_DIR` if it is changed in `/etc/one/oned.conf` if you plan to do live disk snapshots with fsfreeze via qemu-guest-agent
-* To chage disk space usage reporting to be as LVM is reporting it define `SP_SPACE_USED_LVMWAY` variable to anything
+* Edit/create the addon-storpool global configuration file /var/lib/one/remotes/addon-storpoolrc and define folowing variables
+```
+FORCED_DETACH_ALL=1
+FORCED_DETACH_HERE=1
+FORCED_DELVOL_DETACH=1
+```
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
