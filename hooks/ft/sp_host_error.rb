@@ -24,6 +24,7 @@
 #           -t how many times to loop in each state
 #           -p <n> avoid resubmission if host comes
 #                  back after n monitoring cycles
+#           -f fencing-script.sh fence the failed node while script is working
 ##############################################################################
 
 ##############################################################################
