@@ -29,9 +29,15 @@ PATH=/usr/sbin:/usr/bin:$PATH
 
 case "$FT_ACTION" in
     FENCE)
-        $SUDO iptables -I OUTPUT -j REJECT -d "$FT_HOSTNAME"
+        # ssh
+        $SUDO iptables -I OUTPUT -j REJECT --reject-with tcp-reset -p tcp --dport 22 -d "$FT_HOSTNAME"
+        # collectd
+        $SUDO iptables -I INPUT -j REJECT --reject-with icmp-port-unreachable -p udp --dport 4124 -s "$FT_HOSTNAME"
         ;;
     THAW)
-        $SUDO iptables -D OUTPUT -j REJECT -d "$FT_HOSTNAME"
+        # ssh
+        $SUDO iptables -D OUTPUT -j REJECT --reject-with tcp-reset -p tcp --dport 22 -d "$FT_HOSTNAME"
+        # collectd
+        $SUDO iptables -D INPUT -j REJECT --reject-with icmp-port-unreachable -p udp --dport 4124 -s "$FT_HOSTNAME"
         ;;
 esac
