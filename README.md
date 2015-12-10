@@ -192,10 +192,10 @@ cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
 * Patch and rebuild sunstone interface
 ```bash
 pushd /usr/lib/one/sunstone/public
+# patch the sunstone interface
 patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/4.14/00-datastores-tab.js.patch
-patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/4.14/01-disk-tab.hbs.patch
 
-# rebuild
+# rebuild the interface
 npm install
 bower --allow-root install
 grunt sass
