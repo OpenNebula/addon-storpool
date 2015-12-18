@@ -29,12 +29,14 @@ This add-on is compatible with OpenNebula 4.10, 4.12, 4.14 and StorPool 15.02+.
 
 * Password-less SSH access from the front-end `oneadmin` user to the `node` instances.
 * StorPool CLI, API access and token
+* (Optional) member of the StorPool cluster with working StorPool initiator driver
+* If it is memeber of the StorPool cluster - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 
-### OpenNebula Node
+### OpenNebula Node (or Bridge Node)
 
-* The OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 * StorPool initiator driver (storpool_block)
-* StorPool CLI, API access and token
+* If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
+* If it is only Bridge Node - it must be configured as Host in open nebula but separated to not run VMs.
 
 ### StorPool cluster
 
@@ -45,7 +47,9 @@ A working StorPool cluster is required.
 * support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
 * extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
 * support SYSTEM datastore volatile disks and context image as StorPool block devices (see limitations)
+* support migration from one to another SYSTEM_DS if both are with `storpool` TM_MAD
 * imported images from the markeplace are thin provisioned (require StorPool 15.03+)
+* support TRIM/discard in the VM when virtio-scsi driver is in use (`DEVICE_PREFIX=sd`)
 
 ## Limitations
 
@@ -300,13 +304,13 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **DS_MAD**: [mandatory] The DS driver for the datastore. String, use value `storpool`
 * **TM_MAD**: [mandatory] Transfer driver for the datastore. String, use value `storpool`
 * **DISK_TYPE**: [mandatory] Type for the VM disks using images from this datastore. String, use value `block`
-* **BRIDGE_LIST**: [mandatory] Nodes to use for image datastore operations. String (1)
+* **BRIDGE_LIST**: [optional] Nodes to use for image datastore operations. String (1)
 * **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (2)
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
 * **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS. Global datastore configuration for storpol TM_MAD is with *SHARED=yes* set. If the datastore is not on shared filesystem this parameter should be set to *SP_SYSTEM=ssh* to copy non-storpool files from one node to another.
 
-1. Quoted, space separated list of server hostnames which are members of the StorPool cluster.
+1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
 1. The PlaceTail placement group is defined in StorPool as list of drives. used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**

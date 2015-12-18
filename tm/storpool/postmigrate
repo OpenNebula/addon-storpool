@@ -23,24 +23,24 @@
 # postmigrate srcHost dstHost vmPath vmId datasourceId template
 #-------------------------------------------------------------------------------
 
-TM_PATH="`dirname $0`"
+#-------------------------------------------------------------------------------
+# Get postmigrate arguments from OpenNebula core
+#-------------------------------------------------------------------------------
 
+SRC_HOST="$1"
+DST_HOST="$2"
+VM_PATH="$3"
+VM_ID="$4"
+DS_ID="$5"
+TEMPLATE="$6"
+
+TM_PATH="$(dirname $0)"
 for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
     if [ -f "${_PATH}/storpool_common.sh" ]; then
         source "${_PATH}/storpool_common.sh"
         break;
     fi
 done
-
-#-------------------------------------------------------------------------------
-# Get cmd arguments from OpenNebula core
-#-------------------------------------------------------------------------------
-SRC_HOST=$1
-DST_HOST=$2
-VM_PATH=$3
-VM_ID=$4
-DS_ID=$5
-TEMPLATE=$6
 
 splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -61,10 +61,10 @@ for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         SP_VOL="${DISK_SOURCE##*/}"
-        [ -n "${DISK_PERSISTENT_ARRAY[i]}" ] || SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
+        [ "${DISK_PERSISTENT_ARRAY[i]}" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID_ARRAY[i]}"
 
         DST_PATH="$VM_PATH/disk.${DISK_ID_ARRAY[i]}"
-        storpoolAction "DETACH_HERE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
     fi
 done
 
@@ -80,8 +80,8 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
             fi
             SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
-            storpoolAction "DETACH_HERE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
-        fi
+            storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+         fi
     done
 
     #-------------------------------------------------------------------------------
@@ -90,7 +90,7 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
     EXTRA_CMD="ln -sf $DST_PATH ${DST_PATH}.iso"
-    storpoolAction "DETACH_HERE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
 fi
 
 if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then

@@ -22,8 +22,6 @@
 # rm base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -39,95 +37,26 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
 #-------------------------------------------------------------------------------
 # Get rm and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DRV_ACTION=$1
-ID=$2
+DRV_ACTION="$1"
+ID="$2"
 
-#if type base64 2>&1 >/dev/null; then
-#    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
-#fi
-
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH     /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/STATE \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL)
-unset i
-SOURCE="${XPATH_ELEMENTS[i++]}"
-IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
-SIZE="${XPATH_ELEMENTS[i++]}"
-PERSISTENT="${XPATH_ELEMENTS[i++]}"
-STATE="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
-SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
-SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
-SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
-
-splog "\
-${ID:+ID=$ID}\
-${STATE:+STATE=$STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${SIZE:+SIZE=$SIZE }\
-${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
-${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
-${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${IMAGE_PATH:+IMAGE_PATH=$IMAGE_PATH }\
-"
-
-#-------------------------------------------------------------------------------
-# Get datastore host
-#-------------------------------------------------------------------------------
-
-DST_HOST=`get_destination_host $ID`
-if [ "$DST_HOST" = "" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
-    exit -1
-fi
+oneDsDriverAction "$DRIVER_PATH"
 
 #-------------------------------------------------------------------------------
 # Remove Image from Datastore
 #-------------------------------------------------------------------------------
 
-SP_VOL=${SOURCE##*/}
-SP_SNAP="${SP_VOL}"
+SP_VOL="one-img-$ID"
 
-log "Removing $SP_VOL from the StorPool image repository in $DST_HOST"
-RM_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
-
-    if storpool attach list | grep -q " $SP_VOL " 2>/dev/null >/dev/null; then
-        splog "detach volume $SP_VOL all"
-        storpool detach volume "$SP_VOL" all
-    fi
-
-    if storpool volume "$SP_VOL" info 2>/dev/null >/dev/null; then
-        splog "delete volume $SP_VOL"
-        storpool volume "$SP_VOL" delete "$SP_VOL"
-    fi
-
-    splog "END RM_CMD"
-EOF
-)
-
-splog "run RM_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
-                 "Error removing $SRC in $DST_HOST"
+storpoolVolumeDelete "$SP_VOL" "force" "snaps" >/dev/null
 
 splog "END $SP_VOL DELETED"
 exit 0

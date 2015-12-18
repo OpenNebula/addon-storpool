@@ -22,8 +22,6 @@
 # snap_delete base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -39,61 +37,21 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
 #-------------------------------------------------------------------------------
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DRV_ACTION=$1
-ID=$2
+DRV_ACTION="$1"
+ID="$2"
 
-#if type base64 2>&1 >/dev/null; then
-#    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
-#fi
+oneDsDriverAction "$DRIVER_PATH"
 
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
+SP_SNAP="${SOURCE##*/}-snap${TARGET_SNAPSHOT}"
 
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT)
-
-unset i
-SOURCE="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
-TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
-
-DST_HOST=`get_destination_host $ID`
-
-splog "\
-${ID:+ID=$ID }\
-${SOURCE:+SOURCE=$SOURCE }\
-${DST_HOST:+DST_HOST=$DST_HOST }\
-${TARGET_SNAPSHOT:+TARGET_SNAPSHOT=$TARGET_SNAPSHOT }\
-"
-if [ -z "$DST_HOST" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
-    exit -1
-fi
-
-SP_SNAP="${SOURCE##*/}-snap$TARGET_SNAPSHOT"
-
-SNAP_DELETE_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
-
-    splog "snapshot delete $SP_SNAP"
-    storpool snapshot "$SP_SNAP" delete "$SP_SNAP"
-
-    splog "END SNAP_DELETE_CMD"
-EOF
-)
-
-splog "RUN SNAP_DELETE_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$SNAP_DELETE_CMD" \
-                 "Error deleting snapshot $SP_SNAP"
+storpoolSnapshotDelete "$SP_SNAP" >/dev/null
 
 splog "END"

@@ -22,15 +22,18 @@
 # cpds host:SOURCE host:DEST vmId datastoreId
 #-------------------------------------------------------------------------------
 
+#-------------------------------------------------------------------------------
+# Get cpds arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC="$1"
+DST="$2"
+SNAP_ID="$3"
+VM_ID="$4"
+DS_ID="$5"
+
 TM_PATH="$(dirname $0)"
-
 source "${TM_PATH}/storpool_common.sh"
-
-SRC=$1
-DST=$2
-SNAP_ID=$3
-VM_ID=$4
-DS_ID=$5
 
 splog "SRC=$SRC DST=$DST SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -58,16 +61,24 @@ SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
 [ "$PERSISTENT" = "YES" ] || SP_PARENT="${SP_PARENT}-${VM_ID}-${DISK_ID}"
 
-if [ "$SNAP_ID" != "-1" ]; then
-    SP_PARENT="${SP_PARENT}-snap${SNAP_ID}"
-    SP_DST="-1"
-fi
-
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
-storpoolAction "CPDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$SP_DST" "$SP_PARENT" "$SP_TEMPLATE" "$DEPLOY_ID"
+storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+
+oneFsfreeze "$DST_HOST" "$DEPLOY_ID"
+trapAdd "oneFsthaw \"$DST_HOST\" \"$DEPLOY_ID\""
+
+if [ "$SNAP_ID" = "-1" ]; then
+    storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
+else
+    SP_PARENT="${SP_PARENT}-snap${SNAP_ID}"
+    storpoolSnapshotClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
+fi
+
+oneFsthaw "$DST_HOST" "$DEPLOY_ID"
+trapReset
 
 splog "END"
 exit 0

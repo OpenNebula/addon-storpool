@@ -22,18 +22,17 @@
 # mvds host:remote_system_ds/disk.i host:remote_system_ds/disk.i vmId datastoreId
 #-------------------------------------------------------------------------------
 
-TM_PATH="$(dirname $0)"
-
-source "${TM_PATH}/storpool_common.sh"
-
 #-------------------------------------------------------------------------------
 # Get mvds arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-SRC=$1
-DST=$2
-VM_ID=$3
-DS_ID=$4
+SRC="$1"
+DST="$2"
+VM_ID="$3"
+DS_ID="$4"
+
+TM_PATH="$(dirname $0)"
+source "${TM_PATH}/storpool_common.sh"
 
 splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -56,7 +55,7 @@ DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-[ "$PERSISTENT" = "YES" ] || SP_VOL+="${SP_VOL}-${VM_ID}-${DISK_ID}"
+[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
 SP_NEW="${DST##*/}"
 if [ "$SP_VOL" != "$SP_NEW" ]; then
@@ -71,7 +70,11 @@ splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLAT
 # Detach and if it is deferred snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
-storpoolAction "MVDS" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_NEW" "$SP_TEMPLATE" "$DEFERRED"
+storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
+
+if [ "$DEFERRED" = "1" ]; then
+    storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
+fi
 
 splog "END"
 exit 0

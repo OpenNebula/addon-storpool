@@ -19,8 +19,8 @@
 
 function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
 
-DRV_ACTION=$1
-DS_ID=$2
+DRV_ACTION="$1"
+DS_ID="$2"
 
 DS_NAME="one-ds-${DS_ID}"
 

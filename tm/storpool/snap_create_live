@@ -19,21 +19,20 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# snap_create  host:parent_image snap_id vm_id ds_id
+# snap_create_live  host:parent_image snap_id vm_id ds_id
 #-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Get snap_create_live arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC="$1"
+SNAP_ID="$2"
+VM_ID="$3"
+DS_ID="$4"
 
 TM_PATH="$(dirname $0)"
-
 source "${TM_PATH}/storpool_common.sh"
-
-#-------------------------------------------------------------------------------
-# Get clone arguments from OpenNebula core
-#-------------------------------------------------------------------------------
-
-SRC=$1
-SNAP_ID=$2
-VM_ID=$3
-DS_ID=$4
 
 splog "SRC=$SRC SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -61,6 +60,7 @@ else
     SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
 fi
 
+SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
 DST_HOST=$SRC_HOST
 DST_PATH="$SRC_PATH"
 
@@ -68,7 +68,13 @@ DST_PATH="$SRC_PATH"
 # Create snapshot
 #-------------------------------------------------------------------------------
 
-storpoolAction "SNAPSHOT_LIVE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SNAP_ID" "dummy" "$DEPLOY_ID"
+oneFsfreeze "$DST_HOST" "$DEPLOY_ID"
+trapAdd "oneFsthaw \"$DST_HOST\" \"$DEPLOY_ID\""
+
+storpoolSnapshotCreate "$SP_SNAP" "$SP_VOL"
+
+oneFsthaw "$DST_HOST" "$DEPLOY_ID"
+trapReset
 
 splog "END"
 exit 0

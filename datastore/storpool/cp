@@ -22,8 +22,6 @@
 # cp base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -39,120 +37,35 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
 #-------------------------------------------------------------------------------
 # Get cp and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DRV_ACTION=$1
-ID=$2
+DRV_ACTION="$1"
+ID="$2"
 
-#if type base64 2>&1 >/dev/null; then
-#    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
-#fi
-
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/RESTRICTED_DIRS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SAFE_DIRS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/STAGING_DIR \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/STATE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5 \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE )
-
-STAGING_DIR="${STAGING_DIR:-/tmp}"
-unset i
-BASE_PATH="${XPATH_ELEMENTS[i++]}"
-DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
-RESTRICTED_DIRS="${XPATH_ELEMENTS[i++]}"
-SAFE_DIRS="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
-SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
-SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
-SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
-SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
-SP_BW="${XPATH_ELEMENTS[i++]:--}"
-STAGING_DIR="${XPATH_ELEMENTS[i++]:-$STAGING_DIR}"
-IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
-SIZE="${XPATH_ELEMENTS[i++]}"
-SOURCE="${XPATH_ELEMENTS[i++]}"
-PERSISTENT="${XPATH_ELEMENTS[i++]}"
-STATE="${XPATH_ELEMENTS[i++]}"
-MD5="${XPATH_ELEMENTS[i++]}"
-SHA1="${XPATH_ELEMENTS[i++]}"
-DRIVER="${XPATH_ELEMENTS[i++]}"
-NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
-LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
-TYPE="${XPATH_ELEMENTS[i++]}"
-
-DST_HOST=`get_destination_host $ID`
-
-splog "\
-${ID:+ID=$ID }\
-${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
-${STATE:+STATE=$STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${SIZE:+SIZE=$SIZE }\
-${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
-${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
-${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${DRIVER:+DRIVER=$DRIVER }\
-${DST_HOST:+DST_HOST=$DST_HOST }\
-${STAGING_DIR:+STAGING_DIR=$STAGING_DIR }\
-${NO_DECOMPRESS:+NO_DECOMPRESS=$NO_DECOMPRESS }\
-${LIMIT_TRANSFER_BW:+LIMIT_TRANSFER_BW=$LIMIT_TRANSFER_BW }\
-${TYPE:+TYPE=$TYPE }\
-"
+oneDsDriverAction "$DRIVER_PATH"
 
 #-------------------------------------------------------------------------------
 # Validate variables
 #-------------------------------------------------------------------------------
 
-if [ "$DST_HOST" = "" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
-    exit -1
-fi
-if [ "$SP_PLACEALL" = "" ]; then
-    error_message "Datastore template missing 'SP_PLACEALL' attribute."
-    exit -1
-fi
-if [ "$SP_PLACETAIL" = "" ]; then
-    SP_PLACETAIL="$SP_PLACEALL"
-fi
-if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
-    error_message "Datastore template with unknown value for 'SP_REPLICATION' attribute '$SP_REPLICATION'."
-    exit -1
+if [ -n "$BRIDGE_LIST" ]; then
+    DST_HOST=`get_destination_host $ID`
+    if [ "$DST_HOST" = "" ]; then
+        error_message "Datastore template missing 'BRIDGE_LIST' attribute."
+        exit -1
+    fi
 fi
 
 set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
 
 IMAGE_HASH=`generate_image_hash`
 TMP_DST="$STAGING_DIR/$IMAGE_HASH"
-
-
-DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" -`
-
-COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
 
 case "$IMAGE_PATH" in
 http://*|https://*)
@@ -170,7 +83,6 @@ http://*|https://*)
     ;;
 esac
 
-
 SP_VOL="one-img-${ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
@@ -178,164 +90,102 @@ SP_DST="$SP_TEMPLATE/$SP_VOL"
 SP_TEMP_VOL="$(echo $SP_VOL | md5sum | awk '{print $1}')"
 SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"
 
+if [ -n "$DST_HOST" ]; then
+    DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" -`
+else
+    DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" "$SP_TEMP_LINK"`
+fi
+
+COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
+
 #-------------------------------------------------------------------------------
-# Prepare image to temp volume
+# Transfer the image to a temp volume
 #-------------------------------------------------------------------------------
 
-PRE_COPY_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    try_detach() {
-        splog "detach \$@"
-        t=10
-        while true; do
-            if storpool detach "\$@"; then
-                break
-            fi
+storpoolTemplate "$SP_TEMPLATE" >/dev/null
 
-            t=\$(expr "\$t" - 1)
-            if [ "\$t" -lt 1 ]; then
-                splog 'detaching repeatedly failed'
-                exit 1
-            fi
-            sleep 1
-        done
-    }
+storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE" "$SP_TEMPLATE" >/dev/null
 
-    SP_SIZE="${SIZE}M"
+trapAdd "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
-    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL iops $SP_IOPS bw $SP_BW"
-    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" iops "$SP_IOPS" bw "$SP_BW"
-
-    splog "create volume=$SP_TEMP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
-    storpool volume "$SP_TEMP_VOL" size "\${SP_SIZE}" template "$SP_TEMPLATE"
-
-    trap 'storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"' EXIT TERM INT HUP
-
-    splog "attach volume $SP_TEMP_VOL here"
-    storpool attach volume "$SP_TEMP_VOL" here
-
-    trap 'try_detach volume "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"' EXIT TERM INT HUP
-
-    t=15
-    while [ ! -L "$SP_TEMP_LINK" ]; do
-        if [ \$t -lt 1 ]; then
-            splog "Timeout waiting for $SP_TEMP_LINK"
-            echo "Timeout waiting for $SP_TEMP_LINK" >&2
-            exit -1
-        fi
-        sleep .5
-        t=\$((t-1))
-    done
-
-    trap - EXIT TERM INT HUP
-    splog "END PRE_COPY_CMD"
-EOF)
-
-splog "run CP_PRE_CMD on $DST_HOST"
-ssh_exec_and_log    "$DST_HOST" "$PRE_COPY_CMD" \
-                    "Error registering $SP_TEMP_VOL in $DST_HOST"
+storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST" >/dev/null
 
 #-------------------------------------------------------------------------------
 # Import image to temp volume
 #-------------------------------------------------------------------------------
 
-splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k"
-exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k" \
-             "Error dumping $IMAGE_PATH to $DST_HOST:$TMP_DST"
+if [ -n "$DST_HOST" ]; then
+    splog "$COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k"
+    exec_and_log "$COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k" \
+                 "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
+else
+    splog "$COPY_CMD"
+    exec_and_log "$COPY_CMD" \
+                 "Error dumping $IMAGE_PATH to $SP_TEMP_VOL"
+fi
 
 #-------------------------------------------------------------------------------
 # Process imported image
 #-------------------------------------------------------------------------------
 
-POST_COPY_CMD=$(cat <<EOF
+if [ -n "$DST_HOST" ]; then
+    FORMAT=$($SSH $DST_HOST $QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print $3}')
+else
+    FORMAT=$($QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print $3}')
+fi
+splog "$SP_TEMP_LINK FORMAT=$FORMAT SIZE=$SIZE $QEMU_IMG status:$?"
+
+if [ "$FORMAT" != "$DRIVER" ]; then
+    splog "$QEMU_IMG detected format $FORMAT but DRIVER=$DRIVER in the image template"
+fi
+
+if [ "$FORMAT" = "raw" ]; then
+    storpoolVolumeRename "$SP_TEMP_VOL" "$SP_VOL" "$SP_TEMPLATE" >/dev/null
+
+    trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
+
+    trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+else
+    storpoolTemplate "$SP_TEMPLATE"
+
+    storpoolVolumeCreate "$SP_VOL" "$SIZE" "$SP_TEMPLATE" >/dev/null
+
+    trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" >/dev/null
+
+    POST_COPY_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t ds_sp_${0##*/} "\$*"; }
 
-    try_detach() {
-        splog "detach \$@"
-        t=10
-        while true; do
-            if storpool detach "\$@"; then
-                break
-            fi
-
-            t=\$(expr "\$t" - 1)
-            if [ "\$t" -lt 1 ]; then
-                splog 'detaching repeatedly failed'
-                exit 1
-            fi
-            sleep 1
-        done
-    }
-
-    SP_SIZE="${SIZE}M"
-
-    trap 'try_detach volume "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"' EXIT TERM INT HUP
-
-    FORMAT=\$($QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print \$3}')
-    splog "$SP_TEMP_LINK FORMAT=\$FORMAT SIZE=$SIZE $QEMU_IMG status:$?"
-
-    if [ "\$FORMAT" != "$DRIVER" ]; then
-        splog "$QEMU_IMG detected format \$FORMAT but DRIVER=$DRIVER in the image template"
-    fi
-
-    if [ "\$FORMAT" = "raw" ]; then
-        splog "rename $SP_TEMP_VOL to $SP_VOL"
-        storpool volume "$SP_TEMP_VOL" rename "$SP_VOL"
-        trap 'try_detach volume "$SP_VOL" all; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
-    else
-        splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL iops $SP_IOPS bw $SP_BW"
-        storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" iops "$SP_IOPS" bw "$SP_BW"
-
-
-        splog "create volume=$SP_VOL size=\$SP_SIZE template=$SP_TEMPLATE"
-        storpool volume "$SP_VOL" size "\${SP_SIZE}" template "$SP_TEMPLATE"
-
-        trap 'try_detach volume "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
-
-        splog "attach volume $SP_VOL here"
-        storpool attach volume "$SP_VOL" here
-
-        trap 'try_detach volume "$SP_TEMP_VOL" all; storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"; try_detach volume "$SP_VOL" all; storpool volume "$SP_VOL" delete "$SP_VOL"' EXIT TERM INT HUP
-
-        t=15
-        while [ ! -L "$SP_LINK" ]; do
-            if [ \$t -lt 1 ]; then
-                splog "Timeout waiting for $SP_LINK"
-                echo "Timeout waiting for $SP_LINK" >&2
-                exit -1
-            fi
-            sleep .5
-            t=\$((t-1))
-        done
-
-        splog "\$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
-        $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
-        sync
-
-        try_detach volume "$SP_TEMP_VOL" all
-
-        trap 'try_detach volume "$SP_VOL" all;' EXIT TERM INT HUP
-
-        splog "volume "$SP_TEMP_VOL" delete"
-        storpool volume "$SP_TEMP_VOL" delete "$SP_TEMP_VOL"
-    fi
-
-    try_detach volume '$SP_VOL' all
-
-    trap - EXIT TERM INT HUP
-
-    splog "END POST_COPY_CMD"
+    splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
+    $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
+    sync
 EOF
 )
 
-splog "run POST_COPY_CMD on $DST_HOST"
-ssh_exec_and_log    "$DST_HOST" "$POST_COPY_CMD" \
-                    "Error registering $SP_VOL in $DST_HOST"
+    if [ -n "$DST_HOST" ]; then
+        ssh_exec_and_log "$DST_HOST" "$POST_COPY_CMD" \
+                         "Error converting image on $DST_HOST"
+    else
+        splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
+        $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
+        sync
+    fi
+
+    trapDel "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+
+    storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST"
+
+    trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
+
+    storpoolVolumeDelete "$SP_TEMP_VOL" "force" "snaps"
+
+fi
+
+storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
 
 #-------------------------------------------------------------------------------
 # fix image DRIVER to raw
@@ -344,11 +194,13 @@ ssh_exec_and_log    "$DST_HOST" "$POST_COPY_CMD" \
 if [ "$DRIVER" != "raw" ]; then
     splog "Image template DRIVER=$DRIVER updating to DRIVER=raw"
     TMP_XML="$(mktemp)"
-    trap 'rm -f "$TMP_XML"' EXIT TERM INT HUP
+    trapAdd "rm -f \"$TMP_XML\""
     echo "DRIVER=raw" >"$TMP_XML"
-    oneimage update -a $ID "$TMP_XML"
+    oneimage update -a "$ID" "$TMP_XML"
     rm -f "$TMP_XML"
 fi
+
+trapReset
 
 splog "END:$SP_DST"
 echo "$SP_DST"
