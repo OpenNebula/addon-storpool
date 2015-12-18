@@ -112,7 +112,7 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 # cloned, so the name will be "<pool>/one-<imageid>-<vmid>-<diskid>"
 SP_VOL="${SOURCE##*/}"
-[ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
 #-------------------------------------------------------------------------------
 # Delete the device

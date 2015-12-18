@@ -56,9 +56,7 @@ DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if [ "$PERSISTENT" != "YES" ]; then
-    SP_VOL+="-${VM_ID}-${DISK_ID}"
-fi
+[ "$PERSISTENT" = "YES" ] || SP_VOL+="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
 SP_NEW="${DST##*/}"
 if [ "$SP_VOL" != "$SP_NEW" ]; then

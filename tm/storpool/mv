@@ -62,7 +62,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-[ -n "$PERSISTENT" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="${SOURCE%%/*}"
 
@@ -182,7 +182,7 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${SOURCE##*/}"
-[ -n "$PERSISTENT" ] || SP_VOL+="-${VM_ID}-${DISK_ID}"
+[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
 storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
 
