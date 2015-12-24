@@ -73,7 +73,7 @@ git clone https://github.com/OpenNebula/addon-storpool
 ```
 
 ### automated installation
-The automated instllation is best suitable for new installations. The install script will try to do an upgrade if it detects that addon-storpool is already installed but this feature is not tested well
+The automated installation is best suitable for new deployments. The install script will try to do an upgrade if it detects that addon-storpool is already installed but it is possible to have errors due to unhandled changes
 
 * Run the install script and chek for any reported errors or warnings
 ```bash
@@ -136,7 +136,6 @@ sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/ssh/postmigrate
 sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/ssh/postmigrate
 ```
 * Fix shared TM_MAD driver
-(When upgrading from previous version remove old code between the header comments and `exit 0` line)
 ```bash
 # create pre/post migrate hook folders
 mkdir -p /var/lib/one/remotes/tm/shared/{pre,post}migrate.d
@@ -206,28 +205,30 @@ popd
 
 ### addon configuration
 The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
-* Define `SCRIPTS_REMOTE_DIR` if it is changed in `/etc/one/oned.conf` if you plan to do live disk snapshots with fsfreeze via qemu-guest-agent
-* To chage disk space usage reporting to be as LVM is reporting it define `SP_SPACE_USED_LVMWAY` variable to anything
+
+*  If you plan to do live disk snapshots with fsfreeze via qemu-guest-agent but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the addon global configuration.
+
+* To chage disk space usage reporting to be as LVM is reporting it, define `SP_SPACE_USED_LVMWAY` variable to anything
 
 * Add the `oneadmin` user to group `disk` on all nodes
 ```bash
 usermod -a -G disk oneadmin
 ```
-* Edit `/etc/one/oned.conf` and add storpool to `TM_MAD` arguments
+* Edit `/etc/one/oned.conf` and add `storpool` to the `TM_MAD` arguments
 ```
 TM_MAD = [
     executable = "one_tm",
     arguments = "-t 15 -d dummy,lvm,shared,fs_lvm,qcow2,ssh,vmfs,ceph,dev,storpool"
 ]
 ```
-* Edit `/etc/one/oned.conf` and add storpool to `DATASTORE_MAD` arguments
+* Edit `/etc/one/oned.conf` and add `storpool` to the `DATASTORE_MAD` arguments
 ```
 DATASTORE_MAD = [
     executable = "one_datastore",
     arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool"
 ]
 ```
-* Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` for storpool
+* Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for storpool
 ```
 TM_MAD_CONF = [
     name = "storpool", ln_target = "NONE", clone_target = "SELF", shared = "yes"
@@ -268,7 +269,7 @@ FORCED_DELVOL_DETACH=1
 * Restart `opennebula` and `opennebula-sunstone` services
 ```bash
 service opennebula restart
-service opennebuka-sunstone restart
+service opennebula-sunstone restart
 ```
 * Sync remote scripts as oneadmin user
 ```bash
