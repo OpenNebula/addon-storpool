@@ -267,6 +267,15 @@ FORCED_DETACH_ALL=1
 FORCED_DETACH_HERE=1
 FORCED_DELVOL_DETACH=1
 ```
+To enable save/restore of the checkpoint file to a storpool volume (SYSTEM_DS)
+* Edit/create the addon-storpool global configuration file /var/lib/one/remotes/addon-storpoolrc and define the folowing variable
+```
+SP_CHECKPOINT=yes
+```
+* To use the save/restore functionality only for stop/resume
+```
+SP_CHECKPOINT=nomigrate
+```
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
@@ -279,7 +288,6 @@ service opennebuka-sunstone restart
 su - oneadmin
 onehost sync --force
 ```
-
 
 ## Upgrade
 

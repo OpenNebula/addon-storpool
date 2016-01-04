@@ -430,6 +430,71 @@ EOF
                  "Error in fsthaw of domain $_domain on host $_host"
 }
 
+function oneCheckpointSave()
+{
+    local _host=${1%%:*}
+    local _path="${1#*:}"
+    local _vmid="$(basename "$_path")"
+    local _dsid="$(basename $(dirname "$_path"))"
+    local checkpoint="${_path}/checkpoint"
+    local template="one-ds-$_dsid"
+    local volume="one-sys-${_vmid}-checkpoint"
+    local remote_cmd=$(cat <<EOF
+    # checkpoint Save
+    if [ -f "$checkpoint" ]; then
+        if [ -f /usr/lib/storpool/storpool_import ]; then
+            splog "IMPORT $checkpoint $volume $template"
+            if /usr/lib/storpool/storpool_import "$checkpoint" "$volume" "$template" >/dev/null; then
+                splog "rm -f $checkpoint"
+                rm -f "$checkpoint"
+            else
+                splog "Checkpoint import failed! $checkpoint"
+            fi
+        else
+            splog "Error: Can't find /usr/lib/storpool/storpool_import"
+        fi
+    else
+        splog "Checkpoint file not found! $checkpoint"
+    fi
+EOF)
+    splog "oneCheckpointSave $1"
+    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in checkpoint save of VM $_vmid on host $_host"
+}
+
+function oneCheckpointRestore()
+{
+    local _host=${1%%:*}
+    local _path="${1#*:}"
+    local _vmid="$(basename "$_path")"
+    local _dsid="$(basename $(dirname "$_path"))"
+    local checkpoint="${_path}/checkpoint"
+    local template="one-ds-$_dsid"
+    local volume="one-sys-${_vmid}-checkpoint"
+    local remote_cmd=$(cat <<EOF
+    # checkpoint Restore
+    if [ -f "$checkpoint" ]; then
+        splog "file exists $checkpoint"
+    else
+        if [ -f /usr/lib/storpool/storpool_export ]; then
+            splog "EXPORT $volume $checkpoint"
+            mkdir -p "$_path"
+            if /usr/lib/storpool/storpool_export "$volume" "$checkpoint" >/dev/null; then
+                splog "volume $volume delete $volume"
+                storpool volume "$volume" delete "$volume"
+            else
+                splog "Error: Failed to export $checkpoint"
+            fi
+        else
+            splog "Error: Can't find /usr/lib/storpool/storpool_export"
+        fi
+    fi
+EOF)
+    splog "oneCheckpointRestore $1"
+    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in checkpoint save of VM $_vmid on host $_host"
+}
+
 function lookup_file()
 {
     local _FILE="$1" _CWD="${2:-$PWD}"
