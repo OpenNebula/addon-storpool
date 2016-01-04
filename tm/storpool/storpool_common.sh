@@ -47,9 +47,6 @@ source "$TMCOMMON"
 
 # SCRIPTS_REMOTE_DIR must match same in /etc/one/oned.conf
 SCRIPTS_REMOTE_DIR=/var/tmp/one
-FORCED_DETACH_ALL=
-FORCED_DETACH_HERE=
-FORCED_DELVOL_DETACH=
 
 DEBUG_SP_RUN_CMD=1
 
