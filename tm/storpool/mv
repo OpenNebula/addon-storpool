@@ -81,6 +81,7 @@ case "$SP_CHECKPOINT" in
 esac
 
 DETACH_ALL=
+DO_SYMLINK=
 case "$LCM_STATE" in
     8)
         #-----------------------------------------------------------------------
@@ -120,6 +121,7 @@ case "$LCM_STATE" in
         # run only ATTACH_CMD on PROLOG_UNDEPLOY
         #-----------------------------------------------------------------------
         ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
+        DO_SYMLINK="yes"
     ;;
     *)
         splog "STATE=$VMSTATE LCM_STATE=$LCM_STATE"
@@ -157,7 +159,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 splog "$DETACH_ONLY"
             else
                 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
-#                oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
+                if [ "$DO_SYMLINK" = "yes" ]; then
+                    oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
+                fi
             fi
         fi
         if [ "$SRC_PATH" != "$DST_PATH" ]; then
@@ -214,7 +218,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                     splog "$DETACH_ONLY"
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-#                    oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+                    if [ "$DO_SYMLINK" = "yes" ]; then
+                        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+                    fi
                 fi
                 if [ "$SRC_PATH" != "$DST_PATH" ]; then
                     storpoolVolumeTemplate "$SP_VOL" "one-ds-$DS_ID"
@@ -246,11 +252,13 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${SOURCE##*/}"
-SP_LINK="/dev/storpool/$SP_VOL"
 [ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+SP_LINK="/dev/storpool/$SP_VOL"
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-#oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+if [ "$DO_SYMLINK" = "yes" ]; then
+    oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+fi
 
 splog "END"
 exit 0
