@@ -73,13 +73,14 @@ SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
+echo "$SP_DST"
+
 #-------------------------------------------------------------------------------
 # Image FSTYPE:save_as. If it is HOT snapshot then tm/cpds will take care of it later
 #-------------------------------------------------------------------------------
 
 if [ "$FSTYPE" = "save_as" ]; then
     splog "END ($FSTYPE) return:$SP_DST"
-    echo "$SP_DST"
     exit 0
 fi
 
@@ -87,9 +88,9 @@ fi
 # Create the image in the datastore
 #-------------------------------------------------------------------------------
 
-storpoolTemplate "$SP_TEMPLATE" >/dev/null
+storpoolTemplate "$SP_TEMPLATE"
 
-storpoolVolumeCreate "$SP_VOL" "${SIZE}" "$SP_TEMPLATE" >/dev/null
+storpoolVolumeCreate "$SP_VOL" "${SIZE}" "$SP_TEMPLATE"
 
 if [ "$FSTYPE" = "raw" ]; then
     splog "created raw image $SP_VOL"
@@ -118,4 +119,3 @@ else
 fi
 
 splog "END:$SP_DST"
-echo "$SP_DST"

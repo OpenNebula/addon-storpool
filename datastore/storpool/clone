@@ -55,13 +55,14 @@ SP_PARENT="${IMAGE_PATH##*/}"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
+echo "$SP_DST"
+
 #-------------------------------------------------------------------------------
 # Clone Image
 #-------------------------------------------------------------------------------
 
-storpoolTemplate "$SP_TEMPLATE" >/dev/null
+storpoolTemplate "$SP_TEMPLATE"
 
-storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE" >/dev/null
+storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
 
 splog "END $SP_DST"
-echo "$SP_DST"

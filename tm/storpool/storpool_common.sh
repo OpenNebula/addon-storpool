@@ -201,7 +201,7 @@ function storpoolTemplate()
     fi
 
     if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACETAIL" ]; then
-        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"}
+        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} >/dev/null
     fi
 }
 
@@ -216,7 +216,7 @@ function storpoolVolumeDelete()
     local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3"
     if storpoolRetry volume list | grep "$_SP_VOL" 2>/dev/null >/dev/null; then
 
-        storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all" >/dev/null
+        storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all"
 
         storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
     else
@@ -269,7 +269,7 @@ function storpoolVolumeAttach()
 
     trapAdd "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 
-    storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST" >/dev/null
+    storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
 
     trapDel "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 }

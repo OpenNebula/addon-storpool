@@ -56,7 +56,7 @@ oneDsDriverAction "$DRIVER_PATH"
 
 SP_VOL="one-img-$ID"
 
-storpoolVolumeDelete "$SP_VOL" "force" "snaps" >/dev/null
+storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 
 splog "END $SP_VOL DELETED"
 exit 0

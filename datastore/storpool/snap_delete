@@ -52,6 +52,6 @@ oneDsDriverAction "$DRIVER_PATH"
 
 SP_SNAP="${SOURCE##*/}-snap${TARGET_SNAPSHOT}"
 
-storpoolSnapshotDelete "$SP_SNAP" >/dev/null
+storpoolSnapshotDelete "$SP_SNAP"
 
 splog "END"

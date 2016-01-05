@@ -90,6 +90,8 @@ SP_DST="$SP_TEMPLATE/$SP_VOL"
 SP_TEMP_VOL="$(echo $SP_VOL | md5sum | awk '{print $1}')"
 SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"
 
+echo $SP_DST
+
 if [ -n "$DST_HOST" ]; then
     DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" -`
 else
@@ -102,22 +104,21 @@ COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
 # Transfer the image to a temp volume
 #-------------------------------------------------------------------------------
 
+storpoolTemplate "$SP_TEMPLATE"
 
-storpoolTemplate "$SP_TEMPLATE" >/dev/null
-
-storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE" "$SP_TEMPLATE" >/dev/null
+storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE" "$SP_TEMPLATE"
 
 trapAdd "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
-storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST" >/dev/null
+storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST"
 
 #-------------------------------------------------------------------------------
 # Import image to temp volume
 #-------------------------------------------------------------------------------
 
 if [ -n "$DST_HOST" ]; then
-    splog "$COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k"
-    exec_and_log "$COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=64k" \
+    splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=512k conv=fdatasync status=none"
+    exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=512k conv=fdatasync status=none" \
                  "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
 else
     splog "$COPY_CMD"
@@ -141,7 +142,7 @@ if [ "$FORMAT" != "$DRIVER" ]; then
 fi
 
 if [ "$FORMAT" = "raw" ]; then
-    storpoolVolumeRename "$SP_TEMP_VOL" "$SP_VOL" "$SP_TEMPLATE" >/dev/null
+    storpoolVolumeRename "$SP_TEMP_VOL" "$SP_VOL" "$SP_TEMPLATE"
 
     trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
@@ -149,11 +150,11 @@ if [ "$FORMAT" = "raw" ]; then
 else
     storpoolTemplate "$SP_TEMPLATE"
 
-    storpoolVolumeCreate "$SP_VOL" "$SIZE" "$SP_TEMPLATE" >/dev/null
+    storpoolVolumeCreate "$SP_VOL" "$SIZE" "$SP_TEMPLATE"
 
     trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
 
-    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" >/dev/null
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
     POST_COPY_CMD=$(cat <<EOF
     set -e
@@ -203,4 +204,3 @@ fi
 trapReset
 
 splog "END:$SP_DST"
-echo "$SP_DST"
