@@ -80,6 +80,7 @@ case "$SP_CHECKPOINT" in
     ;;
 esac
 
+DETACH_ALL=
 case "$LCM_STATE" in
     8)
         #-----------------------------------------------------------------------
@@ -112,6 +113,7 @@ case "$LCM_STATE" in
         # run only DETACH_CMD on EPILOG_UNDEPLOY
         #-----------------------------------------------------------------------
         DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+        DETACH_ALL=1
     ;;
     31)
         #-----------------------------------------------------------------------
@@ -146,7 +148,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             if [ -n "$ATTACH_ONLY" ]; then
                 splog "$ATTACH_ONLY"
             else
-                storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+                storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
             fi
             if [ -n "$DETACH_ONLY" ]; then
                 splog "$DETACH_ONLY"
@@ -203,7 +205,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 if [ -n "$ATTACH_ONLY" ]; then
                     splog "$ATTACH_ONLY"
                 else
-                    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+                    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
                 fi
                 if [ -n "$DETACH_ONLY" ]; then
                     splog "$DETACH_ONLY"
@@ -223,7 +225,7 @@ else
     if [ -n "$ATTACH_ONLY" ]; then
         splog "$ATTACH_ONLY"
     else
-        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
     fi
 fi
 
