@@ -121,6 +121,9 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
     ;;
+    *)
+        splog "STATE=$VMSTATE LCM_STATE=$LCM_STATE"
+    ;;
 esac
 
 
