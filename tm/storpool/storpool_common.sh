@@ -392,7 +392,7 @@ function oneFsfreeze()
     local remote_cmd=$(cat <<EOF
     #_FSFREEZE
     if [ -n "$_domain" ]; then
-        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
             splog "fsfreeze domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
@@ -413,7 +413,7 @@ function oneFsthaw()
     local remote_cmd=$(cat <<EOF
     #_FSTHAW
     if [ -n "$_domain" ]; then
-        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null; then
             splog "fsthaw domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
