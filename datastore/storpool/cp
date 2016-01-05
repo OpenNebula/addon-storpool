@@ -168,6 +168,7 @@ EOF
 )
 
     if [ -n "$DST_HOST" ]; then
+        splog "convert from $FORMAT to raw at $DST_HOST"
         ssh_exec_and_log "$DST_HOST" "$POST_COPY_CMD" \
                          "Error converting image on $DST_HOST"
     else
