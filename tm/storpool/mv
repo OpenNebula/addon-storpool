@@ -99,6 +99,7 @@ case "$LCM_STATE" in
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_RESTORE="yes"
         fi
+        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_RESUME) sunstone"
     ;;
     10)
         #-----------------------------------------------------------------------
