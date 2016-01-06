@@ -67,8 +67,8 @@ SP_PARENT="${SOURCE##*/}"
 
 storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 
-oneFsfreeze "$DST_HOST" "$DEPLOY_ID"
-trapAdd "oneFsthaw \"$DST_HOST\" \"$DEPLOY_ID\""
+oneFsfreeze "$SRC_HOST" "$DEPLOY_ID"
+trapAdd "oneFsthaw \"$SRC_HOST\" \"$DEPLOY_ID\""
 
 if [ "$SNAP_ID" = "-1" ]; then
     storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
@@ -77,7 +77,7 @@ else
     storpoolSnapshotClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
 fi
 
-oneFsthaw "$DST_HOST" "$DEPLOY_ID"
+oneFsthaw "$SRC_HOST" "$DEPLOY_ID"
 trapReset
 
 splog "END"
