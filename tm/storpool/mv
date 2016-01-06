@@ -96,7 +96,7 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         # only attach and restore checkpoint on PROLOG_RESUME
         #-----------------------------------------------------------------------
-        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_RESUME)"
+        ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_RESUME)"
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_RESTORE="yes"
         fi
@@ -105,7 +105,7 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         # only detach and save checkpoint on EPILOG_STOP
         #-----------------------------------------------------------------------
-        DETACH_ONLY="(LCM_STATE=$LCM_STATE EPILOG_STOP)"
+        DETACH_ONLY="DETACH_ONLY (LCM_STATE=$LCM_STATE EPILOG_STOP)"
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_SAVE="yes"
         fi
@@ -114,18 +114,18 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         # only detach (all clients) on EPILOG_UNDEPLOY
         #-----------------------------------------------------------------------
-        DETACH_ONLY="(LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+        DETACH_ONLY="DETACH_ONLY (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
         DETACH_ALL=1
     ;;
     31)
         #-----------------------------------------------------------------------
         # only attach and (re)create symlinks on PROLOG_UNDEPLOY
         #-----------------------------------------------------------------------
-        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
+        ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
         DO_SYMLINK="yes"
     ;;
     *)
-        splog "STATE=$VMSTATE LCM_STATE=$LCM_STATE"
+        splog ">>> STATE=$VMSTATE LCM_STATE=$LCM_STATE <<<"
     ;;
 esac
 
@@ -150,7 +150,6 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         if [ "$SRC_HOST" != "$DST_HOST" ]; then
             SP_LINK="/dev/storpool/$SP_VOL"
             CTX_PATH="$DST_DIR/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
-            splog "Transfer the CONTEXT image to ${DST_HOST}:$CTX_PATH"
             if [ -n "$ATTACH_ONLY" ]; then
                 splog "$ATTACH_ONLY"
             else
