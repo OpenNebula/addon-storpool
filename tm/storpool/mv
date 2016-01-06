@@ -96,7 +96,7 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         # only attach and restore checkpoint on PROLOG_RESUME
         #-----------------------------------------------------------------------
-        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_RESUME) sunstone"
+        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_RESUME)"
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_RESTORE="yes"
         fi
