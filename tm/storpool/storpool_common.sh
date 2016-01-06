@@ -396,7 +396,7 @@ function oneFsfreeze()
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
             splog "fsfreeze domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
-            splog "($?) fsfreeze failed! snapshot not consistent!"
+            splog "($?) $_domain fsfreeze failed! snapshot not consistent!"
         fi
     fi
 
@@ -417,7 +417,7 @@ function oneFsthaw()
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null; then
             splog "fsthaw domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
-            splog "($?) fsthaw failed! VM fs freezed?"
+            splog "($?) $_domain fsthaw failed! VM fs freezed?"
         fi
     fi
 
@@ -454,7 +454,7 @@ function oneCheckpointSave()
         splog "Checkpoint file not found! $checkpoint"
     fi
 EOF)
-    splog "oneCheckpointSave $1"
+    splog "oneCheckpointSave $checkpoint to $volume"
     ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
                  "Error in checkpoint save of VM $_vmid on host $_host"
 }
@@ -487,7 +487,7 @@ function oneCheckpointRestore()
         fi
     fi
 EOF)
-    splog "oneCheckpointRestore $1"
+    splog "oneCheckpointRestore $checkpoint to $volume"
     ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
                  "Error in checkpoint save of VM $_vmid on host $_host"
 }
