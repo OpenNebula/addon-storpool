@@ -679,10 +679,6 @@ function oneDsDriverAction()
     local _DRIVER_PATH="$1"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${_DRIVER_PATH}") -b $DRV_ACTION"
 
-    if type base64 2>&1 >/dev/null; then
-        echo "$DRV_ACTION" | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
-    fi
-
     unset i XPATH_ELEMENTS
 
     while IFS= read -r -d '' element; do
