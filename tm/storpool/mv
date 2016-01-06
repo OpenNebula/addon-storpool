@@ -94,32 +94,32 @@ case "$LCM_STATE" in
     ;;
     9)
         #-----------------------------------------------------------------------
-        # restore checkpoint on PROLOG_RESUME
+        # only attach and restore checkpoint on PROLOG_RESUME
         #-----------------------------------------------------------------------
+        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_RESUME) sunstone"
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_RESTORE="yes"
         fi
-        ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_RESUME) sunstone"
     ;;
     10)
         #-----------------------------------------------------------------------
-        # run only DETACH_CMD and save checkpoint on EPILOG_STOP
+        # only detach and save checkpoint on EPILOG_STOP
         #-----------------------------------------------------------------------
-        DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_STOP)"
+        DETACH_ONLY="(LCM_STATE=$LCM_STATE EPILOG_STOP)"
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_SAVE="yes"
         fi
     ;;
     30)
         #-----------------------------------------------------------------------
-        # run only DETACH_CMD on EPILOG_UNDEPLOY
+        # only detach (all clients) on EPILOG_UNDEPLOY
         #-----------------------------------------------------------------------
-        DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+        DETACH_ONLY="(LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
         DETACH_ALL=1
     ;;
     31)
         #-----------------------------------------------------------------------
-        # run only ATTACH_CMD on PROLOG_UNDEPLOY
+        # only attach and (re)create symlinks on PROLOG_UNDEPLOY
         #-----------------------------------------------------------------------
         ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
         DO_SYMLINK="yes"
