@@ -228,7 +228,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
         done
      fi
-     splog "END [SYSTEM_DS]"
+     splog "END $VM_ID [SYSTEM_DS]"
      exit 0
 else
     if [ -n "$ATTACH_ONLY" ]; then
@@ -243,7 +243,7 @@ fi
 #-------------------------------------------------------------------------------
 
 if [ -n "$DETACH_ONLY" ]; then
-    splog "END $DETACH_ONLY"
+    splog "END $VM_ID $DETACH_ONLY"
     exit 0
 fi
 
@@ -260,5 +260,5 @@ if [ "$DO_SYMLINK" = "yes" ]; then
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 fi
 
-splog "END"
+splog "END $VM_ID"
 exit 0

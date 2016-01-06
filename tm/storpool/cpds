@@ -80,5 +80,5 @@ fi
 oneFsthaw "$SRC_HOST" "$DEPLOY_ID"
 trapReset
 
-splog "END"
+splog "END $VM_ID"
 exit 0

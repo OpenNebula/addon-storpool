@@ -76,5 +76,5 @@ if [ "$DEFERRED" = "1" ]; then
     storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
 fi
 
-splog "END"
+splog "END $VM_ID"
 exit 0

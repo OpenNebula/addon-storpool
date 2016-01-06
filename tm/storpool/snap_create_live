@@ -76,5 +76,5 @@ storpoolSnapshotCreate "$SP_SNAP" "$SP_VOL"
 oneFsthaw "$DST_HOST" "$DEPLOY_ID"
 trapReset
 
-splog "END"
+splog "END $VM_ID"
 exit 0

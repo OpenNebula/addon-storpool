@@ -70,5 +70,5 @@ DST_PATH="$SRC_PATH"
 
 storpoolSnapshotCreate "$SP_SNAP" "$SP_VOL"
 
-splog "END"
+splog "END $VM_ID"
 exit 0

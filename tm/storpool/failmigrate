@@ -99,5 +99,5 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
 fi
 
-splog "END"
+splog "END $VM_ID"
 exit 0

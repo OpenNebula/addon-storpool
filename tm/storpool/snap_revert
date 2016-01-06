@@ -80,5 +80,5 @@ storpoolVolumeAttach "$SP_VOL" "$SRC_HOST"
 oneSymlink "$SRC_HOST" "$SP_LINK" "$SRC_PATH"
 trapReset
 
-splog "END"
+splog "END $VM_ID"
 exit 0

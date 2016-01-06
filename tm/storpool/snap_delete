@@ -70,5 +70,5 @@ DST_PATH="$SRC_PATH"
 
 storpoolSnapshotDelete "$SP_SNAP"
 
-splog "END"
+splog "END $VM_ID"
 exit 0

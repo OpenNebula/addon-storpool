@@ -114,5 +114,5 @@ else
     storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 fi
 
-splog "END"
+splog "END $VM_ID"
 exit 0

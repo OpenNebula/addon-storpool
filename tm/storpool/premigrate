@@ -112,5 +112,5 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
 #    oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
 fi
 
-splog "END"
+splog "END $VM_ID"
 exit 0
