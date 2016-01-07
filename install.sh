@@ -303,8 +303,8 @@ echo "*** VMM poll patch for OpenNebula v4.14 ..."
 pushd "$ONE_VAR"
     do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch"
 popd
-cp "$CWD/vmm/kvm/poll_disk_info" "${ONE_VAR}/remotes/vmm/kvm/poll_disk_info"
-chmod a+x "${ONE_VAR}/remotes/vmm/kvm/poll_disk_info"
+cp "$CWD/vmm/kvm/"{poll_,vmTweak}* "${ONE_VAR}/remotes/vmm/kvm/"
+chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{poll_,vmTweak}*
 
 echo "*** IM monitor_ds.sh patch (for OpenNebula 4.14+) ..."
 pushd "$ONE_VAR"
