@@ -21,7 +21,7 @@ More info:
 
 ## Compatibility
 
-This add-on is compatible with OpenNebula 4.10, 4.12, 4.14 and StorPool 15.02+.
+This add-on is compatible with OpenNebula 4.10+ and StorPool 15.02+.
 
 ## Requirements
 
@@ -43,19 +43,23 @@ This add-on is compatible with OpenNebula 4.10, 4.12, 4.14 and StorPool 15.02+.
 A working StorPool cluster is required.
 
 ## Features
-* support for datstore configuration via sunstone
+* support for datstore configuration via CLI and sunstone
 * support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
-* extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
 * support SYSTEM datastore volatile disks and context image as StorPool block devices (see limitations)
 * support migration from one to another SYSTEM_DS if both are with `storpool` TM_MAD
-* imported images from the markeplace are thin provisioned (require StorPool 15.03+)
-* support TRIM/discard in the VM when virtio-scsi driver is in use (`DEVICE_PREFIX=sd`)
+* support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
+* support two different modes of disk usage reporting - LVM style and StorPool style
+* extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
+* all disk images are thin provisioned
+* (optional) helper tool to tweak the number of queues for virtio-scsi (require `DEVICE_PREFIX=sd`)
+* (optional) helper tool to enabe virtio-blk-data-plane for virtio-blk (require `DEVICE_PREFIX=vd`)
+* (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 
 ## Limitations
 
 1. tested only with the KVM hypervisor
 1. no support for VM snapshot because it is handled internally by libvirt
-1. in SYSTEM datastore integration the reported free/used/total space is not propper because the volatile disks and the context image are expected to be files instead of a block device. Extra external monitoring of space usage should be implemented.
+1. When SYSTEM_Ds integration is enabled the reported free/used/total space is not propper because the volatile disks and the context image are expected to be files instead of a block devices. Extra external monitoring of space usage should be implemented.
 
 ## Installation
 
@@ -63,12 +67,14 @@ A working StorPool cluster is required.
 
 * Install required dependencies
 ```bash
-# patch
-yum -y install patch git jq
-# node, bower, grunt
+# required during the install procedure
+yum -y install patch git jq lz4
+# for sunstone integration: node, bower, grunt
 yum -y install npm
 npm install bower -g
 npm install grunt-cli -g
+# required for system operation
+yum -y install jq
 ```
 
 * Clone the addon-storpool
@@ -181,9 +187,9 @@ pushd /var/lib/one
 patch -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
 popd
 ```
-* Copy vmm/kvm/poll_disk_info to remotes/vmm/kvm
+* Copy poll_disk_info and the helpers to .../remotes/vmm/kvm/
 ```bash
-cp ~/addon-storpool/vmm/kvm/poll_disk_info /var/lib/one/remotes/vmm/kvm/
+cp ~/addon-storpool/vmm/kvm/* /var/lib/one/remotes/vmm/kvm/
 ```
 * Copy FT hook and the fencing helper script
 ```bash
