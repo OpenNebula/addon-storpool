@@ -40,7 +40,7 @@ fi
 
 CWD=$(pwd)
 
-do_patch()
+function do_patch()
 {
     local _patch="$1"
     #check if patch is applied
@@ -63,6 +63,84 @@ do_patch()
     fi
 }
 
+function patch_hook()
+{
+    local _hook="$1"
+    local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
+    local _is_sh=0 _is_patched=0 _backup= _is_bash=
+    grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
+    grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
+    if [ "$(grep -v -E '^#|^$' "${_hook}")" = "exit 0" ]; then
+        if [ "${_is_patched}" = "1" ]; then
+            echo "*** ${_hook} already patched"
+        else
+            _backup="${_hook}.backup$(date +%s)"
+            echo "*** Create backup of ${_hook} as ${_backup}"
+            cp $CP_ARG "${_hook}" "${_backup}"
+            if [ "${_is_sh}" = "1" ]; then
+                grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
+                if [ "${_is_bash}" = "1" ]; then
+                    echo "*** ${_hook} already bash script"
+                else
+                    sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
+                fi
+            fi
+            sed -i -e "s|^exit 0|$_hook_line\nexit 0|" "${_hook}"
+        fi
+    else
+        echo "*** ${_hook} file not empty!"
+        echo " ** Note! Please merge the following line to ${_hook}"
+        echo " **"
+        echo " ** ${_hook_line//\\&/&}"
+        echo " **"
+        if [ "${_is_sh}" = "1" ]; then
+            echo " ** Note! Set script to bash:"
+            echo " **   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
+        fi
+    fi
+}
+
+function findFile()
+{
+    local c f d="$1" csum="$2"
+    while read c f; do
+        if [ "$c" = "$csum" ]; then
+            echo $f
+            break
+        fi
+    done < <(md5sum $d/* 2>/dev/null)
+}
+
+function tmResetMigrate()
+{
+    local current_csum=$(md5sum "${M_DIR}/${MIGRATE}" | awk '{print $1}')
+    local csum comment found orig_csum
+    while read csum comment; do
+        [ "$comment" = "orig" ] && orig_csum="$csum"
+        if [ "$current_csum" = "$csum" ]; then
+            found="$comment"
+            break;
+        fi
+    done < <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
+    case "$found" in
+         orig)
+            ;;
+         4.10)
+            orig=$(findFile "$M_DIR" "$orig_csum" )
+            if [ -n "$orig" ]; then
+                echo "***   $found variant of $TM_MAD/$MIGRATE"
+                mv "${M_DIR}/${MIGRATE}" "${M_DIR}/${MIGRATE}.backup$(date +%s)"
+                echo "***   restoring from original ${orig##*/}"
+                cp $CP_ARG "$orig" "${M_DIR}/${MIGRATE}"
+            fi
+            ;;
+         4.14)
+            continue
+            ;;
+            *)
+            echo " ** Can't determine the variant of $TM_MAD/$MIGRATE"
+    esac
+}
 
 end_msg=
 if [ -n "$SKIP_SUNSTONE" ]; then
@@ -173,84 +251,14 @@ else
     cp -v misc/fencing-script.sh /usr/sbin/
 fi
 
-function patch_hook()
-{
-    local _hook="$1"
-    local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
-    local _is_sh=0 _is_patched=0 _backup= _is_bash=
-    grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
-    grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
-    if [ "$(grep -v -E '^#|^$' "${_hook}")" = "exit 0" ]; then
-        if [ "${_is_patched}" = "1" ]; then
-            echo "*** ${_hook} already patched"
-        else
-            _backup="${_hook}.backup$(date +%s)"
-            echo "*** Create backup of ${_hook} as ${_backup}"
-            cp $CP_ARG "${_hook}" "${_backup}"
-            if [ "${_is_sh}" = "1" ]; then
-                grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
-                if [ "${_is_bash}" = "1" ]; then
-                    echo "*** ${_hook} already bash script"
-                else
-                    sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
-                fi
-            fi
-            sed -i -e "s|^exit 0|$_hook_line\nexit 0|" "${_hook}"
-        fi
-    else
-        echo "*** ${_hook} file not empty!"
-        echo " ** Note! Please merge the following line to ${_hook}"
-        echo " **"
-        echo " ** ${_hook_line//\\&/&}"
-        echo " **"
-        if [ "${_is_sh}" = "1" ]; then
-            echo " ** Note! Set script to bash:"
-            echo " **   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
-        fi
-    fi
-}
+echo "*** monitor_helper-sync crontab job"
+if crontab -l -u oneadmin | grep -E -v "^#" | grep monitor_helper-sync; then
+    echo "*** cron job exists"
+else
+    echo "*** installing crontab job for oneadmin user"
+    (crontab -u oneadmin -l; echo "*/2 * * * * ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
+fi
 
-function findFile()
-{
-    local c f d="$1" csum="$2"
-    while read c f; do
-        if [ "$c" = "$csum" ]; then
-            echo $f
-            break
-        fi
-    done < <(md5sum $d/* 2>/dev/null)
-}
-
-function tmResetMigrate()
-{
-    local current_csum=$(md5sum "${M_DIR}/${MIGRATE}" | awk '{print $1}')
-    local csum comment found orig_csum
-    while read csum comment; do
-        [ "$comment" = "orig" ] && orig_csum="$csum"
-        if [ "$current_csum" = "$csum" ]; then
-            found="$comment"
-            break;
-        fi
-    done < <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
-    case "$found" in
-         orig)
-            ;;
-         4.10)
-            orig=$(findFile "$M_DIR" "$orig_csum" )
-            if [ -n "$orig" ]; then
-                echo "***   $found variant of $TM_MAD/$MIGRATE"
-                mv "${M_DIR}/${MIGRATE}" "${M_DIR}/${MIGRATE}.backup$(date +%s)"
-                echo "***   restoring from original ${orig##*/}"
-                cp $CP_ARG "$orig" "${M_DIR}/${MIGRATE}"
-            fi
-            ;;
-         4.14)
-            continue
-            ;;
-            *)
-            echo " ** Can't determine the variant of $TM_MAD/$MIGRATE"
-    esac
-}
 
 # install premigrate and postmigrate hooks in shared and ssh
 for TM_MAD in shared ssh; do
