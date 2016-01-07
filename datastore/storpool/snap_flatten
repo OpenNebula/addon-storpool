@@ -59,7 +59,7 @@ parent=$(storpool -j volume list | jq -r ".data|map(select(.name==\"$SP_VOL\"))|
 parent="${parent//\"/}"
 
 if [ "$parent" = "$SP_SNAP" ]; then
-    splog "$SP_VOL already based on \$parent"
+    splog "$SP_VOL already based on $parent"
 else
     storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
 fi
