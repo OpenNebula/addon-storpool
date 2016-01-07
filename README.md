@@ -73,8 +73,8 @@ yum -y install patch git jq lz4
 yum -y install npm
 npm install bower -g
 npm install grunt-cli -g
-# required for system operation
-yum -y install jq
+# required for system operation (on all nodes)
+yum -y install jq python-lxml
 ```
 
 * Clone the addon-storpool
