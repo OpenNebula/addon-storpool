@@ -436,27 +436,48 @@ function oneCheckpointSave()
     local checkpoint="${_path}/checkpoint"
     local template="one-ds-$_dsid"
     local volume="one-sys-${_vmid}-checkpoint"
+    local sp_link="/dev/storpool/$volume"
+
+    SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
+
     local remote_cmd=$(cat <<EOF
     # checkpoint Save
     if [ -f "$checkpoint" ]; then
-        if [ -f /usr/lib/storpool/storpool_import ]; then
-            splog "IMPORT $checkpoint $volume $template"
-            if /usr/lib/storpool/storpool_import "$checkpoint" "$volume" "$template" >/dev/null; then
-                splog "rm -f $checkpoint"
-                rm -f "$checkpoint"
-            else
-                splog "Checkpoint import failed! $checkpoint"
-            fi
+        if tar --no-seek --use-compress-program="$SP_COMPRESSION" --create --file="$sp_link" "$checkpoint"; then
+            splog "rm -f $checkpoint"
+            rm -f "$checkpoint"
         else
-            splog "Error: Can't find /usr/lib/storpool/storpool_import"
+            splog "Checkpoint import failed! $checkpoint ($?)"
+            exit 1
         fi
     else
         splog "Checkpoint file not found! $checkpoint"
     fi
+
 EOF)
-    splog "oneCheckpointSave $checkpoint to $volume"
-    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
-                 "Error in checkpoint save of VM $_vmid on host $_host"
+    local file_size=$($SSH "$_host" "du -b \"$checkpoint\" | cut -f 1")
+    if [ -n "$file_size" ]; then
+        local volume_size=$(( (file_size *2 +511) /512 *512 ))
+        volume_size=$((volume_size/1024/1024))
+    else
+        splog "Checkpoint file not found! $checkpoint"
+        return 0
+    fi
+    splog "file_size=$file_size volume_size=$volume_size"
+
+    storpoolVolumeCreate "$volume" "$volume_size" "$template"
+
+    trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
+
+    storpoolVolumeAttach "$volume" "${_host}"
+
+    splog "Saving $checkpoint to $volume"
+    ssh_exec_and_log "${_host}" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in checkpoint save of VM ${_vmid} on host ${_host}"
+
+    trapReset
+
+    storpoolVolumeDetach "$volume" "" "${_host}" "all"
 }
 
 function oneCheckpointRestore()
@@ -464,32 +485,38 @@ function oneCheckpointRestore()
     local _host=${1%%:*}
     local _path="${1#*:}"
     local _vmid="$(basename "$_path")"
-    local _dsid="$(basename $(dirname "$_path"))"
     local checkpoint="${_path}/checkpoint"
-    local template="one-ds-$_dsid"
     local volume="one-sys-${_vmid}-checkpoint"
+    local sp_link="/dev/storpool/$volume"
+
+    SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
+
     local remote_cmd=$(cat <<EOF
     # checkpoint Restore
     if [ -f "$checkpoint" ]; then
         splog "file exists $checkpoint"
     else
-        if [ -f /usr/lib/storpool/storpool_export ]; then
-            splog "EXPORT $volume $checkpoint"
-            mkdir -p "$_path"
-            if /usr/lib/storpool/storpool_export "$volume" "$checkpoint" >/dev/null; then
-                splog "volume $volume delete $volume"
-                storpool volume "$volume" delete "$volume"
-            else
-                splog "Error: Failed to export $checkpoint"
-            fi
+        mkdir -p "$_path"
+        if tar --no-seek --use-compress-program="$SP_COMPRESSION" --to-stdout --extract --file="$sp_link" >"$checkpoint"; then
+            splog "RESTORED $volume $checkpoint"
         else
-            splog "Error: Can't find /usr/lib/storpool/storpool_export"
+            splog "Error: Failed to export $checkpoint"
+            exit 1
         fi
     fi
 EOF)
-    splog "oneCheckpointRestore $checkpoint to $volume"
+
+    storpoolVolumeAttach "$volume" "${_host}"
+
+    trapAdd "storpoolVolumeDetach \"$volume\" \"force\" \"${_host}\" \"all\""
+
+    splog "Restoring $checkpoint from $volume"
     ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
                  "Error in checkpoint save of VM $_vmid on host $_host"
+
+    trapReset
+
+    storpoolVolumeDelete "$volume" "force"
 }
 
 function lookup_file()
