@@ -24,8 +24,7 @@ from sys import argv
 try:
     import lxml.etree as ET
 except ImportError:
-    raise RuntimeError("lxml Python module not found! Install from distribution package ot pip install lxml")
-
+    raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
 
 xmlFile = argv[1]
 
