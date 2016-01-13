@@ -353,9 +353,7 @@ function storpoolSnapshotRevert()
 
     trapReset
 
-    if storpoolVolumeExists "${_SP_VOL}-$_SP_TMP"; then
-        storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
-    fi
+    storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
 }
 
 function storpoolSnapshotClone()
