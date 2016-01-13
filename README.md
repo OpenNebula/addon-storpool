@@ -191,6 +191,10 @@ popd
 ```bash
 cp ~/addon-storpool/vmm/kvm/* /var/lib/one/remotes/vmm/kvm/
 ```
+* Create cron job for stats polling
+```bash
+(crontab -u oneadmin -l; echo "*/2 * * * * /var/lib/one/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
+```
 * Copy FT hook and the fencing helper script
 ```bash
 cp ~/addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
@@ -276,6 +280,11 @@ SP_CHECKPOINT=yes
 ```
 SP_CHECKPOINT=nomigrate
 ```
+
+#### space usage monitoring configuration
+The OpenNebula's monitoring probes are run on the VM hosts. As this addon support no direct access to the StorPool API we should provide access to the needed data to the scripts that are running on the HV nodes.
+The default configuration is to copy the stats from the API on all nodes. This is the case when there is no shared filesystem on all nodes. When there is shared filesystem available 
+
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services

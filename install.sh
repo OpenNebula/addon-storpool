@@ -253,12 +253,11 @@ fi
 
 echo "*** monitor_helper-sync crontab job"
 if crontab -l -u oneadmin | grep -E -v "^#" | grep monitor_helper-sync; then
-    echo "*** cron job exists"
+    echo "*** cron job for monitor_helper-sync exists"
 else
-    echo "*** installing crontab job for oneadmin user"
+    echo "*** installing crontab job for monitor_helper-sync"
     (crontab -u oneadmin -l; echo "*/2 * * * * ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
 fi
-
 
 # install premigrate and postmigrate hooks in shared and ssh
 for TM_MAD in shared ssh; do

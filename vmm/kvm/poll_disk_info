@@ -53,8 +53,10 @@ splog()
 }
 
 SP_SPACE_USED_LVMWAY=
-SP_CMD_VOLUME_STATUS='storpool -j volume status'
-SP_CMD_SNAPSHOT_SPACE='storpool -j snapshot space'
+SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
+SP_CMD_VOLUME_SPACE="cat $SP_VOLUME_SPACE_JSON"
+SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
+SP_CMD_SNAPSHOT_SPACE="cat $SP_SNAPSHOT_SPACE_JSON"
 BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
 [ -f "../../addon-storpoolrc" ] && source "../../addon-storpoolrc"
@@ -73,7 +75,7 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	else
 		used="spaceUsed"
 	fi
-	spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
+	spSize=$($SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
 	echo " <size>$spSize</size>"
