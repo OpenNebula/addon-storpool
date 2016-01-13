@@ -64,10 +64,6 @@ else
     storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
 fi
 
-storpool -j snapshot list|jq -r ".data|map(select(.name|contains(\"${SP_VOL}-snap\")))|.[]|[.name]|@csv" |\
-    while read snapshot; do
-        snapshot="${snapshot//\"/}"
-        storpoolSnapshotDelete "$snapshot"
-    done
+storpoolVolumeSnapshotsDelete "${SP_VOL}-snap"
 
 splog "END"

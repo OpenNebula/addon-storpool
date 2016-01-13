@@ -220,6 +220,17 @@ function storpoolVolumeCreate()
     storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}M" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
 }
 
+function storpoolVolumeSnapshotsDelete()
+{
+    local _SP_VOL_SNAPSHOTS="$1"
+    storpoolRetry -j snapshot list | \
+        jq -r ".data|map(select(.name|contains(\"${_SP_VOL_SNAPSHOTS}\")))|.[]|[.name]|@csv" | \
+        while read name; do
+            name="${name//\"/}"
+            storpoolSnapshotDelete "$name"
+        done
+}
+
 function storpoolVolumeDelete()
 {
     local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3"
@@ -232,12 +243,7 @@ function storpoolVolumeDelete()
         splog "volume $_SP_VOL not found "
     fi
     if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
-        storpoolRetry -j snapshot list | \
-            jq -r ".data | map( select( .name | contains( \"${_SP_VOL}-snap\" ) ) ) | .[] | [ .name ] | @csv" | \
-            while read name; do
-                name="${name//\"/}"
-                storpoolRetry snapshot "$name" delete "$name" >/dev/null
-            done
+        storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
     fi
 }
 
