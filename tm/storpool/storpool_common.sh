@@ -514,18 +514,21 @@ function oneCheckpointRestore()
         fi
     fi
 EOF)
+    if storpoolVolumeExists "$volume"; then
+        storpoolVolumeAttach "$volume" "${_host}"
 
-    storpoolVolumeAttach "$volume" "${_host}"
+        trapAdd "storpoolVolumeDetach \"$volume\" \"force\" \"${_host}\" \"all\""
 
-    trapAdd "storpoolVolumeDetach \"$volume\" \"force\" \"${_host}\" \"all\""
-
-    splog "Restoring $checkpoint from $volume"
-    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+        splog "Restoring $checkpoint from $volume"
+        ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
                  "Error in checkpoint save of VM $_vmid on host $_host"
 
-    trapReset
+        trapReset
 
-    storpoolVolumeDelete "$volume" "force"
+        storpoolVolumeDelete "$volume" "force"
+    else
+        splog "Checkpoint volume $volume not found"
+    fi
 }
 
 function lookup_file()
