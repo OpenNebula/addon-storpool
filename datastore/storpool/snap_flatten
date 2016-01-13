@@ -55,8 +55,7 @@ SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 
-parent=$(storpool -j volume list | jq -r ".data|map(select(.name==\"$SP_VOL\"))|.[]|[.parentName]|@csv") #"
-parent="${parent//\"/}"
+parent=$(storpoolVolumeGetParent "$SP_VOL")
 
 if [ "$parent" = "$SP_SNAP" ]; then
     splog "$SP_VOL already based on $parent"
