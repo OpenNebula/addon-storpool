@@ -205,6 +205,15 @@ function storpoolTemplate()
     fi
 }
 
+function storpoolVolumeExists()
+{
+    local _SP_VOL="$1"
+    if storpoolRetry volume list | grep "$_SP_VOL" 2>/dev/null >/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 function storpoolVolumeCreate()
 {
     local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3"
@@ -214,7 +223,7 @@ function storpoolVolumeCreate()
 function storpoolVolumeDelete()
 {
     local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3"
-    if storpoolRetry volume list | grep "$_SP_VOL" 2>/dev/null >/dev/null; then
+    if storpoolVolumeExists "$_SP_VOL"; then
 
         storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all"
 
@@ -344,7 +353,7 @@ function storpoolSnapshotRevert()
 
     trapReset
 
-    if storpool volume list | grep "${_SP_VOL}-$_SP_TMP" 2>/dev/null >/dev/null; then
+    if storpoolVolumeExists "${_SP_VOL}-$_SP_TMP"; then
         storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
     fi
 }
