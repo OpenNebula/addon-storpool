@@ -59,7 +59,9 @@ SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
 SP_CMD_SNAPSHOT_SPACE="cat $SP_SNAPSHOT_SPACE_JSON"
 BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
-[ -f "../../addon-storpoolrc" ] && source "../../addon-storpoolrc"
+if [ -f "../../addon-storpoolrc" ]; then
+	source "../../addon-storpoolrc"
+fi
 
 if [ -L "$dev" ]; then
 	realDev=$(readlink -e $dev)
@@ -80,12 +82,16 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	echo "<disk>"
 	echo " <size>$spSize</size>"
 	echo " <volume>$spVolume</volume>"
-#	splog "$spVolume $spSize"
+	if [ -n "$POLL_DISK_INFO_DEBUG" ]; then
+		splog "$dev $spVolume $spSize"
+	fi
 	while IFS=',' read name snap_size; do
 		name=${name//\"/}
 #		[ "${name%-snap*}" = "$spVolume" ] || continue
 		snap_id=${name#*snap}
-#		splog "$name $snap_size"
+		if [ -n "$POLL_DISK_INFO_DEBUG" ]; then
+			splog "$dev $name $snap_size"
+		fi
 		cat <<EOF
  <snapshot>
   <id>$snap_id</id>
@@ -93,7 +99,6 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
  </snapshot>
 EOF
 	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
-#	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | .[] | [.name, .${used}] | @csv" | sort)
 else
 	if [ -b "$realDev" ]; then
 		disk_size=$($BLOCKDEV_GET_SIZE "$realDev")
@@ -106,6 +111,8 @@ else
 	[ -n "$disk_size" ] || exit 1
 	echo "<disk>"
 	echo " <size>$disk_size</size>"
-#	splog "$dev $disk_size"
+	if [ -n "$POLL_DISK_INFO_DEBUG" ]; then
+		splog "$dev $disk_size"
+	fi
 fi
 echo "</disk>"
