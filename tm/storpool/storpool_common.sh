@@ -474,7 +474,8 @@ function oneCheckpointSave()
         splog "Checkpoint file not found! $checkpoint"
     fi
 
-EOF)
+EOF
+)
     local file_size=$($SSH "$_host" "du -b \"$checkpoint\" | cut -f 1")
     if [ -n "$file_size" ]; then
         local volume_size=$(( (file_size *2 +511) /512 *512 ))
@@ -524,7 +525,8 @@ function oneCheckpointRestore()
             exit 1
         fi
     fi
-EOF)
+EOF
+)
     if storpoolVolumeExists "$volume"; then
         storpoolVolumeAttach "$volume" "${_host}"
 
