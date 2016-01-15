@@ -41,7 +41,7 @@ SP_MONITOR_HOST_CMD="onehost list | grep on | awk '{print \$2}'"
 
 # load config
 driverPath="${0%/*}"
-if [ -f "${drivePath}/../../addon-storpoolrc" ]; then
+if [ -f "${driverPath}/../../addon-storpoolrc" ]; then
 	. "${driverPath}/../../addon-storpoolrc"
 	splog "sourced ${driverPath}/../../addon-storpoolrc"
 fi
