@@ -19,32 +19,43 @@
 # vmTweakVirtioScsiQueues.py <XMLfile> <nQueues>
 
 from sys import argv,exit
+import syslog
+
+dbg = 1
+
+if dbg:
+	syslog.openlog('vmTweakVirtioScsiMultiqueue.py', syslog.LOG_PID)
 
 try:
-    import lxml.etree as ET
+	import lxml.etree as ET
 except ImportError:
-    raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
+	raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
 
 xmlFile = argv[1]
 nQueues = argv[2]
 
 et = ET.parse(xmlFile, ET.XMLParser(strip_cdata=False,remove_blank_text=True))
 
-doExit = 1
+vm_name = et.find(".//name").text
 
-did = 0
+doExit = 1
+diskId = -1
 disks = et.findall(".//disk")
 for disk in disks:
 	if disk.get('device') == 'disk':
+		diskId += 1
 		if disk.get('type') == 'block':
 			target = disk.findall(".//target")
 			for e in target:
-				if e.get('dev')[0:2] == 'sd':
+				target_dev = e.get('dev')
+				if target_dev[0:2] == 'sd':
 					doExit = 0
-		did += 1
+					if dbg:
+						syslog.syslog(syslog.LOG_INFO, "VM {0} dev {1} is disk.{2}".format(vm_name,target_dev,diskId))
 
 if doExit:
-	print "no sdX"
+	if dbg:
+		syslog.syslog(syslog.LOG_INFO, "VM {0} has no 'sd' prefixed devices".format(vm_name))
 	exit(0)
 
 controllers = et.findall(".//controller")
@@ -55,9 +66,13 @@ for controller in controllers:
 			doExit = 1
 			driver = controller.findall(".//driver")
 			for e in driver:
+				if dbg:
+					syslog.syslog(syslog.LOG_INFO, "VM {0} setting queues={1}>".format(vm_name,nQueues))
 				# <driver queues="1" />
 				e.set('queues',"{0}".format(nQueues))
 			else:
+				if dbg:
+					syslog.syslog(syslog.LOG_INFO, "VM {0} adding driver with queues={1}>".format(vm_name,nQueues))
 				driver = ET.SubElement(controller, "driver")
 				driver.set('queues',"{0}".format(nQueues))
 
@@ -76,5 +91,6 @@ driver.set('queues',"{0}".format(nQueues))
 
 devices = et.findall(".//devices")[0]
 devices.append(controller)
-
+if dbg:
+	syslog.syslog(syslog.LOG_INFO, "VM {0} adding virtio-scsi controller with queues={1}".format(vm_name,nQueues))
 et.write(xmlFile,pretty_print=True)
