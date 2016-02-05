@@ -106,7 +106,7 @@ COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
 
 storpoolTemplate "$SP_TEMPLATE"
 
-storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE" "$SP_TEMPLATE"
+storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
 trapAdd "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
@@ -150,7 +150,7 @@ if [ "$FORMAT" = "raw" ]; then
 else
     storpoolTemplate "$SP_TEMPLATE"
 
-    storpoolVolumeCreate "$SP_VOL" "$SIZE" "$SP_TEMPLATE"
+    storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
     trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
 

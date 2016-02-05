@@ -90,7 +90,7 @@ fi
 
 storpoolTemplate "$SP_TEMPLATE"
 
-storpoolVolumeCreate "$SP_VOL" "${SIZE}" "$SP_TEMPLATE"
+storpoolVolumeCreate "$SP_VOL" "${SIZE}"M "$SP_TEMPLATE"
 
 if [ "$FSTYPE" = "raw" ]; then
     splog "created raw image $SP_VOL"

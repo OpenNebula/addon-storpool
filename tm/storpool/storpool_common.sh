@@ -217,7 +217,7 @@ function storpoolVolumeExists()
 function storpoolVolumeCreate()
 {
     local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3"
-    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}M" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
 }
 
 function storpoolVolumeSnapshotsDelete()
@@ -486,7 +486,7 @@ EOF
     fi
     splog "file_size=$file_size volume_size=$volume_size"
 
-    storpoolVolumeCreate "$volume" "$volume_size" "$template"
+    storpoolVolumeCreate "$volume" "$volume_size"M "$template"
 
     trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
 

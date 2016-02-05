@@ -82,7 +82,7 @@ SP_TEMPLATE="one-ds-$DS_ID"
 
 storpoolTemplate "$SP_TEMPLATE"
 
-storpoolVolumeCreate "$SP_VOL" "$SIZE" "$SP_TEMPLATE"
+storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
 MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
 
