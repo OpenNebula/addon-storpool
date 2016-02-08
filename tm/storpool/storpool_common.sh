@@ -208,7 +208,7 @@ function storpoolTemplate()
 function storpoolVolumeExists()
 {
     local _SP_VOL="$1"
-    if storpoolRetry volume list | grep "$_SP_VOL" 2>/dev/null >/dev/null; then
+    if storpoolRetry -j volume list | jq -e -r ".data[]|select(.name == \"$_SP_VOL\")" 2>/dev/null >/dev/null; then
         return 0
     fi
     return 1
