@@ -22,12 +22,13 @@ function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
 DRV_ACTION="$1"
 DS_ID="$2"
 
+DRIVER_PATH="${0%/*}"
+UNI_PATH="${DRIVER_PATH}/../../datastore/storpool"
 DS_NAME="one-ds-${DS_ID}"
-MONITOR_HELPER="${0%/*}/monitor_helper"
+MONITOR_HELPER="$UNI_PATH/monitor_helper"
 SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
 SP_MONITOR_HELPER="cat $SP_TEMPLATE_STATUS_JSON"
 
-DRIVER_PATH="${0%/*}"
 if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
     . "${DRIVER_PATH}/../../addon-storpoolrc"
 fi
@@ -58,7 +59,7 @@ else
 	SP_TEMPLATE_PROPAGATE="YES"
 	[ -f "${0%/*}/../../addon-storpoolrc" ] && source "${0%/*}/../../addon-storpoolrc"
 	
-	XPATH="${0%/*}/../xpath.rb -b $DRV_ACTION"
+	XPATH="${UNI_PATH}/../xpath.rb -b $DRV_ACTION"
 	unset i XPATH_ELEMENTS
 	while IFS= read -r -d '' element; do
 		XPATH_ELEMENTS[i++]="$element"
