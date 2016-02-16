@@ -130,11 +130,9 @@ else
 	fi
 fi # DRV_ACTION
 
-while IFS=',' read n u t f; do
+while IFS=',' read n t f; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
-		if [ "$u" = "0" ]; then
-			u=$(( t - f ))
-		fi
+		u=$(( t - f ))
 #		splog "$DS_NAME: u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
 		case "${DRV_ACTION:0:6}" in
 			system)
@@ -148,4 +146,4 @@ while IFS=',' read n u t f; do
 		esac
 		break
 	fi
-done < <($MONITOR_HELPER | jq -r '.data|map(select(.name))|.[]|[.name,.stored.used,.stored.capacity,.stored.free]|@csv')
+done < <($MONITOR_HELPER | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free]|@csv')
