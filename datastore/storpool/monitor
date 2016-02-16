@@ -57,7 +57,6 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 else
 #	echo "$0 $*" >/tmp/monitor_image.sh
 	SP_TEMPLATE_PROPAGATE="YES"
-	[ -f "${0%/*}/../../addon-storpoolrc" ] && source "${0%/*}/../../addon-storpoolrc"
 	
 	XPATH="${UNI_PATH}/../xpath.rb -b $DRV_ACTION"
 	unset i XPATH_ELEMENTS
