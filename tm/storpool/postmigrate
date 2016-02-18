@@ -88,8 +88,6 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     # Detach context ISO volume
     #-------------------------------------------------------------------------------
     SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-    DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
-    EXTRA_CMD="ln -sf $DST_PATH ${DST_PATH}.iso"
     storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
 fi
 
