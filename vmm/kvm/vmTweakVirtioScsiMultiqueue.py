@@ -16,7 +16,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-# vmTweakVirtioScsiQueues.py <XMLfile> <nQueues>
+# vmTweakVirtioScsiQueues.py <XMLfile> [<nQueues>]
 
 from sys import argv,exit
 import syslog
@@ -31,8 +31,11 @@ try:
 except ImportError:
 	raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
 
+nQueues = None
+
 xmlFile = argv[1]
-nQueues = argv[2]
+if len(argv) == 3:
+	nQueues = argv[2]
 
 et = ET.parse(xmlFile, ET.XMLParser(strip_cdata=False,remove_blank_text=True))
 
@@ -45,8 +48,8 @@ for disk in disks:
 	if disk.get('device') == 'disk':
 		diskId += 1
 		if disk.get('type') == 'block':
-			target = disk.findall(".//target")
-			for e in target:
+			disk_target = disk.findall(".//target")
+			for e in disk_target:
 				target_dev = e.get('dev')
 				if target_dev[0:2] == 'sd':
 					doExit = 0
@@ -58,10 +61,12 @@ if doExit:
 		syslog.syslog(syslog.LOG_INFO, "VM {0} has no 'sd' prefixed devices".format(vm_name))
 	exit(0)
 
+controller_id = 0
 controllers = et.findall(".//controller")
 for controller in controllers:
 	#<controller type="scsi" index="0" model="virtio-scsi">
 	if controller.get('type') == 'scsi':
+		conteroller_id += 1
 		if controller.get('model') == 'virtio-scsi':
 			doExit = 1
 			driver = controller.findall(".//driver")
@@ -69,25 +74,27 @@ for controller in controllers:
 				if dbg:
 					syslog.syslog(syslog.LOG_INFO, "VM {0} setting queues={1}>".format(vm_name,nQueues))
 				# <driver queues="1" />
-				e.set('queues',"{0}".format(nQueues))
+				if nQueues != None:
+					e.set('queues',"{0}".format(nQueues))
 			else:
-				if dbg:
-					syslog.syslog(syslog.LOG_INFO, "VM {0} adding driver with queues={1}>".format(vm_name,nQueues))
-				driver = ET.SubElement(controller, "driver")
-				driver.set('queues',"{0}".format(nQueues))
+				if nQueues != None:
+					if dbg:
+						syslog.syslog(syslog.LOG_INFO, "VM {0} adding driver with queues={1}>".format(vm_name,nQueues))
+					driver = ET.SubElement(controller, "driver")
+					driver.set('queues',"{0}".format(nQueues))
 
 if doExit:
 	et.write(xmlFile,pretty_print=True)
 	exit(0)
 
-cid = 0
 controller = ET.Element("controller")
 controller.set('type','scsi')
-controller.set('index',"{0}".format(cid))
+controller.set('index',"{0}".format(controller_id))
 controller.set('model','virtio-scsi')
 
-driver = ET.SubElement(controller, "driver")
-driver.set('queues',"{0}".format(nQueues))
+if nQueues != None:
+	driver = ET.SubElement(controller, "driver")
+	driver.set('queues',"{0}".format(nQueues))
 
 devices = et.findall(".//devices")[0]
 devices.append(controller)

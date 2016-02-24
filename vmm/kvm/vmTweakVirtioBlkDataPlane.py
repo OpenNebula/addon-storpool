@@ -35,26 +35,22 @@ xmlFile = argv[1]
 
 et = ET.parse(xmlFile, ET.XMLParser(strip_cdata=False,remove_blank_text=True))
 
-vm_name = et.find(".//name").text
-
-qemu_namespace = "{{http://libvirt.org/schemas/domain/qemu/1.0}}{0}"
-xtra = ["device.virtio-disk{0}.scsi=off","device.virtio-disk{0}.x-data-plane=on"]
-xtra.append("device.virtio-disk{0}.config-wce=off")
-
 # ugly but working
 domain = et.getroot()[0].getparent()
 
+vm_name = et.find(".//name").text
+
+qemu_namespace = "{{http://libvirt.org/schemas/domain/qemu/1.0}}{0}"
+qemu_args = ["device.virtio-disk{0}.scsi=off","device.virtio-disk{0}.x-data-plane=on"]
+qemu_args.append("device.virtio-disk{0}.config-wce=off")
+
 diskId = 0
-disks = et.findall(".//disk")
-for disk in disks:
-	device=disk.get('device')
-	if device == 'disk':
-		disk_type = disk.get('type')
-		if disk_type == 'block':
+for disk in et.findall(".//disk"):
+	if disk.get('device') == 'disk':
+		if disk.get('type') == 'block':
 			#<disk><target/>
 			target_dev = ''
-			disk_target = disk.findall(".//target")
-			for e in disk_target:
+			for e in disk.findall(".//target"):
 				target_dev = e.get('dev')
 				if target_dev[0:2] == 'vd':
 					#<target dev="vda" bus="virtio"/>
@@ -64,8 +60,7 @@ for disk in disks:
 					syslog.syslog(syslog.LOG_INFO, "VM {0} not virtio-blk {1} (diskId:{2})".format(vm_name,target_dev,diskId))
 				continue
 			#<disk><driver/>
-			disk_driver = disk.findall(".//driver")
-			for e in disk_driver:
+			for e in disk.findall(".//driver"):
 				if e.get('type') == 'raw' and e.get("name") == 'qemu':
 					if dbg:
 						syslog.syslog(syslog.LOG_INFO, "VM {0} enabling virtio-blk-data-plane on {1} (diskId:{2})".format(vm_name,target_dev,diskId))
@@ -86,7 +81,7 @@ for disk in disks:
 					# <qemu:arg value='-set'/>
 					# <qemu:arg value='device.virtio-disk0.config-wce=off'/>
 					#</qemu:commandline>
-					for value in xtra:
+					for value in qemu_args:
 						cmdLine = ET.Element(qemu_namespace.format("commandline"))
 						child = ET.Element(qemu_namespace.format("arg"))
 						child.set("value","-set")
