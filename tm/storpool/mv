@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -22,17 +22,17 @@
 # mv host:remote_datastore/disk.i host:remote_datastore/disk.i vmId datastoreId
 #-------------------------------------------------------------------------------
 
-TM_PATH="$(dirname $0)"
-
-source "${TM_PATH}/storpool_common.sh"
-
 #-------------------------------------------------------------------------------
 # Get mv arguments from OpenNebula core
 #-------------------------------------------------------------------------------
-SRC=$1
-DST=$2
-VM_ID=$3
-DS_ID=$4
+
+SRC="$1"
+DST="$2"
+VM_ID="$3"
+DS_ID="$4"
+
+TM_PATH="$(dirname $0)"
+source "${TM_PATH}/storpool_common.sh"
 
 splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -47,9 +47,6 @@ DST_DIR=`dirname $DST_PATH`
 
 DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
 IS_DISK=`is_disk $DST_PATH`
-
-#default detach action
-DETACH_ACTION="DETACH"
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
@@ -68,27 +65,70 @@ SP_TEMPLATE="${SOURCE%%/*}"
 
 log "vm $VM_ID moving $SRC to $DST"
 
-#-------------------------------------------------------------------------------
-# run only DETACH_CMD on EPILOG_STOP, EPILOG_UNDEPLOY
-#-------------------------------------------------------------------------------
-if [ $LCM_STATE = "10" ]; then
-    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_STOP)"
-fi
-if [ $LCM_STATE = "30" ]; then
-    DETACH_ONLY="END (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
-fi
-#-------------------------------------------------------------------------------
-# run only ATTACH_CMD on PROLOG_UNDEPLOY
-#-------------------------------------------------------------------------------
-if [ $LCM_STATE = "31" ]; then
-    ATTACH_ONLY="(LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
-fi
-#-------------------------------------------------------------------------------
-# run DETACH on DST host on PROLOG_MIGRATE_UNKNOWN
-#-------------------------------------------------------------------------------
-if [ $LCM_STATE = "60" ]; then
-    DETACH_ACTION="DETACH_VIA_DST"
-fi
+# is checkpoint on storpool enabled?
+case "$SP_CHECKPOINT" in
+    yes)
+        SP_CHECKPOINT="migrate"
+    ;;
+    nomigrate)
+        SP_CHECKPOINT="yes"
+    ;;
+    *)
+        SP_CHECKPOINT=
+        CHECKPOINT_SAVE=
+        CHECKPOINT_RESTORE=
+    ;;
+esac
+
+DETACH_ALL=
+DO_SYMLINK=
+case "$LCM_STATE" in
+    8)
+        #-----------------------------------------------------------------------
+        # migrate checkpoint on PROLOG_MIGRATE
+        #-----------------------------------------------------------------------
+        if [ "$SP_CHECKPOINT" = "migrate" ]; then
+            CHECKPOINT_SAVE="yes"
+            CHECKPOINT_RESTORE="yes"
+        fi
+    ;;
+    9)
+        #-----------------------------------------------------------------------
+        # only attach and restore checkpoint on PROLOG_RESUME
+        #-----------------------------------------------------------------------
+        ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_RESUME)"
+        if [ -n "$SP_CHECKPOINT" ]; then
+            CHECKPOINT_RESTORE="yes"
+        fi
+    ;;
+    10)
+        #-----------------------------------------------------------------------
+        # only detach and save checkpoint on EPILOG_STOP
+        #-----------------------------------------------------------------------
+        DETACH_ONLY="DETACH_ONLY (LCM_STATE=$LCM_STATE EPILOG_STOP)"
+        if [ -n "$SP_CHECKPOINT" ]; then
+            CHECKPOINT_SAVE="yes"
+        fi
+    ;;
+    30)
+        #-----------------------------------------------------------------------
+        # only detach (all clients) on EPILOG_UNDEPLOY
+        #-----------------------------------------------------------------------
+        DETACH_ONLY="DETACH_ONLY (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
+        DETACH_ALL=1
+    ;;
+    31)
+        #-----------------------------------------------------------------------
+        # only attach and (re)create symlinks on PROLOG_UNDEPLOY
+        #-----------------------------------------------------------------------
+        ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
+        DO_SYMLINK="yes"
+    ;;
+    *)
+        splog ">>> STATE=$VMSTATE LCM_STATE=$LCM_STATE <<<"
+    ;;
+esac
+
 
 #-------------------------------------------------------------------------------
 # check if it is called in SYSTEM_DS context
@@ -98,41 +138,64 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
-        #context ISO
+        # checkpoint
+        if [ -n "$CHECKPOINT_SAVE" ]; then
+            oneCheckpointSave "$SRC"
+        fi
+        if [ -n "$CHECKPOINT_RESTORE" ]; then
+            oneCheckpointRestore "$DST"
+        fi
+        # context ISO. Do detach/attach only when hosts differ
         SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-        DST_PATH="$DST_DIR/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
-        if [ -n "$ATTACH_ONLY" ]; then
-            splog "$ATTACH_ONLY"
-        else
-            storpoolAction "$DETACH_ACTION" "$SRC_HOST" "$DST_HOST" "$SP_VOL"
+        if [ "$SRC_HOST" != "$DST_HOST" ]; then
+            SP_LINK="/dev/storpool/$SP_VOL"
+            CTX_PATH="$DST_DIR/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
+            if [ -n "$ATTACH_ONLY" ]; then
+                splog "$ATTACH_ONLY"
+            else
+                storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
+            fi
+            if [ -n "$DETACH_ONLY" ]; then
+                splog "$DETACH_ONLY"
+            else
+                storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+                if [ "$DO_SYMLINK" = "yes" ]; then
+                    oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
+                fi
+            fi
         fi
-        if [ -n "$DETACH_ONLY" ]; then
-            splog "$DETACH_ONLY"
-        else
-            EXTRA_CMD="ln -sf \"$DST_HOST\" \"${DST_HOST}.iso\""
-            SP_MODE="ro"
-            storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+        if [ "$SRC_PATH" != "$DST_PATH" ]; then
+            splog "Change the CONTEXT image template to one-ds-$DS_ID"
+            storpoolVolumeTemplate "$SP_VOL" "one-ds-$DS_ID"
         fi
-
+        # other files in the VM home
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`
         if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
             if [ "$SRC_HOST" = "$DST_HOST" ]; then
-                splog "VM $VM_ID on same host($SRC_HOST)"
+                if [ "$SRC_PATH" = "$DST_PATH" ]; then
+                    splog "VM $VM_ID on same host($SRC_HOST)"
+                else
+                    splog "datastore change $SRC_PATH -> $DST_PATH"
+                    ssh_exec_and_log "$DST_HOST" "mv -n -t $DST_PATH $SRC_PATH/*" \
+                        "Failed moving $SRC_PATH/* to $DST_PATH"
+                fi
             else
                 TAR_COPY="$SSH $SRC_HOST '$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR'"
                 TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
-                splog "Copy $SRC_HOST:$SRC_PATH $DST_HOST:$DST_DIR/$SRC_VM_DIR"
+                splog "Transfer $SRC_HOST:$SRC_PATH $DST_HOST:$DST_DIR/$SRC_VM_DIR"
                 exec_and_log "eval $TAR_COPY" "Error copying SYSTEM_DS from $SRC_HOST to $DST_HOST"
 
                 splog "Cleanup $SRC_HOST rm -rf $SRC_PATH"
                 ssh_exec_and_log "$SRC_HOST" "rm -rf $SRC_PATH" \
-                         "failed removing $SRC_HOST $SRC_PATH"
+                        "failed removing $SRC_HOST $SRC_PATH"
             fi
+
         fi
      else
         for i in ${!DISK_ID_ARRAY[@]}; do
             if [ "${DISK_TM_ARRAY[i]}" = "" ]; then
+                DISK_PATH="$DST_PATH"
                 FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
                 if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                     FORMAT="swap"
@@ -142,29 +205,36 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                         continue
                     fi
                 else
-                    DST_PATH+="/disk.${DISK_ID_ARRAY[i]}"
+                    DISK_PATH="${DST_PATH}/disk.${DISK_ID_ARRAY[i]}"
                 fi
                 SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
+                SP_LINK="/dev/storpool/$SP_VOL"
                 if [ -n "$ATTACH_ONLY" ]; then
                     splog "$ATTACH_ONLY"
                 else
-                    storpoolAction "$DETACH_ACTION" "$SRC_HOST" "$DST_HOST" "$SP_VOL"
+                    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
                 fi
                 if [ -n "$DETACH_ONLY" ]; then
                     splog "$DETACH_ONLY"
                 else
-                    storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+                    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+                    if [ "$DO_SYMLINK" = "yes" ]; then
+                        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+                    fi
+                fi
+                if [ "$SRC_PATH" != "$DST_PATH" ]; then
+                    storpoolVolumeTemplate "$SP_VOL" "one-ds-$DS_ID"
                 fi
             fi
         done
      fi
-     splog "END"
+     splog "END $VM_ID [SYSTEM_DS]"
      exit 0
 else
     if [ -n "$ATTACH_ONLY" ]; then
         splog "$ATTACH_ONLY"
     else
-        storpoolAction "$DETACH_ACTION" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
     fi
 fi
 
@@ -173,7 +243,7 @@ fi
 #-------------------------------------------------------------------------------
 
 if [ -n "$DETACH_ONLY" ]; then
-    splog "END $DETACH_ONLY"
+    splog "END $VM_ID $DETACH_ONLY"
     exit 0
 fi
 
@@ -183,8 +253,12 @@ fi
 
 SP_VOL="${SOURCE##*/}"
 [ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+SP_LINK="/dev/storpool/$SP_VOL"
 
-storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+if [ "$DO_SYMLINK" = "yes" ]; then
+    oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+fi
 
-splog "END"
+splog "END $VM_ID"
 exit 0

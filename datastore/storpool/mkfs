@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -22,8 +22,6 @@
 # mkfs base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -39,7 +37,9 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
-[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ] && source "${DRIVER_PATH}/../../addon-storpoolrc"
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
 
 #-------------------------------------------------------------------------------
 # Get mkfs and datastore arguments from OpenNebula core
@@ -48,85 +48,19 @@ source ${DRIVER_PATH}/../libfs.sh
 DRV_ACTION=$1
 ID=$2
 
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/RESTRICTED_DIRS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SAFE_DIRS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/STAGING_DIR \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/STATE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE)
-
-unset i
-BASE_PATH="${XPATH_ELEMENTS[i++]}"
-DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
-RESTRICTED_DIRS="${XPATH_ELEMENTS[i++]}"
-SAFE_DIRS="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
-SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
-SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
-SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
-SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
-SP_BW="${XPATH_ELEMENTS[i++]:--}"
-STAGING_DIR="${XPATH_ELEMENTS[i++]:-$STAGING_DIR}"
-PERSISTENT="${XPATH_ELEMENTS[i++]}"
-STATE="${XPATH_ELEMENTS[i++]}"
-SOURCE="${XPATH_ELEMENTS[i++]}"
-IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
-FSTYPE="${XPATH_ELEMENTS[i++]}"
-SIZE="${XPATH_ELEMENTS[i++]}"
-
-splog "\
-${ID:+ID=$ID }\
-${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
-${STATE:+STATE=$STATE }\
-${SOURCE:+SOURCE=$SOURCE }\
-${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${SIZE:+SIZE=$SIZE }\
-${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
-${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
-${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
-${FSTYPE:+FSTYPE=$FSTYPE }\
-${STAGING_DIR:+STAGING_DIR=$STAGING_DIR }\
-${POOL_NAME:+POOL_NAME=$POOL_NAME }\
-${IMAGE_PATH:+IMAGE_PATH=$IMAGE_PATH }\
-"
+oneDsDriverAction "$DRIVER_PATH"
 
 #-------------------------------------------------------------------------------
 # Get datastore host, validate variables and set up datastore
 #-------------------------------------------------------------------------------
 
-DST_HOST=`get_destination_host $ID`
+if [ -n "$BRIDGE_LIST" ]; then
+    DST_HOST=`get_destination_host $ID`
 
-if [ "$DST_HOST" = "" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
-    exit -1
-fi
-if [ "$SP_PLACEALL" = "" ]; then
-    error_message "Datastore template missing 'SP_PLACEALL' attribute."
-    exit -1
-fi
-if [ "$SP_PLACETAIL" = "" ]; then
-    SP_PLACETAIL="$SP_PLACEALL"
-fi
-if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
-    error_message "Datastore template with unknown value for 'SP_REPLICATION' attribute '$SP_REPLICATION'."
-    exit -1
+    if [ "$DST_HOST" = "" ]; then
+        error_message "Datastore template missing 'BRIDGE_LIST' attribute."
+        exit -1
+    fi
 fi
 
 set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
@@ -139,13 +73,14 @@ SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
+echo "$SP_DST"
+
 #-------------------------------------------------------------------------------
-# Image FSTYPE:save_as. If it is HOT snapshot then tm/cpds will take care later
+# Image FSTYPE:save_as. If it is HOT snapshot then tm/cpds will take care of it later
 #-------------------------------------------------------------------------------
 
 if [ "$FSTYPE" = "save_as" ]; then
     splog "END ($FSTYPE) return:$SP_DST"
-    echo "$SP_DST"
     exit 0
 fi
 
@@ -153,49 +88,34 @@ fi
 # Create the image in the datastore
 #-------------------------------------------------------------------------------
 
-MKFS_RUN=`mkfs_command $SP_LINK $FSTYPE $SIZE`
+storpoolTemplate "$SP_TEMPLATE"
 
-MKFS_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
+storpoolVolumeCreate "$SP_VOL" "${SIZE}"M "$SP_TEMPLATE"
 
-    splog "template $SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
-    storpool template "$SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" iops "$SP_IOPS" bw "$SP_BW"
+if [ "$FSTYPE" = "raw" ]; then
+    splog "created raw image $SP_VOL"
+else
 
-    splog "volume $SP_VOL size ${SIZE}M template $SP_TEMPLATE"
-    storpool volume "$SP_VOL" size "${SIZE}M" template "$SP_TEMPLATE"
+    trapAdd "splog \"return \$? \"; storpoolVolumeDelete \"$SP_VOL\" force snaps"
 
-    if [ "$FSTYPE" = "raw" ]; then
-        splog "created raw image $SP_VOL"
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+
+    MKFS_RUN=`mkfs_command $SP_LINK $FSTYPE $SIZE`
+
+    if [ -n "$DST_HOST" ]; then
+        splog "run mkfs on $DST_HOST"
+        ssh_exec_and_log "$DST_HOST" "$MKFS_RUN" \
+                     "Error processing $SP_VOL on $DST_HOST"
     else
-        splog "attach volume $SP_VOL here"
-        storpool attach volume "$SP_VOL" here
-
-        t=15
-        while [ ! -L "$SP_LINK" ]; do
-            if [ \$t -lt 1 ]; then
-                echo "Timeout waiting for device $SP_LINK" >&2
-                exit -1
-            fi
-            sleep .5
-            t=\$((t-1))
-        done
-
-        splog "MKFS_RUN=$MKFS_RUN"
-        $MKFS_RUN
-
-        splog "detach volume $SP_VOL all"
-        storpool detach volume "$SP_VOL" all
+        splog "run mkfs local"
+        exec_and_log "$MKFS_RUN" \
+                     "Error processing $SP_VOL"
+        splog "run mkfs completed"
     fi
 
-    splog "END MKFS_CMD"
-EOF
-)
+    trapReset
 
-splog "run MKFS_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$MKFS_CMD" \
-                 "Error registering $SP_VOL in $DST_HOST"
+    storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST"
+fi
 
 splog "END:$SP_DST"
-echo "$SP_DST"

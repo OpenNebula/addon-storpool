@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -18,16 +18,17 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-# context context.sh file1 file2 ... fileN host:remote_system_ds/disk.i vmid 0
+# context context.sh file1 file2 ... fileN host:remote_system_ds/disk.i vmid dsid
 #   - context.sh file are the contents of the context ISO
 #   - host is the target host to deploy the VM
 #   - remote_system_ds is the path for the system datastore in the host
 #   - vmid is the id of the VM
-#   - 0 is the target datastore (system)
+#   - dsid is the target datastore (system)
 
-TM_PATH="$(dirname $0)"
+#-------------------------------------------------------------------------------
+# Get context arguments from OpenNebula core
+#-------------------------------------------------------------------------------
 
-source "${TM_PATH}/storpool_common.sh"
 
 ARGV=("$@")
 
@@ -36,11 +37,15 @@ VM_ID="${ARGV[$(($#-2))]}"
 DST="${ARGV[$(($#-3))]}"
 SRC=("${ARGV[@]:0:$(($#-3))}")
 
+TM_PATH="$(dirname $0)"
+source "${TM_PATH}/storpool_common.sh"
+
 splog "DS_ID=$DS_ID VM_ID=$VM_ID DST=$DST SRC=$SRC"
 
 function exit_error
 {
     error_message "$ERROR"
+    splog "$ERROR"
     [ -d "$ISO_DIR" ] && rm -rf "$ISO_DIR" > /dev/null 2>&1
     exit -1
 }
@@ -72,12 +77,6 @@ DST_HOST=`arg_host $DST`
 DST_DIR=`dirname $DST_PATH`
 
 DISK_ID=$(echo $DST | awk -F. '{print $NF}')
-
-#-------------------------------------------------------------------------------
-# Create DST path
-#-------------------------------------------------------------------------------
-
-ssh_make_path "$DST_HOST" "$DST_DIR"
 
 #-------------------------------------------------------------------------------
 # Build the Context Block device (locally) and copy it remotely
@@ -124,25 +123,36 @@ SP_VOL="one-sys-${VM_ID}-${DISK_ID}-iso"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-$DS_ID"
 
-EXTRA_CMD="$LN -sf $DST_PATH ${DST_PATH}.iso"
-storpoolAction "PRE_CONTEXT" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_PARENT" "$SP_TEMPLATE" "$SP_SIZE"
+storpoolVolumeDelete "$SP_VOL" "force"
+
+storpoolTemplate "$SP_TEMPLATE"
+
+storpoolVolumeCreate "$SP_VOL" "$SP_SIZE" "$SP_TEMPLATE"
 
 #-------------------------------------------------------------------------------
 # Import image to the context volume
 #-------------------------------------------------------------------------------
 
-PIPE_CMD="cat $ISO_FILE"
-
-splog "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$DST_PATH bs=512k"
-exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$DST_PATH bs=512k" \
-             "Error importing $ISO_FILE to $DST_HOST:$DST_PATH"
+if [ -n "$BRIDGE_LIST" ]; then
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+    PIPE_CMD="cat $ISO_FILE"
+    splog "eval $PIPE_CMD | $SSH $DST_HOST $DD of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none"
+    exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=/dev/storpool/$SP_VOL bs=512k" \
+             "Error importing $ISO_FILE to $DST_HOST:/dev/storpool/$SP_VOL"
+else
+    storpoolVolumeAttach "$SP_VOL"
+    splog "$DD if=$ISO_FILE of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none"
+    exec_and_log "$DD if=$ISO_FILE of=/dev/storpool/$SP_VOL bs=512k" \
+             "Error importing $ISO_FILE to /dev/storpool/$SP_VOL"
+    storpoolVolumeDetach "$SP_VOL"
+fi
 
 #-------------------------------------------------------------------------------
 # (re)attach readonly
 #-------------------------------------------------------------------------------
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
 
-SP_MODE="ro"
-storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
+oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
 
 #-------------------------------------------------------------------------------
 # Remove ISO file and source dir
@@ -151,5 +161,5 @@ storpoolAction "ATTACH" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH"
 rm -rf "$ISO_FILE" > /dev/null 2>&1
 rm -rf "$ISO_DIR" > /dev/null 2>&1
 
-splog "END"
+splog "END $VM_ID"
 exit 0

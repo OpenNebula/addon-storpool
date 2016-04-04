@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may    #
 # not use this file except in compliance with the License. You may obtain    #
@@ -53,11 +53,15 @@ splog()
 }
 
 SP_SPACE_USED_LVMWAY=
-SP_CMD_VOLUME_STATUS='storpool -j volume status'
-SP_CMD_SNAPSHOT_SPACE='storpool -j snapshot space'
+SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
+SP_CMD_VOLUME_SPACE="cat $SP_VOLUME_SPACE_JSON"
+SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
+SP_CMD_SNAPSHOT_SPACE="cat $SP_SNAPSHOT_SPACE_JSON"
 BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
-[ -f "../../addon-storpoolrc" ] && source "../../addon-storpoolrc"
+if [ -f "../../addon-storpoolrc" ]; then
+	source "../../addon-storpoolrc"
+fi
 
 if [ -L "$dev" ]; then
 	realDev=$(readlink -e $dev)
@@ -73,17 +77,21 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	else
 		used="spaceUsed"
 	fi
-	spSize=$($SP_CMD_VOLUME_STATUS | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
+	spSize=$($SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
 	echo " <size>$spSize</size>"
 	echo " <volume>$spVolume</volume>"
-#	splog "$spVolume $spSize"
+	if [ -n "$POLL_DISK_INFO_DEBUG" ]; then
+		splog "$dev $spVolume $spSize"
+	fi
 	while IFS=',' read name snap_size; do
 		name=${name//\"/}
 #		[ "${name%-snap*}" = "$spVolume" ] || continue
 		snap_id=${name#*snap}
-#		splog "$name $snap_size"
+		if [ -n "$POLL_DISK_INFO_DEBUG" ]; then
+			splog "$dev $name $snap_size"
+		fi
 		cat <<EOF
  <snapshot>
   <id>$snap_id</id>
@@ -91,7 +99,6 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
  </snapshot>
 EOF
 	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
-#	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | .[] | [.name, .${used}] | @csv" | sort)
 else
 	if [ -b "$realDev" ]; then
 		disk_size=$($BLOCKDEV_GET_SIZE "$realDev")
@@ -104,6 +111,8 @@ else
 	[ -n "$disk_size" ] || exit 1
 	echo "<disk>"
 	echo " <size>$disk_size</size>"
-#	splog "$dev $disk_size"
+	if [ -n "$POLL_DISK_INFO_DEBUG" ]; then
+		splog "$dev $disk_size"
+	fi
 fi
 echo "</disk>"

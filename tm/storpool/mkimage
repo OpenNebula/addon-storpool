@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -26,15 +26,22 @@
 #   - vmid is the id of the VM
 #   - dsid is the target datastore (0 is the system datastore)
 
-TM_PATH="$(dirname $0)"
+#-------------------------------------------------------------------------------
+# Get mkimage arguments from OpenNebula core
+#-------------------------------------------------------------------------------
 
+SIZE="$1"
+FSTYPE="$2"
+DST="$3"
+VM_ID="$4"
+DS_ID="$5"
+
+TM_PATH="$(dirname $0)"
 source "${TM_PATH}/storpool_common.sh"
 
-SIZE=$1
-FSTYPE=$2
-DST=$3
-VM_ID=$4
-DS_ID=$5
+source "${TM_PATH}/../../datastore/libfs.sh"
+
+splog "SIZE=$SIZE FSTYPE=$FSTYPE DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
 #-------------------------------------------------------------------------------
 # Get template information from datastore TEMPLATE definition
@@ -73,9 +80,33 @@ SP_VOL="one-sys-${VM_ID}-${DISK_ID}-${FSTYPE}"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-$DS_ID"
 
-EXTRA_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
+storpoolTemplate "$SP_TEMPLATE"
 
-storpoolAction "MKIMAGE" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SP_PARENT" "$SP_TEMPLATE" "$SP_SIZE"
+storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
-splog "END"
+MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
+
+if [ -n "$BRIDGE_LIST" ]; then
+    splog "BRIDGE_LIST:$BRIDGE_LIST"
+    R_HOST=`get_destination_host $VM_ID`
+    storpoolVolumeAttach "$SP_VOL" "$R_HOST"
+
+    splog "run on $R_HOST $MKFS_CMD"
+    ssh_exec_and_log "$R_HOST" "$MKFS_CMD" \
+       "Error running $MKFS_CMD on $R_HOST"
+else
+    storpoolVolumeAttach "$SP_VOL"
+
+    splog "run $MKFS_CMD"
+    exec_and_log "$MKFS_CMD" \
+       "Error running $MKFS_CMD"
+fi
+
+storpoolVolumeDetach "$SP_VOL" "force" "" "all"
+
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+
+oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+
+splog "END $VM_ID"
 exit 0

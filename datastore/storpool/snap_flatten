@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -22,8 +22,6 @@
 # snap_flatten base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -39,96 +37,32 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
 #-------------------------------------------------------------------------------
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DRV_ACTION=$1
-ID=$2
+DRV_ACTION="$1"
+ID="$2"
 
-#if type base64 2>&1 >/dev/null; then
-#    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
-#fi
-
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT)
-
-unset i
-SOURCE="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
-TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
-
-DST_HOST=`get_destination_host $ID`
-
-splog "\
-${ID:+ID=$ID }\
-${SOURCE:+SOURCE=$SOURCE }\
-${DST_HOST:+DST_HOST=$DST_HOST }\
-${TARGET_SNAPSHOT:+TARGET_SNAPSHOT=$TARGET_SNAPSHOT }\
-"
-if [ -z "$DST_HOST" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
-    exit -1
-fi
+oneDsDriverAction "$DRIVER_PATH"
 
 SP_VOL="${SOURCE##*/}"
 SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
-SP_SNAP="${SP_VOL}-snap$TARGET_SNAPSHOT"
+SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
+SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 
-SNAP_FLATTEN_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
+parent=$(storpoolVolumeGetParent "$SP_VOL")
 
-    parent=\$(storpool -j volume list | jq -r ".data|map(select(.name==\"$SP_VOL\"))|.[]|[.parentName]|@csv")
-    parent="\${parent//\"/}"
+if [ "$parent" = "$SP_SNAP" ]; then
+    splog "$SP_VOL already based on $parent"
+else
+    storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
+fi
 
-    if [ "\$parent" = "$SP_SNAP" ]; then
-        splog "$SP_VOL already based on \$parent"
-    else
-        splog "volume $SP_VOL rename $SP_TMPVOL"
-        if storpool volume "$SP_VOL" rename "$SP_TMPVOL"; then
-            splog "volume $SP_VOL parent $SP_SNAP"
-            if storpool volume "$SP_VOL" parent "$SP_SNAP"; then
-                splog "volume delete $SP_TMPVOL"
-                storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL"
-            else
-                splog "Failed to flatten $SP_VOL"
-                echo "Failed to flatten $SP_VOL" >&2
-                splog "volume $SP_TMPVOL rename $SP_VOL"
-                if ! storpool volume "$SP_TMPVOL" rename "$SP_VOL"; then
-                    splog "Failed to revert $SP_TMPVOL to $SP_VOL"
-                    echo "Failed to revert $SP_TMPVOL to $SP_VOL" >&2
-                fi
-                exit 1
-            fi
-        else
-            splog "Failed to rename $SP_VOL to $SP_TMPVOL"
-            echo "Failed to rename $SP_VOL to $SP_TMPVOL" >&2
-            exit 1
-        fi
-    fi
-
-    storpool -j snapshot list|jq -r ".data|map(select(.name|contains(\"${SP_VOL}-snap\")))|.[]|[.name]|@csv" |\
-        while read snapshot; do
-            snapshot="\${snapshot//\"/}"
-            splog "snapshot delete \$snapshot"
-            storpool snapshot "\$snapshot" delete "\$snapshot"
-        done
-
-    splog "END SNAP_FLATTEN_CMD"
-EOF
-)
-
-splog "RUN SNAP_FLATTEN_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$SNAP_FLATTEN_CMD" \
-                 "Error flatting $SOURCE"
+storpoolVolumeSnapshotsDelete "${SP_VOL}-snap"
 
 splog "END"

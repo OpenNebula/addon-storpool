@@ -1,0 +1,111 @@
+#!/bin/bash
+#
+# -------------------------------------------------------------------------- #
+# Copyright 2016, StorPool (storpool.com)                                    #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
+
+function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
+
+
+# datastores stats
+SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
+SP_TEMPLATE_STATUS_RUN="${0%/*}/monitor_helper"
+
+# VM disks stats
+SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
+SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
+
+# VM disks snapshots stats
+SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
+SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
+
+# Do sync to remote hosts
+MONITOR_SYNC_REMOTE="yes"
+
+# command to get hosts list to sync
+SP_MONITOR_HOST_CMD="onehost list | grep on | awk '{print \$2}'"
+
+# load config
+driverPath="${0%/*}"
+if [ -f "${driverPath}/../../addon-storpoolrc" ]; then
+	. "${driverPath}/../../addon-storpoolrc"
+fi
+
+jFiles=
+
+function run_task()
+{
+	local _run="$1" _jsonFile="$2"
+	# dump json to local file
+	eval ${_run} 2>/dev/null >"${_jsonFile}New"
+	ret=$?
+	if [ $ret -eq 0 ]; then
+		if mv -f "${_jsonFile}New" "${_jsonFile}"; then
+			jFiles="$jFiles ${_jsonFile}"
+		fi
+		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+			splog "${_run} Completed: $_jsonFile"
+		fi
+	else
+		splog "${_run} failed! ret=${ret} using old ${_jsonFile}"
+	fi
+	return $ret
+}
+
+function sync_files()
+{
+	local _files="${1:-$jFiles}" _destDir="${2:-/tmp/}"
+	# sync to remote hosts
+	if [ "${_files//[[:space:]]/}" = "" ]; then
+		splog "Nothing to sync"
+		return 1
+	fi
+	
+	eval $SP_MONITOR_HOST_CMD | while read rHost; do
+	#	splog "sync $rHost"
+		if [ "$rHost" != "$(hostname -s)" ]; then
+			scp -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
+			    ${_files} ${rHost}:"${_destDir}" 2>/dev/null
+			ret=$?
+			if [ $ret -ne 0 ]; then
+				splog "${rHost} ${_files} returned ${ret}"
+			else
+				if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+					splog "$rHost ${_files} copied to ${_destDir}"
+				fi
+			fi
+		else
+			if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+				splog "$rHost is localhost"
+			fi
+		fi
+	done
+}
+
+run_task "$SP_TEMPLATE_STATUS_RUN" "$SP_TEMPLATE_STATUS_JSON"
+
+run_task "$SP_VOLUME_SPACE_RUN" "$SP_VOLUME_SPACE_JSON"
+
+run_task "$SP_SNAPSHOT_SPACE_RUN" "$SP_SNAPSHOT_SPACE_JSON"
+
+if [ "$MONITOR_SYNC_REMOTE" = "yes" ]; then
+	sync_files
+fi
+
+if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+	splog "END$jFiles"
+fi

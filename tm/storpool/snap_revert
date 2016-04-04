@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -19,21 +19,20 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# snap_create  host:parent_image snap_id vm_id ds_id
+# snap_revert  host:parent_image snap_id vm_id ds_id
 #-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Get snap_revert arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC="$1"
+SNAP_ID="$2"
+VM_ID="$3"
+DS_ID="$4"
 
 TM_PATH="$(dirname $0)"
-
 source "${TM_PATH}/storpool_common.sh"
-
-#-------------------------------------------------------------------------------
-# Get clone arguments from OpenNebula core
-#-------------------------------------------------------------------------------
-
-SRC=$1
-SNAP_ID=$2
-VM_ID=$3
-DS_ID=$4
 
 splog "SRC=$SRC SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -61,14 +60,25 @@ else
     SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
 fi
 
+SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
 DST_HOST=$SRC_HOST
 DST_PATH="$SRC_PATH"
+SP_LINK="/dev/storpool/$SP_VOL"
 
 #-------------------------------------------------------------------------------
 # Revert snapshot
 #-------------------------------------------------------------------------------
 
-storpoolAction "SNAPREVERT" "$SRC_HOST" "$DST_HOST" "$SP_VOL" "$DST_PATH" "$SNAP_ID"
+storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
 
-splog "END"
+trapAdd "storpoolVolumeAttach \"$SP_VOL\" \"$SRC_HOST\""
+trapAdd "oneSymlink \"$SRC_HOST\" \"$SP_LINK\" \"$SRC_PATH\""
+
+storpoolSnapRevert "$SP_SNAP" "$SP_VOL"
+
+storpoolVolumeAttach "$SP_VOL" "$SRC_HOST"
+oneSymlink "$SRC_HOST" "$SP_LINK" "$SRC_PATH"
+trapReset
+
+splog "END $VM_ID"
 exit 0

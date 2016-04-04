@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -20,6 +20,15 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:$PATH
 
 #-------------------------------------------------------------------------------
+# syslog logger function
+#-------------------------------------------------------------------------------
+
+function splog()
+{
+    logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}" "$*"
+}
+
+#-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
@@ -38,9 +47,8 @@ source "$TMCOMMON"
 
 # SCRIPTS_REMOTE_DIR must match same in /etc/one/oned.conf
 SCRIPTS_REMOTE_DIR=/var/tmp/one
-FORCED_DETACH_ALL=
-FORCED_DETACH_HERE=
-FORCED_DELVOL_DETACH=
+
+DEBUG_SP_RUN_CMD=1
 
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 
@@ -49,82 +57,100 @@ if [ -f "$sprcfile" ]; then
 fi
 
 #-------------------------------------------------------------------------------
-# syslog logger function
+# trap handling functions
 #-------------------------------------------------------------------------------
-
-function splog()
+function trapReset()
 {
-    logger -t "tm_sp_${0##*/}" "$*"
+    TRAP_CMD="-"
+    if [ -n "$DEBUG_TRAPS" ]; then
+        splog "trapReset"
+    fi
+
+    trap "$TRAP_CMD" EXIT TERM INT HUP
+}
+function trapAdd()
+{
+    local _trap_cmd="$1"
+    if [ -n "$DEBUG_TRAPS" ]; then
+        splog "trapAdd:$*"
+    fi
+
+    [ -n "$TRAP_CMD" ] || TRAP_CMD="-"
+
+    if [ "$TRAP_CMD" = "-" ]; then
+        TRAP_CMD="${_trap_cmd};"
+    else
+        if [ "$_trap_cmd" = "APPEND" ]; then
+            _trap_cmd="$2"
+            TRAP_CMD="${_trap_cmd};${TRAP_CMD}"
+        else
+            TRAP_CMD="${TRAP_CMD}${_trap_cmd};"
+        fi
+    fi
+
+#    splog "trapAdd:$TRAP_CMD"
+    trap "$TRAP_CMD" EXIT TERM INT HUP
+}
+function trapDel()
+{
+    local _trap_cmd="$1"
+    if [ -n "$DEBUG_TRAPS" ]; then
+        splog "trapDel:$*"
+    fi
+    TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
+    if [ -n "$TRAP_CMD" ]; then
+        if [ -n "$DEBUG_TRAPS" ]; then
+            splog "trapDel:$TRAP_CMD"
+        fi
+        trap "$TRAP_CMD" EXIT TERM INT HUP
+    else
+        trapReset
+    fi
 }
 
-function storpoolAction()
-{
-    local _ACTION="$1" _SRC_HOST="$2" _DST_HOST="$3" _SP_VOL="$4" _DST_PATH="$5"  _SP_PARENT="$6" _SP_TEMPLATE="$7" _SP_SIZE="$8"
-    splog "$_ACTION $_SRC_HOST $_DST_HOST $_SP_VOL $_DST_PATH $_SP_PARENT $_SP_TEMPLATE $_SP_SIZE"
-    local _SP_LINK="/dev/storpool/$_SP_VOL"
-    local _DST_DIR="${_DST_PATH%%disk*}"
-    local _SP_TMP=$(date +%s)-$(mktemp --dry-run XXXXXXXX)
-    local _SP_SNAP="${_SP_VOL}-snap${_SP_PARENT}"
-#    splog "SP_LINK=$_SP_LINK DST_DIR=$_DST_DIR"
-    _SP_TEMPLATE="${_SP_TEMPLATE:+template $_SP_TEMPLATE}"
-
-    local _BEGIN=$(cat <<EOF
-    #_BEGIN
+REMOTE_HDR=$(cat <<EOF
+    #_REMOTE_HDR
     set -e
     export PATH=/bin:/usr/bin:/sbin:/usr/sbin:\$PATH
-    splog(){ logger -t "tm_sp_${0##*/}_${_ACTION}" "\$*"; }
+    splog(){ logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}_r" "\$*"; }
 EOF
 )
-    local _END=$(cat <<EOF
+REMOTE_FTR=$(cat <<EOF
     #_END
-    splog "END $_ACTION"
+    splog "END \$endmsg"
 EOF
 )
-    local _TEMPLATE=$(cat <<EOF
-    #_TEMPLATE
-    if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACETAIL" ]; then
-        splog "$_SP_TEMPLATE replication $SP_REPLICATION placeAll $SP_PLACEALL placeTail $SP_PLACETAIL"
-        storpool $_SP_TEMPLATE replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL"
-    fi
-EOF
-)
-    local _CREATE=$(cat <<EOF
-    #_CREATE
-    splog "volume $_SP_VOL size ${_SP_SIZE} $_SP_TEMPLATE"
-    storpool volume "$_SP_VOL" size "${_SP_SIZE}" $_SP_TEMPLATE
-EOF
-)
-    local _RMLINK=$(cat <<EOF
-    #_RMLINK
-    if [ -L "$_DST_PATH" ]; then
-        splog "rm -f $_DST_PATH"
-        rm -f "$_DST_PATH"
-    fi
-EOF
-)
-    local _DETACH_ALL=$(cat <<EOF
-    #_DETACH_ALL
-    if storpool attach list | grep -q " $_SP_VOL " 2>/dev/null >/dev/null; then
-        splog "detach volume $_SP_VOL all ${FORCED_DETACH_ALL:+force yes}"
-        storpool detach volume "$_SP_VOL" all ${FORCED_DETACH_ALL:+force yes}
-    else
-        splog "volume not attached $_SP_VOL"
-    fi
-EOF
-)
-    local _DETACH_HERE=$(cat <<EOF
-    #_DETACH_HERE
-    splog "detach volume $_SP_VOL here ${FORCED_DETACH_HERE:+force yes}"
-    storpool detach volume "$_SP_VOL" here ${FORCED_DETACH_HERE:+force yes}
-EOF
-)
-    local _ATTACH=$(cat <<EOF
-    #_ATTACH
-    splog "attach volume $_SP_VOL ${SP_MODE:+mode $SP_MODE} here"
-    storpool attach volume "$_SP_VOL" ${SP_MODE:+mode $SP_MODE} here
 
-    trap 'storpool detach volume "$_SP_VOL" here' EXIT TERM INT HUP
+function storpoolClientId()
+{
+#    ssh "$1" /usr/sbin/storpool_confget -s \`hostname\` | grep SP_OURID | cut -d '=' -f 2 | tail -n 1
+    /usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1
+}
 
+function storpoolRetry() {
+    if [ -n "$DEBUG_SP_RUN_CMD" ]; then
+        splog "storpool $*"
+    fi
+    t=${STORPOOL_RETRIES:-10}
+    while true; do
+        if storpool "$@"; then
+            break
+        fi
+        t=$((t - 1))
+        if [ "$t" -lt 1 ]; then
+            splog "storpool $* FAILED ($t::$?)"
+            exit 1
+        fi
+        sleep .1
+        splog "retry $t storpool $*"
+    done
+}
+
+function storpoolWaitLink()
+{
+    local _SP_LINK="$1" _SP_HOST="$2"
+    local _REMOTE=$(cat <<EOF
+    # storpoolWaitLink
     t=15
     while [ ! -L "$_SP_LINK" ]; do
         if [ \$t -lt 1 ]; then
@@ -136,242 +162,385 @@ EOF
         t=\$((t-1))
     done
 
-    trap - EXIT TERM INT HUP
+    endmsg="storpoolWaitLink $_SP_LINK (\$t)"
 EOF
 )
-    local _SYMLINK=$(cat <<EOF
-    #_SYMLINK
-    if [ -d "$_DST_DIR" ]; then
-        splog "rm -f $_DST_PATH"
-        rm -f "$_DST_PATH"
+#    splog "storpoolWaitLink $_SP_LINK${_SP_HOST:+ on $_SP_HOST}"
+    if [ -n "$_SP_HOST" ]; then
+        ssh_exec_and_log "$_SP_HOST" "${REMOTE_HDR}${_REMOTE}$REMOTE_FTR" \
+            "Error symlink '$_SP_LINK' not found. Giving up"
     else
-        splog "mkdir -p $_DST_DIR"
-        mkdir -p "$_DST_DIR"
-    fi
-
-    splog "ln -s $_SP_LINK $_DST_PATH"
-    ln -s "$_SP_LINK" "$_DST_PATH"
-EOF
-)
-    local _DELVOL=$(cat <<EOF
-    #_DELVOL
-    if storpool volume "$_SP_VOL" info 2>/dev/null >/dev/null; then
-        splog "delete $_SP_VOL"
-        storpool volume "$_SP_VOL" delete "$SP_VOL"
-    else
-        splog "volume $_SP_VOL not found"
-    fi
-EOF
-)
-    local _DELVOL_NONPERSISTENT=$(cat <<EOF
-    #_DELVOL_NONPERSISTENT
-    if [ "$_SP_PARENT" != "YES" ]; then
-        if storpool volume "$_SP_VOL" info 2>/dev/null >/dev/null; then
-            splog "delete volume $_SP_VOL"
-            storpool volume "$_SP_VOL" delete "$_SP_VOL"
-        fi
-        # delete snapshots too
-        storpool -j snapshot list | \
-        jq -r '.data | map( select( .name | contains( "${_SP_VOL}-snap" ) ) ) | .[] | [ .name ] | @csv' | \
-        while read snap; do
-            eval snap=\$snap
-            splog "delete snapshot \$snap"
-            storpool snapshot \$snap delete \$snap
+        t=15
+        while [ ! -L "$_SP_LINK" ]; do
+            if [ $t -lt 1 ]; then
+                splog "Timeout waiting for $_SP_LINK"
+                echo "Timeout waiting for $_SP_LINK" >&2
+                exit -1
+            fi
+            sleep .5
+            t=$((t-1))
         done
+        splog "END storpoolWaitLink $_SP_LINK ($t)"
+    fi
+}
+
+function storpoolTemplate()
+{
+    local _SP_TEMPLATE="$1"
+    if [ "$SP_PLACEALL" = "" ]; then
+        splog "Datastore template $_SP_TEMPLATE missing 'SP_PLACEALL' attribute."
+        exit -1
+    fi
+    if [ "$SP_PLACETAIL" = "" ]; then
+        splog "Datastore template $_SP_TEMPLATE missing 'SP_PLACETAIL' attribute. Using SP_PLACEALL"
+        SP_PLACETAIL="$SP_PLACEALL"
+    fi
+    if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
+        splog "Datastore template $_SP_TEMPLATE with unknown value for SP_REPLICATION attribute=${SP_REPLICATION}"
+        exit -1
+    fi
+
+    if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACETAIL" ]; then
+        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} >/dev/null
+    fi
+}
+
+function storpoolVolumeExists()
+{
+    local _SP_VOL="$1"
+    if [ -n "$(storpoolRetry -j volume list | jq -r ".data[]|select(.name == \"$_SP_VOL\")")" ]; then #"
+        return 0
+    fi
+    return 1
+}
+
+function storpoolVolumeCreate()
+{
+    local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3"
+    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+}
+
+function storpoolVolumeSnapshotsDelete()
+{
+    local _SP_VOL_SNAPSHOTS="$1"
+    storpoolRetry -j snapshot list | \
+        jq -r ".data|map(select(.name|contains(\"${_SP_VOL_SNAPSHOTS}\")))|.[]|[.name]|@csv" | \
+        while read name; do
+            name="${name//\"/}"
+            storpoolSnapshotDelete "$name"
+        done
+}
+
+function storpoolVolumeDelete()
+{
+    local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3"
+    if storpoolVolumeExists "$_SP_VOL"; then
+
+        storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all"
+
+        storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
     else
-        splog "skipping persistent image. $_SP_PARENT"
+        splog "volume $_SP_VOL not found "
     fi
-EOF
-)
-    local _DELVOL_DETACH=$(cat <<EOF
-    #_DELVOL_DETACH
-    if storpool volume "$SP_VOL" info 2>/dev/null >/dev/null; then
-        if storpool attach list | grep " $SP_VOL "; then
-            splog "detach volume $SP_VOL ${FORCED_DELVOL_DETACH:+force yes}"
-            storpool detach volume "$SP_VOL" all ${FORCED_DELVOL_DETACH:+force yes}
-        fi
-        splog "delete $SP_VOL"
-        storpool volume "$SP_VOL" delete "$SP_VOL"
-    else
-        splog "volume $_SP_VOL not found"
+    if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
+        storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
     fi
+}
 
-EOF
-)
-    local _CLONE=$(cat <<EOF
-    #_CLONE
-    if [ "$_DST_PATH" = "-1" ]; then
-        splog "volume $_SP_VOL parent $_SP_PARENT $_SP_TEMPLATE"
-        storpool volume "$_SP_VOL" parent "$_SP_PARENT" $_SP_TEMPLATE
-    else
-        splog "volume $_SP_VOL baseOn $_SP_PARENT $_SP_TEMPLATE"
-        storpool volume "$_SP_VOL" baseOn "$_SP_PARENT" $_SP_TEMPLATE
-    fi
+function storpoolVolumeRename()
+{
+    local _SP_OLD="$1" _SP_NEW="$2" _SP_TEMPLATE="$3"
+    storpoolRetry volume "$_SP_OLD" rename "$_SP_NEW" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+}
 
-EOF
-)
-    local _RESIZE=$(cat <<EOF
-    #_RESIZE
-    if [ -n "$SIZE" ]; then
-        if [ $SIZE -gt ${ORIGINAL_SIZE:-0} ]; then
-            splog "volume $_SP_VOL size ${SIZE}M"
-            storpool volume "$_SP_VOL" size "${SIZE}M"
-        fi
-    fi
+function storpoolVolumeClone()
+{
+    local _SP_PARENT="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
 
-EOF
-)
-    local _RENAME=$(cat <<EOF
-    #_RENAME
-    splog "volume $_SP_PARENT rename $_SP_VOL $_SP_TEMPLATE"
-    storpool volume "$_SP_PARENT" rename "$_SP_VOL" $_SP_TEMPLATE
+    storpoolRetry volume "$_SP_VOL" baseOn "$_SP_PARENT" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+}
 
-EOF
-)
-    local _RENAME_COND=$(cat <<EOF
-    #_RENAME_COND
-    if [ -n "$_SP_SIZE" ]; then
-        splog "volume $_SP_VOL rename $_SP_PARENT $_SP_TEMPLATE"
-        storpool volume "$_SP_VOL" rename "$_SP_PARENT" $_SP_TEMPLATE
-    fi
+function storpoolVolumeResize()
+{
+    local _SP_VOL="$1" _SP_SIZE="$2"
 
-EOF
-)
-    local _EXTRA=$(cat <<EOF
-    #_EXTRA
-    splog "EXTRA_CMD:$EXTRA_CMD"
-    $EXTRA_CMD
+    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}M" >/dev/null
+}
 
-EOF
-)
-    local _SNAPSHOT=$(cat <<EOF
-    #_SNAPSHOT
-    splog "volume $_SP_VOL snapshot $_SP_SNAP"
-    storpool volume "$_SP_VOL" snapshot "$_SP_SNAP"
-
-EOF
-)
-    local _SNAPREVERT=$(cat <<EOF
-    #_SNAPREVERT
-    splog "volume $_SP_VOL rename ${_SP_VOL}-$_SP_TMP"
-    storpool volume "$_SP_VOL" rename "${_SP_VOL}-$_SP_TMP"
-
-    trap 'storpool volume "${_SP_VOL}-$_SP_TMP" rename "$_SP_VOL"' EXIT TERM INT HUP
-
-    splog "volume $_SP_VOL parent $_SP_SNAP"
-    storpool volume "$_SP_VOL" parent "$_SP_SNAP"
-
-    trap - EXIT TERM INT HUP
-
-    if storpool volume "${_SP_VOL}-$_SP_TMP" info 2>/dev/null >/dev/null; then
-        splog "volume ${_SP_VOL}-$_SP_TMP delete ${_SP_VOL}-$_SP_TMP"
-        storpool volume "${_SP_VOL}-$_SP_TMP" delete "${_SP_VOL}-$_SP_TMP"
-    fi
-
-EOF
-)
-    local _DELSNAP=$(cat <<EOF
-    #_DELSNAP
-    splog "delete snapshot $_SP_SNAP"
-    storpool snapshot "$_SP_SNAP" delete "$_SP_SNAP"
-
-EOF
-)
-    local _FSFREEZE=$(cat <<EOF
-    #_FSFREEZE
-    if [ -n "$_SP_SIZE" ]; then
-        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
-        if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
-            splog "VM $VM_ID fsfreeze domain $_SP_SIZE \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-status\"}")"
-            trap 'virsh --connect \$LIBVIRT_URI qemu-agent-command "$_SP_SIZE" "{\"execute\":\"guest-fsfreeze-thaw\"}"; splog "VM $VM_ID fsthaw domain $_SP_SIZE (ret=$?)";' EXIT TERM INT HUP
-        fi
-    else
-        splog "unknown DOMAIN_ID. snapshot creation canceled!" >&2
-        exit 1
-    fi
-
-EOF
-)
-    local _CMD= _HOST=
-    case "$_ACTION" in
-        CLONE)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DELVOL$_CLONE$_RESIZE$_ATTACH$_SYMLINK"
-        ;;
-        CPDS)
-            _HOST="$_SRC_HOST"
-            _CMD="$_BEGIN$_DELVOL$_FSFREEZE$_CLONE"
-        ;;
-        DELETE)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DETACH_ALL$_DELVOL_NONPERSISTENT$_RMLINK"
-        ;;
-        LN)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_RESIZE$_ATTACH$_SYMLINK"
-        ;;
-        DETACH)
-            _HOST="$_SRC_HOST"
-            _CMD="$_BEGIN$_DETACH_ALL"
-        ;;
-        DETACH_VIA_DST)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DETACH_ALL"
-        ;;
-        ATTACH)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_ATTACH$_SYMLINK"
-            SP_MODE=
-        ;;
-        MVDS)
-            _HOST="$_SRC_HOST"
-            _CMD="$_BEGIN$_RMLINK$_DETACH_ALL$_RENAME_COND"
-        ;;
-        DETACH_HERE)
-            _HOST="$_SRC_HOST"
-            _CMD="$_BEGIN$_DETACH_HERE"
-        ;;
-        ATTACHDETACH)
-            attachdetach "$_SRC_HOST" "$_DST_HOST" "$_SP_VOL" "$_DST_PATH" "ATTACH"
-            attachdetach "$_SRC_HOST" "$_DST_HOST" "$_SP_VOL" "$_DST_PATH" "DETACH"
-        ;;
-        MKIMAGE)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_TEMPLATE$_CREATE$_ATTACH$_SYMLINK$_EXTRA"
-        ;;
-        PRE_CONTEXT)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DELVOL_DETACH$_TEMPLATE$_CREATE$_ATTACH$_SYMLINK$_EXTRA"
-        ;;
-        SNAPSHOT)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_SNAPSHOT"
-        ;;
-        SNAPSHOT_LIVE)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_FSFREEZE$_SNAPSHOT"
-        ;;
-        DELSNAP)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DELSNAP"
-        ;;
-        SNAPREVERT)
-            _HOST="$_DST_HOST"
-            _CMD="$_BEGIN$_DETACH_ALL$_SNAPREVERT$_ATTACH"
-        ;;
-        *)
-    esac
-    if [ -n "$_CMD" ]; then
-#        echo "$_CMD" >/tmp/tm_${0##*/}_${_ACTION}-$(date +%s).sh
-        if [ -n "$_HOST" ]; then
-            splog "run $_ACTION on $_HOST ($_DST_PATH)"
-            ssh_exec_and_log "$_HOST" "$_CMD$_END" \
-                 "Error processing $_ACTION on $_HOST($_DST_PATH)"
+function storpoolVolumeAttach()
+{
+    local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}"
+    local _SP_CLIENT
+    if [ -n "$_SP_HOST" ]; then
+        _SP_CLIENT="$(storpoolClientId "$_SP_HOST")"
+        if [ -n "$_SP_CLIENT" ]; then
+           _SP_CLIENT="client $_SP_CLIENT"
         else
-            splog "run $_ACTION ($_DST_PATH)"
-            exec_and_log "$_CMD$_END" \
-                 "Error processing $_ACTION on $_HOST($_DST_PATH)"
+            splog "Error: Can't get remote CLIENT_ID from $_SP_HOST"
+            exit -1
         fi
+    fi
+    storpoolRetry attach volume "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
+
+    trapAdd "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
+
+    storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
+
+    trapDel "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
+}
+
+function storpoolVolumeDetach()
+{
+    local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4"
+    local _SP_CLIENT volume client
+#    splog "storpoolVolumeDetach($*)"
+    if [ -n "$_DETACH_ALL" ]; then
+        _SP_CLIENT="all"
+    else
+        if [ -n "$_SP_HOST" ]; then
+            _SP_CLIENT="$(storpoolClientId "$_SP_HOST")"
+            if [ "$_SP_CLIENT" = "" ]; then
+                splog "Error: Can't get SP_OURID for host $_SP_HOST"
+                exit -1
+            fi
+        fi
+    fi
+    while IFS=',' read volume client; do
+        volume="${volume//\"/}"
+        client="${client//\"/}"
+        case "$_SP_CLIENT" in
+            all)
+                storpoolRetry detach volume "$volume" all ${_FORCE:+force yes} >/dev/null
+                break
+                ;;
+             '')
+                storpoolRetry detach volume "$volume" here ${_FORCE:+force yes} >/dev/null
+                break
+                ;;
+              *)
+                if [ "$_SP_CLIENT" = "$client" ]; then
+                    storpoolRetry detach volume "$volume" client "$client" ${_FORCE:+force yes} >/dev/null
+                fi
+                ;;
+        esac
+    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client]|@csv")
+}
+
+function storpoolVolumeTemplate()
+{
+    local _SP_VOL="$1" _SP_TEMPLATE="$2"
+    storpoolRetry volume "$_SP_VOL" template "$_SP_TEMPLATE" >/dev/null
+}
+
+function storpoolVolumeGetParent()
+{
+    local _SP_VOL="$1" parentName
+    parentName=$(storpoolRetry -j volume list | jq -r ".data|map(select(.name==\"$_SP_VOL\"))|.[]|[.parentName]|@csv") #"
+    echo "${parentName//\"/}"
+}
+
+function storpoolSnapshotCreate()
+{
+    local _SP_SNAPSHOT="$1" _SP_VOL="$2"
+
+    storpoolRetry volume "$_SP_VOL" snapshot "$_SP_SNAPSHOT" >/dev/null
+}
+
+function storpoolSnapshotDelete()
+{
+    local _SP_SNAPSHOT="$1"
+
+    storpoolRetry snapshot "$_SP_SNAPSHOT" delete "$_SP_SNAPSHOT" >/dev/null
+}
+
+function storpoolSnapshotRevert()
+{
+    local _SP_SNAPSHOT="$1" _SP_VOL="$2"
+    local _SP_TMP="$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
+
+    storpoolRetry volume "$_SP_VOL" rename "${_SP_VOL}-${_SP_TMP}" >/dev/null
+
+    trapAdd "storpool volume \"$_SP_TMP\" rename \"$_SP_VOL\""
+
+    storpoolRetry volume "$_SP_VOL" parent "$_SP_SNAPSHOT" >/dev/null
+
+    trapReset
+
+    storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
+}
+
+function storpoolSnapshotClone()
+{
+    local _SP_SNAP="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
+
+    storpoolRetry volume "$_SP_VOL" parent "$_SP_SNAP" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+}
+
+
+function oneSymlink()
+{
+    local _host="$1" _src="$2"
+    shift 2
+    local _dst="$*"
+    splog "symlink $_src -> ${_host}:{${_dst//[[:space:]]/,}}"
+    local remote_cmd=$(cat <<EOF
+    #_SYMLINK
+    for dst in $_dst; do
+        dst_dir=\$(dirname \$dst)
+        if [ -d "\$dst_dir" ]; then
+            true
+        else
+            splog "mkdir -p \$dst_dir"
+            trap "splog \"Can't create destination dir \$dst_dir (\$?)\"" EXIT TERM INT HUP
+            splog "mkdir -p \$dst_dir"
+            mkdir -p "\$dst_dir"
+            trap - EXIT TERM INT HUP
+        fi
+        splog "ln -sf $_src \$dst"
+        ln -sf "$_src" "\$dst"
+    done
+EOF
+)
+    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error creating symlink from $_src to ${_dst//[[:space:]]/,} on host $_host"
+}
+
+function oneFsfreeze()
+{
+    local _host="$1" _domain="$2"
+
+    local remote_cmd=$(cat <<EOF
+    #_FSFREEZE
+    if [ -n "$_domain" ]; then
+        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
+            splog "fsfreeze domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
+        else
+            splog "($?) $_domain fsfreeze failed! snapshot not consistent!"
+        fi
+    fi
+
+EOF
+)
+    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in fsfreeze of domain $_domain on host $_host"
+}
+
+function oneFsthaw()
+{
+    local _host="$1" _domain="$2"
+
+    local remote_cmd=$(cat <<EOF
+    #_FSTHAW
+    if [ -n "$_domain" ]; then
+        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null; then
+            splog "fsthaw domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
+        else
+            splog "($?) $_domain fsthaw failed! VM fs freezed?"
+        fi
+    fi
+
+EOF
+)
+    ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in fsthaw of domain $_domain on host $_host"
+}
+
+function oneCheckpointSave()
+{
+    local _host=${1%%:*}
+    local _path="${1#*:}"
+    local _vmid="$(basename "$_path")"
+    local _dsid="$(basename $(dirname "$_path"))"
+    local checkpoint="${_path}/checkpoint"
+    local template="one-ds-$_dsid"
+    local volume="one-sys-${_vmid}-checkpoint"
+    local sp_link="/dev/storpool/$volume"
+
+    SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
+
+    local remote_cmd=$(cat <<EOF
+    # checkpoint Save
+    if [ -f "$checkpoint" ]; then
+        if tar --no-seek --use-compress-program="$SP_COMPRESSION" --create --file="$sp_link" "$checkpoint"; then
+            splog "rm -f $checkpoint"
+            rm -f "$checkpoint"
+        else
+            splog "Checkpoint import failed! $checkpoint ($?)"
+            exit 1
+        fi
+    else
+        splog "Checkpoint file not found! $checkpoint"
+    fi
+
+EOF
+)
+    local file_size=$($SSH "$_host" "du -b \"$checkpoint\" | cut -f 1")
+    if [ -n "$file_size" ]; then
+        local volume_size=$(( (file_size *2 +511) /512 *512 ))
+        volume_size=$((volume_size/1024/1024))
+    else
+        splog "Checkpoint file not found! $checkpoint"
+        return 0
+    fi
+    splog "file_size=$file_size volume_size=$volume_size"
+
+    storpoolVolumeCreate "$volume" "$volume_size"M "$template"
+
+    trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
+
+    storpoolVolumeAttach "$volume" "${_host}"
+
+    splog "Saving $checkpoint to $volume"
+    ssh_exec_and_log "${_host}" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in checkpoint save of VM ${_vmid} on host ${_host}"
+
+    trapReset
+
+    storpoolVolumeDetach "$volume" "" "${_host}" "all"
+}
+
+function oneCheckpointRestore()
+{
+    local _host=${1%%:*}
+    local _path="${1#*:}"
+    local _vmid="$(basename "$_path")"
+    local checkpoint="${_path}/checkpoint"
+    local volume="one-sys-${_vmid}-checkpoint"
+    local sp_link="/dev/storpool/$volume"
+
+    SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
+
+    local remote_cmd=$(cat <<EOF
+    # checkpoint Restore
+    if [ -f "$checkpoint" ]; then
+        splog "file exists $checkpoint"
+    else
+        mkdir -p "$_path"
+        if tar --no-seek --use-compress-program="$SP_COMPRESSION" --to-stdout --extract --file="$sp_link" >"$checkpoint"; then
+            splog "RESTORED $volume $checkpoint"
+        else
+            splog "Error: Failed to export $checkpoint"
+            exit 1
+        fi
+    fi
+EOF
+)
+    if storpoolVolumeExists "$volume"; then
+        storpoolVolumeAttach "$volume" "${_host}"
+
+        trapAdd "storpoolVolumeDetach \"$volume\" \"force\" \"${_host}\" \"all\""
+
+        splog "Restoring $checkpoint from $volume"
+        ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
+                 "Error in checkpoint save of VM $_vmid on host $_host"
+
+        trapReset
+
+        storpoolVolumeDelete "$volume" "force"
+    else
+        splog "Checkpoint volume $volume not found"
     fi
 }
 
@@ -457,6 +626,7 @@ function oneDatastoreInfo()
                             /DATASTORE/CLUSTER_ID \
                             /DATASTORE/TEMPLATE/SHARED \
                             /DATASTORE/TEMPLATE/TYPE \
+                            /DATASTORE/TEMPLATE/BRIDGE_LIST \
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
                             /DATASTORE/TEMPLATE/SP_PLACEALL \
                             /DATASTORE/TEMPLATE/SP_PLACETAIL \
@@ -471,6 +641,7 @@ function oneDatastoreInfo()
     DS_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
     DS_SHARED="${XPATH_ELEMENTS[i++]}"
     DS_TEMPLATE_TYPE="${XPATH_ELEMENTS[i++]}"
+    BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
@@ -551,4 +722,95 @@ function oneTemplateInfo()
     DISK_TYPE_ARRAY=($_DISK_TYPE)
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
+}
+
+
+
+function oneDsDriverAction()
+{
+    local _DRIVER_PATH="$1"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${_DRIVER_PATH}") -b $DRV_ACTION"
+
+    unset i XPATH_ELEMENTS
+
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5 \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/DISK_TYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/STATE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/CLONING_ID \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/CLONING_OPS \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/CLONES \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE)
+
+
+    unset i
+    BASE_PATH="${XPATH_ELEMENTS[i++]}"
+    DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+    BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+    SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
+    SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
+    SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+    SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
+    SP_BW="${XPATH_ELEMENTS[i++]:--}"
+    NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
+    LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
+    DS_TYPE="${XPATH_ELEMENTS[i++]}"
+    MD5="${XPATH_ELEMENTS[i++]}"
+    SHA1="${XPATH_ELEMENTS[i++]}"
+    DRIVER="${XPATH_ELEMENTS[i++]}"
+    IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
+    PERSISTENT="${XPATH_ELEMENTS[i++]}"
+    FSTYPE="${XPATH_ELEMENTS[i++]}"
+    SOURCE="${XPATH_ELEMENTS[i++]}"
+    TYPE="${XPATH_ELEMENTS[i++]}"
+    DISK_TYPE="${XPATH_ELEMENTS[i++]}"
+    STATE="${XPATH_ELEMENTS[i++]}"
+    CLONING_ID="${XPATH_ELEMENTS[i++]}"
+    CLONING_OPS="${XPATH_ELEMENTS[i++]}"
+    CLONES="${XPATH_ELEMENTS[i++]}"
+    TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
+    SIZE="${XPATH_ELEMENTS[i++]}"
+
+    splog "\
+${ID:+ID=$ID }\
+${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
+${STATE:+STATE=$STATE }\
+${SIZE:+SIZE=$SIZE }\
+${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
+${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
+${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
+${SP_IOPS+SP_IOPS=$SP_IOPS }\
+${SP_BW+SP_BW=$SP_BW }\
+${SOURCE:+SOURCE=$SOURCE }\
+${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+${FSTYPE:+FSTYPE=$FSTYPE }\
+${TYPE:+TYPE=$TYPE }\
+${DISK_TYPE:+DISK_TYPE=$DISK_TYPE }\
+${CLONING_ID:+CLONING_ID=$CLONING_ID }\
+${CLONING_OPS:+CLONING_OPS=$CLONING_OPS }\
+${CLONES:+CLONES=$CLONES }\
+${IMAGE_PATH:+IMAGE_PATH=$IMAGE_PATH }\
+${BRIDGE_LIST:+BRIDGE_LIST=$BRIDGE_LIST }\
+${DRIVER:+DRIVER=$DRIVER }\
+"
 }

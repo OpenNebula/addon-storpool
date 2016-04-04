@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015, StorPool (storpool.com)                                    #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
@@ -22,8 +22,6 @@
 # snap_revert base64drvActionXML id
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
-
 #-------------------------------------------------------------------------------
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
@@ -39,86 +37,24 @@ fi
 DRIVER_PATH=$(dirname $0)
 source ${DRIVER_PATH}/../libfs.sh
 
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
 #-------------------------------------------------------------------------------
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DRV_ACTION=$1
-ID=$2
+DRV_ACTION="$1"
+ID="$2"
 
-#if type base64 2>&1 >/dev/null; then
-#    echo $DRV_ACTION | base64 -d >"/tmp/ds_sp_${0##*/}-$ID"
-#fi
-
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT)
-
-unset i
-SOURCE="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
-TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
-
-DST_HOST=`get_destination_host $ID`
-
-splog "\
-${ID:+ID=$ID }\
-${SOURCE:+SOURCE=$SOURCE }\
-${DST_HOST:+DST_HOST=$DST_HOST }\
-${TARGET_SNAPSHOT:+TARGET_SNAPSHOT=$TARGET_SNAPSHOT }\
-"
-if [ -z "$DST_HOST" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
-    exit -1
-fi
+oneDsDriverAction "$DRIVER_PATH"
 
 SP_VOL="${SOURCE##*/}"
-SP_SNAP="${SP_VOL}-snap$TARGET_SNAPSHOT"
-
+SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
 SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
+SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 
-SNAP_REVERT_CMD=$(cat <<EOF
-    set -e
-    export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
-
-    splog "volume $SP_VOL rename $SP_TMPVOL"
-    if storpool volume "$SP_VOL" rename "$SP_TMPVOL" 2>&1 >/dev/null; then
-        splog "volume $SP_VOL parent $SP_SNAP"
-        if storpool volume "$SP_VOL" parent "$SP_SNAP" 2>&1 >/dev/null; then
-            splog "volume $SP_TMPVOL delete"
-            if ! storpool volume "$SP_TMPVOL" delete "$SP_TMPVOL" 2>&1 >/dev/null; then
-                splog "failed to delete volume $SP_TMPVOL (softfail)"
-            fi
-        else
-            splog "revert $SP_TMPVOL to $SP_VOL"
-            if storpool volume "$SP_TMPVOL" rename "$SP_VOL" 2>&1 >/dev/null; then
-                errmsg="failed to revert volume $SP_VOL to $SP_SNAP"
-            else
-                errmsg="failed to restore after revert failed volume $SP_VOL to $SP_SNAP"
-            fi
-        fi
-    else
-        errmsg="failed to revert volume $SP_VOL to $SP_SNAP"
-    fi
-    if [ -n "\$errmsg" ]; then
-        splog "$errmsg"
-        echo "errmsg" >&2
-        exit 1
-    fi
-
-    splog "END SNAP_REVERT_CMD"
-EOF
-)
-
-splog "RUN SNAP_REVERT_CMD on $DST_HOST"
-ssh_exec_and_log "$DST_HOST" "$SNAP_REVERT_CMD" \
-                 "Error reverting snapshot $SP_SNAP"
+storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
 
 splog "END"
