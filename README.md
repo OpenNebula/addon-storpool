@@ -203,7 +203,7 @@ cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
 
 #### sunstone related pieces
 
-* Patch and rebuild sunstone interface
+* Patch and rebuild the sunstone interface
 ```bash
 pushd /usr/lib/one/sunstone/public
 # patch the sunstone interface
@@ -214,7 +214,6 @@ npm install
 bower --allow-root install
 grunt sass
 grunt requirejs
-
 popd
 ```
 
@@ -290,9 +289,9 @@ The default configuration is to copy the stats from the API on all nodes. This i
 * Restart `opennebula` and `opennebula-sunstone` services
 ```bash
 service opennebula restart
-service opennebuka-sunstone restart
+service opennebula-sunstone restart
 ```
-* Sync remote scripts as oneadmin user
+* As oneadmin user sync the remote scripts
 ```bash
 su - oneadmin
 onehost sync --force
@@ -311,7 +310,7 @@ This addon enables full support of transfer manager (TM_MAD) backend of type sha
 If TM_MAD is storpool it is possible to have both shared and ssh datastores, configured per cluster. To achieve this two attributes should be set:
 
 * DATASTORE_LOCATION in cluster configuration should be set
-* By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in datastore configuration
+* By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in the datastore configuration
 
 
 ### Configuring the Datastore
@@ -424,4 +423,4 @@ Once configured, the StorPool image datastore can be used as a backend for disk 
 
 Non-persistent images are StorPool volumes. When you use a non-persistent image for a VM the driver creates a new temporary volume and attaches the new volume to the VM. When the VM is destroyed, the temporary volume is deleted.
 
-When the StorPool driver is enabled for System datastore the context ISO image and the volatile disks are placed on StorPool volumes. In this case on the disk is kept only VM configuration XML and the RAM dumps during migrate, suspend etc.
+When the StorPool driver is enabled for the SYSTEM datastore the context ISO image and the volatile disks are placed on StorPool volumes. In this case on the disk is kept only VM configuration XML and the RAM dumps during migrate, suspend etc.
