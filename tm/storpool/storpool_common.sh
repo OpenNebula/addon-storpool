@@ -123,8 +123,17 @@ EOF
 
 function storpoolClientId()
 {
-#    ssh "$1" /usr/sbin/storpool_confget -s \`hostname\` | grep SP_OURID | cut -d '=' -f 2 | tail -n 1
-    /usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1
+    local result bridge
+    result=$(/usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    if [ "$result" = "" ]; then
+        for bridge in $BRIDGE_LIST; do
+            result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            if [ -n "$result" ]; then
+                break
+            fi
+        done
+    fi
+    echo $result
 }
 
 function storpoolRetry() {
