@@ -44,10 +44,6 @@ source "$TMCOMMON"
 # load local configuration parameters
 #-------------------------------------------------------------------------------
 
-
-# SCRIPTS_REMOTE_DIR must match same in /etc/one/oned.conf
-SCRIPTS_REMOTE_DIR=/var/tmp/one
-
 DEBUG_SP_RUN_CMD=1
 
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
@@ -58,6 +54,22 @@ fi
 if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
+
+function getFromConf()
+{
+    local cfgFile="$1" varName="$2" first="$3"
+    local response
+    if [ -n "$first" ]; then
+        response="$(grep "^$varName" "$cfgFile" | head -n 1)"
+    else
+        response="$(grep "^$varName" "$cfgFile" | tail -n 1)"
+    fi
+    response="${response#*=}"
+    if [ -n "$DEBUG_COMMON" ]; then
+        splog "getFromConf($cfgFile,$varName,$first): $response"
+    fi
+    echo "${response//\"/}"
+}
 
 #-------------------------------------------------------------------------------
 # trap handling functions
@@ -426,11 +438,12 @@ EOF
 function oneFsfreeze()
 {
     local _host="$1" _domain="$2"
+    SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
 
     local remote_cmd=$(cat <<EOF
     #_FSFREEZE
     if [ -n "$_domain" ]; then
-        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
             splog "fsfreeze domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
@@ -447,11 +460,12 @@ EOF
 function oneFsthaw()
 {
     local _host="$1" _domain="$2"
+    SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
 
     local remote_cmd=$(cat <<EOF
     #_FSTHAW
     if [ -n "$_domain" ]; then
-        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null; then
             splog "fsthaw domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
