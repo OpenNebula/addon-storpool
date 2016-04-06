@@ -38,7 +38,9 @@ while read l; do
 	ds_data=(${l//,/ })
 done < <(storpool -j template list | jq -r ".data|map(select(.name==\"$DS_NAME\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv")
 
-#splog "$PWD datastore $DS_ID (${ds_data[@]})>>>${DRV_ACTION:0:6}"
+if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
+	splog "$PWD datastore $DS_ID (${ds_data[@]})>>>${DRV_ACTION:0:6}"
+fi
 
 if [ "${DRV_ACTION:0:6}" = "system" ]; then
 #	echo "$PWD/$0 $*" >/tmp/monitor_system.sh
