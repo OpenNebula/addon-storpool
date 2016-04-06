@@ -133,10 +133,16 @@ function storpoolClientId()
             fi
         done
     fi
+    if [ -n "$DEBUG_COMMON" ]; then
+        splog "storpoolClientId($1): ${result} ${bridge:+bridge:$bridge}"
+    fi
     echo $result
 }
 
 function storpoolRetry() {
+    if [ -n "$DEBUG_COMMON" ]; then
+        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST"
+    fi
     if [ -n "$DEBUG_SP_RUN_CMD" ]; then
         splog "storpool $*"
     fi
@@ -664,9 +670,9 @@ function oneDatastoreInfo()
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
 
-    [ -n "$SP_API_HTTP_HOST" ] || unset SP_API_HTTP_HOST
-    [ -n "$SP_API_HTTP_PORT" ] || unset SP_API_HTTP_PORT
-    [ -n "$SP_AUTH_TOKEN" ] || unset SP_AUTH_TOKEN
+    [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
+    [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
+    [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
 #    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
 #    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
@@ -816,9 +822,9 @@ function oneDsDriverAction()
     TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
 
-    [ -n "$SP_API_HTTP_HOST" ] || unset SP_API_HTTP_HOST
-    [ -n "$SP_API_HTTP_PORT" ] || unset SP_API_HTTP_PORT
-    [ -n "$SP_AUTH_TOKEN" ] || unset SP_AUTH_TOKEN
+    [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
+    [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
+    [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
     splog "\
 ${ID:+ID=$ID }\
