@@ -55,6 +55,9 @@ sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 if [ -f "$sprcfile" ]; then
     source "$sprcfile"
 fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+    source "/etc/storpool/addon-storpool.conf"
+fi
 
 #-------------------------------------------------------------------------------
 # trap handling functions

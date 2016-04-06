@@ -30,7 +30,10 @@ SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
 SP_MONITOR_HELPER="cat $SP_TEMPLATE_STATUS_JSON"
 
 if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
-    . "${DRIVER_PATH}/../../addon-storpoolrc"
+    source "${DRIVER_PATH}/../../addon-storpoolrc"
+fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+    source "/etc/storpool/addon-storpool.conf"
 fi
 
 declare ds_data

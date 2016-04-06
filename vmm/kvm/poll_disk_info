@@ -62,6 +62,9 @@ BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 if [ -f "../../addon-storpoolrc" ]; then
 	source "../../addon-storpoolrc"
 fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+	source "/etc/storpool/addon-storpool.conf"
+fi
 
 if [ -L "$dev" ]; then
 	realDev=$(readlink -e $dev)
