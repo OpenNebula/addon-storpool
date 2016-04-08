@@ -49,6 +49,7 @@ A working StorPool cluster is required.
 * support migration from one to another SYSTEM_DS if both are with `storpool` TM_MAD
 * support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 * support two different modes of disk usage reporting - LVM style and StorPool style
+* support datastores on different storpool clusters
 * extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
 * all disk images are thin provisioned
 * (optional) helper tool to tweak the number of queues for virtio-scsi (require `DEVICE_PREFIX=sd`)
@@ -57,8 +58,8 @@ A working StorPool cluster is required.
 
 ## Limitations
 
-1. tested only with the KVM hypervisor
-1. no support for VM snapshot because it is handled internally by libvirt
+1. Tested only with the KVM hypervisor
+1. No support for VM snapshot because it is handled internally by libvirt
 1. When SYSTEM_Ds integration is enabled the reported free/used/total space is not propper because the volatile disks and the context image are expected to be files instead of a block devices. Extra external monitoring of space usage should be implemented.
 
 ## Installation
@@ -68,16 +69,16 @@ A working StorPool cluster is required.
 * Install required dependencies
 ```bash
 # required during the install procedure
-yum -y install patch git jq lz4
+yum -y install --enablerepo=epel patch git jq lz4
 # for sunstone integration: node, bower, grunt
 yum -y install npm
 npm install bower -g
 npm install grunt-cli -g
 # required for system operation (on all nodes)
-yum -y install jq python-lxml
+yum -y install --enablerepo=epel jq python-lxml
 ```
 
-* Clone the addon-storpool
+* Clone the addon-storpool from github
 ```bash
 git clone https://github.com/OpenNebula/addon-storpool
 ```
@@ -281,9 +282,116 @@ SP_CHECKPOINT=nomigrate
 ```
 
 #### space usage monitoring configuration
-The OpenNebula's monitoring probes are run on the VM hosts. As this addon support no direct access to the StorPool API we should provide access to the needed data to the scripts that are running on the HV nodes.
-The default configuration is to copy the stats from the API on all nodes. This is the case when there is no shared filesystem on all nodes. When there is shared filesystem available 
+The OpenNebula's monitoring probes are run on the VM hosts. As this addon support no direct access to the StorPool API from the HV nodes we should provide access to the needed data to the scripts that are running on them. The default configuration is for access to single StorPool cluster which is default for the one-fe as follow: 
 
+```
+# datastores stats
+SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
+SP_TEMPLATE_STATUS_RUN="${0%/*}/monitor_helper"
+
+# VM disks stats
+SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
+SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
+
+# VM disks snapshots stats
+SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
+SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
+
+# Copy(scp) the JSON files to the remote hosts
+MONITOR_SYNC_REMOTE="yes"
+
+# Uncomment to enable debugging
+#MONITOR_SYNC_DEBUG=1
+```
+
+For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the path to the JSON files must be altered. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
+Note: the shared filesystem must be mounted on same system path on all nodes as on the one-fe!
+
+For example the shared filesystem in mounted on `/sharedfs`:
+```bash
+cat >>/var/lib/one/remotes/monitor_helper-syncrc <<EOF
+# datastores stats
+export SP_TEMPLATE_STATUS_JSON="/sharedfs/storpool_template_status.json"
+
+# VM disks stats
+export SP_VOLUME_SPACE_JSON="/sharedfs/storpool_volume_usedSpace.json"
+
+# VM disks snapshots stats
+export SP_SNAPSHOT_SPACE_JSON="/sharedfs/storpool_snapshot_space.json"
+
+# Copy(scp) the JSON files to the remote hosts
+export MONITOR_SYNC_REMOTE="no"
+
+EOF
+```
+
+Additional configuration when there is datastore on another(non default) storpool cluster
+Note: The following configuration is assuming that the Hosts using Datastores on different StorPool cluster are separated on different in the OpenNebula Clusters in the front-end(in the example `cluster0` is the system default storpool cluster and `cluster1` is the name of the seconf cluster)!
+
+Create symlink of `monitor_helper-sync` file with different name (in the example `monitor_helper-sync1`)
+```bash
+cd /var/lib/one/remotes/datastore/storpool
+ln -s monitor_helper-sync monitor_helper-sync1
+```
+Then create the configuration file `/var/lib/one/remotes/monitor_helper-sync1rc` containing the credentials to access the API of the oter storpool cluster:
+```bash
+cat >>/var/lib/one/remotes/monitor_helper-sync1rc <<EOF
+# StorPool API host (For example 10.2.0.254)
+export SP_API_HTTP_HOST=10.2.0.254
+# StorPool API port (if it is not same as the default one. For example 8181)
+export SP_API_HTTP_PORT=8181
+# StorPool API auth token
+export SP_AUTH_TOKEN=6607015630136573360
+
+# datastores stats
+export SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status-C2.json"
+# reconfigure the default variable
+export SP_MONITOR_HELPER="cat $SP_TEMPLATE_STATUS_JSON"
+
+# VM disks stats
+export SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace-C2.json"
+# reconfigure the default variable
+export SP_CMD_VOLUME_SPACE="cat $SP_VOLUME_SPACE_JSON"
+
+# VM disks snapshots stats
+export SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space-C2.json"
+# reconfigure the default variable
+export SP_CMD_SNAPSHOT_SPACE="cat $SP_SNAPSHOT_SPACE_JSON"
+
+# Coommand to use to get the list of hosts where to copy the JSON files (used when there is no shared folder available
+# In this example we are selecting the hosts that are member of 'cluster1'
+export SP_MONITOR_HOST_CMD="onehost list | grep on | grep 'cluster1' | awk '{print \$2}'"
+
+EOF
+```
+
+Alter the `SP_MONITOR_HOST_CMD` on the default storpool to report only the hosts in the firt cluster (in the example the cluster is named 'cluster0'). Needed when the there is no shared filesystem available.
+```bash
+cat >>/var/lib/one/remotes/addon-storpoolrc <<EOF
+SP_MONITOR_HOST_CMD="onehost list | grep on | grep 'cluster0' | awk '{print \$2}'"
+
+EOF
+```
+On all hosts that are member of the second cluster add the following to `/etc/storpool/addon-storpool.conf`
+```bash
+cat >>/etc/storpool/addon-storpool.conf <<EOF
+source /var/tmp/one/monitor_helper-sync1rc
+
+EOF
+```
+
+Add a cron job for the symlink symlink `monitor_helper-sync1`
+```bash
+(crontab -u oneadmin -l; echo "*/2 * * * * /var/lib/one/remotes/datastore/storpool/monitor_helper-sync1 2>&1 >/tmp/monitor_helper_sync1.err") | crontab -u oneadmin -
+```
+
+Include `SP_API_HTTP_HOST` `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN` as additional attributes to the Datstore which is on the second StorPool cluster.
+
+Update the Hosts:
+```bash
+su - oneadmin
+onehist sync --force
+```
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
