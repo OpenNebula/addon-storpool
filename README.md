@@ -37,6 +37,7 @@ This add-on is compatible with OpenNebula 4.10+ and StorPool 15.02+.
 * StorPool initiator driver (storpool_block)
 * If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 * If it is only Bridge Node - it must be configured as Host in open nebula but separated to not run VMs.
+* The Bridge node must have qemu-img available - used by the addon during marketplace imports to convert the qcow2 images to raw ones.
 
 ### StorPool cluster
 
