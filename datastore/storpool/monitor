@@ -24,10 +24,11 @@ DS_ID="$2"
 
 DRIVER_PATH="${0%/*}"
 UNI_PATH="${DRIVER_PATH}/../../datastore/storpool"
-DS_NAME="one-ds-${DS_ID}"
 MONITOR_HELPER="$UNI_PATH/monitor_helper"
 SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
 SP_MONITOR_HELPER="cat $SP_TEMPLATE_STATUS_JSON"
+SP_MONITOR_UPDATE_TEMPLATE=
+
 
 if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
     source "${DRIVER_PATH}/../../addon-storpoolrc"
@@ -36,13 +37,8 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
-declare ds_data
-while read l; do
-	ds_data=(${l//,/ })
-done < <(storpool -j template list | jq -r ".data|map(select(.name==\"$DS_NAME\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv")
-
 if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
-	splog "$PWD datastore $DS_ID (${ds_data[@]})>>>${DRV_ACTION:0:6}"
+	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 fi
 
 if [ "${DRV_ACTION:0:6}" = "system" ]; then
@@ -54,85 +50,8 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 		echo "{[]}" >"$SP_TEMPLATE_STATUS_JSON"
 		splog "$SP_TEMPLATE_STATUS_JSON not found. Created empty one."
 	fi
-	
-	if [ ${#ds_data[@]} -eq 0  ]; then
-#		splog "DATASTORE_ID $DS_ID not SP defined"
-		exit 0
-	fi
-else
+#else
 #	echo "$0 $*" >/tmp/monitor_image.sh
-	SP_TEMPLATE_PROPAGATE="YES"
-	
-	XPATH="${UNI_PATH}/../xpath.rb -b $DRV_ACTION"
-	unset i XPATH_ELEMENTS
-	while IFS= read -r -d '' element; do
-		XPATH_ELEMENTS[i++]="$element"
-	done < <($XPATH \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/ID \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
-		/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TM_MAD)
-	
-	unset i
-	BASE_PATH="${XPATH_ELEMENTS[i++]}"
-	DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
-	BRIDGE_LIST="${XPATH_ELEMENTS[i++]:-$HOSTNAME}"
-	SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
-	SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
-	SP_PLACETAIL="${XPATH_ELEMENTS[i++]:-$SP_PLACEALL}"
-	SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
-	SP_BW="${XPATH_ELEMENTS[i++]:--}"
-	SP_TEMPLATE_PROPAGATE="${XPATH_ELEMENTS[i++]:-$SP_TEMPLATE_PROPAGATE}"
-	TM_MAD="${XPATH_ELEMENTS[i++]}"
-	i=0
-	if [ "$TM_MAD" = "storpool" ]; then
-		cmd=
-		DO_TEMPLATE=
-		for e in SP_REPLICATION SP_PLACEALL SP_PLACETAIL SP_IOPS SP_BW; do
-			eval new=\$$e
-			current=${ds_data[$i]}
-			current=${current//\"/}
-			i=$((i+1))
-			if [ "$new" = "$current" ]; then
-				continue
-			else
-				key=${e#SP_}
-				DO_TEMPLATE+="$key:$current "
-				key=${key,,}
-				case "$key" in
-					bw)
-						[ -n "${new//[[:digit:]]/}" ] || new+="K"
-						;;
-					placeall)
-						key="placeAll"
-						;;
-					placetail)
-						key="placeTail"
-						;;
-				esac
-				cmd+="$key $new "
-			fi
-		done
-		if [ -n "$cmd" ] ; then
-			splog "template $DS_NAME $cmd(${DO_TEMPLATE%[[:space:]]})"
-			storpool template "$DS_NAME" $cmd 2>&1 >/dev/null
-			if [ "$SP_TEMPLATE_PROPAGATE" = "YES" ] && [ ${#ds_data[@]} -gt 0 ]; then
-				splog "template $DS_NAME propagate"
-				storpool template "$DS_NAME" propagate 2>&1 >/dev/null
-			fi
-#		else
-#			splog "template $DS_NAME is OK"
-		fi
-	else
-		splog "TM_MAD not StorPool ($TM_MAD)"
-		exit 0
-	fi
 fi # DRV_ACTION
 
 while IFS=',' read n t f; do

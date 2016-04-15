@@ -21,20 +21,24 @@ export PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
 
 
+SP_CACHE_PATH="/tmp"
 # datastores stats
-SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
+SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
 SP_TEMPLATE_STATUS_RUN="${0%/*}/monitor_helper"
 
 # VM disks stats
-SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
+SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
 SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
 
 # VM disks snapshots stats
-SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
 
 # Do sync to remote hosts
 MONITOR_SYNC_REMOTE="yes"
+
+# Do template propagate
+SP_TEMPLATE_PROPAGATE="YES"
 
 # command to get hosts list to sync
 SP_MONITOR_HOST_CMD="onehost list | grep on | awk '{print \$2}'"
@@ -48,67 +52,220 @@ if [ -f "${driverPath}/../../${0##*/}rc" ]; then
 	source "${driverPath}/../../${0##*/}rc"
 fi
 
-jFiles=
+
+XPATH="${driverPath}/../xpath_multi.py"
+
+unset i XPATH_ELEMENTS
+while IFS= read element; do
+	XPATH_ELEMENTS[i++]="$element"
+done < <(onedatastore list -x | $XPATH -s \
+        /DATASTORE_POOL/DATASTORE/ID \
+        /DATASTORE_POOL/DATASTORE/CLUSTER_ID \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/TM_MAD \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_REPLICATION \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACEALL \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACETAIL \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_IOPS \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_BW \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_SYSTEM)
+
+unset i
+_DS_ID="${XPATH_ELEMENTS[i++]}"
+_DS_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
+_DS_TM_MAD="${XPATH_ELEMENTS[i++]}"
+_SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
+_SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
+_SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+_SP_IOPS="${XPATH_ELEMENTS[i++]}"
+_SP_BW="${XPATH_ELEMENTS[i++]}"
+_SP_TEMPLATE_PROPAGATE="${XPATH_ELEMENTS[i++]}"
+_SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
+_SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
+_SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
+_SP_SYSTEM="${XPATH_ELEMENTS[i++]}"
+
+_OLDIFS=$IFS
+IFS=";"
+DS_ID_ARRAY=($_DS_ID)
+DS_CLUSTER_ID_ARRAY=($_DS_CLUSTER_ID)
+DS_TM_MAD_ARRAY=($_DS_TM_MAD)
+SP_REPLICATION_ARRAY=($_SP_REPLICATION)
+SP_PLACEALL_ARRAY=($_SP_PLACEALL)
+SP_PLACETAIL_ARRAY=($_SP_PLACETAIL)
+SP_IOPS_ARRAY=($_SP_IOPS)
+SP_BW_ARRAY=($_SP_BW)
+SP_TEMPLATE_PROPAGATE_ARRAY=($_SP_TEMPLATE_PROPAGATE)
+SP_API_HTTP_HOST_ARRAY=($_SP_API_HTTP_HOST)
+SP_API_HTTP_PORT_ARRAY=($_SP_API_HTTP_PORT)
+SP_AUTH_TOKEN_ARRAY=($_SP_AUTH_TOKEN)
+SP_SYSTEM_ARRAY=($_SP_SYSTEM)
+IFS=$_OLDIFS
+
+declare -A jFiles
 
 function run_task()
 {
-	local _run="$1" _jsonFile="$2"
+	local _run="$1" _jsonFile="$2" _cluster="$3"
 	# dump json to local file
-	eval ${_run} 2>/dev/null >"${_jsonFile}New"
+	local _jDir="${SP_CACHE_PATH}/cid_${_cluster}"
+	mkdir -p "${_jDir}"
+	eval ${_run} 2>/dev/null >"${_jDir}/${_jsonFile}New"
 	ret=$?
 	if [ $ret -eq 0 ]; then
-		if mv -f "${_jsonFile}New" "${_jsonFile}"; then
-			jFiles="$jFiles ${_jsonFile}"
+		if mv -f "${_jDir}/${_jsonFile}New" "${_jDir}/${_jsonFile}"; then
+			jFiles[${_jsonFile}]="${_jsonFile}"
 		fi
 		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-			splog "${_run} Completed: $_jsonFile"
+			splog "${_run} cluster_id:${_cluster} ${_jDir}/${_jsonFile}"
 		fi
 	else
-		splog "${_run} failed! ret=${ret} using old ${_jsonFile}"
+		splog "${_run} failed! ret=${ret} using old ${_jDir}/${_jsonFile}"
 	fi
 	return $ret
 }
 
-function sync_files()
-{
-	local _files="${1:-$jFiles}" _destDir="${2:-/tmp/}"
-	# sync to remote hosts
-	if [ "${_files//[[:space:]]/}" = "" ]; then
-		splog "Nothing to sync"
-		return 1
+declare -a template_data
+
+for i in ${!DS_ID_ARRAY[@]}; do
+	[ "${DS_TM_MAD_ARRAY[i]}" = "storpool" ] || continue
+	
+	SP_TEMPLATE_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
+	
+	cmd=
+	comment=
+	template_name="one-ds-${DS_ID_ARRAY[i]}"
+	sp_token="${SP_AUTH_TOKEN_ARRAY[i]}"
+	[ -n "$sp_token" ] && export SP_AUTH_TOKEN="$sp_token" || unset SP_AUTH_TOKEN
+	sp_host="${SP_API_HTTP_HOST_ARRAY[i]}"
+	[ -n "$sp_host" ] && export SP_API_HTTP_HOST="$sp_host" || unset SP_API_HTTP_HOST
+	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
+	[ -n "$sp_port" ] && export SP_API_HTTP_HOST="$sp_port" || unset SP_API_HTTP_PORT
+	
+	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv") #"
+	template_data=(${tmp//,/ })
+	
+	old=${template_data[0]//\"/}
+	new=${SP_REPLICATION_ARRAY[i]:-3}
+	if [ -n "$new" ] && [ "$old" != "$new" ]; then
+		cmd+="replication $new "
+		comment+=" replication:$old"
+	fi
+	old=${template_data[1]//\"/}
+	new=${SP_PLACEALL_ARRAY[i]}
+	if [ -n "$new" ] && [ "$old" != "$new" ]; then
+		cmd+="placeAll $new "
+		comment+=" placeAll:$old"
+	fi
+	old=${template_data[2]//\"/}
+	new=${SP_PLACETAIL_ARRAY[i]}
+	if [ -n "$new" ] && [ "$old" != "$new" ]; then
+		cmd+="placeTail $new "
+		comment+=" placeTail:$old"
+	fi
+	old=${template_data[3]//\"/}
+	new=${SP_IOPS_ARRAY[i]:--}
+	if [ -n "$new" ] && [ "$old" != "$new" ]; then
+		cmd+="iops $new "
+		comment+=" iops:$old"
+	fi
+	old=${template_data[4]//\"/}
+	new=${SP_IOPS_ARRAY[i]:--}
+	if [ -n "$new" ] && [ "$old" != "$new" ]; then
+		cmd+="bw $new "
+		comment+=" bw:$old"
 	fi
 	
-	eval $SP_MONITOR_HOST_CMD | while read rHost; do
-	#	splog "sync $rHost"
-		if [ "$rHost" != "$(hostname -s)" ]; then
-			scp -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
-			    ${_files} ${rHost}:"${_destDir}" 2>/dev/null
-			ret=$?
-			if [ $ret -ne 0 ]; then
-				splog "${rHost} ${_files} returned ${ret}"
-			else
-				if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-					splog "$rHost ${_files} copied to ${_destDir}"
+	if [ -n "$cmd" ]; then
+		storpool template "$template_name" $cmd
+		splog "($?) template $template_name $cmd OLD:$comment api:$sp_host"
+		if [ "$SP_TEMPLATE_PROPAGATE" = "YES" ]; then
+			storpool template "$template_name" propagate 2>&1 >/dev/null
+			splog "($?) template $template_name propagate"
+		fi
+	fi
+	
+	cluster_id="${DS_CLUSTER_ID_ARRAY[i]}"
+	[ "${clusters/|$cluster_id|/}" = "$clusters" ] || continue
+
+	run_task "$SP_TEMPLATE_STATUS_RUN" "${SP_TEMPLATE_STATUS_JSON}" "${cluster_id}"
+	run_task "$SP_VOLUME_SPACE_RUN" "$SP_VOLUME_SPACE_JSON" "${cluster_id}"
+	run_task "$SP_SNAPSHOT_SPACE_RUN" "$SP_SNAPSHOT_SPACE_JSON" "${cluster_id}"
+
+	clusters+="|$cluster_id|"
+done
+
+
+# hosts processing
+
+unset i XPATH_ELEMENTS
+while IFS= read element; do
+	XPATH_ELEMENTS[i++]="$element"
+done < <(onehost list -x | $XPATH -s \
+  /HOST_POOL/HOST/ID \
+  /HOST_POOL/HOST/NAME \
+  /HOST_POOL/HOST/STATE \
+  /HOST_POOL/HOST/CLUSTER_ID \
+  /HOST_POOL/HOST/SP_CACHE_PATH)
+
+unset i
+_HOST_ID="${XPATH_ELEMENTS[i++]}"
+_HOST_NAME="${XPATH_ELEMENTS[i++]}"
+_HOST_STATE="${XPATH_ELEMENTS[i++]}"
+_HOST_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
+_HOST_SP_CACHE_PATH="${XPATH_ELEMENTS[i++]}"
+
+_OLDIFS=$IFS
+IFS=";"
+HOST_ID_ARRAY=($_HOST_ID)
+HOST_NAME_ARRAY=($_HOST_NAME)
+HOST_STATE_ARRAY=($_HOST_STATE)
+HOST_CLUSTER_ID_ARRAY=($_HOST_CLUSTER_ID)
+HOST_SP_CACHE_PATH_ARRAY=($_HOST_SP_CACHE_PATH)
+IFS=$_OLDIFS
+
+for i in ${!HOST_ID_ARRAY[@]}; do
+	_lHost="$(hostname -s)"
+	_rHost="${HOST_NAME_ARRAY[i]}"
+	_cluster_id="${HOST_CLUSTER_ID_ARRAY[i]}"
+	_destDir="${HOST_SP_CACHE_PATH_ARRAY[i]:-$SP_CACHE_PATH}"
+	_jDir="${SP_CACHE_PATH}/cid_${_cluster_id}"
+	
+	if [ -d "$_jDir" ]; then
+		for _jFile in ${jFiles[@]}; do
+			if [ "${_rHost}" = "${_lHost}" ]; then
+				cp "${_jDir}/${_jFile}" "${_destDir}"/
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					splog "${_rHost} copy ${_jFile} returned ${ret}"
+				else
+					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+						splog "${_rHost} is localhost. ${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+					fi
+				fi
+			elif [ "$MONITOR_SYNC_REMOTE" = "yes" ]; then
+				scp -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
+				    "${_jDir}/${_jFile}" ${_rHost}:"${_destDir}/" 2>/dev/null >/dev/null
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					splog "${_rHost} ${_jFile} returned ${ret}"
+				else
+					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+						splog "${_rHost} ${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+					fi
 				fi
 			fi
-		else
-			if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-				splog "$rHost is localhost"
-			fi
-		fi
-	done
-}
+		done
+	else
+		splog "${_rHost} Directory not found! ${_jDir}"
+	fi
+done
 
-run_task "$SP_TEMPLATE_STATUS_RUN" "$SP_TEMPLATE_STATUS_JSON"
 
-run_task "$SP_VOLUME_SPACE_RUN" "$SP_VOLUME_SPACE_JSON"
-
-run_task "$SP_SNAPSHOT_SPACE_RUN" "$SP_SNAPSHOT_SPACE_JSON"
-
-if [ "$MONITOR_SYNC_REMOTE" = "yes" ]; then
-	sync_files
-fi
 
 if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-	splog "END$jFiles"
+	splog "END"
 fi
