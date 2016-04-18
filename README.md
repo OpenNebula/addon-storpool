@@ -286,16 +286,18 @@ SP_CHECKPOINT=nomigrate
 The OpenNebula's monitoring probes are run on the VM hosts. As this addon support no direct access to the StorPool API from the HV nodes we should provide access to the needed data to the scripts that are running on them. The default configuration is for access to single StorPool cluster which is default for the one-fe as follow: 
 
 ```
+SP_CACHE_PATH="/tmp/"
+
 # datastores stats
-SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
+SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
 SP_TEMPLATE_STATUS_RUN="${0%/*}/monitor_helper"
 
 # VM disks stats
-SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
+SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
 SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
 
 # VM disks snapshots stats
-SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
 
 # Copy(scp) the JSON files to the remote hosts
