@@ -28,7 +28,7 @@ MONITOR_HELPER="$UNI_PATH/monitor_helper"
 SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status.json"
 SP_MONITOR_HELPER="cat $SP_TEMPLATE_STATUS_JSON"
 SP_MONITOR_UPDATE_TEMPLATE=
-
+DS_NAME="one-ds-$DS_ID"
 
 if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
     source "${DRIVER_PATH}/../../addon-storpoolrc"
