@@ -251,7 +251,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p ${_destDir} && cat >${_destDir}/${_jFile}" 2>/dev/null >/dev/null
 				ret=$?
 				if [ $ret -ne 0 ]; then
-					splog "${_rHost} ${_jFile} returned ${ret}"
+					splog "${_rHost} ${_destDir}/${_jFile} returned ${ret}"
 				else
 					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
 						splog "${_rHost} ${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
@@ -263,8 +263,6 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 		splog "${_rHost} Directory not found! ${_jDir}"
 	fi
 done
-
-
 
 if [ -n "$MONITOR_SYNC_DEBUG" ]; then
 	splog "END"
