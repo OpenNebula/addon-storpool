@@ -237,7 +237,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	if [ -d "$_jDir" ]; then
 		for _jFile in ${jFiles[@]}; do
 			if [ "${_rHost}" = "${_lHost}" ]; then
-				cp "${_jDir}/${_jFile}" "${_destDir}"/
+				[ -d "${_destDir}" ] || mkdir -p "${_destDir}" && cp "${_jDir}/${_jFile}" "${_destDir}"/
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "${_rHost} copy ${_jFile} returned ${ret}"
@@ -247,8 +247,8 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 					fi
 				fi
 			elif [ "$MONITOR_SYNC_REMOTE" = "yes" ]; then
-				scp -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
-				    "${_jDir}/${_jFile}" ${_rHost}:"${_destDir}/" 2>/dev/null >/dev/null
+				cat "${_jDir}/${_jFile}" | ssh -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
+				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p ${_destDir} && cat >${_destDir}/${_jFile}" 2>/dev/null >/dev/null
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "${_rHost} ${_jFile} returned ${ret}"
