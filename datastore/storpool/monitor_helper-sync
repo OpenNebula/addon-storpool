@@ -248,7 +248,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 				fi
 			elif [ "$MONITOR_SYNC_REMOTE" = "yes" ]; then
 				cat "${_jDir}/${_jFile}" | ssh -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
-				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p ${_destDir} && cat >${_destDir}/${_jFile}" 2>/dev/null >/dev/null
+				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p \"${_destDir}\" && cat >\"${_destDir}/${_jFile}\"" 2>/dev/null >/dev/null
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "${_rHost} ${_destDir}/${_jFile} returned ${ret}"
