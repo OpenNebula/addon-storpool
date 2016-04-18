@@ -143,7 +143,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	sp_host="${SP_API_HTTP_HOST_ARRAY[i]}"
 	[ -n "$sp_host" ] && export SP_API_HTTP_HOST="$sp_host" || unset SP_API_HTTP_HOST
 	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
-	[ -n "$sp_port" ] && export SP_API_HTTP_HOST="$sp_port" || unset SP_API_HTTP_PORT
+	[ -n "$sp_port" ] && export SP_API_HTTP_PORT="$sp_port" || unset SP_API_HTTP_PORT
 	
 	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv") #"
 	template_data=(${tmp//,/ })
