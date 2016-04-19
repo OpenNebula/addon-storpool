@@ -328,67 +328,8 @@ export MONITOR_SYNC_REMOTE="no"
 EOF
 ```
 
-Additional configuration when there is datastore on another(non default) storpool cluster
-Note: The following configuration is assuming that the Hosts using Datastores on different StorPool cluster are separated on different in the OpenNebula Clusters in the front-end(in the example `cluster0` is the system default storpool cluster and `cluster1` is the name of the seconf cluster)!
-
-Create symlink of `monitor_helper-sync` file with different name (in the example `monitor_helper-sync1`)
-```bash
-cd /var/lib/one/remotes/datastore/storpool
-ln -s monitor_helper-sync monitor_helper-sync1
-```
-Then create the configuration file `/var/lib/one/remotes/monitor_helper-sync1rc` containing the credentials to access the API of the oter storpool cluster:
-```bash
-cat >>/var/lib/one/remotes/monitor_helper-sync1rc <<EOF
-# StorPool API host (For example 10.2.0.254)
-export SP_API_HTTP_HOST=10.2.0.254
-# StorPool API port (if it is not same as the default one. For example 8181)
-export SP_API_HTTP_PORT=8181
-# StorPool API auth token
-export SP_AUTH_TOKEN=6607015630136573360
-
-# datastores stats
-export SP_TEMPLATE_STATUS_JSON="/tmp/storpool_template_status-C2.json"
-# reconfigure the default variable
-export SP_MONITOR_HELPER="cat $SP_TEMPLATE_STATUS_JSON"
-
-# VM disks stats
-export SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace-C2.json"
-# reconfigure the default variable
-export SP_CMD_VOLUME_SPACE="cat $SP_VOLUME_SPACE_JSON"
-
-# VM disks snapshots stats
-export SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space-C2.json"
-# reconfigure the default variable
-export SP_CMD_SNAPSHOT_SPACE="cat $SP_SNAPSHOT_SPACE_JSON"
-
-# Coommand to use to get the list of hosts where to copy the JSON files (used when there is no shared folder available
-# In this example we are selecting the hosts that are member of 'cluster1'
-export SP_MONITOR_HOST_CMD="onehost list | grep on | grep 'cluster1' | awk '{print \$2}'"
-
-EOF
-```
-
-Alter the `SP_MONITOR_HOST_CMD` on the default storpool to report only the hosts in the firt cluster (in the example the cluster is named 'cluster0'). Needed when the there is no shared filesystem available.
-```bash
-cat >>/var/lib/one/remotes/addon-storpoolrc <<EOF
-SP_MONITOR_HOST_CMD="onehost list | grep on | grep 'cluster0' | awk '{print \$2}'"
-
-EOF
-```
-On all hosts that are member of the second cluster add the following to `/etc/storpool/addon-storpool.conf`
-```bash
-cat >>/etc/storpool/addon-storpool.conf <<EOF
-source /var/tmp/one/monitor_helper-sync1rc
-
-EOF
-```
-
-Add a cron job for the symlink symlink `monitor_helper-sync1`
-```bash
-(crontab -u oneadmin -l; echo "*/2 * * * * /var/lib/one/remotes/datastore/storpool/monitor_helper-sync1 2>&1 >/tmp/monitor_helper_sync1.err") | crontab -u oneadmin -
-```
-
-Include `SP_API_HTTP_HOST` `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN` as additional attributes to the Datstore which is on the second StorPool cluster.
+Additional configuration when there is datastore on another(non default) storpool cluster:
+Include `SP_API_HTTP_HOST` `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN` as additional attributes to the Datstores.
 
 Update the Hosts:
 ```bash
