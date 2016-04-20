@@ -17,7 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 # paranoid
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:$PATH
+PATH="/bin:/sbin:/usr/bin:/usr/sbin:$ONE_LOCATION:$PATH"
 
 #-------------------------------------------------------------------------------
 # syslog logger function
