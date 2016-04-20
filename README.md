@@ -283,47 +283,51 @@ SP_CHECKPOINT=nomigrate
 ```
 
 #### space usage monitoring configuration
-The OpenNebula's monitoring probes are run on the VM hosts. As this addon support no direct access to the StorPool API from the HV nodes we should provide access to the needed data to the scripts that are running on them. The default configuration is for access to single StorPool cluster which is default for the one-fe as follow: 
+In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, the SYSTEM datastore and the VM disks(and their snapshots) are monitored from the hosts. As this addon support no direct access to the StorPool API from the hosts we should provide access to the needed data to the related probes. This is done by the monitor_helper-sync script which is run via cron job on the front-end. The script is collecting the needed data and propagating(if needed) to the hosts for use. Here is the default configuration:
 
 ```
-SP_CACHE_PATH="/tmp/"
+# path to the json files on the hosts 
+# (must be writable by the oneadmin user)
+SP_JSON_PATH="/tmp/"
 
-# datastores stats
+# Path to the json files on the front-end
+# (must be writable by the oneadmin user)
+SP_FE_JSON_PATH="/tmp/monitor"
+
+# datastores stats JSON and the command that generate them
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
-SP_TEMPLATE_STATUS_RUN="${0%/*}/monitor_helper"
+SP_TEMPLATE_STATUS_RUN="storpool -j template status"
 
-# VM disks stats
+# VM disks stats JSON and the command that generate them
 SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
 SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
 
-# VM disks snapshots stats
+# VM disks snapshots stats JSON and the command that generate them
 SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
 
 # Copy(scp) the JSON files to the remote hosts
-MONITOR_SYNC_REMOTE="yes"
+MONITOR_SYNC_REMOTE="YES"
+
+# Do template propagate. When there is change in the template attributes
+# propagate the change to all current volumes based on the template
+SP_TEMPLATE_PROPAGATE="YES"
 
 # Uncomment to enable debugging
 #MONITOR_SYNC_DEBUG=1
 ```
 
-For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the path to the JSON files must be altered. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
+For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the `SP_JSON_PATH` variable must be altered to point to a chared folder and set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
 Note: the shared filesystem must be mounted on same system path on all nodes as on the one-fe!
 
 For example the shared filesystem in mounted on `/sharedfs`:
 ```bash
 cat >>/var/lib/one/remotes/monitor_helper-syncrc <<EOF
-# datastores stats
-export SP_TEMPLATE_STATUS_JSON="/sharedfs/storpool_template_status.json"
+# datastores stats on the sharedfs
+export SP_JSON_PATH="/sharedfs"
 
-# VM disks stats
-export SP_VOLUME_SPACE_JSON="/sharedfs/storpool_volume_usedSpace.json"
-
-# VM disks snapshots stats
-export SP_SNAPSHOT_SPACE_JSON="/sharedfs/storpool_snapshot_space.json"
-
-# Copy(scp) the JSON files to the remote hosts
-export MONITOR_SYNC_REMOTE="no"
+# disabled remote sync
+export MONITOR_SYNC_REMOTE="NO"
 
 EOF
 ```
@@ -361,9 +365,10 @@ This addon enables full support of transfer manager (TM_MAD) backend of type sha
 
 If TM_MAD is storpool it is possible to have both shared and ssh datastores, configured per cluster. To achieve this two attributes should be set:
 
-* DATASTORE_LOCATION in cluster configuration should be set
+* DATASTORE_LOCATION in cluster configuration should be set (pre OpenNebula 5.x+)
 * By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in the datastore configuration
 
+It is possible to manage different set of hosts working with different StorPool clusters from single front-end. In this case the separation of the resorces in Clusters is mandatory. I this case it is highly advised to set the StorPool API details(`SP_API_HTTP_HOST`, `SP_AUTH_TOKEN` and optionally `SP_API_HTTP_PORT`) in each StorPool enabled datastore.
 
 ### Configuring the Datastore
 
@@ -377,7 +382,9 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
 * **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS. Global datastore configuration for storpol TM_MAD is with *SHARED=yes* set. If the datastore is not on shared filesystem this parameter should be set to *SP_SYSTEM=ssh* to copy non-storpool files from one node to another.
-
+* **SP_API_HTTP_HOST**: [optional] The IP address of the StorPool API to use for this datastore. IP address.
+* **SP_API_HTTP_PORT**: [optional] The port of the StorPool API to use for this datastore. Number.
+* **SP_AUTH_TOKEN**: [optional] The AUTH tocken for of the StorPool API to use for this datastore. String.
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
