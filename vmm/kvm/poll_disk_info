@@ -52,11 +52,12 @@ splog()
 	logger -t ${0##*/} "$*"
 }
 
+SP_JSON_PATH="/tmp"
 SP_SPACE_USED_LVMWAY=
-SP_VOLUME_SPACE_JSON="/tmp/storpool_volume_usedSpace.json"
-SP_CMD_VOLUME_SPACE="cat $SP_VOLUME_SPACE_JSON"
-SP_SNAPSHOT_SPACE_JSON="/tmp/storpool_snapshot_space.json"
-SP_CMD_SNAPSHOT_SPACE="cat $SP_SNAPSHOT_SPACE_JSON"
+SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
+SP_CMD_VOLUME_SPACE="cat _SP_JSON_PATH_/_SP_VOLUME_SPACE_JSON_"
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
+SP_CMD_SNAPSHOT_SPACE="cat _SP_JSON_PATH_/_SP_SNAPSHOT_SPACE_JSON_"
 BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
 if [ -f "../../addon-storpoolrc" ]; then
@@ -65,6 +66,20 @@ fi
 if [ -f "/etc/storpool/addon-storpool.conf" ]; then
 	source "/etc/storpool/addon-storpool.conf"
 fi
+
+# expand SP_CMD_VOLUME_SPACE macro variables
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+
+# expand SP_CMD_SNAPSHOT_SPACE macro variables
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_DATASTORE_ID_/$DS_ID}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
 
 if [ -L "$dev" ]; then
 	realDev=$(readlink -e $dev)
@@ -80,7 +95,7 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
 	else
 		used="spaceUsed"
 	fi
-	spSize=$($SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
+	spSize=$(eval $SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 	[ -n "$spSize" ] || exit 1
 	echo "<disk>"
 	echo " <size>$spSize</size>"
@@ -101,7 +116,7 @@ if [ "${realDev%-*}" = "/dev/sp" ]; then
   <size>$snap_size</size>
  </snapshot>
 EOF
-	done < <($SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
+	done < <(eval $SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
 else
 	if [ -b "$realDev" ]; then
 		disk_size=$($BLOCKDEV_GET_SIZE "$realDev")

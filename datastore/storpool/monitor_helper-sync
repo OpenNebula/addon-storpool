@@ -22,7 +22,7 @@ function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
 
 
 SP_JSON_PATH="/tmp"
-SP_MONITOR_JSON_PATH="/tmp/monitor"
+SP_FE_JSON_PATH="/tmp/monitor"
 
 # datastores stats
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
@@ -62,7 +62,7 @@ function run_task()
 	_jsonFile="${_jsonFile//_CLUSTER_ID_/$CLUSTER_ID}"
 	_jsonFile="${_jsonFile//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
 	_jsonFile="${_jsonFile//_SP_JSON_PATH_/$SP_JSON_PATH}"
-	_jsonFile="${_jsonFile//_SP_MONITOR_JSON_PATH_/$SP_MONITOR_JSON_PATH}"
+	_jsonFile="${_jsonFile//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
 	
 	mkdir -p "${_jsonFile%/*}"
 	
