@@ -72,9 +72,9 @@ function run_task()
 		if mv -f "${_jsonFile}New" "${_jsonFile}"; then
 			cp -f "${_jsonFile}" "${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}"
 			splog "($?) cp ${_jsonFile} ${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}"
-			if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
-				ln -sf "${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
-				splog "($?) ln -s ${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
+			if [ -d "$SP_FE_JSON_PATH" ]; then
+				ln -sf "${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}" "${SP_FE_JSON_PATH}/${_jsonFile##*/}"
+				splog "($?) ln -s ${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0} ${SP_FE_JSON_PATH}/${_jsonFile##*/}"
 			fi
 			jFiles[${_jsonFile}]="${_jsonFile##*/}"
 		fi
@@ -205,8 +205,8 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		splog "DS_ID:$DS_ID CLUSTER_ID:$CLUSTER_ID API:$SP_API_HTTP_HOST clusters:$clusters"
 	fi
 	if [ "${clusters/|$CLUSTER_ID|/}" = "$clusters" ]; then
-		SP_MONITOR_CACHE_CLUSTER="${SP_MONITOR_CACHE_PATH}/${CLUSTER_ID}"
-		[ -d "$SP_MONITOR_CACHE_CLUSTER" ] || mkdir -p "${SP_MONITOR_CACHE_CLUSTER}"
+		SP_FE_JSON_PATH="${SP_MONITOR_CACHE_PATH}/${CLUSTER_ID}"
+		[ -d "$SP_FE_JSON_PATH" ] || mkdir -p "${SP_FE_JSON_PATH}"
 		clusters+="|$CLUSTER_ID|"
 		run_task "$SP_TEMPLATE_STATUS_RUN" "${SP_MONITOR_CACHE_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
 		run_task "$SP_VOLUME_SPACE_RUN" "${SP_MONITOR_CACHE_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
@@ -247,12 +247,12 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	_rHost="${HOST_NAME_ARRAY[i]}"
 	_cluster_id="${HOST_CLUSTER_ID_ARRAY[i]}"
 	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-$SP_JSON_PATH}"
-	SP_MONITOR_CACHE_CLUSTER="${SP_MONITOR_CACHE_PATH}/${_cluster_id}"
+	SP_FE_JSON_PATH="${SP_MONITOR_CACHE_PATH}/${_cluster_id}"
 	
-	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
+	if [ -d "$SP_FE_JSON_PATH" ]; then
 		for _jFile in ${jFiles[@]}; do
 			if [ "${_rHost}" = "${_lHost}" ]; then
-				[ -d "${_destDir}" ] || mkdir -p "${_destDir}" && cp -L "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" "${_destDir}"/
+				[ -d "${_destDir}" ] || mkdir -p "${_destDir}" && cp -L "${SP_FE_JSON_PATH}/${_jFile}" "${_destDir}"/
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "${_rHost} copy ${_jFile} returned ${ret}"
@@ -262,7 +262,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 					fi
 				fi
 			elif [ "$MONITOR_SYNC_REMOTE" = "YES" ]; then
-				cat "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" | ssh -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
+				cat "${SP_FE_JSON_PATH}/${_jFile}" | ssh -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
 				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p \"${_destDir}\" && cat >\"${_destDir}/${_jFile}\"" 2>/dev/null >/dev/null
 				ret=$?
 				if [ $ret -ne 0 ]; then
