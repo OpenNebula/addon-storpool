@@ -205,12 +205,12 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		splog "DS_ID:$DS_ID CLUSTER_ID:$CLUSTER_ID API:$SP_API_HTTP_HOST clusters:$clusters"
 	fi
 	if [ "${clusters/|$CLUSTER_ID|/}" = "$clusters" ]; then
-		SP_MONITOR_CACHE_CLUSTER="${SP_MONITOR_CACHE_PATH}/${CLUSTER_ID}"
+		SP_MONITOR_CACHE_CLUSTER="${SP_FE_JSON_PATH}/${CLUSTER_ID}"
 		[ -d "$SP_MONITOR_CACHE_CLUSTER" ] || mkdir -p "${SP_MONITOR_CACHE_CLUSTER}"
 		clusters+="|$CLUSTER_ID|"
-		run_task "$SP_TEMPLATE_STATUS_RUN" "${SP_MONITOR_CACHE_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
-		run_task "$SP_VOLUME_SPACE_RUN" "${SP_MONITOR_CACHE_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
-		run_task "$SP_SNAPSHOT_SPACE_RUN" "${SP_MONITOR_CACHE_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
+		run_task "$SP_TEMPLATE_STATUS_RUN" "${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
+		run_task "$SP_VOLUME_SPACE_RUN" "${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
+		run_task "$SP_SNAPSHOT_SPACE_RUN" "${SP_FE_JSON_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
 	fi
 done
 
@@ -247,7 +247,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	_rHost="${HOST_NAME_ARRAY[i]}"
 	_cluster_id="${HOST_CLUSTER_ID_ARRAY[i]}"
 	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-$SP_JSON_PATH}"
-	SP_MONITOR_CACHE_CLUSTER="${SP_MONITOR_CACHE_PATH}/${_cluster_id}"
+	SP_MONITOR_CACHE_CLUSTER="${SP_FE_JSON_PATH}/${_cluster_id}"
 	
 	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
 		for _jFile in ${jFiles[@]}; do
