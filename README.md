@@ -385,6 +385,8 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **SP_API_HTTP_HOST**: [optional] The IP address of the StorPool API to use for this datastore. IP address.
 * **SP_API_HTTP_PORT**: [optional] The port of the StorPool API to use for this datastore. Number.
 * **SP_AUTH_TOKEN**: [optional] The AUTH tocken for of the StorPool API to use for this datastore. String.
+* **SP_BW**: [optional] The BW limit per volume on the DATASTORE.
+* **SP_IOPS**: [optional] The IOPS limit per volume on the DATASTORE. Number.
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
