@@ -186,7 +186,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		comment+=" iops:$old"
 	fi
 	old=${template_data[4]//\"/}
-	new=${SP_IOPS_ARRAY[i]:--}
+	new=${SP_BW_ARRAY[i]:--}
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
 		cmd+="bw $new "
 		comment+=" bw:$old"
