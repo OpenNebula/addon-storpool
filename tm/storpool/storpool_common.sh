@@ -17,7 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 # paranoid
-PATH="/bin:/sbin:/usr/bin:/usr/sbin:$ONE_LOCATION:$PATH"
+PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 
 #-------------------------------------------------------------------------------
 # syslog logger function
@@ -33,6 +33,7 @@ function splog()
 #-------------------------------------------------------------------------------
 
 if [ -n "${ONE_LOCATION}" ]; then
+    PATH="$PATH:$ONE_LOCATION"
     TMCOMMON="$ONE_LOCATION/var/remotes/tm/tm_common.sh"
 else
     TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
