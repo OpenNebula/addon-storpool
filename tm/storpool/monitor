@@ -17,7 +17,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
 
 DRV_ACTION="$1"
 DS_ID="$2"
