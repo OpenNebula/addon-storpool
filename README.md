@@ -37,6 +37,7 @@ This add-on is compatible with OpenNebula 4.10+ and StorPool 15.02+.
 * StorPool initiator driver (storpool_block)
 * If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 * If it is only Bridge Node - it must be configured as Host in open nebula but separated to not run VMs.
+* The Bridge node must have qemu-img available - used by the addon during marketplace imports to convert the qcow2 images to raw ones.
 
 ### StorPool cluster
 
@@ -49,6 +50,7 @@ A working StorPool cluster is required.
 * support migration from one to another SYSTEM_DS if both are with `storpool` TM_MAD
 * support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 * support two different modes of disk usage reporting - LVM style and StorPool style
+* support datastores on different storpool clusters
 * extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
 * all disk images are thin provisioned
 * (optional) helper tool to tweak the number of queues for virtio-scsi (require `DEVICE_PREFIX=sd`)
@@ -57,8 +59,8 @@ A working StorPool cluster is required.
 
 ## Limitations
 
-1. tested only with the KVM hypervisor
-1. no support for VM snapshot because it is handled internally by libvirt
+1. Tested only with the KVM hypervisor
+1. No support for VM snapshot because it is handled internally by libvirt
 1. When SYSTEM_Ds integration is enabled the reported free/used/total space is not propper because the volatile disks and the context image are expected to be files instead of a block devices. Extra external monitoring of space usage should be implemented.
 
 ## Installation
@@ -68,16 +70,16 @@ A working StorPool cluster is required.
 * Install required dependencies
 ```bash
 # required during the install procedure
-yum -y install patch git jq lz4
+yum -y install --enablerepo=epel patch git jq lz4
 # for sunstone integration: node, bower, grunt
 yum -y install npm
 npm install bower -g
 npm install grunt-cli -g
 # required for system operation (on all nodes)
-yum -y install jq python-lxml
+yum -y install --enablerepo=epel jq python-lxml
 ```
 
-* Clone the addon-storpool
+* Clone the addon-storpool from github
 ```bash
 git clone https://github.com/OpenNebula/addon-storpool
 ```
@@ -282,9 +284,63 @@ SP_CHECKPOINT=nomigrate
 ```
 
 #### space usage monitoring configuration
-The OpenNebula's monitoring probes are run on the VM hosts. As this addon support no direct access to the StorPool API we should provide access to the needed data to the scripts that are running on the HV nodes.
-The default configuration is to copy the stats from the API on all nodes. This is the case when there is no shared filesystem on all nodes. When there is shared filesystem available 
+In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, the SYSTEM datastore and the VM disks(and their snapshots) are monitored from the hosts. As this addon support no direct access to the StorPool API from the hosts we should provide access to the needed data to the related probes. This is done by the monitor_helper-sync script which is run via cron job on the front-end. The script is collecting the needed data and propagating(if needed) to the hosts for use. Here is the default configuration:
 
+```
+# path to the json files on the hosts 
+# (must be writable by the oneadmin user)
+SP_JSON_PATH="/tmp/"
+
+# Path to the json files on the front-end
+# (must be writable by the oneadmin user)
+SP_FE_JSON_PATH="/tmp/monitor"
+
+# datastores stats JSON and the command that generate them
+SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
+SP_TEMPLATE_STATUS_RUN="storpool -j template status"
+
+# VM disks stats JSON and the command that generate them
+SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
+SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
+
+# VM disks snapshots stats JSON and the command that generate them
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
+SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
+
+# Copy(scp) the JSON files to the remote hosts
+MONITOR_SYNC_REMOTE="YES"
+
+# Do template propagate. When there is change in the template attributes
+# propagate the change to all current volumes based on the template
+SP_TEMPLATE_PROPAGATE="YES"
+
+# Uncomment to enable debugging
+#MONITOR_SYNC_DEBUG=1
+```
+
+For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the `SP_JSON_PATH` variable must be altered to point to a chared folder and set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
+Note: the shared filesystem must be mounted on same system path on all nodes as on the one-fe!
+
+For example the shared filesystem in mounted on `/sharedfs`:
+```bash
+cat >>/var/lib/one/remotes/monitor_helper-syncrc <<EOF
+# datastores stats on the sharedfs
+export SP_JSON_PATH="/sharedfs"
+
+# disabled remote sync
+export MONITOR_SYNC_REMOTE="NO"
+
+EOF
+```
+
+Additional configuration when there is datastore on another(non default) storpool cluster:
+Include `SP_API_HTTP_HOST` `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN` as additional attributes to the Datstores.
+
+Update the Hosts:
+```bash
+su - oneadmin
+onehist sync --force
+```
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
@@ -310,9 +366,10 @@ This addon enables full support of transfer manager (TM_MAD) backend of type sha
 
 If TM_MAD is storpool it is possible to have both shared and ssh datastores, configured per cluster. To achieve this two attributes should be set:
 
-* DATASTORE_LOCATION in cluster configuration should be set
+* DATASTORE_LOCATION in cluster configuration should be set (pre OpenNebula 5.x+)
 * By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in the datastore configuration
 
+It is possible to manage different set of hosts working with different StorPool clusters from single front-end. In this case the separation of the resorces in Clusters is mandatory. I this case it is highly advised to set the StorPool API details(`SP_API_HTTP_HOST`, `SP_AUTH_TOKEN` and optionally `SP_API_HTTP_PORT`) in each StorPool enabled datastore.
 
 ### Configuring the Datastore
 
@@ -326,6 +383,11 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
 * **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS. Global datastore configuration for storpol TM_MAD is with *SHARED=yes* set. If the datastore is not on shared filesystem this parameter should be set to *SP_SYSTEM=ssh* to copy non-storpool files from one node to another.
+* **SP_API_HTTP_HOST**: [optional] The IP address of the StorPool API to use for this datastore. IP address.
+* **SP_API_HTTP_PORT**: [optional] The port of the StorPool API to use for this datastore. Number.
+* **SP_AUTH_TOKEN**: [optional] The AUTH tocken for of the StorPool API to use for this datastore. String.
+* **SP_BW**: [optional] The BW limit per volume on the DATASTORE.
+* **SP_IOPS**: [optional] The IOPS limit per volume on the DATASTORE. Number.
 
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.

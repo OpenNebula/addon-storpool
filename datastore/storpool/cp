@@ -65,7 +65,6 @@ fi
 set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
 
 IMAGE_HASH=`generate_image_hash`
-TMP_DST="$STAGING_DIR/$IMAGE_HASH"
 
 case "$IMAGE_PATH" in
 http://*|https://*)

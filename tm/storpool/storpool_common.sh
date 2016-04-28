@@ -17,7 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 # paranoid
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:$PATH
+PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 
 #-------------------------------------------------------------------------------
 # syslog logger function
@@ -33,6 +33,7 @@ function splog()
 #-------------------------------------------------------------------------------
 
 if [ -n "${ONE_LOCATION}" ]; then
+    PATH="$PATH:$ONE_LOCATION"
     TMCOMMON="$ONE_LOCATION/var/remotes/tm/tm_common.sh"
 else
     TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
@@ -44,10 +45,6 @@ source "$TMCOMMON"
 # load local configuration parameters
 #-------------------------------------------------------------------------------
 
-
-# SCRIPTS_REMOTE_DIR must match same in /etc/one/oned.conf
-SCRIPTS_REMOTE_DIR=/var/tmp/one
-
 DEBUG_SP_RUN_CMD=1
 
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
@@ -55,6 +52,25 @@ sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 if [ -f "$sprcfile" ]; then
     source "$sprcfile"
 fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+    source "/etc/storpool/addon-storpool.conf"
+fi
+
+function getFromConf()
+{
+    local cfgFile="$1" varName="$2" first="$3"
+    local response
+    if [ -n "$first" ]; then
+        response="$(grep "^$varName" "$cfgFile" | head -n 1)"
+    else
+        response="$(grep "^$varName" "$cfgFile" | tail -n 1)"
+    fi
+    response="${response#*=}"
+    if [ -n "$DEBUG_COMMON" ]; then
+        splog "getFromConf($cfgFile,$varName,$first): $response"
+    fi
+    echo "${response//\"/}"
+}
 
 #-------------------------------------------------------------------------------
 # trap handling functions
@@ -123,11 +139,26 @@ EOF
 
 function storpoolClientId()
 {
-#    ssh "$1" /usr/sbin/storpool_confget -s \`hostname\` | grep SP_OURID | cut -d '=' -f 2 | tail -n 1
-    /usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1
+    local result bridge
+    result=$(/usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    if [ "$result" = "" ]; then
+        for bridge in $BRIDGE_LIST; do
+            result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            if [ -n "$result" ]; then
+                break
+            fi
+        done
+    fi
+    if [ -n "$DEBUG_COMMON" ]; then
+        splog "storpoolClientId($1): ${result} ${bridge:+bridge:$bridge}"
+    fi
+    echo $result
 }
 
 function storpoolRetry() {
+    if [ -n "$DEBUG_COMMON" ]; then
+        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST"
+    fi
     if [ -n "$DEBUG_SP_RUN_CMD" ]; then
         splog "storpool $*"
     fi
@@ -408,11 +439,12 @@ EOF
 function oneFsfreeze()
 {
     local _host="$1" _domain="$2"
+    SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
 
     local remote_cmd=$(cat <<EOF
     #_FSFREEZE
     if [ -n "$_domain" ]; then
-        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
             splog "fsfreeze domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
@@ -429,11 +461,12 @@ EOF
 function oneFsthaw()
 {
     local _host="$1" _domain="$2"
+    SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
 
     local remote_cmd=$(cat <<EOF
     #_FSTHAW
     if [ -n "$_domain" ]; then
-        . "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null; then
             splog "fsthaw domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
         else
@@ -632,7 +665,10 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_PLACETAIL \
                             /DATASTORE/TEMPLATE/SP_IOPS \
                             /DATASTORE/TEMPLATE/SP_BW \
-                            /DATASTORE/TEMPLATE/SP_SYSTEM)
+                            /DATASTORE/TEMPLATE/SP_SYSTEM \
+                            /DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
+                            /DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
+                            /DATASTORE/TEMPLATE/SP_AUTH_TOKEN)
     unset i
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_DISK_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -648,6 +684,13 @@ function oneDatastoreInfo()
     SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
     SP_BW="${XPATH_ELEMENTS[i++]:--}"
     SP_SYSTEM="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
+    SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
+
+    [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
+    [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
+    [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
 #    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
 #    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
@@ -737,12 +780,16 @@ function oneDsDriverAction()
         XPATH_ELEMENTS[i++]="$element"
     done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTER_ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE \
@@ -766,12 +813,16 @@ function oneDsDriverAction()
     unset i
     BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+    CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
     BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
     SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
     SP_BW="${XPATH_ELEMENTS[i++]:--}"
+    SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
+    SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
     NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -791,9 +842,14 @@ function oneDsDriverAction()
     TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
 
+    [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
+    [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
+    [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
+
     splog "\
 ${ID:+ID=$ID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
+${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
 ${STATE:+STATE=$STATE }\
 ${SIZE:+SIZE=$SIZE }\
 ${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
@@ -801,6 +857,9 @@ ${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
 ${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
 ${SP_IOPS+SP_IOPS=$SP_IOPS }\
 ${SP_BW+SP_BW=$SP_BW }\
+${SP_API_HTTP_HOST+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
+${SP_API_HTTP_PORT+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
+${SP_AUTH_TOKEN+SP_AUTH_TOKEN=DEFINED }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${FSTYPE:+FSTYPE=$FSTYPE }\
