@@ -287,6 +287,12 @@ else
 TM_MAD_CONF = [
     name = "storpool", ln_target = "NONE", clone_target = "SELF", shared = "yes"
 ]
+DS_MAD_CONF = [
+    NAME = "storpool",
+    REQUIRED_ATTRS = "DISK_TYPE,SP_REPLICATION,SP_PLACEALL",
+    PERSISTENT_ONLY = "NO",
+    MARKETPLACE_ACTIONS = "export"
+]
 _EOF_
 fi
 
