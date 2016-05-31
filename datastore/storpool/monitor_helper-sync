@@ -65,7 +65,7 @@ function doExpand()
 	_val="${_val//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
 	_val="${_val//_SP_JSON_PATH_/$SP_JSON_PATH}"
 	_val="${_val//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
-	eval "$_name=\$$_val"
+	eval "$_name=$_val"
 }
 
 function run_task()
