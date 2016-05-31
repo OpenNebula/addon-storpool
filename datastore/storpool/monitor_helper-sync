@@ -276,6 +276,13 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	_rHost="${HOST_NAME_ARRAY[i]}"
 	_cluster_id="${HOST_CLUSTER_ID_ARRAY[i]}"
 	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-$SP_JSON_PATH}"
+	_state="${HOST_STATE_ARRAY[i]}"
+	if [ "${_state}" = "" ] || [ ${_state} -ge 4 ]; then
+		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+			splog "Skip host ${_rHost} state:${_state}"
+		fi
+		continue
+	fi
 	SP_MONITOR_CACHE_CLUSTER="${SP_FE_JSON_PATH}/${_cluster_id}"
 	
 	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
