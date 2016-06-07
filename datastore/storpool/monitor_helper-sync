@@ -71,27 +71,45 @@ function doExpand()
 function run_task()
 {
 	local _run="$1" _jsonFile="$2"
+	local sp_api_http_host=${SP_API_HTTP_HOST:-0.0.0.0}
+	local cached=0 ret=1
 	
 	mkdir -p "${_jsonFile%/*}"
 	
-	eval ${_run} 2>/dev/null >"${_jsonFile}New"
-	ret=$?
-	if [ $ret -eq 0 ]; then
-		if mv -f "${_jsonFile}New" "${_jsonFile}"; then
-			cp -f "${_jsonFile}" "${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}"
-			splog "($?) cp ${_jsonFile} ${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}"
-			if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
-				ln -sf "${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
-				splog "($?) ln -s ${_jsonFile}${SP_API_HTTP_HOST:-0.0.0.0} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
-			fi
-			jFiles[${_jsonFile}]="${_jsonFile##*/}"
-		fi
+	if [ "${sp_api_list/|${_run}$sp_api_http_host|/}" = "$sp_api_list" ]; then
+		sp_api_list+="|${_run}$sp_api_http_host|"
+		eval ${_run} 2>/dev/null >"${_jsonFile}New"
+		ret=$?
 		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-			splog "${_run} cluster_id:${CLUSTER_ID}:${SP_API_HTTP_HOST} ${_jsonFile}"
+			splog "run_task:($ret) ${_run} > ${_jsonFile}New"
+		fi
+		if [ $ret -eq 0 ]; then
+			mv -f "${_jsonFile}New" "${_jsonFile}"
+			ret=$?
+#			splog "run_task:[DBG]($ret) mv -f ${_jsonFile}New ${_jsonFile}"
+			if [ $ret -eq 0 ]; then
+				cp -f "${_jsonFile}" "${_jsonFile}${sp_api_http_host}"
+				if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+					splog "run_task:($ret) cp ${_jsonFile} ${_jsonFile}${sp_api_http_host}"
+				fi
+			fi
+		else
+			splog "run_task:${_run} failed! ret=${ret} using old ${_jsonFile}"
+		fi
+	fi
+	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
+		ln -sf "${_jsonFile}${sp_api_http_host}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
+		ret=$?
+		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+			splog "run_task:($ret) ln -s ${_jsonFile}${sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
 		fi
 	else
-		splog "${_run} failed! ret=${ret} using old ${_jDir}/${_jsonFile}"
+		splog "run_task: directory not found SP_MONITOR_CACHE_CLUSTER:$SP_MONITOR_CACHE_CLUSTER"
 	fi
+	jFiles[${_jsonFile}]="${_jsonFile##*/}"
+#	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+#		splog "run_task:[DBG]run:\"${_run}\" cluster_id:${CLUSTER_ID} API:$sp_api_http_host ${_jsonFile} api_list:'$sp_api_list'"
+#	fi
 	return $ret
 }
 
@@ -149,22 +167,9 @@ SP_AUTH_TOKEN_ARRAY=($_SP_AUTH_TOKEN)
 SP_SYSTEM_ARRAY=($_SP_SYSTEM)
 IFS=$_OLDIFS
 
-
 for i in ${!DS_ID_ARRAY[@]}; do
 	[ "${DS_TM_MAD_ARRAY[i]}" = "storpool" ] || continue
 	
-	DS_ID=${DS_ID_ARRAY[i]}
-	CLUSTER_IDS=( ${DS_CLUSTER_ID_ARRAY[i]} )
-	SP_TEMPLATE_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
-
-	if [ ${#CLUSTER_IDS[@]} -eq 0 ]; then
-		unset i
-		while IFS= read element; do
-			CLUSTER_IDS[i++]="$element"
-		done < <(cat "${SP_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
-			        /DATASTORE_POOL/DATASTORE[ID=$DS_ID]/CLUSTER/ID)
-	fi
-
 	cmd=
 	comment=
 	template_name="one-ds-${DS_ID}"
@@ -174,6 +179,22 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	[ -n "$sp_host" ] && export SP_API_HTTP_HOST="$sp_host" || unset SP_API_HTTP_HOST
 	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
 	[ -n "$sp_port" ] && export SP_API_HTTP_PORT="$sp_port" || unset SP_API_HTTP_PORT
+	DS_ID=${DS_ID_ARRAY[i]}
+	SP_TEMPLATE_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
+
+	#old style
+	CLUSTER_IDS=( ${DS_CLUSTER_ID_ARRAY[i]} )
+	if [ ${#CLUSTER_IDS[@]} -eq 0 ]; then
+		#new style
+		unset i
+		while IFS= read element; do
+			CLUSTER_IDS[i++]="$element"
+		done < <(cat "${SP_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
+			        %m%/DATASTORE_POOL/DATASTORE[ID=$DS_ID]/CLUSTERS/ID)
+	fi
+#	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+#		splog ">>>DS_ID=$DS_ID ${SP_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_IDS:${CLUSTER_IDS[@]}"
+#	fi
 	
 	# create/update the template in StorPool
 	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv") #"
@@ -212,33 +233,39 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	
 	if [ -n "$cmd" ]; then
 		storpool template "$template_name" $cmd
-		splog "($?) template $template_name $cmd OLD:$comment api:$sp_host"
+		splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
 		if [ "$SP_TEMPLATE_PROPAGATE" = "YES" ]; then
 			storpool template "$template_name" propagate 2>&1 >/dev/null
 			splog "($?) template $template_name propagate"
 		fi
 	fi
-	
-	declare -a jFiles
-	rFile1="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
-	doExpand "rFile1"
-	run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile1"
-	rFile2="${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
-	doExpand "rFile2"
-	run_task "$SP_VOLUME_SPACE_RUN" "$rFile2"
-	rFile3="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
-	doExpand "rFile3"
-	run_task "$SP_SNAPSHOT_SPACE_RUN" "$rFile3"
+
 	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
 		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-			splog "DS_ID:$DS_ID CLUSTER_ID:$CLUSTER_ID API:$SP_API_HTTP_HOST clusters:$clusters"
+			splog "CLUSTER_ID:$CLUSTER_ID DS_ID:$DS_ID API:$SP_API_HTTP_HOST clusters:$clusters"
 		fi
 		if [ "${clusters/|$CLUSTER_ID|/}" = "$clusters" ]; then
 			clusters+="|$CLUSTER_ID|"
 			SP_MONITOR_CACHE_CLUSTER="${SP_FE_JSON_PATH}/${CLUSTER_ID}"
-			[ -d "$SP_MONITOR_CACHE_CLUSTER" ] || mkdir -p "${SP_MONITOR_CACHE_CLUSTER}"
+			if [ ! -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
+				mkdir -p "${SP_MONITOR_CACHE_CLUSTER}"
+				splog "($?) mkdir $SP_MONITOR_CACHE_CLUSTER"
+			fi
+
+			rFile1="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
+			doExpand "rFile1"
+			run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile1"
+			rFile2="${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
+			doExpand "rFile2"
+			run_task "$SP_VOLUME_SPACE_RUN" "$rFile2"
+			rFile3="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
+			doExpand "rFile3"
+			run_task "$SP_SNAPSHOT_SPACE_RUN" "$rFile3"
 		fi
 	done
+#	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+#		splog "jFiles:${jFiles[@]}"
+#	fi
 done
 
 # hosts processing
@@ -297,7 +324,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 					splog "${_rHost} copy ${_jFile} returned ${ret}"
 				else
 					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-						splog "${_rHost} is localhost. ${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+						splog "${_rHost} is localhost. ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
 			elif [ "$MONITOR_SYNC_REMOTE" = "YES" ]; then
@@ -308,7 +335,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 					splog "${_rHost} ${_destDir}/${_jFile} returned ${ret}"
 				else
 					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-						splog "${_rHost} ${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+						splog "${_rHost} ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
 			fi
