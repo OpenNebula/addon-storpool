@@ -54,6 +54,10 @@ else
 	LOG_PREFIX="ds"
 	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 	oneDsDriverAction "${DRIVER_PATH}"
+	if [ -n "$CLUSTERS_ID" ]; then
+		CLUSTERS_ID_ARRAY=($CLUSTERS_ID)
+		CLUSTER_ID=${CLUSTERS_ID_ARRAY[0]}
+	fi
 	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
 	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-$SP_CMD_TEMPLATE_STATUS}"
 fi # DRV_ACTION
