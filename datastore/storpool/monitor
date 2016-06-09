@@ -51,6 +51,7 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 	fi
 #	echo "bash -x $PWD/$0 $*" >/tmp/monitor_system.sh
 else
+	LOG_PREFIX="ds"
 	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 	oneDsDriverAction "${DRIVER_PATH}"
 	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
