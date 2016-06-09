@@ -152,6 +152,8 @@ fi
 #-------------------------------------------------------------------------------
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
 
+MONITOR_TM_MAD="storpool"
+
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
 
 #-------------------------------------------------------------------------------

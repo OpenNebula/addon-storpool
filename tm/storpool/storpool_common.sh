@@ -438,6 +438,9 @@ function oneSymlink()
             splog "mkdir -p \$dst_dir"
             mkdir -p "\$dst_dir"
             trap - EXIT TERM INT HUP
+            if [ -n "$MONITOR_TM_MAD" ]; then
+                [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"
+            fi
         fi
         splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
@@ -563,6 +566,9 @@ function oneCheckpointRestore()
         splog "file exists $checkpoint"
     else
         mkdir -p "$_path"
+
+        [ -f "$_path/.monitor" ] || echo "storpool" >"$_path/.monitor"
+
         if tar --no-seek --use-compress-program="$SP_COMPRESSION" --to-stdout --extract --file="$sp_link" >"$checkpoint"; then
             splog "RESTORED $volume $checkpoint"
         else
