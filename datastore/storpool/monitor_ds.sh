@@ -26,43 +26,62 @@
 #     echo "  ID = $ds,"
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_monitor_ds" "$*"; }
+function splog() { logger -t "im_sp_monitor_ds" "$*"; }
 
 SP_MONITOR_DS="../../datastore/storpool/monitor"
 
 if [ -f "$SP_MONITOR_DS" ]; then
-
+#    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+#        splog "[DBG]$PWD $0 $* (ds:$ds)"
+#    fi
     SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds)"
 
     if [ -n "$SP_DS_SIZES" ]; then
+        if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+            splog "SP_DS_SIZES=$SP_DS_SIZES"
+        fi
 
         SP_SIZES=($SP_DS_SIZES)
-
         SP_USED_MB=${SP_SIZES["0"]:-0}
         SP_TOTAL_MB=${SP_SIZES["1"]:-0}
         SP_FREE_MB=${SP_SIZES["2"]:-0}
 
-        CALC_USED_MB=$((USED_MB + SP_USED_MB))
-        if [ $SP_FREE_MB -lt $FREE_MB ]; then
-            CALC_FREE_MB=$SP_FREE_MB
-        else
+        if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
+            CALC_USED_MB=$((USED_MB + SP_USED_MB))
+
             CALC_FREE_MB=$FREE_MB
+            if [ $SP_FREE_MB -lt $FREE_MB ]; then
+                CALC_FREE_MB=$SP_FREE_MB
+            fi
+            CALC_TOTAL_MB=$((CALC_USED_MB + CALC_FREE_MB))
+            if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+                splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
+            fi
+
+            echo "DS = ["
+            echo "  ID = $ds,"
+            echo "  USED_MB = $CALC_USED_MB,"
+            echo "  TOTAL_MB = $CALC_TOTAL_MB,"
+            echo "  FREE_MB = $CALC_FREE_MB"
+            echo "]"
+
+            # Skip if datastore is not marked for local monitoring
+            if [ -e "${dir}/.monitor" ]; then
+                DRIVER=$(<"${dir}/.monitor")
+                # default tm DRIVER is ssh
+                SCRIPT_PATH="${REMOTES_DIR}/tm/${DRIVER:-ssh}/monitor_ds"
+                if [ -e "$SCRIPT_PATH" ]; then
+                    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+                        splog "run $SCRIPT_PATH $dir"
+                    fi
+                    "$SCRIPT_PATH" "$dir"
+                else
+                    splog "$SCRIPT_PATH Not found!"
+                fi
+            fi
+
+            continue
         fi
-        CALC_TOTAL_MB=$((CALC_USED_MB + CALC_FREE_MB))
-#        splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
-
-        echo "DS = ["
-        echo "  ID = $ds,"
-        echo "  USED_MB = $CALC_USED_MB,"
-        echo "  TOTAL_MB = $CALC_TOTAL_MB,"
-        echo "  FREE_MB = $CALC_FREE_MB,"
-        # look like this is not used...
-        echo "  VOLATILE_USED_MB = $SP_USED_MB,"
-        echo "  VOLATILE_TOTAL_MB = $SP_TOTAL_MB,"
-        echo "  VOLATILE_FREE_MB = $SP_FREE_MB"
-        echo "]"
-
-        continue
 #    else
 #        splog "DS_ID $ds is not on StorPool"
     fi
