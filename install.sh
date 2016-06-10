@@ -282,6 +282,8 @@ else
 
     sed -i -e 's|ceph,dev|ceph,dev,storpool|g' /etc/one/oned.conf
 
+    sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' /etc/one/oned.conf
+
     cat <<_EOF_ >>/etc/one/oned.conf
 # StorPool
 TM_MAD_CONF = [
