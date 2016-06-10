@@ -82,8 +82,10 @@ if [ -f "$SP_MONITOR_DS" ]; then
 
             continue
         fi
-#    else
-#        splog "DS_ID $ds is not on StorPool"
+    else
+	if [ -n "$IM_MONITOR_DS_DEBUG_VERBOSE" ]; then
+	        splog "DS_ID $ds is not on StorPool"
+	fi
     fi
 else
     splog "$SP_MONITOR_DS not found"
