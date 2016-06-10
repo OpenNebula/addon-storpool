@@ -50,9 +50,16 @@ DISK_LINK="$(readlink "$DISK")"
 DISK_DEV="$(readlink -f "$DISK")"
 #splog "$DISK $DISK_LINK $DISK_DEV"
 
-if [ -n "${DISK_LINK%/dev/storpool*}" ]; then
-	splog "$DISK is NOT on storpool!"
-	exit
+if [ -z "$DISK_LINK" ] || [ -n "${DISK_LINK%/dev/storpool*}" ]; then
+	if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
+		splog "$DISK is NOT on storpool! $DISK_LINK"
+	fi
+	"${0}-misc" "$DISK" "$DS_ID" "$VM_ID"
+	exit $?
+else
+	if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
+		splog "$DISK is on storpool! $DISK_LINK"
+	fi
 fi
 
 # expand SP_CMD_VOLUME_SPACE macro variables

@@ -1,0 +1,85 @@
+#!/bin/bash
+#
+
+# -------------------------------------------------------------------------- #
+# Copyright 2016, StorPool (storpool.com)                                    #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+
+DISK="$1"
+DS_ID="$2"
+VM_ID="$3"
+
+BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
+
+if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
+    source "${DRIVER_PATH}/../../addon-storpoolrc"
+elif [ -f "${DRIVER_PATH}/../../../addon-storpoolrc" ]; then
+    source "${DRIVER_PATH}/../../../addon-storpoolrc"
+fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+    source "/etc/storpool/addon-storpool.conf"
+fi
+
+DRIVER_PATH="${0%/*}"
+
+DISK_ID="${DISK##*\.}"
+DISK_LINK="$(readlink "$DISK")"
+DISK_DEV="$(readlink -f "$DISK")"
+
+if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+	splog "$PWD $DISK $DS_ID $VM_ID $DISK_DEV $DISK_LINK"
+fi
+
+if [ -b "$DISK_DEV" ]; then
+	disk_size="$($BLOCKDEV_GET_SIZE "$DISK_DEV")"
+	if [ -n "$disk_size" ]; then
+		if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+			splog "$DISK ID:$DISK_ID SIZE:$disk_size in MiB:$((disk_size/1024/1024))"
+		fi
+		disk_size="$((disk_size/1024/1024))"
+		
+		echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+	fi
+elif [ -f "$DISK_DEV" ]; then
+	# borrowed from ../shared/monitor
+	vmdir="$(basename "$DISK")"
+	disk_size="$(du -mL "$DISK_DEV" | awk '{print $1}')"
+	
+	if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+		splog "$DISK ID:$DISK_ID SIZE:$disk_size"
+	fi
+	echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+	
+	disk="${DISK##*/}"
+	snap_dir="${vmdir}/${disk}.snap"
+	if [ -e "$snap_dir" ]; then
+		snaps="$(ls "$snap_dir" | grep '^[0-9]$')"
+		
+		for snap in $snaps; do
+			snap_size="$(du -mL "${snap_dir}/${snap}" | awk '{print $1}')"
+			[ -z "$snap_size" ] && continue
+			
+			if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+				splog "$DISK SNAP_ID:$snap ID:$DISK_ID SIZE:$disk_size"
+			fi
+			
+			echo -n "SNAPSHOT_SIZE=[ID=${snap},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+		done
+	fi
+fi
