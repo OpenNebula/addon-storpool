@@ -438,9 +438,9 @@ function oneSymlink()
             splog "mkdir -p \$dst_dir"
             mkdir -p "\$dst_dir"
             trap - EXIT TERM INT HUP
-            if [ -n "$MONITOR_TM_MAD" ]; then
-                [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"
-            fi
+        fi
+        if [ -n "$MONITOR_TM_MAD" ]; then
+            [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"
         fi
         splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
