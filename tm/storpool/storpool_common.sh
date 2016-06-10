@@ -444,6 +444,7 @@ function oneSymlink()
         fi
         splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
+        echo "storpool" >"\$dst".driver
     done
 EOF
 )
