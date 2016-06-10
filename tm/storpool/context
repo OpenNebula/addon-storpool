@@ -84,7 +84,7 @@ DISK_ID=$(echo $DST | awk -F. '{print $NF}')
 
 log "Generating context block device"
 
-ISO_DIR="$DS_BASE_PATH/.isofiles/$VM_ID"
+ISO_DIR="$DS_DIR/.isofiles/$VM_ID"
 ISO_FILE="$ISO_DIR/$VM_ID.iso"
 
 exec_and_set_error "mkdir -p $ISO_DIR" \
