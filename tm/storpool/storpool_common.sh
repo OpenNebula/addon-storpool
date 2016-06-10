@@ -866,6 +866,8 @@ function oneDsDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
+    [ "$DEBUG_oneDsDriverAction" = "1" ] || return
+
     splog "\
 ${ID:+ID=$ID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
