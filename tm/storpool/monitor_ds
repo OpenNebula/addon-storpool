@@ -1,0 +1,61 @@
+#!/bin/bash
+#
+
+# -------------------------------------------------------------------------- #
+# Copyright 2016, StorPool (storpool.com)                                    #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+
+DS_DIR="$1"
+
+DS_ID=$(basename "$DS_DIR")
+DS_NAME="one-ds-$DS_ID"
+
+DRIVER_PATH="${0%/*}"
+
+if [ -n "$DEBUG_TM_MONITOR_DS" ]; then
+	splog "$PWD datastore $DS_ID $DS_DIR"
+fi
+
+DS_DRIVER="$(<$DS_DIR/.monitor)" || DS_DRIVER="storpool"
+
+for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
+	VM_DIR="$DS_DIR/$VM_ID"
+#	splog "VM_ID=$VM_ID VM_DIR=$VM_DIR"
+	test -d "$VM_DIR" || continue
+	
+	echo -n "VM=[ID=$VM_ID,POLL=\""
+	
+	for DISK in `ls $VM_DIR/disk.[[:digit:]]* | grep '/disk\.[0-9]\+$'`; do
+#		splog "DISK=$DISK"
+		if [ -f "${DISK}.driver" ]; then
+			DRIVER="$(<"${DISK}.driver")"
+		fi
+		DRIVER="${DRIVER:-$DS_DRIVER}"
+		
+		if [ -x "$DRIVER_PATH/../$DRIVER/monitor_disk" ]; then
+			DRIVER_RUN="$DRIVER_PATH/../$DRIVER/monitor_disk"
+		elif [ -x "$DRIVER_PATH/monitor_disk_helper" ]; then
+			DRIVER_RUN="$DRIVER_PATH/misc/monitor_disk_helper"
+		else
+			DRIVER_RUN="$DRIVER_PATH/monitor_disk"
+		fi
+		"$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER"
+		splog "END $DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER ($?)"
+	done
+	
+	echo "\"]"
+done

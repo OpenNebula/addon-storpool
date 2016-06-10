@@ -1,0 +1,97 @@
+#!/bin/bash
+#
+
+# -------------------------------------------------------------------------- #
+# Copyright 2016, StorPool (storpool.com)                                    #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
+
+DISK="$1"
+DS_ID="$2"
+VM_ID="$3"
+DRIVER="$4"
+
+DS_NAME="one-ds-$DS_ID"
+
+DRIVER_PATH="${0%/*}"
+
+SP_JSON_PATH="/tmp"
+SP_SPACE_USED_LVMWAY=
+SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
+SP_CMD_VOLUME_SPACE="cat _SP_JSON_PATH_/_SP_VOLUME_SPACE_JSON_"
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
+SP_CMD_SNAPSHOT_SPACE="cat _SP_JSON_PATH_/_SP_SNAPSHOT_SPACE_JSON_"
+
+if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
+    source "${DRIVER_PATH}/../../addon-storpoolrc"
+fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+    source "/etc/storpool/addon-storpool.conf"
+fi
+
+if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
+	splog "$PWD $DISK $DS_ID $VM_ID $DRIVER"
+fi
+
+DISK_LINK="$(readlink "$DISK")"
+DISK_DEV="$(readlink -f "$DISK")"
+#splog "$DISK $DISK_LINK $DISK_DEV"
+
+if [ -n "${DISK_LINK%/dev/storpool*}" ]; then
+	splog "$DISK is NOT on storpool!"
+	exit
+fi
+
+# expand SP_CMD_VOLUME_SPACE macro variables
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+
+# expand SP_CMD_SNAPSHOT_SPACE macro variables
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_DATASTORE_ID_/$DS_ID}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+
+DISK_ID="${DISK##*\.}"
+spVolume=${DISK_LINK#/dev/storpool/}
+
+if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
+	used="storedSize"
+else
+	used="spaceUsed"
+fi
+spSize=$(eval $SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
+
+disk_size="${spSize:-0}"
+disk_size=$((disk_size/1024/1024))
+if [ -n "$DEBUG_TM_MONITOR_DISK" ]; then
+	splog "$DISK ID:$DISK_ID SIZE:$disk_size"
+fi
+echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+
+while IFS=',' read name snap_size; do
+	name=${name//\"/}
+	snap_id=${name#*snap}
+	snap_size=$((snap_size/1024/1024))
+	if [ -n "$DEBUG_TM_MONITOR_DISK" ]; then
+		splog "$DISK $DISK_ID $SNAP_ID SIZE:$snap_size"
+	fi
+	echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+done < <(eval $SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)

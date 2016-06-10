@@ -89,3 +89,14 @@ while IFS=',' read n t f; do
 		break
 	fi
 done < <(eval $SP_CMD_TEMPLATE_STATUS | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free]|@csv')
+
+if [ -d "$BASE_PATH" ]; then
+	$DRIVER_PATH/monitor_ds "$BASE_PATH"
+else
+	if [ ! -L "$BASE_PATH" ]; then
+		mkdir -p "$BASE_PATH"
+		splog "mkdir -p $BASE_PATH ($?)"
+	fi
+fi
+
+exit 0
