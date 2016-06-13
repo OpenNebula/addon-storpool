@@ -126,6 +126,9 @@ function tmResetMigrate()
          orig)
             ;;
          4.10)
+            true
+            ;&
+         4.14)
             orig=$(findFile "$M_DIR" "$orig_csum" )
             if [ -n "$orig" ]; then
                 echo "***   $found variant of $TM_MAD/$MIGRATE"
@@ -134,7 +137,7 @@ function tmResetMigrate()
                 cp $CP_ARG "$orig" "${M_DIR}/${MIGRATE}"
             fi
             ;;
-         4.14)
+         5.00)
             continue
             ;;
             *)
@@ -153,6 +156,9 @@ else
     if [ -f "$SUNSTONE_PUBLIC/app/tabs/datastores-tab/form-panels/create.js" ]; then
         SS_VER=4.14
     fi
+    if [ -f "$SUNSTONE_PUBLIC/app/tabs/vnets-topology-tab/html.tbs" ]; then
+        SS_VER=5.00
+    fi
     ONE_VER=${ONE_VER:-$SS_VER}
 
     # patch sunstone's datastores-tab.js
@@ -164,7 +170,7 @@ else
             do_patch "$p"
             [ -n "$DO_PATCH" ] && [ "$DO_PATCH" = "done" ] && REBUILD_JS=1
         done
-        if [ "$ONE_VER" = "4.14" ]; then
+        if [ "$ONE_VER" = "4.14" ] || [ "${ONE_VER:0:2}" = "5." ] ; then
             bin_err=
             if [ -n "$REBUILD_JS" ]; then
                 for b in npm bower grunt; do
