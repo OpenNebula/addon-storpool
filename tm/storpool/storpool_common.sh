@@ -139,18 +139,30 @@ EOF
 
 function storpoolClientId()
 {
+    local hst="$1" COMMON_DOMAIN="${2:-$COMMON_DOMAIN}"
     local result bridge
-    result=$(/usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    if [ "$result" = "" ]; then
+        if [ -n "$COMMON_DOMAIN" ]; then
+            result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        fi
+    fi
     if [ "$result" = "" ]; then
         for bridge in $BRIDGE_LIST; do
-            result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$1" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
             if [ -n "$result" ]; then
                 break
+            fi
+            if [ -n "$COMMON_DOMAIN" ]; then
+                result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+                if [ -n "$result" ]; then
+                    break
+                fi
             fi
         done
     fi
     if [ -n "$DEBUG_COMMON" ]; then
-        splog "storpoolClientId($1): ${result} ${bridge:+bridge:$bridge}"
+        splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}"
     fi
     echo $result
 }
@@ -303,7 +315,7 @@ function storpoolVolumeAttach()
     local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}"
     local _SP_CLIENT
     if [ -n "$_SP_HOST" ]; then
-        _SP_CLIENT="$(storpoolClientId "$_SP_HOST")"
+        _SP_CLIENT="$(storpoolClientId "$_SP_HOST" "$COMMON_DOMAIN")"
         if [ -n "$_SP_CLIENT" ]; then
            _SP_CLIENT="client $_SP_CLIENT"
         else
@@ -329,7 +341,7 @@ function storpoolVolumeDetach()
         _SP_CLIENT="all"
     else
         if [ -n "$_SP_HOST" ]; then
-            _SP_CLIENT="$(storpoolClientId "$_SP_HOST")"
+            _SP_CLIENT="$(storpoolClientId "$_SP_HOST" "$COMMON_DOMAIN")"
             if [ "$_SP_CLIENT" = "" ]; then
                 splog "Error: Can't get SP_OURID for host $_SP_HOST"
                 exit -1
