@@ -156,7 +156,7 @@ else
     if [ -f "$SUNSTONE_PUBLIC/app/tabs/datastores-tab/form-panels/create.js" ]; then
         SS_VER=4.14
     fi
-    if [ -f "$SUNSTONE_PUBLIC/app/tabs/vnets-topology-tab/html.tbs" ]; then
+    if [ -f "$SUNSTONE_PUBLIC/app/tabs/vnets-topology-tab/html.hbs" ]; then
         SS_VER=5.00
     fi
     ONE_VER=${ONE_VER:-$SS_VER}
