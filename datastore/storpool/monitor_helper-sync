@@ -239,7 +239,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 			splog "($?) template $template_name propagate"
 		fi
 	fi
-
+	
 	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
 		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
 			splog "CLUSTER_ID:$CLUSTER_ID DS_ID:$DS_ID API:$SP_API_HTTP_HOST clusters:$clusters"
@@ -251,16 +251,37 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				mkdir -p "${SP_MONITOR_CACHE_CLUSTER}"
 				splog "($?) mkdir $SP_MONITOR_CACHE_CLUSTER"
 			fi
-
-			rFile1="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
-			doExpand "rFile1"
-			run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile1"
-			rFile2="${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
-			doExpand "rFile2"
-			run_task "$SP_VOLUME_SPACE_RUN" "$rFile2"
-			rFile3="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
-			doExpand "rFile3"
-			run_task "$SP_SNAPSHOT_SPACE_RUN" "$rFile3"
+			
+			if [ -n "$SP_TEMPLATE_STATUS_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
+				doExpand "rFile"
+				run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile"
+			fi
+			if [ -n "$SP_VOLUME_SPACE_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
+				doExpand "rFile"
+				run_task "$SP_VOLUME_SPACE_RUN" "$rFile"
+			fi
+			if [ -n "$SP_SNAPSHOT_SPACE_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
+				doExpand "rFile"
+				run_task "$SP_SNAPSHOT_SPACE_RUN" "$rFile"
+			fi
+			if [ -n "$SP_VOLUME_STATUS_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_STATUS_JSON##*/}"
+				doExpand "rFile"
+				run_task "$SP_VOLUME_STATUS_RUN" "$rFile"
+			fi
+			if [ -n "$SP_VOLUME_LIST_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_LIST_JSON##*/}"
+				doExpand "rFile"
+				run_task "$SP_VOLUME_LIST_RUN" "${SP_FE_JSON_PATH}/${SP_VOLUME_LIST_JSON##*/}"
+			fi
+			if [ -n "$SP_SNAPSHOT_LIST_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}"
+				doExpand "rFile"
+				run_task "$SP_SNAPSHOT_LIST_RUN" "${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}"
+			fi
 		fi
 	done
 #	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
