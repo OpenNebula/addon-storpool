@@ -172,6 +172,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	
 	cmd=
 	comment=
+	DS_ID=${DS_ID_ARRAY[i]}
 	template_name="one-ds-${DS_ID}"
 	sp_token="${SP_AUTH_TOKEN_ARRAY[i]}"
 	[ -n "$sp_token" ] && export SP_AUTH_TOKEN="$sp_token" || unset SP_AUTH_TOKEN
@@ -179,7 +180,6 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	[ -n "$sp_host" ] && export SP_API_HTTP_HOST="$sp_host" || unset SP_API_HTTP_HOST
 	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
 	[ -n "$sp_port" ] && export SP_API_HTTP_PORT="$sp_port" || unset SP_API_HTTP_PORT
-	DS_ID=${DS_ID_ARRAY[i]}
 	SP_TEMPLATE_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
 	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
 		if [ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]; then
