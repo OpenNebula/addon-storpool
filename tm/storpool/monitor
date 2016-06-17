@@ -91,6 +91,13 @@ while IFS=',' read n t f; do
 done < <(eval $SP_CMD_TEMPLATE_STATUS | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free]|@csv')
 
 if [ -d "$BASE_PATH" ]; then
+	if [ -f "$BASE_PATH/.monitor" ]; then
+		DS_DRIVER="$(<$DS_DIR/.monitor)" || DS_DRIVER="storpool"
+		if [ -n "$DEBUG_TM_MONITOR" ]; then
+			splog "$DS_ID is marked for remote monitoring via IM_MAD using 'tm/$DS_DRIVER/monitor_ds'"
+		fi
+		exit 0
+	fi
 	$DRIVER_PATH/monitor_ds "$BASE_PATH"
 else
 	if [ ! -L "$BASE_PATH" ]; then
