@@ -30,6 +30,13 @@ function splog() { logger -t "im_sp_monitor_ds" "$*"; }
 
 SP_MONITOR_DS="../../datastore/storpool/monitor"
 
+if [ -f "../../addon-storpoolrc" ]; then
+    source "../../addon-storpoolrc"
+fi
+if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+    source "/etc/storpool/addon-storpool.conf"
+fi
+
 if [ -f "$SP_MONITOR_DS" ]; then
 #    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
 #        splog "[DBG]$PWD $0 $* (ds:$ds)"
@@ -65,7 +72,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             echo "  FREE_MB = $CALC_FREE_MB"
             echo "]"
 
-            # Skip if datastore is not marked for local monitoring
+            # Report VM DISKS if marked for remote monitoring
             if [ -e "${dir}/.monitor" ]; then
                 DRIVER=$(<"${dir}/.monitor")
                 # default tm DRIVER is ssh
