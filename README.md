@@ -46,22 +46,24 @@ A working StorPool cluster is required.
 ## Features
 * support for datstore configuration via CLI and sunstone
 * support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
+* support SYSTEM datastore on shared filesystem or over ssh 
 * support SYSTEM datastore volatile disks and context image as StorPool block devices (see limitations)
-* support migration from one to another SYSTEM_DS if both are with `storpool` TM_MAD
+* support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
 * support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 * support two different modes of disk usage reporting - LVM style and StorPool style
 * support datastores on different storpool clusters
 * extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
 * all disk images are thin provisioned
+* Improved storage security: there is no storage management access from the hypervisors so if rogue user manage to escape from the VM to the host the datastore impact will be reduced on the locally attached disks(local to the hostVMs) only
 * (optional) helper tool to tweak the number of queues for virtio-scsi (require `DEVICE_PREFIX=sd`)
-* (optional) helper tool to enabe virtio-blk-data-plane for virtio-blk (require `DEVICE_PREFIX=vd`)
+* (optional) helper tool to enable virtio-blk-data-plane for virtio-blk (require `DEVICE_PREFIX=vd`)
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 
 ## Limitations
 
 1. Tested only with the KVM hypervisor
 1. No support for VM snapshot because it is handled internally by libvirt
-1. When SYSTEM_Ds integration is enabled the reported free/used/total space is not propper because the volatile disks and the context image are expected to be files instead of a block devices. Extra external monitoring of space usage should be implemented.
+1. When SYSTEM datastore integration is enabled the reported free/used/total space is not proper because the volatile disks and the context image are expected to be files instead of a block devices. Extra external monitoring of space usage should be implemented.
 
 ## Installation
 
@@ -85,9 +87,9 @@ git clone https://github.com/OpenNebula/addon-storpool
 ```
 
 ### automated installation
-The automated installation is best suitable for new deployments. The install script will try to do an upgrade if it detects that addon-storpool is already installed but it is possible to have errors due to unhandled changes
+The automated installation is best suitable for new deployments. The install script will try to do an upgrade if it detects that addon-storpool is already installed but it is possible to have errors due to non expected changes
 
-* Run the install script and chek for any reported errors or warnings
+* Run the install script and check for any reported errors or warnings
 ```bash
 bash ~/addon-storpool/install.sh
 ```
@@ -182,13 +184,13 @@ pushd /var/lib/one
 patch --backup -p0 <~/addon-storpool/patches/im/4.14/00-monitor_ds.patch
 popd
 ```
-* Patch VMM_MAD/kvm/poll
+* Patch VMM_MAD/kvm/poll (OpenNebula v4.x only)
 ```bash
 pushd /var/lib/one
 patch -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
 popd
 ```
-* Copy poll_disk_info and the helpers to .../remotes/vmm/kvm/
+* Copy poll_disk_info and the helpers to .../remotes/vmm/kvm/ (OpenNebula v4.x only)
 ```bash
 cp ~/addon-storpool/vmm/kvm/* /var/lib/one/remotes/vmm/kvm/
 ```
@@ -196,7 +198,7 @@ cp ~/addon-storpool/vmm/kvm/* /var/lib/one/remotes/vmm/kvm/
 ```bash
 (crontab -u oneadmin -l; echo "*/2 * * * * /var/lib/one/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
 ```
-* Copy FT hook and the fencing helper script
+* Copy FT hook and the fencing helper script (OpenNebula v4.x only)
 ```bash
 cp ~/addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
 cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
@@ -208,7 +210,7 @@ cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
 ```bash
 pushd /usr/lib/one/sunstone/public
 # patch the sunstone interface
-patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/4.14/00-datastores-tab.js.patch
+patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.00/00-datastores-tab.js.patch
 
 # rebuild the interface
 npm install
@@ -223,7 +225,7 @@ The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-sto
 
 *  If you plan to do live disk snapshots with fsfreeze via qemu-guest-agent but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the addon global configuration.
 
-* To chage disk space usage reporting to be as LVM is reporting it, define `SP_SPACE_USED_LVMWAY` variable to anything
+* To change disk space usage reporting to be as LVM is reporting it, define `SP_SPACE_USED_LVMWAY` variable to anything
 
 * Add the `oneadmin` user to group `disk` on all nodes
 ```bash
@@ -237,22 +239,44 @@ TM_MAD = [
 ]
 ```
 * Edit `/etc/one/oned.conf` and add `storpool` to the `DATASTORE_MAD` arguments
+For OpenNebula v4.x:
 ```
 DATASTORE_MAD = [
     executable = "one_datastore",
     arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool"
 ]
 ```
-* Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for storpool
+For OpenNebula v5.x:
+```
+DATASTORE_MAD = [
+    executable = "one_datastore",
+    arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool  -s shared,ssh,ceph,fs_lvm,qcow2,storpool"
+]
+```
+* Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool
 ```
 TM_MAD_CONF = [
     name = "storpool", ln_target = "NONE", clone_target = "SELF", shared = "yes"
 ]
 ```
+* Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool (OpenNebula v5.x)
+```
+DS_MAD_CONF = [
+    NAME = "storpool",
+    REQUIRED_ATTRS = "DISK_TYPE",
+    PERSISTENT_ONLY = "NO",
+    MARKETPLACE_ACTIONS = "export"
+]
+```
 To enable live disk snapshots support for storpool
-* Edit `/etc/one/kvm_exec/kvm_execrc` and add `kvm-storpool` to `LIVE_DISK_SNAPSHOTS`
+* Add `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` 
+For OpenNebula v4.x edit `/etc/one/kvm_exec/kvm_execrc`
 ```
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-storpool"
+```
+For OpenNebula v5.x edit `/etc/one/vmm_exec/vmm_execrc`
+```
+LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 ```
 * Edit `/etc/one/oned.conf` and add `-i` argument to `VM_MAD`
 ```
@@ -264,7 +288,7 @@ VM_MAD = [
     type       = "kvm" ]
 ```
 To enable the StorPool compatible Fault Tolerance `HOST_HOOK`
-* Edit `/etc/one/oned.conf` and define `HOST_HOOK` as follow(tweak the arguments if needed)
+* Edit `/etc/one/oned.conf` and define `HOST_HOOK` as follow(tweak the arguments if needed) (OpenNebula v4.x only)
 ```
 HOST_HOOK = [
     name      = "error",
@@ -274,7 +298,7 @@ HOST_HOOK = [
     remote    = "no" ]
 ```
 To enable save/restore of the checkpoint file to a storpool volume (SYSTEM_DS)
-* Edit/create the addon-storpool global configuration file /var/lib/one/remotes/addon-storpoolrc and define the folowing variable
+* Edit/create the addon-storpool global configuration file /var/lib/one/remotes/addon-storpoolrc and define the following variable
 ```
 SP_CHECKPOINT=yes
 ```
@@ -318,10 +342,10 @@ SP_TEMPLATE_PROPAGATE="YES"
 #MONITOR_SYNC_DEBUG=1
 ```
 
-For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the `SP_JSON_PATH` variable must be altered to point to a chared folder and set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
-Note: the shared filesystem must be mounted on same system path on all nodes as on the one-fe!
+For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the `SP_JSON_PATH` variable must be altered to point to a shared folder and set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
+_Note: the shared filesystem must be mounted on same system path on all nodes as on the one-fe!_
 
-For example the shared filesystem in mounted on `/sharedfs`:
+For example the shared file system in mounted on `/sharedfs`:
 ```bash
 cat >>/var/lib/one/remotes/monitor_helper-syncrc <<EOF
 # datastores stats on the sharedfs
@@ -362,14 +386,14 @@ Follow the installation procedure. If something can not be upgraded automaticall
 
 ### Configuring the System Datastore
 
-This addon enables full support of transfer manager (TM_MAD) backend of type shared, ssh, or storpol for the system datastore. The system datastore will hold only the symbolic links to the StorPool block devices, so it will not take much space. See more details on the [System Datastore Guide](http://docs.opennebula.org/4.10/administration/storage/system_ds.html).
+This addon enables full support of transfer manager (TM_MAD) backend of type shared, ssh, or storpool for the system datastore. The system datastore will hold only the symbolic links to the StorPool block devices, so it will not take much space. See more details on the [System Datastore Guide](http://docs.opennebula.org/4.10/administration/storage/system_ds.html).
 
 If TM_MAD is storpool it is possible to have both shared and ssh datastores, configured per cluster. To achieve this two attributes should be set:
 
 * DATASTORE_LOCATION in cluster configuration should be set (pre OpenNebula 5.x+)
 * By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in the datastore configuration
 
-It is possible to manage different set of hosts working with different StorPool clusters from single front-end. In this case the separation of the resorces in Clusters is mandatory. I this case it is highly advised to set the StorPool API details(`SP_API_HTTP_HOST`, `SP_AUTH_TOKEN` and optionally `SP_API_HTTP_PORT`) in each StorPool enabled datastore.
+It is possible to manage different set of hosts working with different StorPool clusters from single front-end. In this case the separation of the resources in Clusters is mandatory. I this case it is highly advised to set the StorPool API details(`SP_API_HTTP_HOST`, `SP_AUTH_TOKEN` and optionally `SP_API_HTTP_PORT`) in each StorPool enabled datastore.
 
 ### Configuring the Datastore
 

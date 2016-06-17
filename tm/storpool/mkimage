@@ -106,6 +106,8 @@ storpoolVolumeDetach "$SP_VOL" "force" "" "all"
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
+MONITOR_TM_MAD="storpool"
+
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 
 splog "END $VM_ID"

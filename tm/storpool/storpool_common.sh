@@ -439,8 +439,12 @@ function oneSymlink()
             mkdir -p "\$dst_dir"
             trap - EXIT TERM INT HUP
         fi
+        if [ -n "$MONITOR_TM_MAD" ]; then
+            [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"
+        fi
         splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
+        echo "storpool" >"\$dst".driver
     done
 EOF
 )
@@ -563,6 +567,9 @@ function oneCheckpointRestore()
         splog "file exists $checkpoint"
     else
         mkdir -p "$_path"
+
+        [ -f "$_path/.monitor" ] || echo "storpool" >"$_path/.monitor"
+
         if tar --no-seek --use-compress-program="$SP_COMPRESSION" --to-stdout --extract --file="$sp_link" >"$checkpoint"; then
             splog "RESTORED $volume $checkpoint"
         else
@@ -641,18 +648,19 @@ function oneVmInfo()
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
 
-#    splog "\
-#${VMSTATE:+VMSTATE=$VMSTATE }\
-#${LCM_STATE:+LCM_STATE=$LCM_STATE }\
-#${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
-#${SOURCE:+SOURCE=$SOURCE }\
-#${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
-#${CLONE:+CLONE=$CLONE }\
-#${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-#${IMAGE:+IMAGE=$IMAGE }\
-#"
-#    msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
-#    [ -n "$msg" ] && splog "$msg"
+    [ "$DEBUG_oneVmInfo" = "1" ] || return
+    splog "\
+${VMSTATE:+VMSTATE=$VMSTATE }\
+${LCM_STATE:+LCM_STATE=$LCM_STATE }\
+${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
+${SOURCE:+SOURCE=$SOURCE }\
+${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
+${CLONE:+CLONE=$CLONE }\
+${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+${IMAGE:+IMAGE=$IMAGE }\
+"
+    msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
+    [ -n "$msg" ] && splog "$msg"
 }
 
 function oneDatastoreInfo()
@@ -704,13 +712,14 @@ function oneDatastoreInfo()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-#    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
-#    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
-#    _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
-#    _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
-#    _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
-#    _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }"
-#    splog "$_MSG"
+    [ "$DEBUG_oneDatastoreInfo" = "1" ] || return
+    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
+    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
+    _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
+    _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
+    _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
+    _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }"
+    splog "$_MSG"
 }
 
 function dumpTemplate()
@@ -740,7 +749,9 @@ function oneTemplateInfo()
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-#    splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+    if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
+        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+    fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
     unset i XPATH_ELEMENTS
@@ -764,7 +775,6 @@ function oneTemplateInfo()
     _DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
     _DISK_TYPE=${XPATH_ELEMENTS[i++]}
     _DISK_FORMAT=${XPATH_ELEMENTS[i++]}
-#    splog "[oneTemplateInfo] $_DISK_TM_MAD $_DISK_DATASTORE_ID $_DISK_ID $_DISK_CLUSTER_ID $_DISK_SOURCE $_DISK_PERSISTENT $_DISK_TYPE $_DISK_FORMAT"
 
     _OLDIFS=$IFS
     IFS=";"
@@ -777,6 +787,10 @@ function oneTemplateInfo()
     DISK_TYPE_ARRAY=($_DISK_TYPE)
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
+
+    if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
+        splog "[oneTemplateInfo] $_DISK_TM_MAD $_DISK_DATASTORE_ID $_DISK_ID $_DISK_CLUSTER_ID $_DISK_SOURCE $_DISK_PERSISTENT $_DISK_TYPE $_DISK_FORMAT"
+    fi
 }
 
 
@@ -793,6 +807,7 @@ function oneDsDriverAction()
     done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTER_ID \
+                    %m%/DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTERS/ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
@@ -826,6 +841,7 @@ function oneDsDriverAction()
     BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
+    CLUSTERS_ID="${XPATH_ELEMENTS[i++]}"
     BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
@@ -858,10 +874,13 @@ function oneDsDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
+    [ "$DEBUG_oneDsDriverAction" = "1" ] || return
+
     splog "\
 ${ID:+ID=$ID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
 ${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
+${CLUSTERS_ID:+CLUSTERS_ID=$CLUSTERS_ID }\
 ${STATE:+STATE=$STATE }\
 ${SIZE:+SIZE=$SIZE }\
 ${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\

@@ -17,7 +17,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
+function splog() { logger -t "tm_sp_${0##*/}" "$*"; }
 
 DRV_ACTION="$1"
 DS_ID="$2"
@@ -37,7 +37,7 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
-if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
+if [ -n "$DEBUG_TM_MONITOR" ]; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 fi
 
@@ -51,13 +51,8 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 	fi
 #	echo "bash -x $PWD/$0 $*" >/tmp/monitor_system.sh
 else
-	LOG_PREFIX="ds"
 	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 	oneDsDriverAction "${DRIVER_PATH}"
-	if [ -n "$CLUSTERS_ID" ]; then
-		CLUSTERS_ID_ARRAY=($CLUSTERS_ID)
-		CLUSTER_ID=${CLUSTERS_ID_ARRAY[0]}
-	fi
 	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
 	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-$SP_CMD_TEMPLATE_STATUS}"
 fi # DRV_ACTION
@@ -71,14 +66,14 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/$SP_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
 
-if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
-	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
-fi
+#if [ -n "$DEBUG_TM_MONITOR" ]; then
+#	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
+#fi
 
 while IFS=',' read n t f; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
 		u=$(( t - f ))
-		if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
+		if [ -n "$DEBUG_TM_MONITOR" ]; then
 			splog "<$DS_ID> u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
 		fi
 		case "${DRV_ACTION:0:6}" in
@@ -94,3 +89,14 @@ while IFS=',' read n t f; do
 		break
 	fi
 done < <(eval $SP_CMD_TEMPLATE_STATUS | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free]|@csv')
+
+if [ -d "$BASE_PATH" ]; then
+	$DRIVER_PATH/monitor_ds "$BASE_PATH"
+else
+	if [ ! -L "$BASE_PATH" ]; then
+		mkdir -p "$BASE_PATH"
+		splog "mkdir -p $BASE_PATH ($?)"
+	fi
+fi
+
+exit 0

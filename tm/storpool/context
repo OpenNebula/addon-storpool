@@ -84,7 +84,7 @@ DISK_ID=$(echo $DST | awk -F. '{print $NF}')
 
 log "Generating context block device"
 
-ISO_DIR="$DS_BASE_PATH/.isofiles/$VM_ID"
+ISO_DIR="$DS_DIR/.isofiles/$VM_ID"
 ISO_FILE="$ISO_DIR/$VM_ID.iso"
 
 exec_and_set_error "mkdir -p $ISO_DIR" \
@@ -151,6 +151,8 @@ fi
 # (re)attach readonly
 #-------------------------------------------------------------------------------
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+
+MONITOR_TM_MAD="storpool"
 
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
 
