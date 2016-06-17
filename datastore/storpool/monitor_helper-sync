@@ -191,9 +191,9 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	CLUSTER_IDS=( ${DS_CLUSTER_ID_ARRAY[i]} )
 	if [ ${#CLUSTER_IDS[@]} -eq 0 ]; then
 		#new style
-		unset i
+		unset j
 		while IFS= read element; do
-			CLUSTER_IDS[i++]="$element"
+			CLUSTER_IDS[j++]="$element"
 		done < <(cat "${SP_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
 			        %m%/DATASTORE_POOL/DATASTORE[ID=$DS_ID]/CLUSTERS/ID)
 	fi
