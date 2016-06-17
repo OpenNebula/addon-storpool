@@ -26,7 +26,7 @@
 #     echo "  ID = $ds,"
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "im_sp_monitor_ds" "$*"; }
+function splog() { logger -t "ds_sp_monitor_ds" "$*"; }
 
 SP_MONITOR_DS="../../datastore/storpool/monitor"
 
@@ -91,7 +91,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
         fi
     else
 	if [ -n "$IM_MONITOR_DS_DEBUG_VERBOSE" ]; then
-	        splog "DS_ID $ds is not on StorPool"
+	        splog "Datastore $ds is not on StorPool"
 	fi
     fi
 else
