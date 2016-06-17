@@ -58,7 +58,7 @@ else
 		CLUSTERS_ID_ARRAY=($CLUSTERS_ID)
 		CLUSTER_ID=${CLUSTERS_ID_ARRAY[0]}
 	fi
-	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
+#	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
 	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-$SP_CMD_TEMPLATE_STATUS}"
 fi # DRV_ACTION
 
