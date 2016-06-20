@@ -104,9 +104,13 @@ if [ -d "$BASE_PATH" ]; then
 	fi
 	$DRIVER_PATH/monitor_ds "$BASE_PATH"
 else
-	if [ ! -L "$BASE_PATH" ]; then
-		mkdir -p "$BASE_PATH"
-		splog "mkdir -p $BASE_PATH ($?)"
+	if [ -n "$BASE_PATH" ]; then
+		if [ ! -L "$BASE_PATH" ]; then
+			mkdir -p "$BASE_PATH"
+			splog "mkdir -p $BASE_PATH ($?)"
+		fi
+	else
+		splog "BASE_PATH variable is empty!"
 	fi
 fi
 
