@@ -45,7 +45,14 @@ source "$TMCOMMON"
 # load local configuration parameters
 #-------------------------------------------------------------------------------
 
+DEBUG_COMMON=
+DEBUG_TRAPS=
 DEBUG_SP_RUN_CMD=1
+DEBUG_SP_RUN_CMD_VERBOSE=
+DEBUG_oneVmInfo=
+DEBUG_oneDatastoreInfo=
+DEBUG_oneTemplateInfo=
+DEBUG_oneDsDriverAction=
 
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 
@@ -172,7 +179,14 @@ function storpoolRetry() {
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST"
     fi
     if [ -n "$DEBUG_SP_RUN_CMD" ]; then
-        splog "storpool $*"
+        if [ -n "$DEBUG_SP_RUN_CMD_VERBOSE" ]; then
+            splog "storpool $*"
+        else
+            for _last_cmd;do :;done
+            if [ "${_last_cmd}" != "list" ]; then
+                splog "storpool $*"
+            fi
+        fi
     fi
     t=${STORPOOL_RETRIES:-10}
     while true; do
