@@ -555,7 +555,7 @@ EOF
         splog "Checkpoint file not found! $checkpoint"
         return 0
     fi
-    splog "file_size=$file_size volume_size=$volume_size"
+    splog "checkpoint_size=${file_size} volume_size=${volume_size}M"
 
     storpoolVolumeCreate "$volume" "$volume_size"M "$template"
 
