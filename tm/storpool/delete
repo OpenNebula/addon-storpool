@@ -83,11 +83,17 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 
-        RM_CMD="rm -rf '$DST_PATH'"
-        splog "run RM_CMD on $DST_HOST ($DST_PATH)"
-        ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
-                 "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+    else
+        SP_VOL="one-sys-${VM_ID}-${DISK_ID}"
+#        splog "[SYSTEM_DS] delete volatile $SP_VOL"
+        for SP_VOL in `storpoolVolumeContains "$SP_VOL"`; do
+            storpoolVolumeDelete "$SP_VOL" "force"
+        done
     fi
+    RM_CMD="rm -rf '$DST_PATH'"
+    splog "run RM_CMD on $DST_HOST ($DST_PATH)"
+    ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+             "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
 
     splog "END [SYSTEM_DS]"
     exit 0
