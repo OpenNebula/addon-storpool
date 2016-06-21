@@ -82,6 +82,7 @@ esac
 
 DETACH_ALL=
 DO_SYMLINK=
+SKIP_CONTEXT=
 case "$LCM_STATE" in
     8)
         #-----------------------------------------------------------------------
@@ -130,6 +131,9 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         DETACH_ALL=1
         DO_SYMLINK="yes"
+        SKIP_CONTEXT=1
+        date >>"/tmp/one-${VM_ID}-${DISK_ID}-iso.skip"
+
     ;;
     *)
         splog ">>> STATE=$VMSTATE LCM_STATE=$LCM_STATE <<<"
@@ -169,6 +173,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 if [ "$DO_SYMLINK" = "yes" ]; then
                     oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
                 fi
+            fi
+            if [ -n "$SKIP_CONTEXT" ]; then
+                skip_context_ts="$(date -u)"
+                echo "$skip_context_ts" >"/tmp/one-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip"
+                splog "create /tmp/one-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip ($skip_context_ts)"
             fi
         fi
         if [ "$SRC_PATH" != "$DST_PATH" ]; then
