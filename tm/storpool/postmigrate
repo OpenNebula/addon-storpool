@@ -59,12 +59,19 @@ oneTemplateInfo "$TEMPLATE"
 #-------------------------------------------------------------------------------
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
+        DISK_ID="${DISK_ID_ARRAY[i]}"
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
-        SP_VOL="${DISK_SOURCE##*/}"
-        [ "${DISK_PERSISTENT_ARRAY[i]}" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID_ARRAY[i]}"
+        if [ -n "$DISK_SOURCE" ]; then
+            SP_VOL="${DISK_SOURCE##*/}"
+            [ "${DISK_PERSISTENT_ARRAY[i]}" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
 
-        DST_PATH="$VM_PATH/disk.${DISK_ID_ARRAY[i]}"
-        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+            DST_PATH="$VM_PATH/disk.${DISK_ID}"
+            storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+        else
+            if [ -n "$DEBUG_MIGRATE_LIVE" ]; then
+                splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
+            fi
+        fi
     fi
 done
 
@@ -73,7 +80,7 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     # Detach volatile disk volumes
     #-------------------------------------------------------------------------------
     for i in ${!DISK_ID_ARRAY[@]}; do
-        if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ]; then
+        if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ] || [ "${DISK_SOURCE_ARRAY[i]}" = "" ]; then
             FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
             if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                 FORMAT="swap"
