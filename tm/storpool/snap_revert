@@ -80,7 +80,7 @@ storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
 trapAdd "storpoolVolumeAttach \"$SP_VOL\" \"$SRC_HOST\""
 trapAdd "oneSymlink \"$SRC_HOST\" \"$SP_LINK\" \"$SRC_PATH\""
 
-storpoolSnapRevert "$SP_SNAP" "$SP_VOL"
+storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
 
 storpoolVolumeAttach "$SP_VOL" "$SRC_HOST"
 oneSymlink "$SRC_HOST" "$SP_LINK" "$SRC_PATH"
