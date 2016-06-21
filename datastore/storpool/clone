@@ -91,6 +91,7 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
 
     if [ "$DS_TM_MAD" != "$TM_MAD" ]; then
         splog "Clone from $TM_MAD to $DS_TM_MAD is not supported!"
+        log "Clone from $TM_MAD to $DS_TM_MAD is not supported!"
         exit -1
     fi
 
