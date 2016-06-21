@@ -84,25 +84,27 @@ storpoolTemplate "$SP_TEMPLATE"
 
 storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
-MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
+if [ "${FSTYPE,,}" != "raw" ]; then
+    MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
 
-if [ -n "$BRIDGE_LIST" ]; then
-    splog "BRIDGE_LIST:$BRIDGE_LIST"
-    R_HOST=`get_destination_host $VM_ID`
-    storpoolVolumeAttach "$SP_VOL" "$R_HOST"
+    if [ -n "$BRIDGE_LIST" ]; then
+        splog "BRIDGE_LIST:$BRIDGE_LIST"
+        R_HOST=`get_destination_host $VM_ID`
+        storpoolVolumeAttach "$SP_VOL" "$R_HOST"
 
-    splog "run on $R_HOST $MKFS_CMD"
-    ssh_exec_and_log "$R_HOST" "$MKFS_CMD" \
-       "Error running $MKFS_CMD on $R_HOST"
-else
-    storpoolVolumeAttach "$SP_VOL"
+        splog "run on $R_HOST $MKFS_CMD"
+        ssh_exec_and_log "$R_HOST" "$MKFS_CMD" \
+           "Error running $MKFS_CMD on $R_HOST"
+    else
+        storpoolVolumeAttach "$SP_VOL"
 
-    splog "run $MKFS_CMD"
-    exec_and_log "$MKFS_CMD" \
-       "Error running $MKFS_CMD"
+        splog "run $MKFS_CMD"
+        exec_and_log "$MKFS_CMD" \
+           "Error running $MKFS_CMD"
+    fi
+
+    storpoolVolumeDetach "$SP_VOL" "force" "" "all"
 fi
-
-storpoolVolumeDetach "$SP_VOL" "force" "" "all"
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
