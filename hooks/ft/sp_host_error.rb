@@ -22,9 +22,7 @@
 # Script to migrate VM-s from failed host
 #   Additional flags
 #           -t how many times to loop in each state
-#           -p <n> avoid resubmission if host comes
-#                  back after n monitoring cycles
-#           -f fencing-script.sh fence the failed node while script is working
+#           -s fencing-script.sh fence the failed node while script is working
 ##############################################################################
 
 ##############################################################################
@@ -65,19 +63,33 @@ if !(host_id=ARGV[0])
     exit -1
 end
 
+mode   = nil  # By default, recreate VMs following the v4 workaround
+force  = "n"  # By default, don't recreate/delete suspended VMs
 repeat = nil  # By default, don't wait for monitorization cycles"
 max_count = 200
 fencing_script = nil # For backward compatibility by default there is no fencing script
 
 opts = GetoptLong.new(
+            ['--migrate',  '-m',GetoptLong::NO_ARGUMENT],
+            ['--delete',   '-d',GetoptLong::NO_ARGUMENT],
+            ['--recreate', '-r',GetoptLong::NO_ARGUMENT],
+            ['--force',    '-f',GetoptLong::NO_ARGUMENT],
             ['--pause',    '-p',GetoptLong::REQUIRED_ARGUMENT],
-            ['--timeout',    '-t',GetoptLong::REQUIRED_ARGUMENT],
-            ['--fencing-script',    '-f',GetoptLong::REQUIRED_ARGUMENT]
+            ['--timeout',  '-t',GetoptLong::REQUIRED_ARGUMENT],
+            ['--fencing-script',    '-s',GetoptLong::REQUIRED_ARGUMENT]
         )
 
 begin
     opts.each do |opt, arg|
         case opt
+            when '--migrate'
+                mode="-m"
+            when '--delete'
+                mode="-d"
+            when '--recreate'
+                mode="-r"
+            when '--force'
+                force  = "y"
             when '--pause'
                 repeat = arg.to_i
             when '--timeout'
@@ -150,6 +162,7 @@ if OpenNebula.is_error?(rc)
 end
 
 state = "STATE=3"
+state += " or STATE=5 or STATE=8" if mode and force == "y"
 
 vm_ids_array = vms.retrieve_elements("/VM_POOL/VM[#{state}]/HISTORY_RECORDS/HISTORY[HOSTNAME=\"#{host_name}\" and last()]/../../ID")
 
@@ -161,6 +174,19 @@ if vm_ids_array
         vm_state = vm.state_str
         lcm_state = vm.lcm_state_str
         state =  "#{vm_state}/#{lcm_state}"
+        if mode
+            if mode == "-r"
+                vm.delete(true)
+                splog "RECREATE #{vm_id} #{state}"
+            elsif mode == "-d"
+                vm.delete
+                splog "DELETE #{vm_id} #{state}"
+            elsif mode == "-m"
+                vm.resched
+                splog "RESCHED #{vm_id} #{state}"
+            end
+            next
+        end
         if state == "ACTIVE/UNKNOWN"
             vmhash[vm_id] = Hash.new
             vmhash[vm_id]["vm"] = vm
@@ -171,6 +197,11 @@ if vm_ids_array
         else
             splog("#{host_name}(#{host_id}) SKIP: VM #{vm_id} state #{state}")
         end
+    end
+
+    if mode
+        splog "END Compatibility mode(#{mode})"
+        exit 0
     end
 
     if vmhash.size == 0
