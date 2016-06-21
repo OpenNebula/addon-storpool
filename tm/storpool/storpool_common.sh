@@ -811,7 +811,8 @@ function oneTemplateInfo()
     IFS=$_OLDIFS
 
     if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
-        splog "[oneTemplateInfo] $_DISK_TM_MAD $_DISK_DATASTORE_ID $_DISK_ID $_DISK_CLUSTER_ID $_DISK_SOURCE $_DISK_PERSISTENT $_DISK_TYPE $_DISK_FORMAT"
+        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE format:$_DISK_FORMAT"
+#        echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
     fi
 }
 
