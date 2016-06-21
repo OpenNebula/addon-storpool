@@ -29,6 +29,7 @@
 function splog() { logger -t "ds_sp_monitor_ds" "$*"; }
 
 SP_MONITOR_DS="../../datastore/storpool/monitor"
+ONE_VERSION="$(<../../VERSION)"
 
 if [ -f "../../addon-storpoolrc" ]; then
     source "../../addon-storpoolrc"
@@ -71,6 +72,10 @@ if [ -f "$SP_MONITOR_DS" ]; then
             echo "  TOTAL_MB = $CALC_TOTAL_MB,"
             echo "  FREE_MB = $CALC_FREE_MB"
             echo "]"
+
+            if [ "${ONE_VERSION:0:1}" = "4" ]; then
+                continue
+            fi
 
             # Report VM DISKS if marked for remote monitoring
             if [ -e "${dir}/.monitor" ]; then
