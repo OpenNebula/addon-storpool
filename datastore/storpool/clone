@@ -125,7 +125,7 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
         # SRC_HOST  dd if=SRC_VOL | ssh DST_HOST dd of=DST_VOL
         DST_CMD="dd of=/dev/storpool/$SP_VOL bs=1M conv=fdatasync status=none"
         if [ -n "$DST_HOST" ]; then
-            DST_CMD="ssh $DST_HOST '$DST_CMD'"
+            DST_CMD="ssh ${CLONE_COMPRESSION:+-C} $DST_HOST '$DST_CMD'"
         fi
         SRC_CMD="dd if=/dev/storpool/$SP_PARENT bs=1M status=none | $DST_CMD"
         if [ -n "$SRC_HOST" ]; then
