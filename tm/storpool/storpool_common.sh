@@ -167,6 +167,10 @@ function storpoolClientId()
                 fi
             fi
         done
+        if [ "$result" = "" ] && [ -n "$CLONE_GW" ]; then
+            result=$(ssh "$CLONE_GW" /usr/sbin/storpool_confget -s "\$(hostname)" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1) #"
+            splog "CLONE_GW=$CLONE_GW CLIENT_ID=$result"
+        fi
     fi
     if [ -n "$DEBUG_COMMON" ]; then
         splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}"
@@ -710,7 +714,8 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_SYSTEM \
                             /DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
                             /DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
-                            /DATASTORE/TEMPLATE/SP_AUTH_TOKEN)
+                            /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
+                            /DATASTORE/TEMPLATE/SP_CLONE_GW)
     unset i
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_DISK_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -729,6 +734,7 @@ function oneDatastoreInfo()
     SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
+    SP_CLONE_GW="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -740,7 +746,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
     _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
     _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
-    _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }"
+    _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
     splog "$_MSG"
 }
 
@@ -841,6 +847,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_CLONE_GW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE \
@@ -876,6 +883,7 @@ function oneDsDriverAction()
     SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
+    SP_CLONE_GW="${XPATH_ELEMENTS[i++]}"
     NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -916,6 +924,7 @@ ${SP_BW+SP_BW=$SP_BW }\
 ${SP_API_HTTP_HOST+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
 ${SP_API_HTTP_PORT+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
 ${SP_AUTH_TOKEN+SP_AUTH_TOKEN=DEFINED }\
+${SP_CLONE_GW+SP_CLONE_GW=$SP_CLONE_GW }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${FSTYPE:+FSTYPE=$FSTYPE }\

@@ -104,7 +104,13 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
                 exit -1
             fi
         fi
-        storpoolVolumeAttach "$SP_PARENT" "$SRC_HOST"
+        if [ -n "$SP_CLONE_GW"  ]; then
+            SRC_SP_CLONE_GW="$SP_CLONE_GW"
+        else
+            SRC_SP_CLONE_GW="$SRC_HOST"
+        fi
+        CLONE_GW="$SRC_SP_CLONE_GW"
+        storpoolVolumeAttach "$SP_PARENT" "$SRC_SP_CLONE_GW" "ro"
 
         oneDsDriverAction "$DRIVER_PATH"
 
@@ -115,36 +121,42 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
                 exit -1
             fi
         fi
+        if [ -n "$SP_CLONE_GW" ]; then
+            DST_SP_CLONE_GW="$SP_CLONE_GW"
+        else
+            DST_SP_CLONE_GW="$DST_HOST"
+        fi
+        CLONE_GW="$DST_SP_CLONE_GW"
 
         #create DST volume with the given SIZE
         storpoolTemplate "one-ds-${DATASTORE_ID}"
         storpoolVolumeCreate "$SP_VOL" "${SIZE}"M "one-ds-${DATASTORE_ID}"
         #attach DST volume to BRIDGE_LIST or here
-        storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+        storpoolVolumeAttach "$SP_VOL" "$DST_SP_CLONE_GW"
 
         # SRC_HOST  dd if=SRC_VOL | ssh DST_HOST dd of=DST_VOL
         DST_CMD="dd of=/dev/storpool/$SP_VOL bs=1M conv=fdatasync status=none"
-        if [ -n "$DST_HOST" ]; then
-            DST_CMD="ssh ${CLONE_COMPRESSION:+-C} $DST_HOST '$DST_CMD'"
+        if [ -n "$DST_SP_CLONE_GW" ]; then
+            DST_CMD="ssh ${CLONE_COMPRESSION:+-C} $DST_SP_CLONE_GW '$DST_CMD'"
         fi
         SRC_CMD="dd if=/dev/storpool/$SP_PARENT bs=1M status=none | $DST_CMD"
-        if [ -n "$SRC_HOST" ]; then
-            ssh $SRC_HOST "eval $SRC_CMD"
-            splog "ssh $SRC_HOST 'eval $SRC_CMD' ($?)"
-            splog "md5sum"
+        if [ -n "$SRC_SP_CLONE_GW" ]; then
+            ssh $SRC_SP_CLONE_GW "eval $SRC_CMD"
+            splog "ssh $SRC_SP_CLONE_GW 'eval $SRC_CMD' ($?)"
         else
             eval $SRC_CMD
             splog "$SRC_CMD ($?)"
         fi
 
         #detach DST_VOL
-        storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST"
+        storpoolVolumeDetach "$SP_VOL" "" "$DST_SP_CLONE_GW"
         #detach SRC_VOL
 
         [ -n "$SRC_SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST=$SRC_SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
         [ -n "$SRC_SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT=$SRC_SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
         [ -n "$SRC_SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN=$SRC_SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
-        storpoolVolumeDetach "$SP_PARENT" "" "$SRC_HOST"
+        CLONE_GW="$SRC_SP_CLONE_GW"
+        storpoolVolumeDetach "$SP_PARENT" "" "$SRC_SP_CLONE_GW"
 
         exit
     else
