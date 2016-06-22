@@ -25,7 +25,7 @@ PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 
 function splog()
 {
-    logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}" "[${BASH_LINENO[-2]}]$*"
+    logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}" "${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
 }
 
 #-------------------------------------------------------------------------------
