@@ -180,11 +180,11 @@ function storpoolRetry() {
     fi
     if [ -n "$DEBUG_SP_RUN_CMD" ]; then
         if [ -n "$DEBUG_SP_RUN_CMD_VERBOSE" ]; then
-            splog "storpool $*"
+            splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
         else
             for _last_cmd;do :;done
             if [ "${_last_cmd}" != "list" ]; then
-                splog "storpool $*"
+                splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
             fi
         fi
     fi
