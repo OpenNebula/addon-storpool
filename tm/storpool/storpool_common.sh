@@ -561,6 +561,10 @@ EOF
     fi
     splog "checkpoint_size=${file_size} volume_size=${volume_size}M"
 
+    if storpoolVolumeExists "$volume"; then
+        storpoolVolumeDelete "$volume" "force"
+    fi
+
     storpoolVolumeCreate "$volume" "$volume_size"M "$template"
 
     trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
