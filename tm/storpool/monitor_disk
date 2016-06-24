@@ -88,6 +88,9 @@ spSize=$(eval $SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVo
 
 disk_size="${spSize:-0}"
 disk_size=$((disk_size/1024/1024))
+if [ "$disk_size" = "0" ] && [ -n "$spSize" ] && [ "$spSize" -gt "0" ]; then
+	disk_size=1
+fi
 if [ -n "$DEBUG_TM_MONITOR_DISK" ]; then
 	splog "$DISK ID:$DISK_ID SIZE:$disk_size"
 fi
