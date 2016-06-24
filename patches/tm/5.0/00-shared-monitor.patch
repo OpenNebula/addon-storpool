@@ -13,7 +13,7 @@
 +                fi
 +            done
 +            if [ -n "\$DRIVER_RUN" ]; then
-+                "\$DRIVER_RUN" "\${vmdir}/\${disk}" "\${DS_ID}" "\$vm" "\$DRIVER"
++                "\$DRIVER_RUN" "\${vmdir}/\${disk}" "${DS_ID}" "\$vm" "\$DRIVER"
 +                continue
 +            fi
 +        fi
