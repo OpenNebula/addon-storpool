@@ -691,9 +691,6 @@ ${IMAGE:+IMAGE=$IMAGE }\
 "
     msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
     [ -n "$msg" ] && splog "$msg"
-    zts=$(date +%s)
-    onevm show -x "$_VM_ID" > /tmp/vm-${_VM_ID}-${zts}-${VMSTATE}-${LCM_STATE}-show.xml
-    onevm list -x  > /tmp/vm-${_VM_ID}-${zts}-${VMSTATE}-${LCM_STATE}-list.xml
 }
 
 function oneDatastoreInfo()
