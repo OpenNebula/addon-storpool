@@ -332,6 +332,11 @@ pushd "$ONE_VAR"
     do_patch "$CWD/patches/im/4.14/00-monitor_ds.patch"
 popd
 
+echo "*** tm/shared/monitorh patch (for OpenNebula 5.0+) ..."
+pushd "$ONE_VAR"
+    do_patch "$CWD/patches/tm/5.0/00-shared-monitor.patch"
+popd
+
 echo "*** Please sync hosts (onehost sync --force)"
 
 echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
