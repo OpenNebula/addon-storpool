@@ -42,7 +42,7 @@ CWD=$(pwd)
 
 function do_patch()
 {
-    local _patch="$1"
+    local _patch="$1" _backup="$2"
     #check if patch is applied
     echo "   Test patch ${_patch##*/}"
     if patch --dry-run --reverse --forward --strip=0 --input="${_patch}"; then
@@ -50,7 +50,7 @@ function do_patch()
     else
         if patch --dry-run --forward --strip=0 --input="${_patch}"; then
             echo "*** Apply patch ${_patch##*/}"
-            if patch --backup --version-control=numbered --strip=0 --forward --input="${_patch}"; then
+            if patch ${_backup:+--backup} --version-control=numbered --strip=0 --forward --input="${_patch}"; then
                 DO_PATCH="done"
             else
                 DO_PATCH="failed"
@@ -167,7 +167,7 @@ else
         set +e
         pushd "$SUNSTONE_PUBLIC" &>/dev/null
         for p in `ls ${CWD}/patches/sunstone/${ONE_VER}/*.patch`; do
-            do_patch "$p"
+            do_patch "$p" "backup"
             [ -n "$DO_PATCH" ] && [ "$DO_PATCH" = "done" ] && REBUILD_JS=1
         done
         if [ "$ONE_VER" = "4.14" ] || [ "${ONE_VER:0:2}" = "5." ] ; then
@@ -322,7 +322,7 @@ fi
 
 echo "*** VMM poll patch for OpenNebula v4.14 ..."
 pushd "$ONE_VAR"
-    do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch"
+    do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch" "backup"
 popd
 cp "$CWD/vmm/kvm/"{poll_,vmTweak}* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{poll_,vmTweak}*
@@ -334,7 +334,7 @@ popd
 
 echo "*** tm/shared/monitorh patch (for OpenNebula 5.0+) ..."
 pushd "$ONE_VAR"
-    do_patch "$CWD/patches/tm/5.0/00-shared-monitor.patch"
+    do_patch "$CWD/patches/tm/5.0/00-shared-monitor.patch" "backup"
 popd
 
 echo "*** Please sync hosts (onehost sync --force)"

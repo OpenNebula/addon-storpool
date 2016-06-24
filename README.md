@@ -181,19 +181,19 @@ sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do sour
 * Patch IM_MAD/kvm-probes.d/monitor_ds.sh
 ```bash
 pushd /var/lib/one
-patch --backup -p0 <~/addon-storpool/patches/im/4.14/00-monitor_ds.patch
+patch -p0 <~/addon-storpool/patches/im/4.14/00-monitor_ds.patch
 popd
 ```
 * Patch VMM_MAD/kvm/poll (OpenNebula v4.x only)
 ```bash
 pushd /var/lib/one
-patch -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
+patch --backup -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
 popd
 ```
 * Patch TM_MAD/shared/monitorl (OpenNebula v5.x+)
 ```bash
 pushd /var/lib/one
-patch -p0 <~/addon-storpool/patches/tm/5.0/00-shared-monitor.patch
+patch --backup -p0 <~/addon-storpool/patches/tm/5.0/00-shared-monitor.patch
 popd
 ```
 * Copy poll_disk_info and the helpers to .../remotes/vmm/kvm/ (OpenNebula v4.x only)
