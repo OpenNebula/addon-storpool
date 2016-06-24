@@ -41,8 +41,8 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 	
 	for DISK in `ls $VM_DIR/disk.[[:digit:]]* | grep '/disk\.[0-9]\+$'`; do
 #		splog "DISK=$DISK"
-		if [ -f "${DISK}.driver" ]; then
-			DRIVER="$(<"${DISK}.driver")"
+		if [ -f "${DISK}.monitor" ]; then
+			DRIVER="$(<"${DISK}.monitor")"
 		fi
 		DRIVER="${DRIVER:-$DS_DRIVER}"
 		
