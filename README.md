@@ -89,7 +89,7 @@ git clone https://github.com/OpenNebula/addon-storpool
 ### automated installation
 The automated installation is best suitable for new deployments. The install script will try to do an upgrade if it detects that addon-storpool is already installed but it is possible to have errors due to non expected changes
 
-* Run the install script and check for any reported errors or warnings
+* Run the install script as 'root' user and check for any reported errors or warnings
 ```bash
 bash ~/addon-storpool/install.sh
 ```
