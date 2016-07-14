@@ -180,7 +180,7 @@ else
                         echo " ** Note! $b not found!"
                         case "$b" in
                             bower)
-                                npm install -g bower
+                                npm install -g bower@1.6.5
                                 $b --version
                                 [ $? -ne 0 ] && bin_err="$bin_err $b"
                                 ;;
