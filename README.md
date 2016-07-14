@@ -245,6 +245,7 @@ TM_MAD = [
 ]
 ```
 * Edit `/etc/one/oned.conf` and add `storpool` to the `DATASTORE_MAD` arguments
+
 For OpenNebula v4.x:
 ```
 DATASTORE_MAD = [
