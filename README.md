@@ -75,7 +75,7 @@ A working StorPool cluster is required.
 yum -y install --enablerepo=epel patch git jq lz4
 # for sunstone integration: node, bower, grunt
 yum -y install npm
-npm install bower -g
+npm install bower@1.6.5 -g
 npm install grunt-cli -g
 # required for system operation (on all nodes)
 yum -y install --enablerepo=epel jq python-lxml
