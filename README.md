@@ -202,7 +202,17 @@ cp ~/addon-storpool/vmm/kvm/* /var/lib/one/remotes/vmm/kvm/
 ```
 * Create cron job for stats polling
 ```bash
-(crontab -u oneadmin -l; echo "*/2 * * * * /var/lib/one/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
+cat >>/etc/cron.d/addon-storpool <<_EOF_
+# StorPool
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=oneadmin
+*/4 * * * * oneadmin ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err
+_EOF_
+```
+If upgrading delete the old style cron task
+```bash
+crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -
 ```
 * Copy FT hook and the fencing helper script (OpenNebula v4.x only)
 ```bash
