@@ -138,12 +138,27 @@ else
 fi
 
 echo "*** monitor_helper-sync crontab job"
-if crontab -l -u oneadmin | grep -E -v "^#" | grep monitor_helper-sync; then
-    echo "*** cron job for monitor_helper-sync exists"
+if grep monitor_helper-sync /etc/cron.d/addon-storpool 2>/dev/null; then
+    echo "*** cron job file exists"
 else
-    echo "*** installing crontab job for monitor_helper-sync"
-    (crontab -u oneadmin -l; echo "*/4 * * * * ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
+    echo "*** installing crontab job for monitor_helper-sync /etc/cron.d/addon-storpool"
+    if [ -f "/etc/cron.d/addon-storpool" ]; then
+        echo "*** File exists. Appending cron job to /etc/cron.d/addon-storpool"
+    else
+        echo "*** Creating /etc/cron.d/addon-storpool"
+        cat >>/etc/cron.d/addon-storpool <<_EOF_
+# Run the hourly jobs
+SHELL=/bin/bash
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=oneadmin
+_EOF_
+    fi
+    cat >>/etc/cron.d/addon-storpool <<_EOF_
+*/4 * * * * oneadmin ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err
+_EOF_
 fi
+echo "*** Cleanup old style crontab job"
+(crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)
 
 # install premigrate and postmigrate hooks in shared and ssh TM_MADs
 for TM_MAD in shared ssh; do
