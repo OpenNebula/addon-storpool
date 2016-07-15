@@ -64,11 +64,13 @@ else
                 echo " ** Note! $b not found!"
                 case "$b" in
                     bower)
+                        echo " ** Note! installing $b"
                         npm install -g bower@1.6.5
                         $b --version
                         [ $? -ne 0 ] && bin_err="$bin_err $b"
                         ;;
                     grunt)
+                        echo " ** Note! installing $b"
                         #npm install -g grunt
                         npm install -g grunt-cli
                         $b --version
@@ -143,7 +145,7 @@ else
     (crontab -u oneadmin -l; echo "*/4 * * * * ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
 fi
 
-# install premigrate and postmigrate hooks in shared and ssh
+# install premigrate and postmigrate hooks in shared and ssh TM_MADs
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
         M_DIR="$ONE_VAR/remotes/tm/${TM_MAD}"
@@ -204,7 +206,7 @@ echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
 
-echo "*** IM monitor_ds.sh patch ..."
+echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
 pushd "$ONE_VAR"
     do_patch "$CWD/patches/im/$ONE_VER/00-monitor_ds.patch"
 popd
