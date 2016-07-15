@@ -50,7 +50,12 @@ function do_patch()
     else
         if patch --dry-run --forward --strip=0 --input="${_patch}"; then
             echo "*** Apply patch ${_patch##*/}"
-            if patch ${_backup:+--backup --version-control=numbered} --strip=0 --forward --input="${_patch}"; then
+            if [ -n "$_backup" ]; then
+                _backup="--backup --version-control=numbered"
+            else
+                _backup="--no-backup-if-mismatch"
+            fi
+            if patch ${_backup} --strip=0 --forward --input="${_patch}"; then
                 DO_PATCH="done"
             else
                 DO_PATCH="failed"
