@@ -50,7 +50,7 @@ function do_patch()
     else
         if patch --dry-run --forward --strip=0 --input="${_patch}"; then
             echo "*** Apply patch ${_patch##*/}"
-            if patch ${_backup:+--backup} --version-control=numbered --strip=0 --forward --input="${_patch}"; then
+            if patch ${_backup:+--backup --version-control=numbered} --strip=0 --forward --input="${_patch}"; then
                 DO_PATCH="done"
             else
                 DO_PATCH="failed"
@@ -145,197 +145,24 @@ function tmResetMigrate()
     esac
 }
 
-end_msg=
-if [ -n "$SKIP_SUNSTONE" ]; then
-    echo "*** Skipping opennebula-sunstone integration patch"
+if [ -f "$ONE_VAR/remotes/VERSION" ]; then
+    [ -n "$ONE_VER" ] || ONE_VER="$(< "$ONE_VAR/remotes/VERSION")"
+fi
+OIFS=$IFS
+IFS='.'
+ONE_VERSION=($ONE_VER)
+IFS=$OIFS
+
+if [ -f "scripts/install-${ONE_VER}.sh" ]; then
+    source "scripts/install-${ONE_VER}.sh"
+    echo "*** Please sync hosts (onehost sync --force)"
+
+    echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
 else
-    SUNSTONE_PUBLIC=${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}
-    if [ -f "$SUNSTONE_PUBLIC/js/plugins/datastores-tab.js" ]; then
-        SS_VER=4.10
-    fi
-    if [ -f "$SUNSTONE_PUBLIC/app/tabs/datastores-tab/form-panels/create.js" ]; then
-        SS_VER=4.14
-    fi
-    if [ -f "$SUNSTONE_PUBLIC/app/tabs/vnets-topology-tab/html.hbs" ]; then
-        SS_VER=5.00
-    fi
-    ONE_VER=${ONE_VER:-$SS_VER}
-
-    # patch sunstone's datastores-tab.js
-    if [ -n "$ONE_VER" ]; then
-        patch_err=
-        set +e
-        pushd "$SUNSTONE_PUBLIC" &>/dev/null
-        for p in `ls ${CWD}/patches/sunstone/${ONE_VER}/*.patch`; do
-            do_patch "$p" "backup"
-            [ -n "$DO_PATCH" ] && [ "$DO_PATCH" = "done" ] && REBUILD_JS=1
-        done
-        if [ "$ONE_VER" = "4.14" ] || [ "${ONE_VER:0:2}" = "5." ] ; then
-            bin_err=
-            if [ -n "$REBUILD_JS" ]; then
-                for b in npm bower grunt; do
-                    echo "*** check for $b"
-                    $b --version
-                    if [ $? -ne 0 ]; then
-                        echo " ** Note! $b not found!"
-                        case "$b" in
-                            bower)
-                                npm install -g bower@1.6.5
-                                $b --version
-                                [ $? -ne 0 ] && bin_err="$bin_err $b"
-                                ;;
-                            grunt)
-                                npm install -g grunt
-                                npm install -g grunt-cli
-                                $b --version
-                                [ $? -ne 0 ] && bin_err="$bin_err $b"
-                                ;;
-                            *)
-                                bin_err=$b
-                                break
-                                ;;
-                        esac
-                    fi
-                done
-                if [ -n "$bin_err" ]; then
-                    echo " ** Can't rebuild sunstone interface (missing:$bin_err)"
-                else
-                    echo "*** rebuilding synstone javascripts..."
-                    echo "*** npm install"
-                    npm install
-                    echo "*** bower install"
-                    bower --allow-root install
-                    echo "*** grunt sass"
-                    grunt sass
-                    echo "*** grunt requirejs"
-                    grunt requirejs
-                fi
-            fi
-        fi
-        popd &>/dev/null
-        set -e
-        end_msg="opennebula-sunstone"
-    else
-        echo " ** Can't determine version fron ${SUNSTONE_PUBLIC}. Wrong path or opennebula-sunstone not installed."
-        echo " ** Note! StorPool integration to sunstone not installed."
-    fi
+    echo "ERROR: Unknown OpenNebula version '$ONE_VERSION' detected!"
+    echo "Please install manually"
+    echo
 fi
-
-if [ -n "$SKIP_ONED" ]; then
-    echo "*** Skipping oned integration"
-    [ -n "$end_msg" ] && echo "*** Please restart $end_msg service"
-    exit;
-fi
-
-
-# install datastore and tm MAD
-for MAD in datastore tm; do
-    M_DIR="${ONE_VAR}/remotes/${MAD}"
-    echo "*** Installing ${M_DIR}/storpool ..."
-    mkdir -pv "${M_DIR}/storpool"
-    cp $CP_ARG ${MAD}/storpool/* "${M_DIR}/storpool/"
-    chown -R "$ONE_USER" "${M_DIR}/storpool"
-    chmod u+x -R "${M_DIR}/storpool"
-done
-
-# install xpath_multi.py
-XPATH_MULTI="$ONE_VAR/remotes/datastore/xpath_multi.py"
-echo "*** Installing $XPATH_MULTI ..."
-cp $CP_ARG datastore/xpath_multi.py "$XPATH_MULTI"
-chown "$ONE_USER" "$XPATH_MULTI"
-chmod u+x "$XPATH_MULTI"
-
-# install hooks
-echo "*** Install hooks ..."
-cp -v -a hooks/* "$ONE_VAR/remotes/hooks/"
-
-# fencing-script.sh
-if [ -f /usr/sbin/fencing-script.sh ]; then
-    echo "*** File exists: /usr/sbin/fencing-script.sh "
-    echo "*** Please update /usr/sbin/fencing-script.sh using hints from misc/fencing-script.sh"
-else
-    cp -v misc/fencing-script.sh /usr/sbin/
-fi
-
-echo "*** monitor_helper-sync crontab job"
-if crontab -l -u oneadmin | grep -E -v "^#" | grep monitor_helper-sync; then
-    echo "*** cron job for monitor_helper-sync exists"
-else
-    echo "*** installing crontab job for monitor_helper-sync"
-    (crontab -u oneadmin -l; echo "*/2 * * * * ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err") | crontab -u oneadmin -
-fi
-
-# install premigrate and postmigrate hooks in shared and ssh
-for TM_MAD in shared ssh; do
-    for MIGRATE in premigrate postmigrate; do
-        M_DIR="$ONE_VAR/remotes/tm/${TM_MAD}"
-        mkdir -p "$M_DIR/${MIGRATE}.d"
-        pushd "$M_DIR/${MIGRATE}.d" &>/dev/null
-        ln -sf "../../storpool/${MIGRATE}" "${MIGRATE}-storpool"
-        popd &>/dev/null
-        chown -R "$ONE_USER" "${M_DIR}/${MIGRATE}.d"
-        tmResetMigrate
-        patch_hook "${M_DIR}/${MIGRATE}"
-    done
-done
-
-# Enable StorPool in oned.conf
-if grep -q -i storpool /etc/one/oned.conf >/dev/null 2>&1; then
-    echo "*** StorPool is already enabled in /etc/one/oned.conf"
-else
-    echo "*** enabling StorPool plugin in /etc/one/oned.conf"
-    cp /etc/one/oned.conf /etc/one/oned.conf.bak;
-
-    sed -i -e 's|ceph,dev|ceph,dev,storpool|g' /etc/one/oned.conf
-
-    sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' /etc/one/oned.conf
-
-    cat <<_EOF_ >>/etc/one/oned.conf
-# StorPool
-TM_MAD_CONF = [
-    name = "storpool", ln_target = "NONE", clone_target = "SELF", shared = "yes"
-]
-DS_MAD_CONF = [
-    NAME = "storpool",
-    REQUIRED_ATTRS = "DISK_TYPE",
-    PERSISTENT_ONLY = "NO",
-    MARKETPLACE_ACTIONS = "export"
-]
-_EOF_
-fi
-
-# Enable snap_create_live in vmm_exec/vmm_execrc
-LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' /etc/one/vmm_exec/vmm_execrc | tail -n 1)
-if [ "x${LIVE_DISK_SNAPSHOTS_LINE/kvm-storpool/}" = "x$LIVE_DISK_SNAPSHOTS_LINE" ]; then
-    if [ -n "$LIVE_DISK_SNAPSHOTS_LINE" ]; then
-        echo "*** adding StorPool to LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
-        eval $LIVE_DISK_SNAPSHOTS_LINE
-        sed -i -e 's|kvm-qcow2|kvm-qcow2 kvm-storpool|g' /etc/one/vmm_exec/vmm_execrc
-    else
-        echo "*** LIVE_DISK_SNAPSHOTS not defined in /etc/one/vmm_exec/vmm_execrc"
-        echo "*** to enable StorPool add the following line to /etc/one/vmm_exec/vmm_execrc"
-        echo "LIVE_DISK_SNAPSHOTS=\"kvm-storpool\""
-    fi
-else
-    echo "*** StorPool is already enabled for LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
-fi
-
-echo "*** VMM poll patch for OpenNebula v4.14 ..."
-pushd "$ONE_VAR"
-    do_patch "$CWD/patches/vmm/4.14/01-kvm_poll.patch" "backup"
-popd
-cp "$CWD/vmm/kvm/"{poll_,vmTweak}* "${ONE_VAR}/remotes/vmm/kvm/"
-chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{poll_,vmTweak}*
-
-echo "*** IM monitor_ds.sh patch (for OpenNebula 4.14+) ..."
-pushd "$ONE_VAR"
-    do_patch "$CWD/patches/im/4.14/00-monitor_ds.patch"
-popd
-
-echo "*** tm/shared/monitorh patch (for OpenNebula 5.0+) ..."
-pushd "$ONE_VAR"
-    do_patch "$CWD/patches/tm/5.0/00-shared-monitor.patch" "backup"
-popd
 
 echo "*** Please sync hosts (onehost sync --force)"
 
