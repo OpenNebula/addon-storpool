@@ -160,15 +160,8 @@ IFS=$OIFS
 
 if [ -f "scripts/install-${ONE_VER}.sh" ]; then
     source "scripts/install-${ONE_VER}.sh"
-    echo "*** Please sync hosts (onehost sync --force)"
-
-    echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
 else
     echo "ERROR: Unknown OpenNebula version '$ONE_VERSION' detected!"
     echo "Please install manually"
     echo
 fi
-
-echo "*** Please sync hosts (onehost sync --force)"
-
-echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
