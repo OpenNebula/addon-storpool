@@ -30,11 +30,11 @@ SP_TEMPLATE_STATUS_RUN="storpool -j template status"
 
 # VM disks stats
 SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
-SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
+SP_VOLUME_SPACE_RUN="cat /tmp/storpool_volume_usedSpaceIN.json"
 
 # VM disks snapshots stats
 SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
-SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
+SP_SNAPSHOT_SPACE_RUN="cat /tmp/storpool_snapshot_spaceIN.json"
 
 # Do sync to remote hosts
 MONITOR_SYNC_REMOTE="YES"
