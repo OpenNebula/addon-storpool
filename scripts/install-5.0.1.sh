@@ -137,28 +137,59 @@ else
     cp -v misc/fencing-script.sh /usr/sbin/
 fi
 
-echo "*** monitor_helper-sync crontab job"
-if grep monitor_helper-sync /etc/cron.d/addon-storpool 2>/dev/null; then
-    echo "*** cron job file exists"
+echo "*** Clean up old style crontab jobs"
+(crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)
+(crontab -u root -l | grep -v "storpool -j " | crontab -u root -)
+
+########################
+
+if [ -f "/etc/cron.d/addon-storpool" ]; then
+   echo "*** File exists. /etc/cron.d/addon-storpool"
 else
-    echo "*** installing crontab job for monitor_helper-sync /etc/cron.d/addon-storpool"
-    if [ -f "/etc/cron.d/addon-storpool" ]; then
-        echo "*** File exists. Appending cron job to /etc/cron.d/addon-storpool"
-    else
-        echo "*** Creating /etc/cron.d/addon-storpool"
-        cat >>/etc/cron.d/addon-storpool <<_EOF_
-# Run the hourly jobs
+   echo "*** Creating /etc/cron.d/addon-storpool"
+   cat >>/etc/cron.d/addon-storpool <<_EOF_
+# addon-storpool jobs
 SHELL=/bin/bash
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO=oneadmin
 _EOF_
-    fi
+fi
+
+if grep monitor_helper-sync /etc/cron.d/addon-storpool 2>/dev/null; then
+    echo "*** job exist for monitor_helper-sync"
+else
+    echo "*** Adding job for monitor_helper-sync"
     cat >>/etc/cron.d/addon-storpool <<_EOF_
 */4 * * * * oneadmin ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err
 _EOF_
 fi
-echo "*** Cleanup old style crontab job"
-(crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)
+
+if grep "snapshot space" /etc/cron.d/addon-storpool 2>/dev/null; then
+    echo "*** job exist for 'snapshot space' command"
+else
+    echo "*** Adding job for 'snapshot space' command"
+    cat >>/etc/cron.d/addon-storpool <<_EOF_
+5 * * * * root storpool -j snapshot space > /tmp/storpool_snapshot_space.jsonN && mv -f /tmp/storpool_snapshot_space.jsonN /tmp/storpool_snapshot_spaceIN.json
+_EOF_
+fi
+
+if grep "volume usedSpace" /etc/cron.d/addon-storpool 2>/dev/null; then
+    echo "*** job exist for 'volume usedSpace' command"
+else
+    echo "*** Adding job for 'volume usedSpace' command"
+    cat >>/etc/cron.d/addon-storpool <<_EOF_
+10 * * * * root storpool -j volume usedSpace > /tmp/storpool_volume_usedSpace.jsonN && mv -f /tmp/storpool_volume_usedSpace.jsonN /tmp/storpool_volume_usedSpaceIN.json
+_EOF_
+fi
+
+if grep "volume status" /etc/cron.d/addon-storpool 2>/dev/null; then
+    echo "*** job exist for 'volume status' command"
+else
+    echo "*** Adding job for 'volume status' command"
+    cat >>/etc/cron.d/addon-storpool <<_EOF_
+15 * * * * root storpool -j volume status > /tmp/storpool_volume_status.jsonN && mv -f /tmp/storpool_volume_status.jsonN /tmp/storpool_volume_statusIN.json
+_EOF_
+fi
 
 # install premigrate and postmigrate hooks in shared and ssh TM_MADs
 for TM_MAD in shared ssh; do
