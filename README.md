@@ -208,11 +208,15 @@ SHELL=/bin/bash
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO=oneadmin
 */4 * * * * oneadmin ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err
+5 * * * * root storpool -j snapshot space > /tmp/storpool_snapshot_space.jsonN && mv -f /tmp/storpool_snapshot_space.jsonN /tmp/storpool_snapshot_spaceIN.json
+10 * * * * root storpool -j volume usedSpace > /tmp/storpool_volume_usedSpace.jsonN && mv -f /tmp/storpool_volume_usedSpace.jsonN /tmp/storpool_volume_usedSpaceIN.json
+15 * * * * root storpool -j volume status > /tmp/storpool_volume_status.jsonN && mv -f /tmp/storpool_volume_status.jsonN /tmp/storpool_volume_statusIN.json
 _EOF_
 ```
 If upgrading delete the old style cron task
 ```bash
 crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -
+crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 ```
 * Copy FT hook and the fencing helper script (OpenNebula v4.x only)
 ```bash
