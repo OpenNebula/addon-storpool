@@ -371,7 +371,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 					splog "${_rHost} copy ${_jFile} returned ${ret}"
 				else
 					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-						splog "${_rHost} is localhost. ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+						splog "${_rHost} (localhost) ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
 			elif [ "$MONITOR_SYNC_REMOTE" = "YES" ]; then
