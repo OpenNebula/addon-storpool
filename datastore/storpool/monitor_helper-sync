@@ -53,6 +53,27 @@ if [ -f "${driverPath}/../../${0##*/}rc" ]; then
 	source "${driverPath}/../../${0##*/}rc"
 fi
 
+# locking...
+lockFile="/var/lock/one/${0##*/}.lock"
+if [ -f "$lockFile" ]; then
+	pid=$(<"$lockFile")
+	mTime=$(stat -c %Y "$lockFile")
+	splog "Found $lockFile with PID $pid last modified $mTime"
+	if [ -d "/proc/$pid/" ]; then
+		cmdline="$(/proc/$pid/cmdline)"
+		if [ "${cmdline/${0##*/}/}" != "$cmdline" ]; then
+			splog "Still running"
+			exit 0
+		fi
+	else
+		splog "Can't find process info for PID $pid. Assuming stale file."
+	fi
+fi
+
+echo $$ >"$lockFile"
+trap "rm -f \"$lockFile\"" EXIT TERM INT
+
+# Global arrays ...
 declare -a template_data
 declare -A jFiles
 
