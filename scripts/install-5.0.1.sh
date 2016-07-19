@@ -164,33 +164,6 @@ else
 _EOF_
 fi
 
-if grep "snapshot space" /etc/cron.d/addon-storpool 2>/dev/null; then
-    echo "*** job exist for 'snapshot space' command"
-else
-    echo "*** Adding job for 'snapshot space' command"
-    cat >>/etc/cron.d/addon-storpool <<_EOF_
-5 * * * * root storpool -j snapshot space > /tmp/storpool_snapshot_space.jsonN && mv -f /tmp/storpool_snapshot_space.jsonN /tmp/storpool_snapshot_spaceIN.json
-_EOF_
-fi
-
-if grep "volume usedSpace" /etc/cron.d/addon-storpool 2>/dev/null; then
-    echo "*** job exist for 'volume usedSpace' command"
-else
-    echo "*** Adding job for 'volume usedSpace' command"
-    cat >>/etc/cron.d/addon-storpool <<_EOF_
-10 * * * * root storpool -j volume usedSpace > /tmp/storpool_volume_usedSpace.jsonN && mv -f /tmp/storpool_volume_usedSpace.jsonN /tmp/storpool_volume_usedSpaceIN.json
-_EOF_
-fi
-
-if grep "volume status" /etc/cron.d/addon-storpool 2>/dev/null; then
-    echo "*** job exist for 'volume status' command"
-else
-    echo "*** Adding job for 'volume status' command"
-    cat >>/etc/cron.d/addon-storpool <<_EOF_
-15 * * * * root storpool -j volume status > /tmp/storpool_volume_status.jsonN && mv -f /tmp/storpool_volume_status.jsonN /tmp/storpool_volume_statusIN.json
-_EOF_
-fi
-
 # install premigrate and postmigrate hooks in shared and ssh TM_MADs
 for TM_MAD in shared ssh; do
     for MIGRATE in premigrate postmigrate; do
