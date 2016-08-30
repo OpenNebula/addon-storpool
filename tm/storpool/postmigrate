@@ -94,8 +94,10 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     # Detach context ISO volume
     #-------------------------------------------------------------------------------
-    SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+    if [ -n "$_CONTEXT_DISK_ID" ]; then
+        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+    fi
 fi
 
 if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then

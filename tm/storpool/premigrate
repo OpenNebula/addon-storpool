@@ -114,11 +114,13 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     # Attach context ISO volume
     #-------------------------------------------------------------------------------
-    SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-    SP_LINK="/dev/storpool/$SP_VOL"
-    DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
-    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
-#    oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
+    if [ -n "$_CONTEXT_DISK_ID" ]; then
+        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        SP_LINK="/dev/storpool/$SP_VOL"
+        DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
+        storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+#        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
+    fi
 fi
 
 splog "END $VM_ID"
