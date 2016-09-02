@@ -76,7 +76,7 @@ splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLAT
 # Detach and if it is deferred snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
+storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
 if [ "$DEFERRED" = "1" ]; then
     storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"

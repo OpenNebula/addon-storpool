@@ -79,9 +79,14 @@ for i in ${!DISK_ID_ARRAY[@]}; do
         if [ -n "$DISK_SOURCE" ]; then
             SP_VOL="${DISK_SOURCE##*/}"
             [ "${DISK_PERSISTENT_ARRAY[i]}" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+            if [ "${DISK_READONLY_ARRAY[i]}" = "YES" ]; then
+                SP_MODE="ro"
+            else
+                SP_MODE=
+            fi
             SP_LINK="/dev/storpool/$SP_VOL"
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
-            storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+            storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 #           oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
         else
             if [ -n "$DEBUG_MIGRATE_LIVE" ]; then

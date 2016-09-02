@@ -92,7 +92,11 @@ if [ -n "$SIZE" ]; then
     fi
 fi
 
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+if [ "${READONLY}" = "YES" ]; then
+    SP_MODE="ro"
+fi
+
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 
