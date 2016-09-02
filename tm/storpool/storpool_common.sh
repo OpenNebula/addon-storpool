@@ -662,6 +662,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE_ID \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/CLONE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/TYPE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/READONLY \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/PERSISTENT \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS \
@@ -679,6 +680,7 @@ function oneVmInfo()
     IMAGE_ID="${XPATH_ELEMENTS[i++]}"
     IMAGE="${XPATH_ELEMENTS[i++]}"
     CLONE="${XPATH_ELEMENTS[i++]}"
+    TYPE="${XPATH_ELEMENTS[i++]}"
     READONLY="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS="${XPATH_ELEMENTS[i++]}"
@@ -695,6 +697,7 @@ ${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
 ${CLONE:+CLONE=$CLONE }\
+${TYPE:+TYPE=$TYPE }\
 ${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${IMAGE:+IMAGE=$IMAGE }\
@@ -807,6 +810,7 @@ function oneTemplateInfo()
                     /VM/TEMPLATE/DISK/SOURCE \
                     /VM/TEMPLATE/DISK/PERSISTENT \
                     /VM/TEMPLATE/DISK/TYPE \
+                    /VM/TEMPLATE/DISK/CLONE \
                     /VM/TEMPLATE/DISK/READONLY \
                     /VM/TEMPLATE/DISK/FORMAT)
     unset i
@@ -817,6 +821,7 @@ function oneTemplateInfo()
     _DISK_SOURCE=${XPATH_ELEMENTS[i++]}
     _DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
     _DISK_TYPE=${XPATH_ELEMENTS[i++]}
+    _DISK_CLONE=${XPATH_ELEMENTS[i++]}
     _DISK_READONLY=${XPATH_ELEMENTS[i++]}
     _DISK_FORMAT=${XPATH_ELEMENTS[i++]}
 
@@ -829,12 +834,13 @@ function oneTemplateInfo()
     DISK_SOURCE_ARRAY=($_DISK_SOURCE)
     DISK_PERSISTENT_ARRAY=($_DISK_PERSISTENT)
     DISK_TYPE_ARRAY=($_DISK_TYPE)
+    DISK_CLONE_ARRAY=($_DISK_CLONE)
     DISK_READONLY_ARRAY=($_DISK_READONLY)
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
     if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
-        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
+        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
 #        echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
     fi
 }
