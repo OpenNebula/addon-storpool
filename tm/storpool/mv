@@ -59,7 +59,14 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+if [ "$PERSISTENT" != "YES" ]; then
+    if [ "$CLONE" = "YES" ]; then
+        SP_VOL+="-${VM_ID}-${DISK_ID}"
+    else
+        PERSISTENT="YES"
+    fi
+fi
+
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="${SOURCE%%/*}"
 
@@ -270,7 +277,14 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${SOURCE##*/}"
-[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+if [ "$PERSISTENT" != "YES" ]; then
+    if [ "$CLONE" = "YES" ]; then
+        SP_VOL+="-${VM_ID}-${DISK_ID}"
+    else
+        PERSISTENT="YES"
+    fi
+fi
+
 SP_LINK="/dev/storpool/$SP_VOL"
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"

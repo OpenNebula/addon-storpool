@@ -71,7 +71,11 @@ for i in ${!DISK_ID_ARRAY[@]}; do
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         if [ -n "$DISK_SOURCE" ]; then
             SP_VOL="${DISK_SOURCE##*/}"
-            [ "${DISK_PERSISTENT_ARRAY[i]}" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+            if [ "${DISK_PERSISTENT_ARRAY[i]}" != "YES" ]; then
+                if [ "${DISK_CLONE_ARRAY[i]}" = "YES" ]; then
+                    SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
+                fi
+            fi
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
             storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
         else
