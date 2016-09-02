@@ -53,6 +53,12 @@ oneDatastoreInfo "$DS_ID"
 
 oneVmInfo "$VM_ID" "$DISK_ID"
 
+if [ "$TYPE" = "CDROM" ]; then
+    source "$TM_PATH/../../scripts_common.sh"
+    error_message "${0##*/}: CDROM snapshot operation not supported"
+    exit 1
+fi
+
 #-------------------------------------------------------------------------------
 # Compute the source image
 #-------------------------------------------------------------------------------
