@@ -61,7 +61,13 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-[ "$PERSISTENT" = "YES" ] || SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+if [ "$PERSISTENT" != "YES" ]; then
+    if [ "$CLONE" = "YES" ]; then
+        SP_VOL+="-${VM_ID}-${DISK_ID}"
+    else
+        PERSISTENT="YES"
+    fi
+fi
 
 SP_NEW="${DST##*/}"
 if [ "$SP_VOL" != "$SP_NEW" ]; then
@@ -76,7 +82,7 @@ splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLAT
 # Detach and if it is deferred snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
+storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
 if [ "$DEFERRED" = "1" ]; then
     storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"

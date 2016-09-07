@@ -197,6 +197,10 @@ function storpoolRetry() {
         if storpool "$@"; then
             break
         fi
+        if [ "$_SOFT_FAIL" = "YES" ]; then
+            splog "storpool $* SOFT_FAIL"
+            break
+        fi
         t=$((t - 1))
         if [ "$t" -lt 1 ]; then
             splog "storpool $* FAILED ($t::$?)"
@@ -360,10 +364,10 @@ function storpoolVolumeAttach()
 
 function storpoolVolumeDetach()
 {
-    local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4"
+    local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5"
     local _SP_CLIENT volume client
 #    splog "storpoolVolumeDetach($*)"
-    if [ -n "$_DETACH_ALL" ]; then
+    if [ "$_DETACH_ALL" = "all" ]; then
         _SP_CLIENT="all"
     else
         if [ -n "$_SP_HOST" ]; then
@@ -375,6 +379,9 @@ function storpoolVolumeDetach()
         fi
     fi
     while IFS=',' read volume client; do
+        if [ "$_SOFT_FAIL" = "YES" ]; then
+            _FORCE=
+        fi
         volume="${volume//\"/}"
         client="${client//\"/}"
         case "$_SP_CLIENT" in
@@ -655,6 +662,8 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE_ID \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/CLONE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/TYPE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/READONLY \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/PERSISTENT \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_ACTIVE \
@@ -671,6 +680,8 @@ function oneVmInfo()
     IMAGE_ID="${XPATH_ELEMENTS[i++]}"
     IMAGE="${XPATH_ELEMENTS[i++]}"
     CLONE="${XPATH_ELEMENTS[i++]}"
+    TYPE="${XPATH_ELEMENTS[i++]}"
+    READONLY="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_ACTIVE="${XPATH_ELEMENTS[i++]}"
@@ -686,6 +697,8 @@ ${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
 ${CLONE:+CLONE=$CLONE }\
+${TYPE:+TYPE=$TYPE }\
+${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${IMAGE:+IMAGE=$IMAGE }\
 "
@@ -797,6 +810,8 @@ function oneTemplateInfo()
                     /VM/TEMPLATE/DISK/SOURCE \
                     /VM/TEMPLATE/DISK/PERSISTENT \
                     /VM/TEMPLATE/DISK/TYPE \
+                    /VM/TEMPLATE/DISK/CLONE \
+                    /VM/TEMPLATE/DISK/READONLY \
                     /VM/TEMPLATE/DISK/FORMAT)
     unset i
     _DISK_TM_MAD=${XPATH_ELEMENTS[i++]}
@@ -806,6 +821,8 @@ function oneTemplateInfo()
     _DISK_SOURCE=${XPATH_ELEMENTS[i++]}
     _DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
     _DISK_TYPE=${XPATH_ELEMENTS[i++]}
+    _DISK_CLONE=${XPATH_ELEMENTS[i++]}
+    _DISK_READONLY=${XPATH_ELEMENTS[i++]}
     _DISK_FORMAT=${XPATH_ELEMENTS[i++]}
 
     _OLDIFS=$IFS
@@ -817,11 +834,13 @@ function oneTemplateInfo()
     DISK_SOURCE_ARRAY=($_DISK_SOURCE)
     DISK_PERSISTENT_ARRAY=($_DISK_PERSISTENT)
     DISK_TYPE_ARRAY=($_DISK_TYPE)
+    DISK_CLONE_ARRAY=($_DISK_CLONE)
+    DISK_READONLY_ARRAY=($_DISK_READONLY)
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
     if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
-        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE format:$_DISK_FORMAT"
+        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
 #        echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
     fi
 }

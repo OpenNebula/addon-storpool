@@ -107,14 +107,20 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 
+if [ "$PERSISTENT" != "YES" ]; then
+    if [ "$CLONE" = "YES" ]; then
+        SP_VOL+="-${VM_ID}-${DISK_ID}"
+    else
+        PERSISTENT="YES"
+    fi
+fi
+
 if [ "$PERSISTENT" = "YES" ]; then
     log "PERSISTENT $DST_PATH. Only detaching $SP_VOL"
     splog "PERSISTENT $DST_PATH. Only detaching $SP_VOL"
 
-    storpoolVolumeDetach "$SP_VOL" "force" "" "all"
+    storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 else
-    SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-
     log "Deleting $DST_PATH"
 
     storpoolVolumeDelete "$SP_VOL" "force" "snaps"
