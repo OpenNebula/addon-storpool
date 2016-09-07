@@ -121,8 +121,6 @@ if [ "$PERSISTENT" = "YES" ]; then
 
     storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 else
-    SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-
     log "Deleting $DST_PATH"
 
     storpoolVolumeDelete "$SP_VOL" "force" "snaps"
