@@ -74,9 +74,8 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 SP_TEMPLATE="${SOURCE%%/*}"
-SP_SNAP="${SP_VOL}-${VM_ID}-${DISK_ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
-splog "SP_VOL=$SP_VOL ${PERSISTENT:+SP_SNAP=$SP_SNAP}"
+splog "SP_VOL=$SP_VOL"
 
 #-------------------------------------------------------------------------------
 # Enable the destination device
@@ -84,10 +83,10 @@ splog "SP_VOL=$SP_VOL ${PERSISTENT:+SP_SNAP=$SP_SNAP}"
 
 if [ -n "$SIZE" ]; then
     if [ $SIZE -gt ${ORIGINAL_SIZE:-0} ]; then
-        if [ "$PERSISTENT" = "YES" ]; then
-            splog "not resizing PERSISTENT $SP_VOL SIZE=$SIZE ORIGINAL_SIZE=$ORIGINAL_SIZE"
-        else
+        if [ "$CLONE" = "YES" ]; then
             storpoolVolumeResize "$SP_VOL" "$SIZE"
+        else
+            splog "not resizing Non-CLONED $SP_VOL SIZE=$SIZE ORIGINAL_SIZE=$ORIGINAL_SIZE"
         fi
     fi
 fi

@@ -66,13 +66,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 FORMAT="swap"
             fi
             SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
-            if [ "$PERSISTENT" != "YES" ]; then
-                storpoolVolumeDelete "$SP_VOL" "force" "snaps"
-                RM_CMD="rm -rf '${DST_PATH}/disk.${DISK_ID_ARRAY[i]}'"
-                splog "run RM_CMD on $DST_HOST (${DST_PATH}/disk.${DISK_ID_ARRAY[i]})"
-                ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
-                    "Error deleting ${DST_PATH}/disk.${DISK_ID_ARRAY[i]} on $DST_HOST"
-            fi
+            storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+            RM_CMD="rm -rf '${DST_PATH}/disk.${DISK_ID_ARRAY[i]}'"
+            splog "run RM_CMD on $DST_HOST (${DST_PATH}/disk.${DISK_ID_ARRAY[i]})"
+            ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+                "Error deleting ${DST_PATH}/disk.${DISK_ID_ARRAY[i]} on $DST_HOST"
 #        else
 #            splog "[SYSTEM_DS] SKIP $i type:${DISK_TYPE_ARRAY[i]} format:${DISK_FORMAT_ARRAY[i]:-raw} tm:${DISK_TM_MAD_ARRAY[i]}"
         fi
@@ -107,23 +105,16 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 
-if [ "$PERSISTENT" != "YES" ]; then
-    if [ "$CLONE" = "YES" ]; then
-        SP_VOL+="-${VM_ID}-${DISK_ID}"
-    else
-        PERSISTENT="YES"
-    fi
-fi
-
-if [ "$PERSISTENT" = "YES" ]; then
-    log "PERSISTENT $DST_PATH. Only detaching $SP_VOL"
-    splog "PERSISTENT $DST_PATH. Only detaching $SP_VOL"
-
-    storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
-else
-    log "Deleting $DST_PATH"
+if [ "$CLONE" = "YES" ]; then
+    SP_VOL+="-${VM_ID}-${DISK_ID}"
+    log "Deleting $DST_PATH ($SP_VOL)"
 
     storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+else
+    log "Not CLONE $DST_PATH. Only detaching $SP_VOL"
+    splog "Not CLONE $DST_PATH. Only detaching $SP_VOL"
+
+    storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 fi
 
 splog "END $VM_ID"

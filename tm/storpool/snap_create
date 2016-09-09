@@ -63,13 +63,9 @@ fi
 # Compute the source image
 #-------------------------------------------------------------------------------
 
-SP_PARENT=${SOURCE##*/}
-if [ "$CLONE" = "NO" ]; then
-    # PERSISTENT image
-    SP_VOL="${SP_PARENT}"
-else
-    # NON-PERSISTENT image
-    SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
+SP_VOL=${SOURCE##*/}
+if [ "$CLONE" = "YES" ]; then
+    SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
 SP_SNAP="${SP_VOL}-snap${SNAP_ID}"

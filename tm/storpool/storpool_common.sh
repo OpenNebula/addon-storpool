@@ -662,6 +662,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE_ID \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/IMAGE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/CLONE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SAVE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/TYPE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/READONLY \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/PERSISTENT \
@@ -680,6 +681,7 @@ function oneVmInfo()
     IMAGE_ID="${XPATH_ELEMENTS[i++]}"
     IMAGE="${XPATH_ELEMENTS[i++]}"
     CLONE="${XPATH_ELEMENTS[i++]}"
+    SAVE="${XPATH_ELEMENTS[i++]}"
     TYPE="${XPATH_ELEMENTS[i++]}"
     READONLY="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
@@ -697,6 +699,7 @@ ${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
 ${CLONE:+CLONE=$CLONE }\
+${SAVE:+SAVE=$SAVE }\
 ${TYPE:+TYPE=$TYPE }\
 ${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
@@ -882,6 +885,8 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/CLONE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/SAVE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/DISK_TYPE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/STATE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/CLONING_ID \
@@ -918,6 +923,8 @@ function oneDsDriverAction()
     FSTYPE="${XPATH_ELEMENTS[i++]}"
     SOURCE="${XPATH_ELEMENTS[i++]}"
     TYPE="${XPATH_ELEMENTS[i++]}"
+    CLONE="${XPATH_ELEMENTS[i++]}"
+    SAVE="${XPATH_ELEMENTS[i++]}"
     DISK_TYPE="${XPATH_ELEMENTS[i++]}"
     STATE="${XPATH_ELEMENTS[i++]}"
     CLONING_ID="${XPATH_ELEMENTS[i++]}"
@@ -952,6 +959,8 @@ ${SOURCE:+SOURCE=$SOURCE }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${FSTYPE:+FSTYPE=$FSTYPE }\
 ${TYPE:+TYPE=$TYPE }\
+${CLONE:+CLONE=$CLONE }\
+${SAVE:+SAVE=$SAVE }\
 ${DISK_TYPE:+DISK_TYPE=$DISK_TYPE }\
 ${CLONING_ID:+CLONING_ID=$CLONING_ID }\
 ${CLONING_OPS:+CLONING_OPS=$CLONING_OPS }\

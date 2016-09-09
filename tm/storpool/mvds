@@ -61,12 +61,8 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if [ "$PERSISTENT" != "YES" ]; then
-    if [ "$CLONE" = "YES" ]; then
-        SP_VOL+="-${VM_ID}-${DISK_ID}"
-    else
-        PERSISTENT="YES"
-    fi
+if [ "$CLONE" = "YES" ]; then
+    SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
 SP_NEW="${DST##*/}"

@@ -65,10 +65,8 @@ splog "DISK_ID=$DISK_ID SP_DST=$SP_DST"
 SP_TEMPLATE="one-ds-$DS_ID"
 SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
-if [ "$PERSISTENT" != "YES" ]; then
-    if [ "$CLONE" = "YES" ]; then
-        SP_PARENT+="-${VM_ID}-${DISK_ID}"
-    fi
+if [ "$CLONE" = "YES" ]; then
+    SP_PARENT+="-${VM_ID}-${DISK_ID}"
 fi
 
 #-------------------------------------------------------------------------------
