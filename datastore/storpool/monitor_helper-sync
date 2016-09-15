@@ -157,7 +157,7 @@ function run_task()
 	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
 		ln -sf "${_jsonFile}${sp_api_http_host}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
 		ret=$?
-		if [ -n "$MONITOR_SYNC_DEBUG" ]||[ $ret -ne 0] ; then
+		if [ -n "$MONITOR_SYNC_DEBUG" ] || [ $ret -ne 0 ] ; then
 			splog "($ret) ln -s ${_jsonFile}${sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/} cached:$cached sec"
 		fi
 	else
