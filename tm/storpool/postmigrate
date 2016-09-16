@@ -99,6 +99,13 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
         SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
     fi
+
+    #-------------------------------------------------------------------------------
+    # Call the other storage drivers
+    #-------------------------------------------------------------------------------
+    if declare -f migrate_other >/dev/null; then
+        migrate_other "$@"
+    fi
 fi
 
 if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then

@@ -106,6 +106,13 @@ if [ "$DS_TM_MAD" = "storpool" ]; then
     SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
     storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
+
+    #-------------------------------------------------------------------------------
+    # Call the other storage drivers
+    #-------------------------------------------------------------------------------
+    if declare -f migrate_other >/dev/null; then
+        migrate_other "$@"
+    fi
 fi
 
 splog "END $VM_ID"
