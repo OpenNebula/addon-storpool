@@ -197,6 +197,7 @@ if [ "$DRIVER" != "raw" ]; then
     TMP_XML="$(mktemp)"
     trapAdd "rm -f \"$TMP_XML\""
     echo "DRIVER=raw" >"$TMP_XML"
+    echo "FORMAT=raw" >>"$TMP_XML"
     oneimage update -a "$ID" "$TMP_XML"
     rm -f "$TMP_XML"
 fi
