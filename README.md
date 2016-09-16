@@ -119,7 +119,7 @@ cp -a ~/addon-storpool/tm/storpool /var/lib/one/remotes/tm/
 #fix files ownership
 chown -R oneadmin.oneadmin /var/lib/one/remotes/tm/storpool
 ```
-* Fix ssh TM_MAD driver
+* Fix ssh TM_MAD driver (up to OpenNebula 5.0.x only)
 (When upgrading from previous version remove old code between the header comments and `exit 0` line)
 ```bash
 # create pre/post migrate hook folders
@@ -149,7 +149,7 @@ sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/ssh/postmigrate
 # [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
 sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/ssh/postmigrate
 ```
-* Fix shared TM_MAD driver
+* Fix shared TM_MAD driver (up to OpenNebula 5.0.x only)
 ```bash
 # create pre/post migrate hook folders
 mkdir -p /var/lib/one/remotes/tm/shared/{pre,post}migrate.d

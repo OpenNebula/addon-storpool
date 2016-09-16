@@ -1,0 +1,11 @@
+--- remotes-5.2.0/im/kvm-probes.d/monitor_ds.sh	2016-09-15 09:39:45.000000000 +0000
++++ remotes/im/kvm-probes.d/monitor_ds.sh	2016-09-16 16:06:16.644887753 +0000
+@@ -54,6 +54,8 @@
+     TOTAL_MB=${TOTAL_MB:-"0"}
+     FREE_MB=${FREE_MB:-"0"}
+ 
++    [ -f ../../datastore/storpool/monitor_ds.sh ] && source ../../datastore/storpool/monitor_ds.sh
++
+     echo "DS = ["
+     echo "  ID = $ds,"
+     echo "  USED_MB = $USED_MB,"
