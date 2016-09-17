@@ -44,12 +44,12 @@ function do_patch()
 {
     local _patch="$1" _backup="$2"
     #check if patch is applied
-    echo "   Test patch ${_patch##*/}"
-    if patch --dry-run --reverse --forward --strip=0 --input="${_patch}"; then
-        echo "*** Patch file ${_patch##*/} already applied?"
+    echo "*** Testing patch ${_patch##*/}"
+    if patch --dry-run --reverse --forward --strip=0 --input="${_patch}" 2>/dev/null >/dev/null; then
+        echo "   *** Patch file ${_patch##*/} already applied?"
     else
-        if patch --dry-run --forward --strip=0 --input="${_patch}"; then
-            echo "*** Apply patch ${_patch##*/}"
+        if patch --dry-run --forward --strip=0 --input="${_patch}" 2>/dev/null >/dev/null; then
+            echo "   *** Apply patch ${_patch##*/}"
             if [ -n "$_backup" ]; then
                 _backup="--backup --version-control=numbered"
             else
@@ -62,7 +62,7 @@ function do_patch()
                 patch_err="${_patch}"
             fi
         else
-            echo " ** Note! Can't apply patch ${_patch}! Please merge manually."
+            echo "   *** Note! Can't apply patch ${_patch}! Please merge manually."
             patch_err="${_patch}"
         fi
     fi
