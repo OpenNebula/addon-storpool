@@ -213,19 +213,19 @@ cp "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
 
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
-pushd "$ONE_VAR"
+pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/im/$ONE_VER/00-monitor_ds.patch"
-popd
+popd >/dev/null
 
 echo "*** tm/shared/monitor patch ..."
-pushd "$ONE_VAR"
+pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/tm/$ONE_VER/00-shared-monitor.patch" "backup"
-popd
+popd >/dev/null
 
 echo "*** tm/ssh/monitor patch ..."
-pushd "$ONE_VAR"
+pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/tm/$ONE_VER/00-ssh-monitor_ds.patch" "backup"
-popd
+popd >/dev/null
 
 echo "*** Please sync hosts (onehost sync --force)"
 
