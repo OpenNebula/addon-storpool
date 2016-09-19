@@ -87,6 +87,8 @@ storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 if [ "${FSTYPE,,}" != "raw" ]; then
     MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
 
+    trapAdd "splog \"return \$? \"; storpoolVolumeDetach \"$SP_VOL\" \"force\" \"\" \"all\"; storpoolVolumeDelete \"$SP_VOL\" force snaps"
+
     if [ -n "$BRIDGE_LIST" ]; then
         splog "BRIDGE_LIST:$BRIDGE_LIST"
         R_HOST=`get_destination_host $VM_ID`
@@ -102,6 +104,8 @@ if [ "${FSTYPE,,}" != "raw" ]; then
         exec_and_log "$MKFS_CMD" \
            "Error running $MKFS_CMD"
     fi
+
+    trapReset
 
     storpoolVolumeDetach "$SP_VOL" "force" "" "all"
 fi
