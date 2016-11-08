@@ -1,5 +1,5 @@
---- app/tabs/datastores-tab/form-panels/create/wizard.hbs.~1~	2016-06-24 10:55:28.000000000 +0000
-+++ app/tabs/datastores-tab/form-panels/create/wizard.hbs	2016-07-15 08:52:53.580390152 +0000
+--- app/tabs/datastores-tab/form-panels/create/wizard.hbs	2016-10-17 11:09:04.000000000 +0000
++++ app/tabs/datastores-tab/form-panels/create/wizard.hbs	2016-11-08 14:31:27.610021610 +0000
 @@ -33,6 +33,7 @@
          <option ds="fs" tm="lvm" value="lvm">{{tr "LVM"}}</option>
          <option ds="dev" tm="dev" value="raw">{{tr "Raw Device Mapping"}}</option>
@@ -24,9 +24,9 @@
              <option value="custom">{{tr "Custom"}}</option>
            </select>
            <div>
-@@ -292,5 +295,68 @@
-         <input type="text" id="custom_vcenter_disk_type" name="custom_vcenter_disk_type" />
-       </div>
+@@ -262,5 +265,68 @@
+         <div id="vcenter_cluster_wrapper"></div>
+       </label>
      </div>
 +    <div class="medium-6 columns">
 +      <label for="sp_replication">
@@ -93,9 +93,9 @@
 +    </div>
    </div>
  </form>
---- app/tabs/datastores-tab/form-panels/create.js.~1~	2016-06-24 10:55:28.000000000 +0000
-+++ app/tabs/datastores-tab/form-panels/create.js	2016-07-15 08:34:28.557178168 +0000
-@@ -219,6 +219,11 @@
+--- app/tabs/datastores-tab/form-panels/create.js	2016-10-17 11:09:04.000000000 +0000
++++ app/tabs/datastores-tab/form-panels/create.js	2016-11-08 14:32:40.129764165 +0000
+@@ -205,6 +205,11 @@
            _selectISCSI(dialog);
            break;
          
@@ -107,10 +107,10 @@
          case 'custom':
            _selectCustom(dialog);
            break;
-@@ -266,6 +271,14 @@
-     vcenter_adapter_type      = vcenter_adapter_type == "custom" ? $('input[name="custom_vcenter_adapter_type"]', dialog).val() : vcenter_adapter_type;
-     var vcenter_disk_type     = $('#vcenter_disk_type', dialog).val();
-     vcenter_disk_type         = vcenter_disk_type == "custom" ? $('input[name="custom_vcenter_disk_type"]', dialog).val() : vcenter_disk_type;
+@@ -248,6 +253,14 @@
+     var iscsi_user      = $('#iscsi_user', dialog).val();
+     var iscsi_usage     = $('#iscsi_usage', dialog).val();
+     var vcenter_cluster = $('#vcenter_cluster', dialog).val();
 +    var sp_replication  = $('#sp_replication', dialog).val();
 +    var sp_placeall     = $('#sp_placeall', dialog).val();
 +    var sp_placetail    = $('#sp_placetail', dialog).val();
@@ -119,12 +119,12 @@
 +    var sp_api_http_port = $('#sp_api_http_port', dialog).val();
 +    var sp_auth_token   = $('#sp_auth_token', dialog).val();
 +    var sp_system       = $('#sp_system', dialog).val();
+ 
      var ds_obj = {
        "datastore" : {
-         "name" : name,
-@@ -353,6 +366,31 @@
-     if (vcenter_disk_type)
-         ds_obj.datastore.disk_type = vcenter_disk_type;
+@@ -330,6 +343,31 @@
+     if (vcenter_cluster)
+         ds_obj.datastore.vcenter_cluster = vcenter_cluster;
  
 +    if (sp_replication)
 +        ds_obj.datastore.sp_replication = sp_replication;
@@ -154,7 +154,7 @@
      Sunstone.runAction("Datastore.create", ds_obj);
      return false;
    }
-@@ -408,6 +446,14 @@
+@@ -383,6 +421,14 @@
  
      $(".disk_type_wrapper", dialog).hide();
  
@@ -169,7 +169,7 @@
      _resetAll(dialog);
    }
  
-@@ -438,6 +484,14 @@
+@@ -411,6 +457,14 @@
  
      $(".disk_type_wrapper", dialog).show();
  
@@ -184,8 +184,8 @@
      _resetAll(dialog);
    }
  
-@@ -532,6 +586,33 @@
-     $('label[for="vcenter_disk_type"],input#vcenter_disk_type', dialog).parent().fadeIn();
+@@ -503,6 +557,33 @@
+     $('label[for="vcenter_cluster"],div#vcenter_cluster_wrapper', dialog).parent().fadeIn();
    }
  
 +  function _selectStorPool(dialog) {
