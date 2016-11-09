@@ -6,7 +6,7 @@ The [StorPool](https://storpool.com/) datastore driver enables OpenNebula to use
 
 ## Development
 
-To contribute bug patches or new features, you can use the github Pull Request model. It is assumed that code and documentation are contributed under the Apache License 2.0. 
+To contribute bug patches or new features, you can use the github Pull Request model. It is assumed that code and documentation are contributed under the Apache License 2.0.
 
 More info:
 
@@ -28,16 +28,15 @@ This add-on is compatible with OpenNebula 4.10+ and StorPool 15.02+.
 ### OpenNebula Front-end
 
 * Password-less SSH access from the front-end `oneadmin` user to the `node` instances.
-* StorPool CLI, API access and token
-* (Optional) member of the StorPool cluster with working StorPool initiator driver
-* If it is memeber of the StorPool cluster - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
+* StorPool CLI, access to StorPool API network and authorization token
+* (Optional) member of the StorPool cluster with working StorPool initiator driver(storpool_block). In this case the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 
 ### OpenNebula Node (or Bridge Node)
 
 * StorPool initiator driver (storpool_block)
 * If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 * If it is only Bridge Node - it must be configured as Host in open nebula but separated to not run VMs.
-* The Bridge node must have qemu-img available - used by the addon during marketplace imports to convert the QCOW images to RAW ones.
+* The Bridge node must have qemu-img available - used by the addon during marketplace imports to convert the qcow2 images to RAW ones.
 
 ### StorPool cluster
 
@@ -46,44 +45,47 @@ A working StorPool cluster is required.
 ## Features
 * support for datstore configuration via CLI and sunstone
 * support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
-* support SYSTEM datastore on shared filesystem or over ssh 
+* support SYSTEM datastore on shared filesystem or over ssh
 * support SYSTEM datastore volatile disks and context image as StorPool block devices (see limitations)
 * support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
 * support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 * support two different modes of disk usage reporting - LVM style and StorPool style
-* support datastores on different storpool clusters
+* support managing datastores on different StorPool clusters
 * extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
 * all disk images are thin provisioned
-* Improved storage security: there is no storage management access from the hypervisors so if rogue user manage to escape from the VM to the host the impact on the storage will be reduced at most to the locally attached disks(local to the hostVMs)
+* Improved storage security: no storage management access from the hypervisors is needed so if rogue user manage to escape from the VM to the host the impact on the storage will be reduced at most to the locally attached disks(local to the host VMs)
 * (optional) helper tool to tweak the number of queues for virtio-scsi (require `DEVICE_PREFIX=sd`)
 * (optional) helper tool to enable virtio-blk-data-plane for virtio-blk (require `DEVICE_PREFIX=vd`)
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 
 ## Limitations
 
-1. Tested only with the KVM hypervisor
+1. Tested only with KVM hypervisor
 1. No support for VM snapshot because it is handled internally by libvirt
 1. When SYSTEM datastore integration is enabled the reported free/used/total space is not proper because the volatile disks and the context image are expected to be files instead of a block devices. Extra external monitoring of space usage should be implemented.
 
 ## Installation
 
-### Pre-install
-
-* Install required dependencies
-```bash
-# on the front-end
-yum -y install --enablerepo=epel patch git jq lz4
-# for sunstone integration: node, bower, grunt
-yum -y install npm
-npm install bower@1.6.5 -g
-npm install grunt-cli -g
-# required for system operation (on all nodes)
-yum -y install --enablerepo=epel lz4 jq python-lxml
-```
-
 * Clone the addon-storpool from github
 ```bash
 git clone https://github.com/OpenNebula/addon-storpool
+```
+
+### Pre-install
+
+#### front-end dependencies
+
+```bash
+# on the front-end
+yum -y install --enablerepo=epel patch git jq lz4 npm
+npm install bower@1.6.5 -g
+npm install grunt-cli -g
+```
+
+#### node dependencies
+
+```bash
+yum -y install --enablerepo=epel lz4 jq python-lxml
 ```
 
 ### automated installation
@@ -119,65 +121,7 @@ cp -a ~/addon-storpool/tm/storpool /var/lib/one/remotes/tm/
 #fix files ownership
 chown -R oneadmin.oneadmin /var/lib/one/remotes/tm/storpool
 ```
-* Fix the ssh TM_MAD driver for live-migration (up to OpenNebula 5.0.x only)
-(When upgrading from previous version remove old code between the header comments and `exit 0` line)
-```bash
-# create pre/post migrate hook folders
-mkdir -p /var/lib/one/remotes/tm/ssh/{pre,post}migrate.d
 
-pushd /var/lib/one/remotes/tm/ssh/premigrate.d
-ln -s ../../storpool/premigrate premigrate-storpool
-popd
-
-pushd /var/lib/one/remotes/tm/ssh/postmigrate.d
-ln -s ../../storpool/postmigrate postmigrate-storpool
-popd
-
-#edit /var/lib/one/remotes/tm/ssh/premigrate
-# change shebang from #!/bin/sh to #!/bin/bash
-sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/ssh/premigrate
-
-# add code to call scripts from ./premigrate.d
-# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
-sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/ssh/premigrate
-
-#edit /var/lib/one/remotes/tm/ssh/postmigrate
-# change shebang from #!/bin/sh to #!/bin/bash
-sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/ssh/postmigrate
-
-# add code to call scripts from ./postmigrate.d
-# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
-sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/ssh/postmigrate
-```
-* Fix the shared TM_MAD driver for live-migration (up to OpenNebula 5.0.x only)
-```bash
-# create pre/post migrate hook folders
-mkdir -p /var/lib/one/remotes/tm/shared/{pre,post}migrate.d
-
-pushd /var/lib/one/remotes/tm/shared/premigrate.d
-ln -s ../../storpool/premigrate premigrate-storpool
-popd
-
-pushd /var/lib/one/remotes/tm/shared/postmigrate.d
-ln -s ../../storpool/postmigrate postmigrate-storpool
-popd
-
-#edit /var/lib/one/remotes/tm/ssh/premigrate
-# change shebang from #!/bin/sh to #!/bin/bash
-sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/shared/premigrate
-
-# add code to call scripts from ./premigrate.d
-# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
-sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/shared/premigrate
-
-#edit /var/lib/one/remotes/tm/shared/postmigrate
-# change shebang from #!/bin/sh to #!/bin/bash
-sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' /var/lib/one/remotes/tm/shared/postmigrate
-
-# add code to call scripts from ./postmigrate.d
-# [ -d "${0}.d" ] && for hook in "${0}.d"/* ; do source "$hook"; done
-sed -i -e 's|^exit 0|[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done\nexit 0|' /var/lib/one/remotes/tm/shared/postmigrate
-```
 * Patch IM_MAD/kvm-probes.d/monitor_ds.sh
 ```bash
 pushd /var/lib/one
@@ -190,24 +134,14 @@ pushd /var/lib/one
 patch --backup -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
 popd
 ```
-* Patch TM_MAD/shared/monitor (OpenNebula v5.x+)
 
-For OpenNebula v5.0.x:
-```bash
-pushd /var/lib/one
-patch --backup -p0 <~/addon-storpool/patches/tm/5.0/00-shared-monitor.patch
-popd
-```
-For OpenNebula v5.2.x:
+* Patch TM_MAD/shared/monitor
 ```bash
 pushd /var/lib/one
 patch --backup -p0 <~/addon-storpool/patches/tm/5.2/00-shared-monitor.patch
 popd
 ```
-* Copy poll_disk_info and the helpers to .../remotes/vmm/kvm/ (OpenNebula v4.x only)
-```bash
-cp ~/addon-storpool/vmm/kvm/* /var/lib/one/remotes/vmm/kvm/
-```
+
 * Create cron job for stats polling. Fix the paths if needed.
 ```bash
 cat >>/etc/cron.d/addon-storpool <<_EOF_
@@ -223,11 +157,6 @@ If upgrading delete the old style cron task
 crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -
 crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 ```
-* Copy FT hook and the fencing helper script (OpenNebula v4.x only)
-```bash
-cp ~/addon-storpool/hooks/ft/sp_host_error.rb /var/lib/one/remotes/hooks/ft/
-cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
-```
 
 #### sunstone related pieces
 
@@ -235,7 +164,7 @@ cp ~/addon-storpool/misc/fencing-script.sh /usr/sbin/
 ```bash
 pushd /usr/lib/one/sunstone/public
 # patch the sunstone interface
-patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.2.0/00-datastores-tab.js.patch
+patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.2.0/datastores-tab.patch
 
 # rebuild the interface
 npm install
@@ -265,14 +194,6 @@ TM_MAD = [
 ```
 * Edit `/etc/one/oned.conf` and add `storpool` to the `DATASTORE_MAD` arguments
 
-For OpenNebula v4.x:
-```
-DATASTORE_MAD = [
-    executable = "one_datastore",
-    arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool"
-]
-```
-For OpenNebula v5.x:
 ```
 DATASTORE_MAD = [
     executable = "one_datastore",
@@ -285,7 +206,7 @@ TM_MAD_CONF = [
     name = "storpool", ln_target = "NONE", clone_target = "SELF", shared = "yes"
 ]
 ```
-* Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool (OpenNebula v5.x)
+* Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool
 ```
 DS_MAD_CONF = [
     NAME = "storpool",
@@ -295,33 +216,9 @@ DS_MAD_CONF = [
 ]
 ```
 To enable live disk snapshots support for storpool
-* Add `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` 
-For OpenNebula v4.x edit `/etc/one/kvm_exec/kvm_execrc`
-```
-LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-storpool"
-```
-For OpenNebula v5.x edit `/etc/one/vmm_exec/vmm_execrc`
+* Add `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` in `/etc/one/vmm_exec/vmm_execrc`
 ```
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
-```
-* Edit `/etc/one/oned.conf` and add `-i` argument to `VM_MAD` (OpenNebula v4.14)
-```
-VM_MAD = [
-    name       = "kvm",
-    executable = "one_vmm_exec",
-    arguments  = "-i -t 15 -r 1 kvm",
-    default    = "vmm_exec/vmm_exec_kvm.conf",
-    type       = "kvm" ]
-```
-To enable the StorPool compatible Fault Tolerance `HOST_HOOK`
-* Edit `/etc/one/oned.conf` and define `HOST_HOOK` as follow(tweak the arguments if needed) (OpenNebula v4.x only)
-```
-HOST_HOOK = [
-    name      = "error",
-    on        = "ERROR",
-    command   = "ft/sp_host_error.rb",
-    arguments = "$ID -p 2 -f fencing-script.sh",
-    remote    = "no" ]
 ```
  When the SYSTEM datastore is on storpool (TM_MAD=storpool), to enable save/restore of the checkpoint file to a storpool volume.
 * Edit/create the addon-storpool global configuration file /var/lib/one/remotes/addon-storpoolrc and define the following variable
@@ -337,7 +234,7 @@ SP_CHECKPOINT=nomigrate
 In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, the SYSTEM datastore and the VM disks(and their snapshots) are monitored from the hosts. As this addon support no direct access to the StorPool API from the hosts we should provide access to the needed data to the related probes. This is done by the monitor_helper-sync script which is run via cron job on the front-end. The script is collecting the needed data and propagating(if needed) to the hosts for use. Here is the default configuration:
 
 ```
-# path to the json files on the hosts 
+# path to the json files on the hosts
 # (must be writable by the oneadmin user)
 SP_JSON_PATH="/tmp/"
 
@@ -386,12 +283,6 @@ EOF
 Additional configuration when there is datastore on another(non default) storpool cluster:
 Include `SP_API_HTTP_HOST` `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN` as additional attributes to the Datstores.
 
-Update the Hosts:
-```bash
-su - oneadmin
-onehist sync --force
-```
-
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
 ```bash
@@ -400,8 +291,7 @@ service opennebula-sunstone restart
 ```
 * As oneadmin user sync the remote scripts
 ```bash
-su - oneadmin
-onehost sync --force
+su - oneadmin -c 'onehost sync --force'
 ```
 
 ## Upgrade
