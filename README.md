@@ -114,6 +114,7 @@ cp ~/addon-storpool/datastore/xpath_multi.py  /var/lib/one/remotes/datastore/sto
 chown -R oneadmin.oneadmin /var/lib/one/remotes/datastore/storpool
 
 ```
+
 * Copy storpool's TM_MAD driver
 ```bash
 cp -a ~/addon-storpool/tm/storpool /var/lib/one/remotes/tm/
@@ -128,12 +129,6 @@ pushd /var/lib/one
 patch -p0 <~/addon-storpool/patches/im/4.14/00-monitor_ds.patch
 popd
 ```
-* Patch VMM_MAD/kvm/poll (OpenNebula v4.x only)
-```bash
-pushd /var/lib/one
-patch --backup -p0 <~/addon-storpool/patches/vmm/4.14/01-kvm_poll.patch
-popd
-```
 
 * Patch TM_MAD/shared/monitor
 ```bash
@@ -141,8 +136,15 @@ pushd /var/lib/one
 patch --backup -p0 <~/addon-storpool/patches/tm/5.2/00-shared-monitor.patch
 popd
 ```
+* Patch TM_MAD/ssh/monitor_ds
+```bash
+pushd /var/lib/one
+patch --backup -p0 <~/addon-storpool/patches/tm/5.2/00-ssh-monitor_ds.patch
+popd
+```
 
-* Create cron job for stats polling. Fix the paths if needed.
+* Create cron job for stats polling
+Fix the paths if needed.
 ```bash
 cat >>/etc/cron.d/addon-storpool <<_EOF_
 # StorPool
@@ -394,7 +396,7 @@ Sunstone -> Infrastructure -> Datastores -> Add [+]
 
 ```bash
 # create datastore configuration file
-$ cat >/tmp/ds.conf <<EOF
+$ cat >/tmp/ds.conf <<_EOF_
 NAME = "StorPoolSys"
 TM_MAD = "storpool"
 TYPE = "SYSTEM_DS"
@@ -402,7 +404,7 @@ SP_REPLICATION = 3
 SP_PLACEALL = "hdd"
 SP_PLACETAIL = "ssd"
 SP_SYSTEM = "ssh"
-EOF
+_EOF_
 
 # Create datastore
 $ onedatastore create /tmp/ds.conf
@@ -418,7 +420,7 @@ $ onedatastore list
  101 StorPoolSys           0M -     -                 0 sys  -        storpool
  ```
 
-Note that by default OpenNebula assumes that the Datastore is accessible by all hypervisors and all bridges. If you need to configure datastores for just a subset of the hosts check the [Cluster guide](http://opennebula.org/documentation:rel4.4:cluster_guide).
+Note that by default OpenNebula assumes that the Datastore is accessible by all hypervisors and all bridges. If you need to configure datastores for just a subset of the hosts check the [Cluster guide](http://docs.opennebula.org/5.2/operation/host_cluster_management/cluster_guide.html).
 
 ### Usage
 
