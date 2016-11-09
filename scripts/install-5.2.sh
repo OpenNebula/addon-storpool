@@ -125,18 +125,6 @@ cp $CP_ARG datastore/xpath_multi.py "$XPATH_MULTI"
 chown "$ONE_USER" "$XPATH_MULTI"
 chmod a+x "$XPATH_MULTI"
 
-# install hooks
-echo "*** Install hooks ..."
-cp -v -a hooks/* "$ONE_VAR/remotes/hooks/"
-
-# fencing-script.sh
-if [ -f /usr/sbin/fencing-script.sh ]; then
-    echo "*** File exists: /usr/sbin/fencing-script.sh "
-    echo "*** Please update /usr/sbin/fencing-script.sh using hints from misc/fencing-script.sh"
-else
-    cp -v misc/fencing-script.sh /usr/sbin/
-fi
-
 echo "*** Clean up old style crontab jobs"
 (crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)
 (crontab -u root -l | grep -v "storpool -j " | crontab -u root -)
