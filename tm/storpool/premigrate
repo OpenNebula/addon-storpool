@@ -33,6 +33,7 @@ VM_PATH="$3"
 VM_ID="$4"
 DS_ID="$5"
 TEMPLATE="$6"
+SYSTEM_MAD="$7"
 
 TM_PATH="`dirname $0`"
 for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
