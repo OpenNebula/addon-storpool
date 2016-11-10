@@ -143,8 +143,7 @@ patch --backup -p0 <~/addon-storpool/patches/tm/5.2/00-ssh-monitor_ds.patch
 popd
 ```
 
-* Create cron job for stats polling
-Fix the paths if needed.
+* Create cron job for stats polling (fix the paths if needed)
 ```bash
 cat >>/etc/cron.d/addon-storpool <<_EOF_
 # StorPool
