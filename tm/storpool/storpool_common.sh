@@ -342,7 +342,7 @@ function storpoolVolumeResize()
 
 function storpoolVolumeAttach()
 {
-    local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}"
+    local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}" _SP_TARGET="${4:-volume}"
     local _SP_CLIENT
     if [ -n "$_SP_HOST" ]; then
         _SP_CLIENT="$(storpoolClientId "$_SP_HOST" "$COMMON_DOMAIN")"
@@ -353,13 +353,13 @@ function storpoolVolumeAttach()
             exit -1
         fi
     fi
-    storpoolRetry attach volume "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
+    storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
 
-    trapAdd "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
+    trapAdd "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 
     storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
 
-    trapDel "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
+    trapDel "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 }
 
 function storpoolVolumeDetach()
