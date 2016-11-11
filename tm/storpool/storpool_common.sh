@@ -773,7 +773,7 @@ function oneDatastoreInfo()
 function dumpTemplate()
 {
     local _TEMPLATE="$1"
-    echo "$_TEMPLATE" | base64 -d | xmllint --format - > "/tmp/tm_${0##*/}-$$.xml"
+    echo "$_TEMPLATE" | base64 -d | xmllint --format - > "/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml"
 }
 
 function oneTemplateInfo()
