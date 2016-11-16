@@ -378,28 +378,33 @@ function storpoolVolumeDetach()
             fi
         fi
     fi
-    while IFS=',' read volume client; do
+    while IFS=',' read volume client snapshot; do
         if [ "$_SOFT_FAIL" = "YES" ]; then
             _FORCE=
+        fi
+        if [ $snapshot = "true" ]; then
+            type="snapshot"
+        else
+            type="volume"
         fi
         volume="${volume//\"/}"
         client="${client//\"/}"
         case "$_SP_CLIENT" in
             all)
-                storpoolRetry detach volume "$volume" all ${_FORCE:+force yes} >/dev/null
+                storpoolRetry detach $type "$volume" all ${_FORCE:+force yes} >/dev/null
                 break
                 ;;
              '')
-                storpoolRetry detach volume "$volume" here ${_FORCE:+force yes} >/dev/null
+                storpoolRetry detach $type "$volume" here ${_FORCE:+force yes} >/dev/null
                 break
                 ;;
               *)
                 if [ "$_SP_CLIENT" = "$client" ]; then
-                    storpoolRetry detach volume "$volume" client "$client" ${_FORCE:+force yes} >/dev/null
+                    storpoolRetry detach $type "$volume" client "$client" ${_FORCE:+force yes} >/dev/null
                 fi
                 ;;
         esac
-    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client]|@csv")
+    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv")
 }
 
 function storpoolVolumeTemplate()
@@ -884,6 +889,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/FORMAT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
@@ -923,6 +929,7 @@ function oneDsDriverAction()
     MD5="${XPATH_ELEMENTS[i++]}"
     SHA1="${XPATH_ELEMENTS[i++]}"
     DRIVER="${XPATH_ELEMENTS[i++]}"
+    FORMAT="${XPATH_ELEMENTS[i++]}"
     IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
     FSTYPE="${XPATH_ELEMENTS[i++]}"
@@ -966,6 +973,7 @@ ${FSTYPE:+FSTYPE=$FSTYPE }\
 ${TYPE:+TYPE=$TYPE }\
 ${CLONE:+CLONE=$CLONE }\
 ${SAVE:+SAVE=$SAVE }\
+${FORMAT:+FORMAT=$FORMAT }\
 ${DISK_TYPE:+DISK_TYPE=$DISK_TYPE }\
 ${CLONING_ID:+CLONING_ID=$CLONING_ID }\
 ${CLONING_OPS:+CLONING_OPS=$CLONING_OPS }\
@@ -977,3 +985,59 @@ ${DRIVER:+DRIVER=$DRIVER }\
 ${BASE_PATH:+BASE_PATH=$BASE_PATH }\
 "
 }
+
+function oneMarketDriverAction()
+{
+    local _DRIVER_PATH="$1"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${_DRIVER_PATH}") -b $DRV_ACTION"
+
+    unset i XPATH_ELEMENTS
+
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <($_XPATH     /MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE \
+                    /MARKET_DRIVER_ACTION_DATA/FORMAT \
+                    /MARKET_DRIVER_ACTION_DATA/DISPOSE \
+                    /MARKET_DRIVER_ACTION_DATA/SIZE \
+                    /MARKET_DRIVER_ACTION_DATA/MD5 \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/BASE_URL \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/BRIDGE_LIST \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/PUBLIC_DIR \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_API_HTTP_HOST \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_API_HTTP_PORT \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_AUTH_TOKEN)
+
+    unset i
+    IMPORT_SOURCE="${XPATH_ELEMENTS[i++]}"
+    FORMAT="${XPATH_ELEMENTS[i++]}"
+    DISPOSE="${XPATH_ELEMENTS[i++]}"
+    SIZE="${XPATH_ELEMENTS[i++]}"
+    MD5="${XPATH_ELEMENTS[i++]}"
+    BASE_URL="${XPATH_ELEMENTS[i++]}"
+    BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+    PUBLIC_DIR="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
+    SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
+
+    [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
+    [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
+    [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
+
+    [ "$DEBUG_oneMarketDriverAction" = "1" ] || return
+
+    splog "\
+${IMPORT_SOURCE:+IMPORT_SOURCE=$IMPORT_SOURCE }\
+${FORMAT:+FORMAT=$FORMAT }\
+${DISPOSE:+DISPOSE=$DISPOSE }\
+${SIZE:+SIZE=$SIZE }\
+${MD5:+MD5=$MD5 }\
+${BASE_URL:+BASE_URL=$BASE_URL }\
+${BRIDGE_LIST:+BRIDGE_LIST=$BRIDGE_LIST }\
+${PUBLIC_DIR:+PUBLIC_DIR=$PUBLIC_DIR }\
+${SP_API_HTTP_HOST:+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
+${SP_API_HTTP_PORT:+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
+${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
+"
+}
+

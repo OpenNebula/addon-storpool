@@ -40,38 +40,9 @@ source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
 DRV_ACTION=$1
 ID=$2
 
-splog "ID:$ID"
-dumpTemplate $DRV_ACTION
+#dumpTemplate $DRV_ACTION
 
-XPATH="${DRIVER_PATH}/../xpath.rb -b $DRV_ACTION"
-
-unset i XPATH_ELEMENTS
-
-while IFS= read -r -d '' element; do
-    XPATH_ELEMENTS[i++]="$element"
-done < <($XPATH     /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5 \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/FORMAT \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/EXPORT_BRIDGE_LIST \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
-                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_PORTCEPH_CONF)
-
-unset i
-
-SRC="${XPATH_ELEMENTS[i++]}"
-SIZE="${XPATH_ELEMENTS[i++]}"
-MD5="${XPATH_ELEMENTS[i++]}"
-SHA1="${XPATH_ELEMENTS[i++]}"
-FORMAT="${XPATH_ELEMENTS[i++]:-raw}"
-EXPORT_BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
-BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
-SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]:-$POOL_NAME}"
-SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
-SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
+oneDsDriverAction "$DRIVER_PATH"
 
 if [ -n "$EXPORT_BRIDGE_LIST" ]; then
     BRIDGE_LIST="$EXPORT_BRIDGE_LIST"
@@ -84,22 +55,50 @@ if [ -z "$DST_HOST" ]; then
     exit -1
 fi
 
-SP_VOL="${SRC#*/}"
-SP_LINK="/dev/storpool/$SP_VOL"
-IMPORT_SOURCE="ssh://$DST_HOST:$SP_LINK"
+SP_VOL="${SOURCE#*/}"
+SP_SNAPSHOT="$SP_VOL-export-$(mktemp --dry-run XXXXXX)"
+SP_LINK="/dev/storpool/$SP_SNAPSHOT"
 
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
 
-CHECKSUM=$(ssh "$DST_HOST" "openssl dgst -md5 $SP_LINK | cut -d' ' -f2")
+# there is not code (yet) to handle the DISPOSE!=NO on the marketplace side
+DISPOSE="YES"
 
-splog "IMPORT_SOURCE=$IPMPORT_SOURCE MD5=$MD5 SIZE=$SIZE FORMAT=$FORMAT"
+storpoolSnapshotCreate "$SP_SNAPSHOT" "$SP_VOL"
+
+storpoolVolumeAttach "$SP_SNAPSHOT" "$DST_HOST" "ro" "snapshot"
+
+if [ -n "$EXPORT_TO" ]; then
+    FORMAT="$EXPORT_TO"
+    EXPORT_FILE="${STAGING_DIR:-/var/tmp}/$SP_SNAPSHOT"
+    CMD=$(CAT<<EOF
+    $QEMU_IMG convert -O $EXPORT_TO $SP_LINK $STAGING_FILE
+    ${DU} -Lm ${STAGING_FILE} | cut -f1
+EOF
+    storpoolVolumeDetach "$SP_SNAPSHOT" "$DST_HOST"
+    storpoolSnapshotDelete "$SP_SNAPSHOT"
+)
+    SIZE=$(ssh_monitor_and_log "$DST_HOST" "$CMD" "export file convert ")
+    if [ $? -eq 0 ]; then
+        # TODO ?
+        DISPOSE="YES"
+    fi
+else
+    FORMAT="raw"
+    EXPORT_FILE="$SP_LINK"
+fi
+
+CHECKSUM=$(ssh_monitor_and_log "$DST_HOST" "openssl dgst -md5 $EXPORT_FILE | cut -d' ' -f2" "export file checksum calc." 2>&1)
+
+IMPORT_SOURCE="ssh://$DST_HOST:$EXPORT_FILE"
+
+splog "IMPORT_SOURCE=$IMPORT_SOURCE MD5=$MD5 CHECKSUM=$CHECKSUM SIZE=$SIZE FORMAT=$FORMAT EXPORT_TO=$EXPORT_TO"
 
 cat <<EOF
 <IMPORT_INFO>
     <IMPORT_SOURCE><![CDATA[$IMPORT_SOURCE]]></IMPORT_SOURCE>
-    <MD5><![CDATA[\$CHECKSUM]]></MD5>
+    <MD5><![CDATA[$CHECKSUM]]></MD5>
     <SIZE><![CDATA[$SIZE]]></SIZE>
-    <FORMAT><![CDATA[${FORMAT}]]></FORMAT>
-    <DISPOSE>NO</DISPOSE>
+    <FORMAT><![CDATA[$FORMAT]]></FORMAT>
+    <DISPOSE><![CDATA[$DISPOSE]]</DISPOSE>
 </IMPORT_INFO>"
 EOF
