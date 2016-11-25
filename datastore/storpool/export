@@ -1,0 +1,104 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
+#                                                                            #
+# Portions copyright OpenNebula Project, OpenNebula Systems                  #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+# ------------ Set up the environment to source common tools ------------
+
+if [ -z "${ONE_LOCATION}" ]; then
+    LIB_LOCATION=/usr/lib/one
+else
+    LIB_LOCATION=$ONE_LOCATION/lib
+fi
+
+. $LIB_LOCATION/sh/scripts_common.sh
+
+DRIVER_PATH=$(dirname $0)
+source ${DRIVER_PATH}/../libfs.sh
+
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
+# -------- Get tm and datastore arguments from OpenNebula core ------------
+
+DRV_ACTION=$1
+ID=$2
+
+#dumpTemplate $DRV_ACTION
+
+oneDsDriverAction "$DRIVER_PATH"
+
+if [ -n "$EXPORT_BRIDGE_LIST" ]; then
+    BRIDGE_LIST="$EXPORT_BRIDGE_LIST"
+fi
+
+DST_HOST=`get_destination_host $ID`
+
+if [ -z "$DST_HOST" ]; then
+    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
+    exit -1
+fi
+
+SP_VOL="${SOURCE#*/}"
+SP_SNAPSHOT="$SP_VOL-export-$(mktemp --dry-run XXXXXX)"
+SP_LINK="/dev/storpool/$SP_SNAPSHOT"
+
+
+# there is not code (yet) to handle the DISPOSE!=NO on the marketplace side
+DISPOSE="YES"
+
+storpoolSnapshotCreate "$SP_SNAPSHOT" "$SP_VOL"
+
+storpoolVolumeAttach "$SP_SNAPSHOT" "$DST_HOST" "ro" "snapshot"
+
+if [ -n "$EXPORT_TO" ]; then
+    FORMAT="$EXPORT_TO"
+    EXPORT_FILE="${STAGING_DIR:-/var/tmp}/$SP_SNAPSHOT"
+    CMD=$(CAT<<EOF
+    $QEMU_IMG convert -O $EXPORT_TO $SP_LINK $STAGING_FILE
+    ${DU} -Lm ${STAGING_FILE} | cut -f1
+EOF
+    storpoolVolumeDetach "$SP_SNAPSHOT" "$DST_HOST"
+    storpoolSnapshotDelete "$SP_SNAPSHOT"
+)
+    SIZE=$(ssh_monitor_and_log "$DST_HOST" "$CMD" "export file convert ")
+    if [ $? -eq 0 ]; then
+        # TODO ?
+        DISPOSE="YES"
+    fi
+else
+    FORMAT="raw"
+    EXPORT_FILE="$SP_LINK"
+fi
+
+CHECKSUM=$(ssh_monitor_and_log "$DST_HOST" "openssl dgst -md5 $EXPORT_FILE | cut -d' ' -f2" "export file checksum calc." 2>&1)
+
+IMPORT_SOURCE="ssh://$DST_HOST:$EXPORT_FILE"
+
+splog "IMPORT_SOURCE=$IMPORT_SOURCE MD5=$MD5 CHECKSUM=$CHECKSUM SIZE=$SIZE FORMAT=$FORMAT EXPORT_TO=$EXPORT_TO"
+
+cat <<EOF
+<IMPORT_INFO>
+    <IMPORT_SOURCE><![CDATA[$IMPORT_SOURCE]]></IMPORT_SOURCE>
+    <MD5><![CDATA[$CHECKSUM]]></MD5>
+    <SIZE><![CDATA[$SIZE]]></SIZE>
+    <FORMAT><![CDATA[$FORMAT]]></FORMAT>
+    <DISPOSE><![CDATA[$DISPOSE]]</DISPOSE>
+</IMPORT_INFO>"
+EOF

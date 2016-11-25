@@ -342,7 +342,7 @@ function storpoolVolumeResize()
 
 function storpoolVolumeAttach()
 {
-    local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}"
+    local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}" _SP_TARGET="${4:-volume}"
     local _SP_CLIENT
     if [ -n "$_SP_HOST" ]; then
         _SP_CLIENT="$(storpoolClientId "$_SP_HOST" "$COMMON_DOMAIN")"
@@ -353,13 +353,13 @@ function storpoolVolumeAttach()
             exit -1
         fi
     fi
-    storpoolRetry attach volume "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
+    storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
 
-    trapAdd "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
+    trapAdd "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 
     storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
 
-    trapDel "storpoolRetry detach volume \"$_SP_VOL\" ${_SP_CLIENT:-here}"
+    trapDel "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 }
 
 function storpoolVolumeDetach()
@@ -378,28 +378,33 @@ function storpoolVolumeDetach()
             fi
         fi
     fi
-    while IFS=',' read volume client; do
+    while IFS=',' read volume client snapshot; do
         if [ "$_SOFT_FAIL" = "YES" ]; then
             _FORCE=
+        fi
+        if [ $snapshot = "true" ]; then
+            type="snapshot"
+        else
+            type="volume"
         fi
         volume="${volume//\"/}"
         client="${client//\"/}"
         case "$_SP_CLIENT" in
             all)
-                storpoolRetry detach volume "$volume" all ${_FORCE:+force yes} >/dev/null
+                storpoolRetry detach $type "$volume" all ${_FORCE:+force yes} >/dev/null
                 break
                 ;;
              '')
-                storpoolRetry detach volume "$volume" here ${_FORCE:+force yes} >/dev/null
+                storpoolRetry detach $type "$volume" here ${_FORCE:+force yes} >/dev/null
                 break
                 ;;
               *)
                 if [ "$_SP_CLIENT" = "$client" ]; then
-                    storpoolRetry detach volume "$volume" client "$client" ${_FORCE:+force yes} >/dev/null
+                    storpoolRetry detach $type "$volume" client "$client" ${_FORCE:+force yes} >/dev/null
                 fi
                 ;;
         esac
-    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client]|@csv")
+    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv")
 }
 
 function storpoolVolumeTemplate()
@@ -726,6 +731,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SHARED \
                             /DATASTORE/TEMPLATE/TYPE \
                             /DATASTORE/TEMPLATE/BRIDGE_LIST \
+                            /DATASTORE/TEMPLATE/EXPORT_BRIDGE_LIST \
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
                             /DATASTORE/TEMPLATE/SP_PLACEALL \
                             /DATASTORE/TEMPLATE/SP_PLACETAIL \
@@ -745,6 +751,7 @@ function oneDatastoreInfo()
     DS_SHARED="${XPATH_ELEMENTS[i++]}"
     DS_TEMPLATE_TYPE="${XPATH_ELEMENTS[i++]}"
     BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+    EXPORT_BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
@@ -767,13 +774,14 @@ function oneDatastoreInfo()
     _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
     _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
     _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
+    _MSG+="${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }"
     splog "$_MSG"
 }
 
 function dumpTemplate()
 {
     local _TEMPLATE="$1"
-    echo "$_TEMPLATE" | base64 -d | xmllint --format - > "/tmp/tm_${0##*/}-$$.xml"
+    echo "$_TEMPLATE" | base64 -d | xmllint --format - > "/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml"
 }
 
 function oneTemplateInfo()
@@ -865,6 +873,7 @@ function oneDsDriverAction()
                     %m%/DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTERS/ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TM_MAD \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/BRIDGE_LIST \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/EXPORT_BRIDGE_LIST \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
@@ -880,6 +889,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/FORMAT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
@@ -903,6 +913,7 @@ function oneDsDriverAction()
     CLUSTERS_ID="${XPATH_ELEMENTS[i++]}"
     TM_MAD="${XPATH_ELEMENTS[i++]}"
     BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+    EXPORT_BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
@@ -918,6 +929,7 @@ function oneDsDriverAction()
     MD5="${XPATH_ELEMENTS[i++]}"
     SHA1="${XPATH_ELEMENTS[i++]}"
     DRIVER="${XPATH_ELEMENTS[i++]}"
+    FORMAT="${XPATH_ELEMENTS[i++]}"
     IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
     FSTYPE="${XPATH_ELEMENTS[i++]}"
@@ -961,13 +973,71 @@ ${FSTYPE:+FSTYPE=$FSTYPE }\
 ${TYPE:+TYPE=$TYPE }\
 ${CLONE:+CLONE=$CLONE }\
 ${SAVE:+SAVE=$SAVE }\
+${FORMAT:+FORMAT=$FORMAT }\
 ${DISK_TYPE:+DISK_TYPE=$DISK_TYPE }\
 ${CLONING_ID:+CLONING_ID=$CLONING_ID }\
 ${CLONING_OPS:+CLONING_OPS=$CLONING_OPS }\
 ${CLONES:+CLONES=$CLONES }\
 ${IMAGE_PATH:+IMAGE_PATH=$IMAGE_PATH }\
 ${BRIDGE_LIST:+BRIDGE_LIST=$BRIDGE_LIST }\
+${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }\
 ${DRIVER:+DRIVER=$DRIVER }\
 ${BASE_PATH:+BASE_PATH=$BASE_PATH }\
 "
 }
+
+function oneMarketDriverAction()
+{
+    local _DRIVER_PATH="$1"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${_DRIVER_PATH}") -b $DRV_ACTION"
+
+    unset i XPATH_ELEMENTS
+
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <($_XPATH     /MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE \
+                    /MARKET_DRIVER_ACTION_DATA/FORMAT \
+                    /MARKET_DRIVER_ACTION_DATA/DISPOSE \
+                    /MARKET_DRIVER_ACTION_DATA/SIZE \
+                    /MARKET_DRIVER_ACTION_DATA/MD5 \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/BASE_URL \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/BRIDGE_LIST \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/PUBLIC_DIR \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_API_HTTP_HOST \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_API_HTTP_PORT \
+                    /MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_AUTH_TOKEN)
+
+    unset i
+    IMPORT_SOURCE="${XPATH_ELEMENTS[i++]}"
+    FORMAT="${XPATH_ELEMENTS[i++]}"
+    DISPOSE="${XPATH_ELEMENTS[i++]}"
+    SIZE="${XPATH_ELEMENTS[i++]}"
+    MD5="${XPATH_ELEMENTS[i++]}"
+    BASE_URL="${XPATH_ELEMENTS[i++]}"
+    BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
+    PUBLIC_DIR="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
+    SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
+    SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
+
+    [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
+    [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
+    [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
+
+    [ "$DEBUG_oneMarketDriverAction" = "1" ] || return
+
+    splog "\
+${IMPORT_SOURCE:+IMPORT_SOURCE=$IMPORT_SOURCE }\
+${FORMAT:+FORMAT=$FORMAT }\
+${DISPOSE:+DISPOSE=$DISPOSE }\
+${SIZE:+SIZE=$SIZE }\
+${MD5:+MD5=$MD5 }\
+${BASE_URL:+BASE_URL=$BASE_URL }\
+${BRIDGE_LIST:+BRIDGE_LIST=$BRIDGE_LIST }\
+${PUBLIC_DIR:+PUBLIC_DIR=$PUBLIC_DIR }\
+${SP_API_HTTP_HOST:+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
+${SP_API_HTTP_PORT:+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
+${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
+"
+}
+
