@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# resize src size vmId
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Get resize arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+SRC="$1"
+NEWSIZE="$2"
+VM_ID="$3"
+
+TM_PATH="$(dirname $0)"
+source "${TM_PATH}/storpool_common.sh"
+
+splog "SRC=$SRC NEWSIZE=$NEWSIZE VM_ID=$VM_ID"
+
+#-------------------------------------------------------------------------------
+# Compute the destination image name
+#-------------------------------------------------------------------------------
+
+SRC_HOST=`arg_host $SRC`
+SRC_PATH=`arg_path $SRC`
+SRC_DIR="${SRC_PATH%/*}"
+
+DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
+
+#-------------------------------------------------------------------------------
+# Get Image information
+#-------------------------------------------------------------------------------
+
+oneVmInfo "$VM_ID" "$DISK_ID"
+
+SP_VOL="${SOURCE##*/}"
+if [ "$CLONE" = "YES" ]; then
+    SP_VOL+="-${VM_ID}-${DISK_ID}"
+fi
+
+#-------------------------------------------------------------------------------
+# Resize the volume
+#-------------------------------------------------------------------------------
+
+storpoolVolumeResize "$SP_VOL" "$NEWSIZE"
+
+splog "END $VM_ID"
+exit 0
