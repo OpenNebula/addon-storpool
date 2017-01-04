@@ -91,6 +91,18 @@ if [ -f "$lockFile" ]; then
 	fi
 fi
 
+# check that the oned process is sunning
+if pgrep 'oned' >/dev/null; then
+	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+		splog "The oned process running."
+	fi
+else
+	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+		splog "There is no oned process running. Exit."
+	fi
+	exit 0
+fi
+
 echo $$ >"$lockFile"
 trap "rm -f \"$lockFile\"" EXIT TERM INT
 
