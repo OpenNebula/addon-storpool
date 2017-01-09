@@ -144,10 +144,44 @@ REMOTE_FTR=$(cat <<EOF
 EOF
 )
 
+function getHostHostname()
+{
+	local _name="$1"
+	local _self="$(dirname $0)"
+	local _XPATH="$(lookup_file "datastore/xpath.rb" "$_self")"
+	
+	unset XPATH_ELEMENTS i
+	while IFS= read -r -d '' element; do
+		XPATH_ELEMENTS[i++]="$element"
+	done < <(onehost show "$_name" -x | "$_XPATH" --stdin \
+                            /HOST/ID \
+                            /HOST/NAME \
+                            /HOST/STATE \
+                            /HOST/TEMPLATE/HOSTNAME 2>/dev/null)
+	unset i
+	HOST_ID="${XPATH_ELEMENTS[i++]}"
+	HOST_NAME="${XPATH_ELEMENTS[i++]}"
+	HOST_STATE="${XPATH_ELEMENTS[i++]}"
+	HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
+	if [ -n "$DEBUG_COMMON" ]; then
+		splog "getHostHostname($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:$HOST_HOSTNAME"
+	fi
+	if [ -n "$HOST_HOSTNAME" ]; then
+		if [ "$_name" != "$HOST_HOSTNAME" ] || [ -n "$DEBUG_COMMON" ]; then
+			splog "getHostHostname($_name): Found '$HOST_HOSTNAME'"
+		fi
+		echo $HOST_HOSTNAME
+	else
+		splog "getHostHostname($_name): Not Found."
+		echo $_name
+	fi
+}
+
 function storpoolClientId()
 {
     local hst="$1" COMMON_DOMAIN="${2:-$COMMON_DOMAIN}"
     local result bridge
+    hst="$(getHostHostname "$hst")"
     result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
     if [ "$result" = "" ]; then
         if [ -n "$COMMON_DOMAIN" ]; then
@@ -1040,4 +1074,3 @@ ${SP_API_HTTP_PORT:+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
 ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 "
 }
-
