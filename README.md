@@ -66,11 +66,6 @@ A working StorPool cluster is required.
 
 ## Installation
 
-* Clone the addon-storpool from github
-```bash
-git clone https://github.com/OpenNebula/addon-storpool
-```
-
 ### Pre-install
 
 #### front-end dependencies
@@ -86,6 +81,11 @@ npm install grunt-cli -g
 
 ```bash
 yum -y install --enablerepo=epel lz4 jq python-lxml
+```
+
+### Get the addon from github
+```bash
+git clone https://github.com/OpenNebula/addon-storpool
 ```
 
 ### automated installation
