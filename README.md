@@ -213,7 +213,7 @@ DS_MAD_CONF = [
     NAME = "storpool",
     REQUIRED_ATTRS = "DISK_TYPE",
     PERSISTENT_ONLY = "NO",
-    MARKETPLACE_ACTIONS = "export"
+    MARKETPLACE_ACTIONS = ""
 ]
 ```
 To enable live disk snapshots support for storpool
