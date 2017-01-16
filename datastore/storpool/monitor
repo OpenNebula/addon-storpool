@@ -75,20 +75,20 @@ if [ -n "$DEBUG_DATASTORE_MONITOR_VERBOSE" ]; then
 	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 fi
 
-while IFS=',' read n t f; do
-	if [ "${n//\"/}" = "$DS_NAME" ]; then
-		u=$(( t - f ))
+while IFS=',' read name storedCapacity storedFree; do
+	if [ "${name//\"/}" = "$DS_NAME" ]; then
+		used=$(( storedCapacity - storedFree ))
 		if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
-			splog "<$DS_ID> u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
+			splog "<$DS_ID> used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024))"
 		fi
 		case "${DRV_ACTION:0:6}" in
 			system)
-				echo $((u/1024/1024)) $((t/1024/1024)) $((f/1024/1024))
+				echo $((used/1024/1024)) $((storedCapacity/1024/1024)) $((storedFree/1024/1024))
 				;;
 			*)
-				echo "USED_MB=$((u/1024/1024))"
-				echo "TOTAL_MB=$((t/1024/1024))"
-				echo "FREE_MB=$((f/1024/1024))"
+				echo "USED_MB=$((used/1024/1024))"
+				echo "TOTAL_MB=$((storedCapacity/1024/1024))"
+				echo "FREE_MB=$((storedFree/1024/1024))"
 				;;
 		esac
 		break
