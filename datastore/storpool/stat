@@ -54,7 +54,17 @@ oneDsDriverAction "$DRIVER_PATH"
 # Compute the size
 #-------------------------------------------------------------------------------
 
-SIZE=`fs_size $IMAGE_PATH`
+if [ "${IMAGE_PATH: -4}" = "vmdk" ]; then
+    SIZE=$($QEMU_IMG info "${IMAGE_PATH}" | sed -n 's/.*(\([0-9]*\) bytes).*/\1/p')
+    if [ $? -ne 0 ]; then
+        SIZE=0
+    else
+        SIZE=$(echo $SIZE | tr -d "\r")
+        SIZE=$((($SIZE+1048575)/1048576))
+    fi
+else
+    SIZE=`fs_size $IMAGE_PATH`
+fi
 
 if [ "$SIZE" = "0" ]; then
     log_error "Cannot determine size for $IMAGE_PATH"
