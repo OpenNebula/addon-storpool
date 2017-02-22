@@ -83,6 +83,7 @@ case "$SP_CHECKPOINT" in
     ;;
 esac
 
+MIGRATE_UNKNOWN=
 DETACH_ALL=
 DO_SYMLINK=
 SKIP_CONTEXT=
@@ -132,11 +133,11 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         # detach from all and attach to dst on PROLOG_MIGRATE_UNKNOWN
         #-----------------------------------------------------------------------
+        MIGRATE_UNKNOWN="yes"
         DETACH_ALL=1
         DO_SYMLINK="yes"
         SKIP_CONTEXT=1
         date >>"/tmp/one-${VM_ID}-${DISK_ID}-iso.skip"
-
     ;;
     *)
         splog ">>> STATE=$VMSTATE LCM_STATE=$LCM_STATE <<<"
@@ -193,9 +194,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`
         if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
-            if [ "$SRC_HOST" = "$DST_HOST" ]; then
+            if [ "$SRC_HOST" = "$DST_HOST" ] || [ "$MIGRATE_UNKNOWN" = "yes" ]; then
                 if [ "$SRC_PATH" = "$DST_PATH" ]; then
-                    splog "VM $VM_ID on same host($SRC_HOST)"
+                    splog "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
                 else
                     splog "datastore change $SRC_PATH -> $DST_PATH"
                     ssh_exec_and_log "$DST_HOST" "mv -n -t $DST_PATH $SRC_PATH/*" \
