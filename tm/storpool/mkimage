@@ -86,7 +86,7 @@ storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
 if [ "${FSTYPE,,}" != "raw" ]; then
     if [ "$FSTYPE" = "swap" ]; then
-        MKFS_CMD="mkswap -L swap $SP_LINK"
+        MKFS_CMD="$MKSWAP -L swap \"$SP_LINK\""
     else
         MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
     fi
