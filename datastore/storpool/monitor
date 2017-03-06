@@ -37,7 +37,14 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
-if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
+if [ -f "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh" ]; then
+	LOG_PREFIX="ds"
+	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+else
+	splog "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh not found!"
+fi
+
+if boolTrue "$DEBUG_DATASTORE_MONITOR"; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 fi
 
@@ -51,8 +58,6 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 	fi
 #	echo "bash -x $PWD/$0 $*" >/tmp/monitor_system.sh
 else
-	LOG_PREFIX="ds"
-	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 	oneDsDriverAction "${DRIVER_PATH}"
 	if [ -n "$CLUSTERS_ID" ]; then
 		CLUSTERS_ID_ARRAY=($CLUSTERS_ID)
@@ -71,14 +76,14 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/$SP_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
 
-if [ -n "$DEBUG_DATASTORE_MONITOR_VERBOSE" ]; then
+if boolTrue "$DEBUG_DATASTORE_MONITOR_VERBOSE"; then
 	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 fi
 
 while IFS=',' read name storedCapacity storedFree; do
 	if [ "${name//\"/}" = "$DS_NAME" ]; then
 		used=$(( storedCapacity - storedFree ))
-		if [ -n "$DEBUG_DATASTORE_MONITOR" ]; then
+		if boolTrue "$DEBUG_DATASTORE_MONITOR"; then
 			splog "<$DS_ID> used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024))"
 		fi
 		case "${DRV_ACTION:0:6}" in

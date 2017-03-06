@@ -74,6 +74,17 @@ if [ -f "${driverPath}/../../${0##*/}rc" ]; then
 	source "${driverPath}/../../${0##*/}rc"
 fi
 
+function boolTrue()
+{
+   case "$1" in
+       1|y|Y|yes|Yes|YES|true|True|TRUE|on|On|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
 # locking...
 lockFile="/var/lock/one/${0##*/}.lock"
 if [ -f "$lockFile" ]; then
@@ -93,11 +104,11 @@ fi
 
 # check that the oned process is sunning
 if pgrep 'oned' >/dev/null; then
-	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+	if boolTrue "$MONITOR_SYNC_DEBUG"; then
 		splog "The oned process running."
 	fi
 else
-	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+	if boolTrue "$MONITOR_SYNC_DEBUG"; then
 		splog "There is no oned process running. Exit."
 	fi
 	exit 0
@@ -148,7 +159,7 @@ function run_task()
 		if [ $cached -ge 0 ]; then
 			eval ${_run} 2>/dev/null >"${_jsonFile}New"
 			ret=$?
-			if [ -n "$MONITOR_SYNC_DEBUG" ] || [ $ret -ne 0 ]; then
+			if boolTrue "$MONITOR_SYNC_DEBUG" || [ $ret -ne 0 ]; then
 				splog "run_task:($ret) ${_run} > ${_jsonFile}New [$cached]"
 				if [ $ret -ne 0 ]; then
 					return $ret
@@ -161,7 +172,7 @@ function run_task()
 				return $ret
 			fi
 			cp -f "${_jsonFile}" "${_jsonFile}${sp_api_http_host}"
-			if [ -n "$MONITOR_SYNC_DEBUG" ] || [ $? -ne 0 ]; then
+			if boolTrue "$MONITOR_SYNC_DEBUG" || [ $? -ne 0 ]; then
 				splog "run_task:($ret) cp ${_jsonFile} ${_jsonFile}${sp_api_http_host}"
 			fi
 		fi
@@ -169,7 +180,7 @@ function run_task()
 	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
 		ln -sf "${_jsonFile}${sp_api_http_host}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
 		ret=$?
-		if [ -n "$MONITOR_SYNC_DEBUG" ] || [ $ret -ne 0 ] ; then
+		if boolTrue "$MONITOR_SYNC_DEBUG" || [ $ret -ne 0 ] ; then
 			splog "($ret) ln -s ${_jsonFile}${sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/} cached:$cached sec"
 		fi
 	else
@@ -247,7 +258,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
 	[ -n "$sp_port" ] && export SP_API_HTTP_PORT="$sp_port" || unset SP_API_HTTP_PORT
 	SP_TEMPLATE_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
-	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+	if boolTrue "$MONITOR_SYNC_DEBUG"; then
 		if [ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]; then
 			splog "API_TOKEN:${SP_AUTH_TOKEN:+DEFINED} API_HOST:${SP_API_HTTP_HOST} API_PORT:${SP_API_HTTP_PORT}"
 		fi
@@ -305,14 +316,14 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	if [ -n "$cmd" ]; then
 		storpool template "$template_name" $cmd
 		splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
-		if [ "$SP_TEMPLATE_PROPAGATE" = "YES" ]; then
+		if boolTrue "$SP_TEMPLATE_PROPAGATE"; then
 			storpool template "$template_name" propagate 2>&1 >/dev/null
 			splog "($?) template $template_name propagate"
 		fi
 	fi
 	
 	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
-		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+		if boolTrue "$MONITOR_SYNC_DEBUG"; then
 			splog "CLUSTER_ID:$CLUSTER_ID DS_ID:$DS_ID API:$SP_API_HTTP_HOST clusters:$clusters"
 		fi
 		if [ "${clusters/|$CLUSTER_ID|/}" = "$clusters" ]; then
@@ -356,7 +367,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 			fi
 		fi
 	done
-#	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+#	if boolTrue "$MONITOR_SYNC_DEBUG"; then
 #		splog "jFiles:${jFiles[@]}"
 #	fi
 done
@@ -381,7 +392,7 @@ _HOST_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
 _HOST_SP_JSON_PATH="${XPATH_ELEMENTS[i++]}"
 
 
-if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+if boolTrue "$MONITOR_SYNC_DEBUG"; then
 	splog "$_HOST_ID|$_HOST_NAME|$_HOST_CLUSTER_ID|$_HOST_STATE"
 fi
 
@@ -401,7 +412,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-$SP_JSON_PATH}"
 	_state="${HOST_STATE_ARRAY[i]}"
 	if [ "${_state}" = "" ] || [ ${_state} -ge 4 ]; then
-		if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+		if boolTrue "$MONITOR_SYNC_DEBUG"; then
 			splog "Skip host ${_rHost} state:${_state}"
 		fi
 		continue
@@ -416,7 +427,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 				if [ $ret -ne 0 ]; then
 					splog "${_rHost} copy ${_jFile} returned ${ret}"
 				else
-					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+					if boolTrue "$MONITOR_SYNC_DEBUG"; then
 						splog "${_rHost} (localhost) ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
@@ -427,7 +438,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 				if [ $ret -ne 0 ]; then
 					splog "${_rHost} ${_destDir}/${_jFile} returned ${ret}"
 				else
-					if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+					if boolTrue "$MONITOR_SYNC_DEBUG"; then
 						splog "${_rHost} ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
@@ -438,6 +449,6 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	fi
 done
 
-if [ -n "$MONITOR_SYNC_DEBUG" ]; then
+if boolTrue "$MONITOR_SYNC_DEBUG"; then
 	splog "END"
 fi

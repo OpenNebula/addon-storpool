@@ -38,6 +38,17 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
+function boolTrue()
+{
+   case "$1" in
+       1|y|Y|yes|Yes|YES|true|True|TRUE|on|On|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
 if [ -f "$SP_MONITOR_DS" ]; then
 #    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
 #        splog "[DBG]$PWD $0 $* (ds:$ds)"
@@ -45,7 +56,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
     SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds)"
 
     if [ -n "$SP_DS_SIZES" ]; then
-        if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+        if boolTrue "$IM_MONITOR_DS_DEBUG"; then
             splog "SP_DS_SIZES=$SP_DS_SIZES"
         fi
 
@@ -56,7 +67,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
 
         if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
 
-            if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+            if boolTrue "$IM_MONITOR_DS_DEBUG"; then
                 splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
             fi
 
@@ -77,7 +88,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                 # default tm DRIVER is ssh
                 SCRIPT_PATH="${REMOTES_DIR}/tm/${DRIVER:-ssh}/monitor_ds"
                 if [ -e "$SCRIPT_PATH" ]; then
-                    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+                    if boolTrue "$IM_MONITOR_DS_DEBUG"; then
                         splog "run $SCRIPT_PATH $dir"
                         export DEBUG_TM_MONITOR_DS=1
                     fi
@@ -90,7 +101,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             continue
         fi
     else
-        if [ -n "$IM_MONITOR_DS_DEBUG_VERBOSE" ]; then
+        if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
             splog "Datastore $ds is not on StorPool"
         fi
     fi

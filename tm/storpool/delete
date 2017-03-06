@@ -76,17 +76,17 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         fi
     done
 
-    if [ $IS_DISK == 0 ]; then
-#        splog "[SYSTEM_DS] delete context iso"
-        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-        storpoolVolumeDelete "$SP_VOL" "force" "snaps"
-
-    else
+    if boolTrue "$IS_DISK"; then
         SP_VOL="one-sys-${VM_ID}-${DISK_ID}"
 #        splog "[SYSTEM_DS] delete volatile $SP_VOL"
         for SP_VOL in `storpoolVolumeContains "$SP_VOL"`; do
             storpoolVolumeDelete "$SP_VOL" "force"
         done
+
+    else
+#        splog "[SYSTEM_DS] delete context iso"
+        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        storpoolVolumeDelete "$SP_VOL" "force" "snaps"
     fi
     RM_CMD="rm -rf '$DST_PATH'"
     splog "run RM_CMD on $DST_HOST ($DST_PATH)"
@@ -105,7 +105,7 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     log "Deleting $DST_PATH ($SP_VOL)"
 

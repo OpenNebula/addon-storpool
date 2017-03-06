@@ -58,7 +58,7 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 #-------------------------------------------------------------------------------
 
 SP_VOL=${SOURCE##*/}
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 

@@ -61,7 +61,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
@@ -80,7 +80,7 @@ splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLAT
 
 storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
-if [ "$DEFERRED" = "1" ]; then
+if boolTrue "$DEFERRED"; then
     storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
 fi
 

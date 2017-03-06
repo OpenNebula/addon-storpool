@@ -133,7 +133,7 @@ if [ -f "$skip_context" ]; then
     fi
 fi
 
-if [ "$CREATE_CONTEXT_ISO" = "1" ]; then
+if boolTrue "$CREATE_CONTEXT_ISO" ]; then
     storpoolVolumeDelete "$SP_VOL" "force"
 
     storpoolTemplate "$SP_TEMPLATE"

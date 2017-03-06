@@ -83,7 +83,7 @@ splog "SP_VOL=$SP_VOL"
 
 if [ -n "$SIZE" ]; then
     if [ $SIZE -gt ${ORIGINAL_SIZE:-0} ]; then
-        if [ "$CLONE" = "YES" ]; then
+        if boolTrue "$CLONE"; then
             storpoolVolumeResize "$SP_VOL" "$SIZE"
         else
             splog "not resizing Non-CLONED $SP_VOL SIZE=$SIZE ORIGINAL_SIZE=$ORIGINAL_SIZE"
@@ -91,7 +91,7 @@ if [ -n "$SIZE" ]; then
     fi
 fi
 
-if [ "${READONLY}" = "YES" ]; then
+if boolTrue "${READONLY}"; then
     SP_MODE="ro"
 fi
 

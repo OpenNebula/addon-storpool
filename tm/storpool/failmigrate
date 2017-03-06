@@ -44,7 +44,7 @@ for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
 done
 
 if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
-    if [ -n "$DEBUG_MIGRATE_LIVE" ]; then
+    if boolTrue "$DEBUG_MIGRATE_LIVE"; then
         splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD (exit)"
     fi
     exit 0
@@ -57,7 +57,7 @@ splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID
 #-------------------------------------------------------------------------------
 oneDatastoreInfo "$DS_ID"
 
-if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+if ! boolTrue "$DS_SHARED" || [ "$SP_SYSTEM" = "ssh" ]; then
     #-------------------------------------------------------------------------------
     # Cleanup $VM_PATH at DST_HOST
     #-------------------------------------------------------------------------------
@@ -79,13 +79,13 @@ for i in ${!DISK_ID_ARRAY[@]}; do
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         if [ -n "$DISK_SOURCE" ]; then
             SP_VOL="${DISK_SOURCE##*/}"
-            if [ "${DISK_CLONE_ARRAY[i]}" = "YES" ]; then
+            if boolTrue "${DISK_CLONE_ARRAY[i]}"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
             storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
         else
-            if [ -n "$DEBUG_MIGRATE_LIVE" ]; then
+            if boolTrue "$DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
             fi
         fi

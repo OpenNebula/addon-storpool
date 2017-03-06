@@ -36,20 +36,31 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
+function boolTrue()
+{
+   case "$1" in
+       1|y|Y|yes|Yes|YES|true|True|TRUE|on|On|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
 DRIVER_PATH="${0%/*}"
 
 DISK_ID="${DISK##*\.}"
 DISK_LINK="$(readlink "$DISK")"
 DISK_DEV="$(readlink -f "$DISK")"
 
-if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+if boolTrue "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE"; then
 	splog "$PWD $DISK $DS_ID $VM_ID $DISK_DEV $DISK_LINK"
 fi
 
 if [ -b "$DISK_DEV" ]; then
 	disk_size="$($BLOCKDEV_GET_SIZE "$DISK_DEV")"
 	if [ -n "$disk_size" ]; then
-		if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+		if boolTrue "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE"; then
 			splog "$DISK ID:$DISK_ID SIZE:$disk_size in MiB:$((disk_size/1024/1024))"
 		fi
 		disk_size="$((disk_size/1024/1024))"
@@ -61,7 +72,7 @@ elif [ -f "$DISK_DEV" ]; then
 	vmdir="$(basename "$DISK")"
 	disk_size="$(du -mL "$DISK_DEV" | awk '{print $1}')"
 	
-	if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+	if boolTrue "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE"; then
 		splog "$DISK ID:$DISK_ID SIZE:$disk_size"
 	fi
 	echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
@@ -75,7 +86,7 @@ elif [ -f "$DISK_DEV" ]; then
 			snap_size="$(du -mL "${snap_dir}/${snap}" | awk '{print $1}')"
 			[ -z "$snap_size" ] && continue
 			
-			if [ -n "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE" ]; then
+			if boolTrue "$DEBUG_TM_MONITOR_DISK_MISC_VERBOSE"; then
 				splog "$DISK SNAP_ID:$snap ID:$DISK_ID SIZE:$disk_size"
 			fi
 			

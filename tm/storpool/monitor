@@ -37,7 +37,18 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
-if [ -n "$DEBUG_TM_MONITOR" ]; then
+function boolTrue()
+{
+   case "$1" in
+       1|y|Y|yes|Yes|YES|true|True|TRUE|on|On|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
+if boolTrue "$DEBUG_TM_MONITOR"; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 	export DEBUG_TM_MONITOR_DS=1
 fi
@@ -71,14 +82,14 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/$SP_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
 
-#if [ -n "$DEBUG_TM_MONITOR" ]; then
+#if boolTrue "$DEBUG_TM_MONITOR"; then
 #	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 #fi
 
 while IFS=',' read n t f; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
 		u=$(( t - f ))
-		if [ -n "$DEBUG_TM_MONITOR" ]; then
+		if boolTrue "$DEBUG_TM_MONITOR"; then
 			splog "<$DS_ID> u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
 		fi
 		case "${DRV_ACTION:0:6}" in
@@ -97,7 +108,8 @@ done < <(eval $SP_CMD_TEMPLATE_STATUS | jq -r '.data|map(select(.name))|.[]|[.na
 
 if [ -d "$(readlink -f $BASE_PATH)" ]; then
 	if [ -f "$BASE_PATH/.monitor" ]; then
-		if [ -n "$DEBUG_TM_MONITOR" ]; then
+		if boolTrue "$DEBUG_TM_MONITOR"; then
+			test -f "$BASE_PATH/.monitor" && DS_DRIVER="$(<$BASE_PATH/.monitor)" || DS_DRIVER="storpool"
 			splog "$DS_ID is marked for remote monitoring via IM_MAD using 'tm/$DS_DRIVER/monitor_ds'"
 		fi
 		exit 0

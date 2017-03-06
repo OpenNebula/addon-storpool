@@ -59,7 +59,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
@@ -70,16 +70,17 @@ log "vm $VM_ID moving $SRC to $DST"
 
 # is checkpoint on storpool enabled?
 case "$SP_CHECKPOINT" in
-    yes)
-        SP_CHECKPOINT="migrate"
-    ;;
     nomigrate)
         SP_CHECKPOINT="yes"
     ;;
     *)
-        SP_CHECKPOINT=
-        CHECKPOINT_SAVE=
-        CHECKPOINT_RESTORE=
+        if boolTrue "$SP_CHECKPOINT"; then
+            SP_CHECKPOINT="migrate"
+        else
+            SP_CHECKPOINT=
+            CHECKPOINT_SAVE=
+            CHECKPOINT_RESTORE=
+        fi
     ;;
 esac
 
@@ -180,11 +181,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                     splog "$DETACH_ONLY"
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
-                    if [ "$DO_SYMLINK" = "yes" ]; then
+                    if boolTrue "$DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
                     fi
                 fi
-                if [ -n "$SKIP_CONTEXT" ]; then
+                if boolTrue "$SKIP_CONTEXT"; then
                     skip_context_ts="$(date -u)"
                     echo "$skip_context_ts" >"/tmp/one-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip"
                     splog "create /tmp/one-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip ($skip_context_ts)"
@@ -229,7 +230,7 @@ EOF
                 if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                     FORMAT="swap"
                 fi
-                if [ $IS_DISK == 1 ]; then
+                if boolTrue "$IS_DISK"; then
                     if [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
                         continue
                     fi
@@ -247,7 +248,7 @@ EOF
                     splog "$DETACH_ONLY"
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-                    if [ "$DO_SYMLINK" = "yes" ]; then
+                    if boolTrue "$DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
                     fi
                 fi
@@ -281,14 +282,14 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${SOURCE##*/}"
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
 SP_LINK="/dev/storpool/$SP_VOL"
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-if [ "$DO_SYMLINK" = "yes" ]; then
+if boolTrue "$DO_SYMLINK"; then
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 fi
 

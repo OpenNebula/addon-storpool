@@ -63,6 +63,17 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
+function boolTrue()
+{
+   case "$1" in
+       1|y|Y|yes|Yes|YES|true|True|TRUE|on|On|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
 function getFromConf()
 {
     local cfgFile="$1" varName="$2" first="$3"
@@ -73,7 +84,7 @@ function getFromConf()
         response="$(grep "^$varName" "$cfgFile" | tail -n 1)"
     fi
     response="${response#*=}"
-    if [ -n "$DEBUG_COMMON" ]; then
+    if boolTrue "$DEBUG_COMMON"; then
         splog "getFromConf($cfgFile,$varName,$first): $response"
     fi
     echo "${response//\"/}"
@@ -85,7 +96,7 @@ function getFromConf()
 function trapReset()
 {
     TRAP_CMD="-"
-    if [ -n "$DEBUG_TRAPS" ]; then
+    if boolTrue "$DEBUG_TRAPS"; then
         splog "trapReset"
     fi
 
@@ -94,7 +105,7 @@ function trapReset()
 function trapAdd()
 {
     local _trap_cmd="$1"
-    if [ -n "$DEBUG_TRAPS" ]; then
+    if boolTrue "$DEBUG_TRAPS"; then
         splog "trapAdd:$*"
     fi
 
@@ -117,12 +128,12 @@ function trapAdd()
 function trapDel()
 {
     local _trap_cmd="$1"
-    if [ -n "$DEBUG_TRAPS" ]; then
+    if boolTrue "$DEBUG_TRAPS"; then
         splog "trapDel:$*"
     fi
     TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
     if [ -n "$TRAP_CMD" ]; then
-        if [ -n "$DEBUG_TRAPS" ]; then
+        if boolTrue "$DEBUG_TRAPS"; then
             splog "trapDel:$TRAP_CMD"
         fi
         trap "$TRAP_CMD" EXIT TERM INT HUP
@@ -163,11 +174,11 @@ function getHostHostname()
 	HOST_NAME="${XPATH_ELEMENTS[i++]}"
 	HOST_STATE="${XPATH_ELEMENTS[i++]}"
 	HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
-	if [ -n "$DEBUG_COMMON" ]; then
+	if boolTrue "$DEBUG_COMMON"; then
 		splog "getHostHostname($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:$HOST_HOSTNAME"
 	fi
 	if [ -n "$HOST_HOSTNAME" ]; then
-		if [ "$_name" != "$HOST_HOSTNAME" ] || [ -n "$DEBUG_COMMON" ]; then
+		if [ "$_name" != "$HOST_HOSTNAME" ] || boolTrue "$DEBUG_COMMON"; then
 			splog "getHostHostname($_name): Found '$HOST_HOSTNAME'"
 		fi
 		echo $HOST_HOSTNAME
@@ -210,18 +221,18 @@ function storpoolClientId()
             splog "$hst CLIENT_ID=$result"
         fi
     fi
-    if [ -n "$DEBUG_COMMON" ]; then
+    if boolTrue "$DEBUG_COMMON"; then
         splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}"
     fi
     echo $result
 }
 
 function storpoolRetry() {
-    if [ -n "$DEBUG_COMMON" ]; then
+    if boolTrue "$DEBUG_COMMON"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST"
     fi
-    if [ -n "$DEBUG_SP_RUN_CMD" ]; then
-        if [ -n "$DEBUG_SP_RUN_CMD_VERBOSE" ]; then
+    if boolTrue "$DEBUG_SP_RUN_CMD"; then
+        if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
             splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
         else
             for _last_cmd;do :;done
@@ -235,7 +246,7 @@ function storpoolRetry() {
         if storpool "$@"; then
             break
         fi
-        if [ "$_SOFT_FAIL" = "YES" ]; then
+        if boolTrue "$_SOFT_FAIL" ]; then
             splog "storpool $* SOFT_FAIL"
             break
         fi
@@ -734,7 +745,8 @@ function oneVmInfo()
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
 
-    [ "$DEBUG_oneVmInfo" = "1" ] || return
+    boolTrue "$DEBUG_oneVmInfo" || return
+
     splog "\
 ${VMSTATE:+VMSTATE=$VMSTATE }\
 ${LCM_STATE:+LCM_STATE=$LCM_STATE }\
@@ -805,7 +817,8 @@ function oneDatastoreInfo()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    [ "$DEBUG_oneDatastoreInfo" = "1" ] || return
+    boolTrue "$DEBUG_oneDatastoreInfo" || return
+
     _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
     _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
     _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
@@ -843,7 +856,7 @@ function oneTemplateInfo()
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-    if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
+    if boolTrue "$DEBUG_oneTemplateInfo"; then
         splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
     fi
 
@@ -888,10 +901,10 @@ function oneTemplateInfo()
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
-    if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
-        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
-#        echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
-    fi
+    boolTrue "$DEBUG_oneTemplateInfo" || return
+
+    splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
+#    echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
 }
 
 
@@ -987,7 +1000,7 @@ function oneDsDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    [ "$DEBUG_oneDsDriverAction" = "1" ] || return
+    boolTrue "$DEBUG_oneDsDriverAction" || return
 
     splog "\
 ${ID:+ID=$ID }\
@@ -1062,7 +1075,7 @@ function oneMarketDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    [ "$DEBUG_oneMarketDriverAction" = "1" ] || return
+    boolTrue "$DEBUG_oneMarketDriverAction" || return
 
     splog "\
 ${IMPORT_SOURCE:+IMPORT_SOURCE=$IMPORT_SOURCE }\
