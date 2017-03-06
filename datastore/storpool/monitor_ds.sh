@@ -26,7 +26,7 @@
 #     echo "  ID = $ds,"
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_monitor_ds" "$*"; }
+function splog() { logger -t "ds_sp_monitor_im" "$*"; }
 
 SP_MONITOR_DS="../../datastore/storpool/monitor"
 ONE_VERSION="$(<../../VERSION)"
