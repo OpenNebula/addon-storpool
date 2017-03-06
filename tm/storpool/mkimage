@@ -49,16 +49,18 @@ splog "SIZE=$SIZE FSTYPE=$FSTYPE DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
 oneDatastoreInfo "$DS_ID"
 
-if [ "$SP_PLACEALL" = "" ]; then
-    error_message "Datastore template missing 'SP_PLACEALL' attribute."
-    exit -1
-fi
-if [ "$SP_PLACETAIL" = "" ]; then
-    SP_PLACETAIL="$SP_PLACEALL"
-fi
-if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
-    error_message "Datastore template with unknown value for 'SP_REPLICATION' attribute '$SP_REPLICATION'."
-    exit -1
+if boolTrue "$AUTO_TEMPLATE"; then
+    if [ "$SP_PLACEALL" = "" ]; then
+        error_message "Datastore template missing 'SP_PLACEALL' attribute."
+        exit -1
+    fi
+    if [ "$SP_PLACETAIL" = "" ]; then
+        SP_PLACETAIL="$SP_PLACEALL"
+    fi
+    if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
+        error_message "Datastore template with unknown value for 'SP_REPLICATION' attribute '$SP_REPLICATION'."
+        exit -1
+    fi
 fi
 
 #-------------------------------------------------------------------------------

@@ -65,6 +65,8 @@ SP_TEMPLATE_PROPAGATE="YES"
 
 ONEDATASTORE_XML="ds.xml"
 
+AUTO_TEMPLATE=1
+
 # load config
 driverPath="${0%/*}"
 if [ -f "${driverPath}/../../addon-storpoolrc" ]; then
@@ -313,7 +315,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		comment+=" bw:$old"
 	fi
 	
-	if [ -n "$cmd" ]; then
+	if [ -n "$cmd" ] && boolTrue "$AUTO_TEMPLATE"; then
 		storpool template "$template_name" $cmd
 		splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
 		if boolTrue "$SP_TEMPLATE_PROPAGATE"; then

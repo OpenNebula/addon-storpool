@@ -56,6 +56,8 @@ DEBUG_oneDatastoreInfo=
 DEBUG_oneTemplateInfo=
 DEBUG_oneDsDriverAction=
 
+AUTO_TEMPLATE=1
+
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 
 if [ -f "$sprcfile" ]; then
@@ -303,6 +305,9 @@ EOF
 function storpoolTemplate()
 {
     local _SP_TEMPLATE="$1"
+    if ! boolTrue "$AUTO_TEMPLATE"; then
+        return 0
+    fi
     if [ "$SP_PLACEALL" = "" ]; then
         splog "Datastore template $_SP_TEMPLATE missing 'SP_PLACEALL' attribute."
         exit -1
