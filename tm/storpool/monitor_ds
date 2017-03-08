@@ -66,7 +66,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 		else
 			DRIVER_RUN="$DRIVER_PATH/monitor_disk"
 		fi
-		if boolTrue "$DEBUG_TM_MONITOR_DS"; then
+		if boolTrue "$DEBUG_TM_MONITOR_DS_VERBOSE"; then
 			splog "$DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER"
 		fi
 		"$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER"
