@@ -159,48 +159,57 @@ REMOTE_FTR=$(cat <<EOF
 EOF
 )
 
-function getHostHostname()
+function oneHostInfo()
 {
-	local _name="$1"
-	local _self="$(dirname $0)"
-	local _XPATH="$(lookup_file "datastore/xpath.rb" "$_self")"
-	
-	unset XPATH_ELEMENTS i
-	while IFS= read -r -d '' element; do
-		XPATH_ELEMENTS[i++]="$element"
-	done < <(onehost show "$_name" -x | "$_XPATH" --stdin \
+    local _name="$1"
+    local _self="$(dirname $0)"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "$_self")"
+
+    unset XPATH_ELEMENTS i
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(onehost show "$_name" -x | "$_XPATH" --stdin \
                             /HOST/ID \
                             /HOST/NAME \
                             /HOST/STATE \
+                            /HOST/TEMPLATE/SP_OURID \
                             /HOST/TEMPLATE/HOSTNAME 2>/dev/null)
-	unset i
-	HOST_ID="${XPATH_ELEMENTS[i++]}"
-	HOST_NAME="${XPATH_ELEMENTS[i++]}"
-	HOST_STATE="${XPATH_ELEMENTS[i++]}"
-	HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
-	if boolTrue "$DEBUG_COMMON"; then
-		splog "getHostHostname($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:$HOST_HOSTNAME"
-	fi
-	if [ -n "$HOST_HOSTNAME" ]; then
-		if [ "$_name" != "$HOST_HOSTNAME" ] || boolTrue "$DEBUG_COMMON"; then
-			splog "getHostHostname($_name): Found '$HOST_HOSTNAME'"
-		fi
-		echo $HOST_HOSTNAME
-	else
-		splog "getHostHostname($_name): Not Found."
-		echo $_name
-	fi
+    unset i
+    HOST_ID="${XPATH_ELEMENTS[i++]}"
+    HOST_NAME="${XPATH_ELEMENTS[i++]}"
+    HOST_STATE="${XPATH_ELEMENTS[i++]}"
+    HOST_SP_OURID="${XPATH_ELEMENTS[i++]}"
+    HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
+
+    boolTrue "$DEBUG_oneHostInfo" || return
+    splog "oneHostInfo($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:${HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
 }
 
 function storpoolClientId()
 {
     local hst="$1" COMMON_DOMAIN="${2:-$COMMON_DOMAIN}"
-    local result bridge
-    hst="$(getHostHostname "$hst")"
-    result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    local result= bridge=
+    oneHostInfo "$hst"
+    if [ -n "$HOST_HOSTNAME" ]; then
+        if [ "$hst" != "$HOST_HOSTNAME" ] || boolTrue "$DEBUG_COMMON"; then
+            splog "storpoolClientId($hst): Found '$HOST_HOSTNAME'"
+        fi
+        hst="$HOST_HOSTNAME"
+    fi
+    if [ -n "$HOST_SP_OURID" ]; then
+        if [ "${HOST_SP_OURID}//[[:digit:]]/" = "" ]; then
+            result="$HOST_SP_OURID"
+            splog "$hst CLIENT_ID=$result"
+        else
+            splog "HOST $hst has HOST_SP_OURID but not only digits:'$HOST_SP_OURID'"
+        fi
+    fi
     if [ "$result" = "" ]; then
-        if [ -n "$COMMON_DOMAIN" ]; then
-            result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        if [ "$result" = "" ]; then
+            if [ -n "$COMMON_DOMAIN" ]; then
+                result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            fi
         fi
     fi
     if [ "$result" = "" ]; then
