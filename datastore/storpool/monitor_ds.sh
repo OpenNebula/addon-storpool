@@ -82,6 +82,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             echo "]"
 
             if [ "${ONE_VERSION:0:1}" = "4" ]; then
+                # hijacking the loop in im/monitor_ds.sh
                 continue
             fi
 
@@ -104,7 +105,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                     splog "${dir}/.monitor not found. Shared filesystem?"
                 fi
             fi
-
+            # hijacking the loop in im/monitor_ds.sh
             continue
         fi
     else
