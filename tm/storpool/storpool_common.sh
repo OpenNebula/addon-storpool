@@ -205,6 +205,10 @@ function storpoolClientId()
             result=$(ssh "$CLONE_GW" /usr/sbin/storpool_confget -s "\$(hostname)" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1) #"
             splog "CLONE_GW=$CLONE_GW CLIENT_ID=$result"
         fi
+        if [ "$result" = "" ]; then
+            result=$(ssh "$hst" /usr/sbin/storpool_confget | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            splog "$hst CLIENT_ID=$result"
+        fi
     fi
     if [ -n "$DEBUG_COMMON" ]; then
         splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}"
