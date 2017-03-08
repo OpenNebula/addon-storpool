@@ -165,18 +165,8 @@ else
 
     cat <<_EOF_ >>/etc/one/oned.conf
 # StorPool related config
-TM_MAD_CONF = [
-    NAME = "storpool",
-    LN_TARGET = "NONE",
-    CLONE_TARGET = "SELF",
-    SHARED = "yes"
-]
-DS_MAD_CONF = [
-    NAME = "storpool",
-    REQUIRED_ATTRS = "DISK_TYPE",
-    PERSISTENT_ONLY = "NO",
-    MARKETPLACE_ACTIONS = ""
-]
+TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes" ]
+DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "" ]
 _EOF_
 fi
 
