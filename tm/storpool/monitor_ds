@@ -26,6 +26,10 @@ DS_NAME="one-ds-$DS_ID"
 
 DRIVER_PATH="${0%/*}"
 
+if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
+    source "$DRIVER_PATH/../../addon-storpoolrc"
+fi
+
 function boolTrue()
 {
    case "$1" in
