@@ -84,7 +84,7 @@ while IFS=',' read name storedCapacity storedFree; do
 	if [ "${name//\"/}" = "$DS_NAME" ]; then
 		used=$(( storedCapacity - storedFree ))
 		if boolTrue "$DEBUG_DATASTORE_MONITOR"; then
-			splog "<$DS_ID> used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024))"
+			splog "DS ID:$DS_ID used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024))"
 		fi
 		case "${DRV_ACTION:0:6}" in
 			system)

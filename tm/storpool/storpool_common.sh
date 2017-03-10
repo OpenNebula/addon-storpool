@@ -58,12 +58,32 @@ DEBUG_oneDsDriverAction=
 
 AUTO_TEMPLATE=1
 SP_WAIT_LINK=1
+VMSNAPSHOTS_DELETE_ON_TERMINATE=1
 
-sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
+function lookup_file()
+{
+    local _FILE="$1" _CWD="${2:-$PWD}"
+    local _PATH=
+    for _PATH in "$_CWD/"{,../,../../,../../../,remotes/}; do
+        if [ -f "${_PATH}${_FILE}" ]; then
+#            splog "lookup_file($_FILE,$_CWD) FOUND:${_PATH}${_FILE}"
+            echo "${_PATH}${_FILE}"
+            return
+#        else
+#            splog "lookup_file($_FILE,$_CWD) NOT FOUND:${_PATH}${_FILE}"
+        fi
+    done
+}
+
+DRIVER_PATH="$(dirname $0)"
+sprcfile="$(lookup_file "addon-storpoolrc" "$DRIVER_PATH")"
 
 if [ -f "$sprcfile" ]; then
     source "$sprcfile"
+else
+    splog "File '$sprcfile' NOT FOUND!"
 fi
+
 if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
@@ -719,18 +739,6 @@ EOF
     fi
 }
 
-function lookup_file()
-{
-    local _FILE="$1" _CWD="${2:-$PWD}"
-    local _PATH=
-    for _PATH in "$_CWD/"{,../,../../,../../../,remotes/}; do
-        if [ -f "${_PATH}${_FILE}" ]; then
-            echo "${_PATH}${_FILE}"
-            break;
-        fi
-    done
-}
-
 function oneVmInfo()
 {
     local _VM_ID="$1" _DISK_ID="$2"
@@ -1136,4 +1144,73 @@ ${SP_API_HTTP_HOST:+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
 ${SP_API_HTTP_PORT:+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
 ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 "
+}
+
+oneVmVolumes()
+{
+    local VM_ID="$1"
+    splog "oneVmVolumes() VM_ID:$VM_ID"
+    unset XPATH_ELEMENTS i
+    while read element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(onevm show -x "$VM_ID" |\
+        ${DRIVER_PATH}/../../datastore/xpath_multi.py -s \
+        /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
+        /VM/TEMPLATE/CONTEXT/DISK_ID \
+        /VM/TEMPLATE/DISK/DISK_ID \
+        /VM/TEMPLATE/DISK/CLONE \
+        /VM/TEMPLATE/DISK/FORMAT \
+        /VM/TEMPLATE/DISK/TYPE \
+        /VM/TEMPLATE/DISK/TARGET \
+        /VM/TEMPLATE/DISK/IMAGE_ID)
+    unset i
+    DS_ID="${XPATH_ELEMENTS[i++]}"
+    CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
+    DISK_ID="${XPATH_ELEMENTS[i++]}"
+    CLONE="${XPATH_ELEMENTS[i++]}"
+    FORMAT="${XPATH_ELEMENTS[i++]}"
+    TYPE="${XPATH_ELEMENTS[i++]}"
+    TARGET="${XPATH_ELEMENTS[i++]}"
+    IMAGE_ID="${XPATH_ELEMENTS[i++]}"
+    _OFS=$IFS
+    IFS=';'
+    DISK_ID_A=($DISK_ID)
+    CLONE_A=($CLONE)
+    FORMAT_A=($FORMAT)
+    TYPE_A=($TYPE)
+    TARGET_A=($TARGET)
+    IMAGE_ID_A=($IMAGE_ID)
+    IFS=$_OFS
+    for ID in ${!DISK_ID_A[@]}; do
+        IMAGE_ID="${IMAGE_ID_A[$ID]}"
+        CLONE="${CLONE_A[$ID]}"
+        FORMAT="${FORMAT_A[$ID]}"
+        TYPE="${TYPE_A[$ID]}"
+        TARGET="${TARGET_A[$ID]}"
+        DISK_ID="${DISK_ID_A[$ID]}"
+        IMG="one-img-$IMAGE_ID"
+        if [ -n "$IMAGE_ID" ]; then
+            if boolTrue "$CLONE"; then
+                IMG+="-$VM_ID-$DISK_ID"
+            fi
+        else
+            case "$TYPE" in
+                swap)
+                    IMG="one-sys-${VM_ID}-${DISK_ID}-swap"
+                    ;;
+                *)
+                    IMG="one-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
+            esac
+        fi
+        vmVolumes+="$IMG "
+        splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        vmDisks=$((vmDisks+1))
+    done
+    DISK_ID="$CONTEXT_DISK_ID"
+    if [ -n "$DISK_ID" ]; then
+        IMG="one-sys-${VM_ID}-${DISK_ID}-iso"
+        vmVolumes+="$IMG "
+        splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+    fi
+    splog "oneVmVolumes() VM_ID:$VM_ID DS_ID=$DS_ID"
 }

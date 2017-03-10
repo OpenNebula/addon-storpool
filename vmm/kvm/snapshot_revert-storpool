@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# snapshot_revert  domain snap_id vm_id vmhost
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Get snapshot_revert arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+DOMAIN="$1"
+SNAP_ID="$2"
+VM_ID="$3"
+VMHOST="$4"
+
+DRIVER_PATH="$(dirname $0)"
+SNAP_TAG="ONESNAP"
+VM_SNAPSHOT_OVERRIDE=1
+DS_PATH="/var/lib/one/datastores"
+
+source "${DRIVER_PATH}/kvmrc"
+source "${DRIVER_PATH}/../../scripts_common.sh"
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+
+LOG_PREFIX="vmm"
+
+splog "$0 $*"
+
+
+if boolTrue "$VM_SNAPSHOT_OVERRIDE"; then
+    oneVmVolumes "$VM_ID"
+
+        rCMD=$(cat <<EOF
+    #echo "$DOMAIN"
+    source /var/tmp/one/vmm/kvm/kvmrc
+    deployment=\$(ls "${DS_PATH}/${DS_ID}/${VM_ID}/deployment."* | tail -n 1)
+    trap 'virsh --connect '\$LIBVIRT_URI' create "'\$deployment'" 2>&1 >/dev/null ;\
+          logger -t vmm_sp_snapshot_revert_r "create '\$deployment' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
+    virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1 >/dev/null
+    logger -t vmm_sp_snapshot_revert_r "destroy $DOMAIN ret:\$? \$(date +%s.%N)"
+    while [ -d /proc/\$PPID ]; do
+        logger -t vmm_sp_snapshot_revert_r "\$(virsh --connect \$LIBVIRT_URI dominfo "'$DOMAIN'") $(date +%s.%N)"
+        sleep .1
+    done
+    virsh --connect \$LIBVIRT_URI create "\$deployment" 2>&1 >/dev/null
+    logger -t vmm_sp_snapshot_revert_r "create "\$deployment" ret:\$? \$(date +%s.%N)"
+    logger -t vmm_sp_snapshot_revert_r \$(virsh --connect \$LIBVIRT_URI dominfo "$DOMAIN") \$(date +%s.%N)
+    #trap - EXIT QUIT TERM KILL INT HUP
+EOF
+)
+        trapAdd "trap - SIGTERM && kill -- -$$"
+        ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null &
+        splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed"
+        sleep .5
+    fi
+    SP_TMP="$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
+    declare -a tmpVolumes
+    while read snap; do
+        splog "BEGIN snapshot $snap"
+        volume="${snap%-$SNAP_ID}"
+        [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="ro"
+        storpoolVolumeDetach "$volume" "force" "$VMHOST" "all"
+#        trapAdd APPEND "storpoolVolumeAttach \"$volume\" \"$VMHOST\" \"$mode\""
+        tmpVolume="${volume}-${SP_TMP}"
+        storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null
+ #       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
+        storpoolRetry volume "$volume" parent "$snap" >/dev/null
+        storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
+        tmpVolumes+=("$tmpVolume")
+        splog "END snapshot $snap"
+    done < <(storpool -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+    for volume in ${tmpVolumes[@]}; do
+        storpoolVolumeDelete "$volume" "force" "snaps"
+    done
+    pids=$(jobs -p)
+    if [ -n "$pids" ]; then
+         kill $pids
+         ret=$?
+         splog "kill $pids ($?)"
+         if [ $ret -eq 0 ]; then
+             splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN created"
+         fi
+    fi
+    exit 0
+else
+    splog "[CONTINUE]"
+fi

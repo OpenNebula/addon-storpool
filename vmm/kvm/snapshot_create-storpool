@@ -1,0 +1,104 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#-------------------------------------------------------------------------------
+# snapshot_create  domain snap_id vm_id vmhost
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Get snapshot_create arguments from OpenNebula core
+#-------------------------------------------------------------------------------
+
+DOMAIN="$1"
+SNAP_ID="$2"
+VM_ID="$3"
+VMHOST="$4"
+
+DRIVER_PATH="$(dirname $0)"
+SNAP_TAG="ONESNAP"
+VM_SNAPSHOT_OVERRIDE=1
+
+source "${DRIVER_PATH}/kvmrc"
+source "${DRIVER_PATH}/../../scripts_common.sh"
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+
+LOG_PREFIX="vmm"
+
+splog "$0 $*"
+
+if boolTrue "$VM_SNAPSHOT_OVERRIDE"; then
+    oneVmVolumes "$VM_ID"
+    splog "vmDisks:$vmDisks vmVolumes:'$vmVolumes'"
+    ts=$(date +%s)
+    res="${SNAP_TAG}-${SNAP_ID}-${ts}"
+
+    if boolTrue "$BACKUP_FSFREEZE_MULTIDISKS"; then
+        if [ ${vmDisks:-1} -gt 1 ]; then
+            VM_BACKUP_FSFREEZE=1
+        else
+            VM_BACKUP_FSFREEZE=
+        fi
+    fi
+    if boolTrue "$BACKUP_FSFREEZE" || boolTrue "$VM_BACKUP_FSFREEZE"; then
+        rCMD=$(cat <<EOF
+    #echo "$DOMAIN"
+    source /var/tmp/one/vmm/kvm/kvmrc
+    trap 'virsh --connect '\$LIBVIRT_URI' qemu-agent-command "'$DOMAIN'" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null ;\
+    logger -t vmm_sp_snapshot_create_r "fsthaw '$DOMAIN' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
+    virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null
+    logger -t vmm_sp_snapshot_create_r "fsfreeze $DOMAIN ret:\$? \$(date +%s.%N)"
+    while [ -d /proc/\$PPID ]; do
+        logger -t vmm_sp_snapshot_create_r \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
+        sleep .1
+    done
+    virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null
+    logger -t vmm_sp_snapshot_create_r "fsthaw $DOMAIN ret:\$? \$(date +%s.%N)"
+    logger -t vmm_sp_snapshot_create_r \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
+    #trap - EXIT QUIT TERM KILL INT HUP
+EOF
+)
+        trap "trap - SIGTERM && kill -- -$$" INT TERM EXIT HUP QUIT
+        ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null &
+        splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN is frosen"
+        sleep .1
+    fi
+    for volume in $vmVolumes; do
+        snap="${volume}-${res}"
+        storpool -j volume "$volume" snapshot "$snap" ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} 2>&1 >"/tmp/${vid}-${snap}.log"
+        ret=$?
+        splog "storpool volume $volume snapshot $snap ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} ($ret)"
+    done
+    if boolTrue "$BACKUP_FSFREEZE" || boolTrue "$VM_BACKUP_FSFREEZE"; then
+        pids=$(jobs -p)
+        if [ -n "$pids" ]; then
+            kill $pids
+            ret=$?
+            splog "kill $pids ($?)"
+            if [ $ret -eq 0 ]; then
+                splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN is thawed"
+            fi
+        fi
+    fi
+    echo "$res"
+    splog "DOMAIN=$DOMAIN SNAP_ID=$SNAP_ID VM_ID=$VM_ID VMHOST=$VMHOST (res:$res)"
+    exit 0
+else
+    splog "[CONTINUE]"
+fi
