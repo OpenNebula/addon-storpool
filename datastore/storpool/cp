@@ -158,7 +158,7 @@ else
     POST_COPY_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
-    splog(){ logger -t ds_sp_${0##*/} "\$*"; }
+    splog(){ logger -t "ds_sp_${0##*/}[\$\$]" "\$*"; }
 
     splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
     $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"

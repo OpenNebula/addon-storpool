@@ -49,7 +49,7 @@ dev="$1"
 
 splog()
 {
-	logger -t ${0##*/} "$*"
+	logger -t "${0##*/}[$$]" "$*"
 }
 
 SP_JSON_PATH="/tmp"

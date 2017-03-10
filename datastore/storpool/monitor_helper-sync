@@ -18,7 +18,7 @@
 
 export PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 
-function splog() { logger -t "ds_sp_${0##*/}" "$*"; }
+function splog() { logger -t "ds_sp_${0##*/}[$$]" "$*"; }
 
 
 SP_JSON_PATH="/tmp"
