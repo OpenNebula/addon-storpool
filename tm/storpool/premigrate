@@ -43,7 +43,14 @@ for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
     fi
 done
 
-splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID"
+if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
+    if [ -n "$DEBUG_MIGRATE_LIVE" ]; then
+        splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD (exit)"
+    fi
+    exit 0
+fi
+
+splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD"
 
 #-------------------------------------------------------------------------------
 # Get Datastore information

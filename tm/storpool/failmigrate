@@ -33,6 +33,7 @@ VM_PATH="$3"
 VM_ID="$4"
 DS_ID="$5"
 TEMPLATE="$6"
+SYSTEM_MAD="$7"
 
 TM_PATH="$(dirname $0)"
 for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
@@ -41,6 +42,13 @@ for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
         break;
     fi
 done
+
+if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
+    if [ -n "$DEBUG_MIGRATE_LIVE" ]; then
+        splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD (exit)"
+    fi
+    exit 0
+fi
 
 splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID"
 
