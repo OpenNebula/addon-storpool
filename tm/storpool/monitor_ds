@@ -37,10 +37,11 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 #	splog "VM_ID=$VM_ID VM_DIR=$VM_DIR"
 	test -d "$VM_DIR" || continue
 	
-	echo -n "VM=[ID=$VM_ID,POLL=\""
-	
-	for DISK in `ls $VM_DIR/disk.[[:digit:]]* | grep '/disk\.[0-9]\+$'`; do
+	DRIVER_RUN=
+	for DISK in `ls $VM_DIR/disk.[[:digit:]]* 2>/dev/null | grep '/disk\.[0-9]\+$'`; do
 #		splog "DISK=$DISK"
+		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,POLL=\""
+		
 		if [ -f "${DISK}.monitor" ]; then
 			DRIVER="$(<"${DISK}.monitor")"
 		fi
@@ -54,5 +55,5 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 		"$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER"
 	done
 	
-	echo "\"]"
+	[ -z "$DRIVER_RUN" ] || echo "\"]"
 done
