@@ -55,22 +55,16 @@ if [ -f "$SP_MONITOR_DS" ]; then
         SP_FREE_MB=${SP_SIZES["2"]:-0}
 
         if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
-            CALC_USED_MB=$((USED_MB + SP_USED_MB))
 
-            CALC_FREE_MB=$FREE_MB
-            if [ $SP_FREE_MB -lt $FREE_MB ]; then
-                CALC_FREE_MB=$SP_FREE_MB
-            fi
-            CALC_TOTAL_MB=$((CALC_USED_MB + CALC_FREE_MB))
             if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
                 splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
             fi
 
             echo "DS = ["
             echo "  ID = $ds,"
-            echo "  USED_MB = $CALC_USED_MB,"
-            echo "  TOTAL_MB = $CALC_TOTAL_MB,"
-            echo "  FREE_MB = $CALC_FREE_MB"
+            echo "  USED_MB = $SP_USED_MB,"
+            echo "  TOTAL_MB = $SP_TOTAL_MB,"
+            echo "  FREE_MB = $SP_FREE_MB"
             echo "]"
 
             if [ "${ONE_VERSION:0:1}" = "4" ]; then
