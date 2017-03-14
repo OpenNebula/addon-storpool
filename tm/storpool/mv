@@ -149,7 +149,12 @@ esac
 # check if it is called in SYSTEM_DS context
 #-------------------------------------------------------------------------------
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
-    ssh_make_path "$DST_HOST" "$DST_DIR" "storpool"
+    if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+        REMOTE_MONITOR="storpool"
+    else
+        REMOTE_MONITOR=
+    fi
+    ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
     TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then

@@ -165,7 +165,9 @@ fi
 #-------------------------------------------------------------------------------
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
 
-MONITOR_TM_MAD="storpool"
+if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+    MONITOR_TM_MAD="storpool"
+fi
 
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH" "${DST_PATH}.iso"
 

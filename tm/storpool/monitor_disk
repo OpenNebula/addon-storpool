@@ -52,13 +52,13 @@ DISK_DEV="$(readlink -f "$DISK")"
 
 if [ -z "$DISK_LINK" ] || [ -n "${DISK_LINK%/dev/storpool*}" ]; then
 	if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
-		splog "$DISK is NOT on storpool! $DISK_LINK"
+		splog "$DISK NOT on storpool! $DISK_LINK"
 	fi
 	"${0}-misc" "$DISK" "$DS_ID" "$VM_ID"
 	exit $?
 else
 	if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
-		splog "$DISK is on storpool! $DISK_LINK"
+		splog "$DISK StorPool volume $DISK_LINK"
 	fi
 fi
 
@@ -84,7 +84,7 @@ if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
 else
 	used="spaceUsed"
 fi
-spSize=$(eval $SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
+spSize=$(eval $SP_CMD_VOLUME_SPACE 2>/dev/null | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 
 disk_size="${spSize:-0}"
 disk_size=$((disk_size/1024/1024))
@@ -101,7 +101,7 @@ while IFS=',' read name snap_size; do
 	snap_id=${name#*snap}
 	snap_size=$((snap_size/1024/1024))
 	if [ -n "$DEBUG_TM_MONITOR_DISK" ]; then
-		splog "$DISK $DISK_ID $snap_id SIZE:$snap_size"
+		splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size"
 	fi
 	echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
 done < <(eval $SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)

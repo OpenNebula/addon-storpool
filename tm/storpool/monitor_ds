@@ -29,8 +29,11 @@ DRIVER_PATH="${0%/*}"
 if [ -n "$DEBUG_TM_MONITOR_DS" ]; then
 	splog "$PWD datastore $DS_ID $DS_DIR"
 fi
-
-DS_DRIVER="$(<$DS_DIR/.monitor)" || DS_DRIVER="storpool"
+if [ -f "$DS_DIR/.monitor" ]; then
+	DS_DRIVER="$(<$DS_DIR/.monitor)"
+else 
+	DS_DRIVER="storpool"
+fi
 
 for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 	VM_DIR="$DS_DIR/$VM_ID"
@@ -51,6 +54,9 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 			DRIVER_RUN="$DRIVER_PATH/../$DRIVER/monitor_disk"
 		else
 			DRIVER_RUN="$DRIVER_PATH/monitor_disk"
+		fi
+		if [ -n "$DEBUG_TM_MONITOR_DS" ]; then
+			splog "$DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER"
 		fi
 		"$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER"
 	done

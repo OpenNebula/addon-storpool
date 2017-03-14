@@ -79,6 +79,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                 if [ -e "$SCRIPT_PATH" ]; then
                     if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
                         splog "run $SCRIPT_PATH $dir"
+                        export DEBUG_TM_MONITOR_DS=1
                     fi
                     "$SCRIPT_PATH" "$dir"
                 else
@@ -89,7 +90,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             continue
         fi
     else
-        if [ "$IM_MONITOR_DS_DEBUG_VERBOSE" = "1" ]; then
+        if [ -n "$IM_MONITOR_DS_DEBUG_VERBOSE" ]; then
             splog "Datastore $ds is not on StorPool"
         fi
     fi

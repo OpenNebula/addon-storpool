@@ -39,6 +39,7 @@ fi
 
 if [ -n "$DEBUG_TM_MONITOR" ]; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
+	export DEBUG_TM_MONITOR_DS=1
 fi
 
 if [ "${DRV_ACTION:0:6}" = "system" ]; then
@@ -49,15 +50,15 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 		echo "{[]}" >"${SP_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON}"
 		splog "${SP_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON} not found. Created empty one."
 	fi
-#	echo "bash -x $PWD/$0 $*" >/tmp/monitor_system.sh
+#	echo "cd $PWD && bash -x $PWD/$0 $*" >/tmp/monitor_system.sh
 else
 	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 	oneDsDriverAction "${DRIVER_PATH}"
-#	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
+	#echo "cd $PWD && bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
 	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-$SP_CMD_TEMPLATE_STATUS}"
 	if [ -n "$CLUSTERS_ID" ]; then
 		CLUSTERS_ID_ARRAY=($CLUSTERS_ID)
-		CLUSTER_ID="${CLUSTERS_ID_ARRAY[0]}"
+		export CLUSTER_ID="${CLUSTERS_ID_ARRAY[0]}"
 	fi
 fi # DRV_ACTION
 
@@ -94,9 +95,8 @@ while IFS=',' read n t f; do
 	fi
 done < <(eval $SP_CMD_TEMPLATE_STATUS | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free]|@csv')
 
-if [ -d "$BASE_PATH" ]; then
+if [ -d "$(readlink -f $BASE_PATH)" ]; then
 	if [ -f "$BASE_PATH/.monitor" ]; then
-		DS_DRIVER="$(<$BASE_PATH/.monitor)" || DS_DRIVER="storpool"
 		if [ -n "$DEBUG_TM_MONITOR" ]; then
 			splog "$DS_ID is marked for remote monitoring via IM_MAD using 'tm/$DS_DRIVER/monitor_ds'"
 		fi
