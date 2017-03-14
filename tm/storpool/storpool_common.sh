@@ -39,7 +39,9 @@ else
     TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
 fi
 
-source "$TMCOMMON"
+if [ -f "$TMCOMMON" ]; then
+	source "$TMCOMMON"
+fi
 
 #-------------------------------------------------------------------------------
 # load local configuration parameters
