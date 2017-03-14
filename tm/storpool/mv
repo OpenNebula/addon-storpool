@@ -267,7 +267,7 @@ fi
 #-------------------------------------------------------------------------------
 
 if [ -n "$DETACH_ONLY" ]; then
-    splog "END $VM_ID $DETACH_ONLY"
+    splog "END $VM_ID $DETACH_ONLY [IMAGE_DS]"
     exit 0
 fi
 
@@ -287,5 +287,5 @@ if [ "$DO_SYMLINK" = "yes" ]; then
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 fi
 
-splog "END $VM_ID"
+splog "END $VM_ID [IMAGE_DS]"
 exit 0
