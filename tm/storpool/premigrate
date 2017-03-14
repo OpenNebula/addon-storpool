@@ -66,10 +66,15 @@ if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
     #-------------------------------------------------------------------------------
     # Copy VM related content to dst host.
     #-------------------------------------------------------------------------------
-    TAR_COPY="$SSH $SRC_HOST '$TAR -C $VM_PATH --sparse -cf - .'"
-    TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $VM_PATH --sparse -xf -'"
+    TAR_SSH=$(cat <<EOF
+set -e -o pipefail
+logger -t "tm_sp_premigrate_r[\$\$]" -- "$TAR -C $VM_PATH --sparse -cf - . | $SSH $DST_HOST '$TAR -C $VM_PATH --sparse -xf -'"
+$TAR -C "$VM_PATH" --sparse -cf - . | $SSH "$DST_HOST" '$TAR -C "$VM_PATH" --sparse -xf -;logger -t "tm_sp_premigrate_r[\$\$]" -- "rDone \$? \\$?"'
+logger -t "tm_sp_premigrate_r[\$\$]" -- "END"
+EOF
+)
     splog "Copy $VM_PATH from $SRC_HOST to $DST_HOST (ssh)"
-    exec_and_log "eval $TAR_COPY" "Error copying VM directory to target host $VM_PATH"
+    ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error copying VM directory to target host $VM_PATH"
 fi
 
 #-------------------------------------------------------------------------------
