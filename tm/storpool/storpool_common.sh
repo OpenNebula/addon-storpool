@@ -211,7 +211,7 @@ function storpoolClientId()
         hst="$HOST_HOSTNAME"
     fi
     if [ -n "$HOST_SP_OURID" ]; then
-        if [ "${HOST_SP_OURID}//[[:digit:]]/" = "" ]; then
+        if [ "${HOST_SP_OURID//[[:digit:]]/}" = "" ]; then
             result="$HOST_SP_OURID"
             splog "$hst CLIENT_ID=$result"
         else
@@ -552,7 +552,7 @@ function oneSymlink()
         if [ -d "\$dst_dir" ]; then
             true
         else
-            splog "mkdir -p \$dst_dir"
+            splog "mkdir -p \$dst_dir (for:\$(basename "\$dst"))"
             trap "splog \"Can't create destination dir \$dst_dir (\$?)\"" EXIT TERM INT HUP
             splog "mkdir -p \$dst_dir"
             mkdir -p "\$dst_dir"
@@ -793,7 +793,7 @@ ${SAVE:+SAVE=$SAVE }\
 ${TYPE:+TYPE=$TYPE }\
 ${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${IMAGE:+IMAGE=$IMAGE }\
+${IMAGE:+IMAGE='$IMAGE' }\
 "
     _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
     [ -n "$_MSG" ] && splog "$_MSG"
@@ -808,6 +808,7 @@ function oneDatastoreInfo()
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
         done < <(onedatastore show -x "$_DS_ID" | "$_XPATH" --stdin \
+                            /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
                             /DATASTORE/TM_MAD \
@@ -828,6 +829,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                             /DATASTORE/TEMPLATE/SP_CLONE_GW)
     unset i
+    DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_DISK_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_TM_MAD="${XPATH_ELEMENTS[i++]}"
@@ -860,6 +862,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }"
     _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
     _MSG+="${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }"
+    _MSG+="${DS_NAME:+NAME='$DS_NAME' }"
     if boolTrue "$AUTO_TEMPLATE"; then
         _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
         _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
