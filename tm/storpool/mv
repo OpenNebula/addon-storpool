@@ -51,6 +51,12 @@ IS_DISK=`is_disk $DST_PATH`
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
+if [ $IS_DISK == 0 ] && [ "$SRC_PATH" != "$DST_PATH" ]; then
+    oneDatastoreInfo "$(basename $(dirname $SRC_PATH))"
+    SRC_DS_SHARED="$DS_SHARED"
+    SRC_SP_SYSTEM="$SP_SYSTEM"
+fi
+
 oneDatastoreInfo "$DS_ID"
 
 #-------------------------------------------------------------------------------
@@ -199,7 +205,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         # other files in the VM home
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`
-        if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+        if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ] || [ "$SRC_SP_SYSTEM" = "ssh" ] || [ "$SRC_DS_SHARED" != "YES"  ]; then
             if [ "$SRC_HOST" = "$DST_HOST" ] || [ "$MIGRATE_UNKNOWN" = "yes" ]; then
                 if [ "$SRC_PATH" = "$DST_PATH" ]; then
                     splog "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
