@@ -57,6 +57,7 @@ DEBUG_oneTemplateInfo=
 DEBUG_oneDsDriverAction=
 
 AUTO_TEMPLATE=1
+SP_WAIT_LINK=1
 
 sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
 
@@ -422,7 +423,9 @@ function storpoolVolumeAttach()
 
     trapAdd "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 
-    storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
+    if boolTrue "$SP_WAIT_LINK"; then
+        storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
+    fi
 
     trapDel "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 }
