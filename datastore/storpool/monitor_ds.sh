@@ -95,7 +95,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             continue
         fi
     else
-        if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+        if [ "$IM_MONITOR_DS_DEBUG_VERBOSE" = "1" ]; then
             splog "Datastore $ds is not on StorPool"
         fi
     fi
