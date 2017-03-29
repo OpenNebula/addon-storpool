@@ -1051,7 +1051,7 @@ function oneDsDriverAction()
 
     boolTrue "$DEBUG_oneDsDriverAction" || return
 
-    _MSG= "[oneDsDriverAction]\
+    _MSG="[oneDsDriverAction]\
 ${ID:+ID=$ID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
 ${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
