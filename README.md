@@ -218,6 +218,7 @@ TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SH
 ```
 DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "" ]
 ```
+
 To enable live disk snapshots support for storpool
 * Add `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` in `/etc/one/vmm_exec/vmm_execrc`
 ```
@@ -236,6 +237,12 @@ SP_CHECKPOINT=nomigrate
 * (option) Reconfigure the VMsnapshot scripts to do grouped disk snapshots. Append the following string to the VM_MAD ARGUMENTS
 ```
 -l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool
+```
+* Edit `/etc/one/oned.conf` and change KEEP_SNAPSHOTS=YES to the VM_MAD
+```
+VM_MAD = [
+    KEEP_SNAPSHOTS = "yes",
+]
 ```
 When there are more than one disk per VM it is recommended to do fsfreese/fsthaw while the disks are snapshotted. Enable in addon-storpoolrc:
 ```
