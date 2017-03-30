@@ -165,18 +165,8 @@ else
 
     cat <<_EOF_ >>/etc/one/oned.conf
 # StorPool related config
-TM_MAD_CONF = [
-    NAME = "storpool",
-    LN_TARGET = "NONE",
-    CLONE_TARGET = "SELF",
-    SHARED = "yes"
-]
-DS_MAD_CONF = [
-    NAME = "storpool",
-    REQUIRED_ATTRS = "DISK_TYPE",
-    PERSISTENT_ONLY = "NO",
-    MARKETPLACE_ACTIONS = ""
-]
+TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes" ]
+DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "" ]
 _EOF_
 fi
 
@@ -200,6 +190,10 @@ echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
 
+echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+cp "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
+chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
+
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
 pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/im/$ONE_VER/00-monitor_ds.patch"
@@ -214,6 +208,13 @@ echo "*** tm/ssh/monitor patch ..."
 pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/tm/$ONE_VER/00-ssh-monitor_ds.patch" "backup"
 popd >/dev/null
+
+echo "*** addon-storpoolrc ..."
+if [ ! -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
+    cp addon-storpoolrc "${ONE_VAR}/remotes/addon-storpoolrc"
+fi
+grep -q "MKSWAP=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKSWAP="sudo /sbin/mkswap"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
+grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/mkfs"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
 
 echo "*** Please sync hosts (onehost sync --force)"
 

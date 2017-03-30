@@ -43,14 +43,21 @@ for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
     fi
 done
 
-splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID"
+if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
+    if boolTrue "$DEBUG_MIGRATE_LIVE"; then
+        splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD (exit)"
+    fi
+    exit 0
+fi
+
+splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD"
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
 oneDatastoreInfo "$DS_ID"
 
-if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+if ! boolTrue "$DS_SHARED" || [ "$SP_SYSTEM" = "ssh" ]; then
     #-------------------------------------------------------------------------------
     # Create DST path
     #-------------------------------------------------------------------------------
@@ -59,10 +66,15 @@ if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
     #-------------------------------------------------------------------------------
     # Copy VM related content to dst host.
     #-------------------------------------------------------------------------------
-    TAR_COPY="$SSH $SRC_HOST '$TAR -C $VM_PATH --sparse -cf - .'"
-    TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $VM_PATH --sparse -xf -'"
+    TAR_SSH=$(cat <<EOF
+set -e -o pipefail
+logger -t "tm_sp_premigrate_r[\$\$]" -- "$TAR -C $VM_PATH --sparse -cf - . | $SSH $DST_HOST '$TAR -C $VM_PATH --sparse -xf -'"
+$TAR -C "$VM_PATH" --sparse -cf - . | $SSH "$DST_HOST" '$TAR -C "$VM_PATH" --sparse -xf -;logger -t "tm_sp_premigrate_r[\$\$]" -- "rDone \$? \\$?"'
+logger -t "tm_sp_premigrate_r[\$\$]" -- "END"
+EOF
+)
     splog "Copy $VM_PATH from $SRC_HOST to $DST_HOST (ssh)"
-    exec_and_log "eval $TAR_COPY" "Error copying VM directory to target host $VM_PATH"
+    ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error copying VM directory to target host $VM_PATH"
 fi
 
 #-------------------------------------------------------------------------------
@@ -79,10 +91,10 @@ for i in ${!DISK_ID_ARRAY[@]}; do
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         if [ -n "$DISK_SOURCE" ]; then
             SP_VOL="${DISK_SOURCE##*/}"
-            if [ "${DISK_CLONE_ARRAY[i]}" = "YES" ]; then
+            if boolTrue "${DISK_CLONE_ARRAY[i]}"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
-            if [ "${DISK_READONLY_ARRAY[i]}" = "YES" ]; then
+            if boolTrue "${DISK_READONLY_ARRAY[i]}"; then
                 SP_MODE="ro"
             else
                 SP_MODE=
@@ -92,14 +104,14 @@ for i in ${!DISK_ID_ARRAY[@]}; do
             storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 #           oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
         else
-            if [ -n "$DEBUG_MIGRATE_LIVE" ]; then
+            if boolTrue "$DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
             fi
         fi
     fi
 done
 
-if [ "$DS_TM_MAD" = "storpool" ]; then
+if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     # Attach volatile disk volumes
     #-------------------------------------------------------------------------------

@@ -38,6 +38,17 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
+function boolTrue()
+{
+   case "${1^^}" in
+       1|Y|YES|TRUE|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
 if [ -f "$SP_MONITOR_DS" ]; then
 #    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
 #        splog "[DBG]$PWD $0 $* (ds:$ds)"
@@ -45,7 +56,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
     SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds)"
 
     if [ -n "$SP_DS_SIZES" ]; then
-        if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+        if boolTrue "$IM_MONITOR_DS_DEBUG"; then
             splog "SP_DS_SIZES=$SP_DS_SIZES"
         fi
 
@@ -55,25 +66,23 @@ if [ -f "$SP_MONITOR_DS" ]; then
         SP_FREE_MB=${SP_SIZES["2"]:-0}
 
         if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
-            CALC_USED_MB=$((USED_MB + SP_USED_MB))
 
-            CALC_FREE_MB=$FREE_MB
-            if [ $SP_FREE_MB -lt $FREE_MB ]; then
-                CALC_FREE_MB=$SP_FREE_MB
-            fi
-            CALC_TOTAL_MB=$((CALC_USED_MB + CALC_FREE_MB))
-            if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
-                splog "DS_ID $ds is on StorPool, SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB"
+            if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+                if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+                    splog "DS_ID $ds (StorPool) SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB $dir"
+                fi
+                splog "DS ID=$ds USED_MB=$SP_USED_MB TOTAL_MB=$SP_TOTAL_MB FREE_MB=$SP_FREE_MB"
             fi
 
             echo "DS = ["
             echo "  ID = $ds,"
-            echo "  USED_MB = $CALC_USED_MB,"
-            echo "  TOTAL_MB = $CALC_TOTAL_MB,"
-            echo "  FREE_MB = $CALC_FREE_MB"
+            echo "  USED_MB = $SP_USED_MB,"
+            echo "  TOTAL_MB = $SP_TOTAL_MB,"
+            echo "  FREE_MB = $SP_FREE_MB"
             echo "]"
 
             if [ "${ONE_VERSION:0:1}" = "4" ]; then
+                # hijacking the loop in im/monitor_ds.sh
                 continue
             fi
 
@@ -83,19 +92,24 @@ if [ -f "$SP_MONITOR_DS" ]; then
                 # default tm DRIVER is ssh
                 SCRIPT_PATH="${REMOTES_DIR}/tm/${DRIVER:-ssh}/monitor_ds"
                 if [ -e "$SCRIPT_PATH" ]; then
-                    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
+                    if boolTrue "$IM_MONITOR_DS_DEBUG"; then
                         splog "run $SCRIPT_PATH $dir"
+                        export DEBUG_TM_MONITOR_DS=1
                     fi
                     "$SCRIPT_PATH" "$dir"
                 else
                     splog "$SCRIPT_PATH Not found!"
                 fi
+            else
+                if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+                    splog "${dir}/.monitor not found. Shared filesystem?"
+                fi
             fi
-
+            # hijacking the loop in im/monitor_ds.sh
             continue
         fi
     else
-        if [ "$IM_MONITOR_DS_DEBUG_VERBOSE" = "1" ]; then
+        if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
             splog "Datastore $ds is not on StorPool"
         fi
     fi

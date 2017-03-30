@@ -51,6 +51,12 @@ IS_DISK=`is_disk $DST_PATH`
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
+if [ $IS_DISK == 0 ] && [ "$SRC_PATH" != "$DST_PATH" ]; then
+    oneDatastoreInfo "$(basename $(dirname $SRC_PATH))"
+    SRC_DS_SHARED="$DS_SHARED"
+    SRC_SP_SYSTEM="$SP_SYSTEM"
+fi
+
 oneDatastoreInfo "$DS_ID"
 
 #-------------------------------------------------------------------------------
@@ -59,7 +65,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
@@ -70,16 +76,17 @@ log "vm $VM_ID moving $SRC to $DST"
 
 # is checkpoint on storpool enabled?
 case "$SP_CHECKPOINT" in
-    yes)
-        SP_CHECKPOINT="migrate"
-    ;;
     nomigrate)
         SP_CHECKPOINT="yes"
     ;;
     *)
-        SP_CHECKPOINT=
-        CHECKPOINT_SAVE=
-        CHECKPOINT_RESTORE=
+        if boolTrue "$SP_CHECKPOINT"; then
+            SP_CHECKPOINT="migrate"
+        else
+            SP_CHECKPOINT=
+            CHECKPOINT_SAVE=
+            CHECKPOINT_RESTORE=
+        fi
     ;;
 esac
 
@@ -149,7 +156,12 @@ esac
 # check if it is called in SYSTEM_DS context
 #-------------------------------------------------------------------------------
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
-    ssh_make_path "$DST_HOST" "$DST_DIR" "storpool"
+    if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+        REMOTE_MONITOR="storpool"
+    else
+        REMOTE_MONITOR=
+    fi
+    ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
     TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
@@ -175,11 +187,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                     splog "$DETACH_ONLY"
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
-                    if [ "$DO_SYMLINK" = "yes" ]; then
+                    if boolTrue "$DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
                     fi
                 fi
-                if [ -n "$SKIP_CONTEXT" ]; then
+                if boolTrue "$SKIP_CONTEXT"; then
                     skip_context_ts="$(date -u)"
                     echo "$skip_context_ts" >"/tmp/one-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip"
                     splog "create /tmp/one-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip ($skip_context_ts)"
@@ -193,7 +205,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         # other files in the VM home
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`
-        if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+        if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ] || [ "$SRC_SP_SYSTEM" = "ssh" ] || [ "$SRC_DS_SHARED" != "YES"  ]; then
             if [ "$SRC_HOST" = "$DST_HOST" ] || [ "$MIGRATE_UNKNOWN" = "yes" ]; then
                 if [ "$SRC_PATH" = "$DST_PATH" ]; then
                     splog "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
@@ -203,16 +215,18 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                         "Failed moving $SRC_PATH/* to $DST_PATH"
                 fi
             else
-                TAR_COPY="$SSH $SRC_HOST '$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR'"
-                TAR_COPY="$TAR_COPY | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
-                splog "Transfer $SRC_HOST:$SRC_PATH $DST_HOST:$DST_DIR/$SRC_VM_DIR"
-                exec_and_log "eval $TAR_COPY" "Error copying SYSTEM_DS from $SRC_HOST to $DST_HOST"
-
-                splog "Cleanup $SRC_HOST rm -rf $SRC_PATH"
-                ssh_exec_and_log "$SRC_HOST" "rm -rf $SRC_PATH" \
-                        "failed removing $SRC_HOST $SRC_PATH"
+                TAR_SSH=$(cat <<EOF
+set -e -o pipefail
+logger -t "tm_sp_mv_r[\$\$]" -- "$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
+$TAR -C "$SRC_DS_DIR" --sparse -cf - "$SRC_VM_DIR" | $SSH "$DST_HOST" '$TAR -C "$DST_DIR" --sparse -xf -;logger -t "tm_sp_mv_r[\$\$]" -- "rDone \$? \\$?"'
+logger -t "tm_sp_mv_r[\$\$]" -- "rm -rf $SRC_PATH"
+rm -rf "$SRC_PATH"
+logger -t "tm_sp_mv_r[\$\$]" -- "END"
+EOF
+)
+                splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
+                ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
             fi
-
         fi
      else
         for i in ${!DISK_ID_ARRAY[@]}; do
@@ -222,7 +236,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                     FORMAT="swap"
                 fi
-                if [ $IS_DISK == 1 ]; then
+                if boolTrue "$IS_DISK"; then
                     if [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
                         continue
                     fi
@@ -240,7 +254,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                     splog "$DETACH_ONLY"
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-                    if [ "$DO_SYMLINK" = "yes" ]; then
+                    if boolTrue "$DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
                     fi
                 fi
@@ -265,7 +279,7 @@ fi
 #-------------------------------------------------------------------------------
 
 if [ -n "$DETACH_ONLY" ]; then
-    splog "END $VM_ID $DETACH_ONLY"
+    splog "END $VM_ID $DETACH_ONLY [IMAGE_DS]"
     exit 0
 fi
 
@@ -274,16 +288,16 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${SOURCE##*/}"
-if [ "$CLONE" = "YES" ]; then
+if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
 SP_LINK="/dev/storpool/$SP_VOL"
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-if [ "$DO_SYMLINK" = "yes" ]; then
+if boolTrue "$DO_SYMLINK"; then
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 fi
 
-splog "END $VM_ID"
+splog "END $VM_ID [IMAGE_DS]"
 exit 0

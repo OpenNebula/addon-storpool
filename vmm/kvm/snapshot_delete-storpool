@@ -19,48 +19,34 @@
 #--------------------------------------------------------------------------- #
 
 #-------------------------------------------------------------------------------
-# resize src size vmId
+# snapshot_create  domain snap_id vm_id vmhost
 #-------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-# Get resize arguments from OpenNebula core
+# Get snapshot_create arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-SRC="$1"
-NEWSIZE="$2"
+DOMAIN="$1"
+SNAP_ID="$2"
 VM_ID="$3"
+VMHOST="$4"
 
-TM_PATH="$(dirname $0)"
-source "${TM_PATH}/storpool_common.sh"
+DRIVER_PATH="$(dirname $0)"
+source "${DRIVER_PATH}/kvmrc"
+source "${DRIVER_PATH}/../../scripts_common.sh"
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-splog "SRC=$SRC NEWSIZE=$NEWSIZE VM_ID=$VM_ID"
+LOG_PREFIX="vmm"
 
-#-------------------------------------------------------------------------------
-# Compute the destination image name
-#-------------------------------------------------------------------------------
-
-SRC_HOST=`arg_host $SRC`
-SRC_PATH=`arg_path $SRC`
-SRC_DIR="${SRC_PATH%/*}"
-
-DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
-
-#-------------------------------------------------------------------------------
-# Get Image information
-#-------------------------------------------------------------------------------
-
-oneVmInfo "$VM_ID" "$DISK_ID"
-
-SP_VOL="${SOURCE##*/}"
-if boolTrue "$CLONE"; then
-    SP_VOL+="-${VM_ID}-${DISK_ID}"
+if boolTrue "$DEBUG_VMSNAPSHOT"; then
+    splog "$0 $*"
 fi
 
-#-------------------------------------------------------------------------------
-# Resize the volume
-#-------------------------------------------------------------------------------
-
-storpoolVolumeResize "$SP_VOL" "$NEWSIZE"
-
-splog "END $VM_ID"
-exit 0
+if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
+	while read snap; do
+		storpool snapshot "$snap" delete "$snap"
+		ret=$?
+		splog "storpool snapshot $snap delete $snap ($ret)"
+	done < <(storpool -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+	exit 0
+fi

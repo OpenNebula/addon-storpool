@@ -39,7 +39,9 @@ else
     TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
 fi
 
-source "$TMCOMMON"
+if [ -f "$TMCOMMON" ]; then
+	source "$TMCOMMON"
+fi
 
 #-------------------------------------------------------------------------------
 # load local configuration parameters
@@ -54,14 +56,63 @@ DEBUG_oneDatastoreInfo=
 DEBUG_oneTemplateInfo=
 DEBUG_oneDsDriverAction=
 
-sprcfile="${TMCOMMON%/*}/../addon-storpoolrc"
+AUTO_TEMPLATE=1
+SP_WAIT_LINK=1
+VMSNAPSHOT_TAG="ONESNAP"
+VMSNAPSHOT_OVERRIDE=1
+VMSNAPSHOT_DELETE_ON_TERMINATE=1
+
+function lookup_file()
+{
+    local _FILE="$1" _CWD="${2:-$PWD}"
+    local _PATH=
+    for _PATH in "$_CWD/"{,../,../../,../../../,remotes/}; do
+        if [ -f "${_PATH}${_FILE}" ]; then
+#            splog "lookup_file($_FILE,$_CWD) FOUND:${_PATH}${_FILE}"
+            echo "${_PATH}${_FILE}"
+            return
+#        else
+#            splog "lookup_file($_FILE,$_CWD) NOT FOUND:${_PATH}${_FILE}"
+        fi
+    done
+}
+
+DRIVER_PATH="$(dirname $0)"
+sprcfile="$(lookup_file "addon-storpoolrc" "$DRIVER_PATH")"
 
 if [ -f "$sprcfile" ]; then
     source "$sprcfile"
+else
+    splog "File '$sprcfile' NOT FOUND!"
 fi
+
 if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
+
+VmState=(INIT PENDING HOLD ACTIVE STOPPED SUSPENDED DONE FAILED POWEROFF UNDEPLOYED CLONING CLONING_FAILURE)
+LcmState=(LCM_INIT PROLOG BOOT RUNNING MIGRATE SAVE_STOP SAVE_SUSPEND SAVE_MIGRATE PROLOG_MIGRATE PROLOG_RESUME EPILOG_STOP EPILOG
+        SHUTDOWN CANCEL FAILURE CLEANUP_RESUBMIT UNKNOWN HOTPLUG SHUTDOWN_POWEROFF BOOT_UNKNOWN BOOT_POWEROFF BOOT_SUSPENDED BOOT_STOPPED
+        CLEANUP_DELETE HOTPLUG_SNAPSHOT HOTPLUG_NIC HOTPLUG_SAVEAS HOTPLUG_SAVEAS_POWEROFF HOTPLUG_SAVEAS_SUSPENDED SHUTDOWN_UNDEPLOY
+        EPILOG_UNDEPLOY PROLOG_UNDEPLOY BOOT_UNDEPLOY HOTPLUG_PROLOG_POWEROFF HOTPLUG_EPILOG_POWEROFF BOOT_MIGRATE BOOT_FAILURE
+        BOOT_MIGRATE_FAILURE PROLOG_MIGRATE_FAILURE PROLOG_FAILURE EPILOG_FAILURE EPILOG_STOP_FAILURE EPILOG_UNDEPLOY_FAILURE
+        PROLOG_MIGRATE_POWEROFF PROLOG_MIGRATE_POWEROFF_FAILURE PROLOG_MIGRATE_SUSPEND PROLOG_MIGRATE_SUSPEND_FAILURE
+        BOOT_UNDEPLOY_FAILURE BOOT_STOPPED_FAILURE PROLOG_RESUME_FAILURE PROLOG_UNDEPLOY_FAILURE DISK_SNAPSHOT_POWEROFF
+        DISK_SNAPSHOT_REVERT_POWEROFF DISK_SNAPSHOT_DELETE_POWEROFF DISK_SNAPSHOT_SUSPENDED DISK_SNAPSHOT_REVERT_SUSPENDED
+        DISK_SNAPSHOT_DELETE_SUSPENDED DISK_SNAPSHOT DISK_SNAPSHOT_REVERT DISK_SNAPSHOT_DELETE PROLOG_MIGRATE_UNKNOWN
+        PROLOG_MIGRATE_UNKNOWN_FAILURE DISK_RESIZE DISK_RESIZE_POWEROFF DISK_RESIZE_UNDEPLOYED)
+
+
+function boolTrue()
+{
+   case "${1^^}" in
+       1|Y|YES|TRUE|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
 
 function getFromConf()
 {
@@ -73,7 +124,7 @@ function getFromConf()
         response="$(grep "^$varName" "$cfgFile" | tail -n 1)"
     fi
     response="${response#*=}"
-    if [ -n "$DEBUG_COMMON" ]; then
+    if boolTrue "$DEBUG_COMMON"; then
         splog "getFromConf($cfgFile,$varName,$first): $response"
     fi
     echo "${response//\"/}"
@@ -85,7 +136,7 @@ function getFromConf()
 function trapReset()
 {
     TRAP_CMD="-"
-    if [ -n "$DEBUG_TRAPS" ]; then
+    if boolTrue "$DEBUG_TRAPS"; then
         splog "trapReset"
     fi
 
@@ -94,7 +145,7 @@ function trapReset()
 function trapAdd()
 {
     local _trap_cmd="$1"
-    if [ -n "$DEBUG_TRAPS" ]; then
+    if boolTrue "$DEBUG_TRAPS"; then
         splog "trapAdd:$*"
     fi
 
@@ -117,12 +168,12 @@ function trapAdd()
 function trapDel()
 {
     local _trap_cmd="$1"
-    if [ -n "$DEBUG_TRAPS" ]; then
+    if boolTrue "$DEBUG_TRAPS"; then
         splog "trapDel:$*"
     fi
     TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
     if [ -n "$TRAP_CMD" ]; then
-        if [ -n "$DEBUG_TRAPS" ]; then
+        if boolTrue "$DEBUG_TRAPS"; then
             splog "trapDel:$TRAP_CMD"
         fi
         trap "$TRAP_CMD" EXIT TERM INT HUP
@@ -144,48 +195,57 @@ REMOTE_FTR=$(cat <<EOF
 EOF
 )
 
-function getHostHostname()
+function oneHostInfo()
 {
-	local _name="$1"
-	local _self="$(dirname $0)"
-	local _XPATH="$(lookup_file "datastore/xpath.rb" "$_self")"
-	
-	unset XPATH_ELEMENTS i
-	while IFS= read -r -d '' element; do
-		XPATH_ELEMENTS[i++]="$element"
-	done < <(onehost show "$_name" -x | "$_XPATH" --stdin \
+    local _name="$1"
+    local _self="$(dirname $0)"
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "$_self")"
+
+    unset XPATH_ELEMENTS i
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(onehost show "$_name" -x | "$_XPATH" --stdin \
                             /HOST/ID \
                             /HOST/NAME \
                             /HOST/STATE \
+                            /HOST/TEMPLATE/SP_OURID \
                             /HOST/TEMPLATE/HOSTNAME 2>/dev/null)
-	unset i
-	HOST_ID="${XPATH_ELEMENTS[i++]}"
-	HOST_NAME="${XPATH_ELEMENTS[i++]}"
-	HOST_STATE="${XPATH_ELEMENTS[i++]}"
-	HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
-	if [ -n "$DEBUG_COMMON" ]; then
-		splog "getHostHostname($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:$HOST_HOSTNAME"
-	fi
-	if [ -n "$HOST_HOSTNAME" ]; then
-		if [ "$_name" != "$HOST_HOSTNAME" ] || [ -n "$DEBUG_COMMON" ]; then
-			splog "getHostHostname($_name): Found '$HOST_HOSTNAME'"
-		fi
-		echo $HOST_HOSTNAME
-	else
-		splog "getHostHostname($_name): Not Found."
-		echo $_name
-	fi
+    unset i
+    HOST_ID="${XPATH_ELEMENTS[i++]}"
+    HOST_NAME="${XPATH_ELEMENTS[i++]}"
+    HOST_STATE="${XPATH_ELEMENTS[i++]}"
+    HOST_SP_OURID="${XPATH_ELEMENTS[i++]}"
+    HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
+
+    boolTrue "$DEBUG_oneHostInfo" || return
+    splog "oneHostInfo($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:${HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
 }
 
 function storpoolClientId()
 {
     local hst="$1" COMMON_DOMAIN="${2:-$COMMON_DOMAIN}"
-    local result bridge
-    hst="$(getHostHostname "$hst")"
-    result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    local result= bridge=
+    oneHostInfo "$hst"
+    if [ -n "$HOST_HOSTNAME" ]; then
+        if [ "$hst" != "$HOST_HOSTNAME" ] || boolTrue "$DEBUG_COMMON"; then
+            splog "storpoolClientId($hst): Found '$HOST_HOSTNAME'"
+        fi
+        hst="$HOST_HOSTNAME"
+    fi
+    if [ -n "$HOST_SP_OURID" ]; then
+        if [ "${HOST_SP_OURID//[[:digit:]]/}" = "" ]; then
+            result="$HOST_SP_OURID"
+            splog "$hst CLIENT_ID=$result"
+        else
+            splog "HOST $hst has HOST_SP_OURID but not only digits:'$HOST_SP_OURID'"
+        fi
+    fi
     if [ "$result" = "" ]; then
-        if [ -n "$COMMON_DOMAIN" ]; then
-            result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        if [ "$result" = "" ]; then
+            if [ -n "$COMMON_DOMAIN" ]; then
+                result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            fi
         fi
     fi
     if [ "$result" = "" ]; then
@@ -210,18 +270,76 @@ function storpoolClientId()
             splog "$hst CLIENT_ID=$result"
         fi
     fi
-    if [ -n "$DEBUG_COMMON" ]; then
+    if boolTrue "$DEBUG_COMMON"; then
         splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}"
     fi
     echo $result
 }
 
-function storpoolRetry() {
-    if [ -n "$DEBUG_COMMON" ]; then
-        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST"
+function storpoolApi()
+{
+    if [ -z "$SP_API_HTTP_HOST" ]; then
+        if [ -x /usr/sbin/storpool_confget ]; then
+            eval `/usr/sbin/storpool_confget -S`
+        fi
+        if [ -z "$SP_API_HTTP_HOST" ]; then
+            splog "storpoolApi: ERROR! SP_API_HTTP_HOST is not set!"
+            return 1
+        fi
     fi
-    if [ -n "$DEBUG_SP_RUN_CMD" ]; then
-        if [ -n "$DEBUG_SP_RUN_CMD_VERBOSE" ]; then
+    if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available}"
+        splog ""
+    fi
+    curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
+    --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
+    --max-time "${3:-300}" ${2:+-d "$2"} \
+    "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>"/tmp/$$-${0##*/}.err" | tee "/tmp/$$-${0##*/}.out"
+    splog "storpoolApi $1 $2 ret:$?"
+}
+
+function storpoolWrapper()
+{
+	local json= res= ret=
+	case "$1" in
+		groupSnapshot)
+			shift
+			while [ -n "$2" ]; do
+				[ -z "$json" ] || json+=","
+				json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
+				shift 2
+			done
+			if [ -n "$json" ]; then
+				res="$(storpoolApi "VolumesGroupSnapshot" "{\"volumes\":[$json]}")"
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					splog "API communication error:$res ($ret)"
+					return $ret
+				else
+					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
+					if [ "$ok" = "true" ]; then
+						if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+							splog "API response:$res"
+						fi
+					else
+						splog "API Error:$res info:$ok"
+						return 1
+					fi
+				fi
+			else
+				splog "storpoolWrapper: Error: Empty volume list!"
+				return 1
+			fi
+			;;
+		*)
+			storpool "$@"
+			;;
+	esac
+}
+
+function storpoolRetry() {
+    if boolTrue "$DEBUG_SP_RUN_CMD"; then
+        if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
             splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
         else
             for _last_cmd;do :;done
@@ -232,10 +350,10 @@ function storpoolRetry() {
     fi
     t=${STORPOOL_RETRIES:-10}
     while true; do
-        if storpool "$@"; then
+        if storpoolWrapper "$@"; then
             break
         fi
-        if [ "$_SOFT_FAIL" = "YES" ]; then
+        if boolTrue "$_SOFT_FAIL" ]; then
             splog "storpool $* SOFT_FAIL"
             break
         fi
@@ -290,6 +408,9 @@ EOF
 function storpoolTemplate()
 {
     local _SP_TEMPLATE="$1"
+    if ! boolTrue "$AUTO_TEMPLATE"; then
+        return 0
+    fi
     if [ "$SP_PLACEALL" = "" ]; then
         splog "Datastore template $_SP_TEMPLATE missing 'SP_PLACEALL' attribute."
         exit -1
@@ -395,7 +516,9 @@ function storpoolVolumeAttach()
 
     trapAdd "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 
-    storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
+    if boolTrue "$SP_WAIT_LINK"; then
+        storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
+    fi
 
     trapDel "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 }
@@ -509,7 +632,7 @@ function oneSymlink()
         if [ -d "\$dst_dir" ]; then
             true
         else
-            splog "mkdir -p \$dst_dir"
+            splog "mkdir -p \$dst_dir (for:\$(basename "\$dst"))"
             trap "splog \"Can't create destination dir \$dst_dir (\$?)\"" EXIT TERM INT HUP
             splog "mkdir -p \$dst_dir"
             mkdir -p "\$dst_dir"
@@ -676,18 +799,6 @@ EOF
     fi
 }
 
-function lookup_file()
-{
-    local _FILE="$1" _CWD="${2:-$PWD}"
-    local _PATH=
-    for _PATH in "$_CWD/"{,../,../../,../../../,remotes/}; do
-        if [ -f "${_PATH}${_FILE}" ]; then
-            echo "${_PATH}${_FILE}"
-            break;
-        fi
-    done
-}
-
 function oneVmInfo()
 {
     local _VM_ID="$1" _DISK_ID="$2"
@@ -699,6 +810,7 @@ function oneVmInfo()
         done < <(onevm show -x "$_VM_ID" | "$_XPATH" --stdin \
                             /VM/DEPLOY_ID \
                             /VM/STATE \
+                            /VM/PREV_STATE \
                             /VM/LCM_STATE \
                             /VM/CONTEXT/DISK_ID \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SOURCE \
@@ -718,6 +830,7 @@ function oneVmInfo()
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
     VMSTATE="${XPATH_ELEMENTS[i++]}"
+    VMPREVSTATE="${XPATH_ELEMENTS[i++]}"
     LCM_STATE="${XPATH_ELEMENTS[i++]}"
     CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     SOURCE="${XPATH_ELEMENTS[i++]}"
@@ -734,10 +847,12 @@ function oneVmInfo()
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
 
-    [ "$DEBUG_oneVmInfo" = "1" ] || return
-    splog "\
-${VMSTATE:+VMSTATE=$VMSTATE }\
-${LCM_STATE:+LCM_STATE=$LCM_STATE }\
+    boolTrue "$DEBUG_oneVmInfo" || return
+
+    splog "[oneVmInfo]\
+${VMSTATE:+VMSTATE=${VmState[$VMSTATE]:-$VMSTATE} }\
+${LCM_STATE:+LCM_STATE=${LcmState[$LCM_STATE]:-$LCM_STATE} }\
+${VMPREVSTATE:+VMPREVSTATE=${VmState[$VMPREVSTATE]:-$VMPREVSTATE} }\
 ${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
@@ -746,10 +861,10 @@ ${SAVE:+SAVE=$SAVE }\
 ${TYPE:+TYPE=$TYPE }\
 ${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
-${IMAGE:+IMAGE=$IMAGE }\
+${IMAGE:+IMAGE='$IMAGE' }\
 "
-    msg="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
-    [ -n "$msg" ] && splog "$msg"
+    _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
+    [ -n "$_MSG" ] && splog "$_MSG"
 }
 
 function oneDatastoreInfo()
@@ -761,6 +876,7 @@ function oneDatastoreInfo()
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
         done < <(onedatastore show -x "$_DS_ID" | "$_XPATH" --stdin \
+                            /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
                             /DATASTORE/TM_MAD \
@@ -781,6 +897,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                             /DATASTORE/TEMPLATE/SP_CLONE_GW)
     unset i
+    DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_DISK_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_TM_MAD="${XPATH_ELEMENTS[i++]}"
@@ -805,14 +922,19 @@ function oneDatastoreInfo()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    [ "$DEBUG_oneDatastoreInfo" = "1" ] || return
-    _MSG="${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
+    boolTrue "$DEBUG_oneDatastoreInfo" || return
+
+    _MSG="[oneDatastoreInfo]${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
     _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+TM_MAD=$DS_TM_MAD }"
     _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
-    _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
-    _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
+    _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }"
     _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
     _MSG+="${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }"
+    _MSG+="${DS_NAME:+NAME='$DS_NAME' }"
+    if boolTrue "$AUTO_TEMPLATE"; then
+        _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
+        _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
+    fi
     splog "$_MSG"
 }
 
@@ -843,8 +965,8 @@ function oneTemplateInfo()
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-    if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
-        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE VM_LCM_STATE=$_VM_LCM_STATE VM_PREV_STATE=$_VM_PREV_STATE CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+    if boolTrue "$DEBUG_oneTemplateInfo"; then
+        splog "VM_ID=$_VM_ID VM_STATE=${VmState[$_VM_STATE]:-$_VM_STATE} VM_LCM_STATE=${LcmState[$_VM_LCM_STATE]:-$_VM_LCM_STATE} VM_PREV_STATE=${VmState[$_VM_PREV_STATE]:-$_VM_PREV_STATE} CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
@@ -888,10 +1010,10 @@ function oneTemplateInfo()
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
-    if [ "$DEBUG_oneTemplateInfo" = "1" ]; then
-        splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
-#        echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
-    fi
+    boolTrue "$DEBUG_oneTemplateInfo" || return
+
+    splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
+#    echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
 }
 
 
@@ -987,20 +1109,15 @@ function oneDsDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    [ "$DEBUG_oneDsDriverAction" = "1" ] || return
+    boolTrue "$DEBUG_oneDsDriverAction" || return
 
-    splog "\
+    _MSG="[oneDsDriverAction]\
 ${ID:+ID=$ID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
 ${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
 ${CLUSTERS_ID:+CLUSTERS_ID=$CLUSTERS_ID }\
 ${STATE:+STATE=$STATE }\
 ${SIZE:+SIZE=$SIZE }\
-${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
-${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
-${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
-${SP_IOPS+SP_IOPS=$SP_IOPS }\
-${SP_BW+SP_BW=$SP_BW }\
 ${SP_API_HTTP_HOST+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
 ${SP_API_HTTP_PORT+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
 ${SP_AUTH_TOKEN+SP_AUTH_TOKEN=DEFINED }\
@@ -1022,6 +1139,16 @@ ${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }\
 ${DRIVER:+DRIVER=$DRIVER }\
 ${BASE_PATH:+BASE_PATH=$BASE_PATH }\
 "
+    if boolTrue "$AUTO_TEMPLATE"; then
+        _MSG+="\
+${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
+${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
+${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
+${SP_IOPS+SP_IOPS=$SP_IOPS }\
+${SP_BW+SP_BW=$SP_BW }\
+"
+    fi
+    splog "$_MSG"
 }
 
 function oneMarketDriverAction()
@@ -1062,7 +1189,7 @@ function oneMarketDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    [ "$DEBUG_oneMarketDriverAction" = "1" ] || return
+    boolTrue "$DEBUG_oneMarketDriverAction" || return
 
     splog "\
 ${IMPORT_SOURCE:+IMPORT_SOURCE=$IMPORT_SOURCE }\
@@ -1077,4 +1204,81 @@ ${SP_API_HTTP_HOST:+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
 ${SP_API_HTTP_PORT:+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
 ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 "
+}
+
+oneVmVolumes()
+{
+    local VM_ID="$1"
+    if boolTrue "$DEBUG_oneVmVolumes"; then
+        splog "oneVmVolumes() VM_ID:$VM_ID"
+    fi
+    unset XPATH_ELEMENTS i
+    while read element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(onevm show -x "$VM_ID" |\
+        ${DRIVER_PATH}/../../datastore/xpath_multi.py -s \
+        /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
+        /VM/TEMPLATE/CONTEXT/DISK_ID \
+        /VM/TEMPLATE/DISK/DISK_ID \
+        /VM/TEMPLATE/DISK/CLONE \
+        /VM/TEMPLATE/DISK/FORMAT \
+        /VM/TEMPLATE/DISK/TYPE \
+        /VM/TEMPLATE/DISK/TARGET \
+        /VM/TEMPLATE/DISK/IMAGE_ID)
+    unset i
+    DS_ID="${XPATH_ELEMENTS[i++]}"
+    CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
+    DISK_ID="${XPATH_ELEMENTS[i++]}"
+    CLONE="${XPATH_ELEMENTS[i++]}"
+    FORMAT="${XPATH_ELEMENTS[i++]}"
+    TYPE="${XPATH_ELEMENTS[i++]}"
+    TARGET="${XPATH_ELEMENTS[i++]}"
+    IMAGE_ID="${XPATH_ELEMENTS[i++]}"
+    _OFS=$IFS
+    IFS=';'
+    DISK_ID_A=($DISK_ID)
+    CLONE_A=($CLONE)
+    FORMAT_A=($FORMAT)
+    TYPE_A=($TYPE)
+    TARGET_A=($TARGET)
+    IMAGE_ID_A=($IMAGE_ID)
+    IFS=$_OFS
+    for ID in ${!DISK_ID_A[@]}; do
+        IMAGE_ID="${IMAGE_ID_A[$ID]}"
+        CLONE="${CLONE_A[$ID]}"
+        FORMAT="${FORMAT_A[$ID]}"
+        TYPE="${TYPE_A[$ID]}"
+        TARGET="${TARGET_A[$ID]}"
+        DISK_ID="${DISK_ID_A[$ID]}"
+        IMG="one-img-$IMAGE_ID"
+        if [ -n "$IMAGE_ID" ]; then
+            if boolTrue "$CLONE"; then
+                IMG+="-$VM_ID-$DISK_ID"
+            fi
+        else
+            case "$TYPE" in
+                swap)
+                    IMG="one-sys-${VM_ID}-${DISK_ID}-swap"
+                    ;;
+                *)
+                    IMG="one-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
+            esac
+        fi
+        vmVolumes+="$IMG "
+        if boolTrue "$DEBUG_oneVmVolumes"; then
+            splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        fi
+        vmDisks=$((vmDisks+1))
+    done
+    DISK_ID="$CONTEXT_DISK_ID"
+    if [ -n "$DISK_ID" ]; then
+        IMG="one-sys-${VM_ID}-${DISK_ID}-iso"
+        vmVolumes+="$IMG "
+        if boolTrue "$DEBUG_oneVmVolumes"; then
+            splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        fi
+    fi
+    if boolTrue "$DEBUG_oneVmVolumes"; then
+        splog "oneVmVolumes() VM_ID:$VM_ID DS_ID=$DS_ID"
+    fi
 }

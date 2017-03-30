@@ -1,0 +1,77 @@
+MKFS="sudo /sbin/mkfs"
+MKSWAP="sudo /sbin/mkswap"
+
+
+# By default the addon uses datastore attributes to reate datastore's
+# tempalte.
+#
+# Uncomment to disable autogeneration and manage StorPool templates manually
+#
+#AUTO_TEMPLATE=0
+
+#
+# Backward compatibility. Uncomment to disable it for StorPool 16.01+
+#
+#SP_WAIT_LINK=0
+
+#(Experimental)
+#
+# save VM checkpoint file to a StorPool volume
+#SP_CHECKPOINT=yes
+#
+# Do not store the VM checkpoint on migrate
+#SP_CHECKPOINT=nomigrate
+
+# (Experimental)
+# Code that overrides the VM snapshot interface creating atomic or in
+# single fsfreeze call snapshots of all VM disks.
+#
+# uncoment and add to VM_MAD attributes:
+# `-l snapshotcreate=snapshot_create-storpool,snapshotdelete=snapshot_delete-storpool,snapshotrevert=snapshot_revert-storpool`
+#
+# Do fsfreeze/fsthaw during VM snapshot
+#
+VMSNAPSHOT_FSFREEZE=0
+
+# Do fsfreeze/fsthaw during VM snapshot
+# only when there are more than 1 VM disks
+#
+VMSNAPSHOT_FSFREEZE_MULTIDISKS=1
+
+# Do atomic VM (disk) snapshots
+# Rquire StorPool revision 16.01.877+
+# Set to 1 to enable
+VMSNAPSHOT_ATOMIC=0
+
+# Delete VM snapshots on VM terminate
+# Snampshots should be manually deleted when disabled
+#
+VMSNAPSHOT_DELETE_ON_TERMINATE=1
+
+#
+# variables enabling various Debuging
+#
+#POLL_DISK_INFO_DEBUG=1
+#DEBUG_COMMON=1
+#DEBUG_SP_RUN_CMD=1
+#DEBUG_SP_RUN_CMD_VERBOSE=1
+#MONITOR_SYNC_DEBUG=1
+#DEBUG_DATASTORE_MONITOR=1
+#DEBUG_DATASTORE_MONITOR_VERBOSE=1
+#DEBUG_TM_MONITOR=1
+#DEBUG_TM_MONITOR_DS=1
+#DEBUG_TM_MONITOR_DS_VERBOSE=1
+#DEBUG_TM_MONITOR_DISK=1
+#DEBUG_TM_MONITOR_DISK_VERBOSE=1
+#DEBUG_TM_MONITOR_DISK_MISC=1
+#DEBUG_TM_MONITOR_DISK_MISC_VERBOSE=1
+#IM_MONITOR_DS_DEBUG=1
+#IM_MONITOR_DS_DEBUG_VERBOSE=1
+#
+#DEBUG_oneDsDriverAction=1
+#DEBUG_oneDsInfo=1
+#DEBUG_oneVmInfo=1
+#DEBUG_oneTemplateInfo=1
+#DEBUG_oneHostInfo=1
+#DEBUG_oneDatastoreInfo=1
+#DEBUG_oneVmVolumes=1

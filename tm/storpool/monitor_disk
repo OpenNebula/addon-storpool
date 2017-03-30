@@ -42,7 +42,18 @@ if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
 
-if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
+function boolTrue()
+{
+   case "${1^^}" in
+       1|Y|YES|TRUE|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
+if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
 	splog "$PWD $DISK $DS_ID $VM_ID $DRIVER"
 fi
 
@@ -51,14 +62,14 @@ DISK_DEV="$(readlink -f "$DISK")"
 #splog "$DISK $DISK_LINK $DISK_DEV"
 
 if [ -z "$DISK_LINK" ] || [ -n "${DISK_LINK%/dev/storpool*}" ]; then
-	if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
-		splog "$DISK is NOT on storpool! $DISK_LINK"
+	if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
+		splog "$DISK NOT on storpool! $DISK_LINK"
 	fi
 	"${0}-misc" "$DISK" "$DS_ID" "$VM_ID"
 	exit $?
 else
-	if [ -n "$DEBUG_TM_MONITOR_DISK_VERBOSE" ]; then
-		splog "$DISK is on storpool! $DISK_LINK"
+	if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
+		splog "$DISK StorPool volume $DISK_LINK"
 	fi
 fi
 
@@ -79,20 +90,20 @@ SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
 DISK_ID="${DISK##*\.}"
 spVolume=${DISK_LINK#/dev/storpool/}
 
-if [ -n "$SP_SPACE_USED_LVMWAY" ]; then
+if boolTrue "$SP_SPACE_USED_LVMWAY"; then
 	used="storedSize"
 else
 	used="spaceUsed"
 fi
-spSize=$(eval $SP_CMD_VOLUME_SPACE | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
+spSize=$(eval $SP_CMD_VOLUME_SPACE 2>/dev/null | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 
 disk_size="${spSize:-0}"
 disk_size=$((disk_size/1024/1024))
 if [ "$disk_size" = "0" ] && [ -n "$spSize" ] && [ "$spSize" -gt "0" ]; then
 	disk_size=1
 fi
-if [ -n "$DEBUG_TM_MONITOR_DISK" ]; then
-	splog "$DISK ID:$DISK_ID SIZE:$disk_size"
+if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
+	splog "$DISK ID:$DISK_ID SIZE:$disk_size ($used)"
 fi
 echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
 
@@ -100,8 +111,8 @@ while IFS=',' read name snap_size; do
 	name=${name//\"/}
 	snap_id=${name#*snap}
 	snap_size=$((snap_size/1024/1024))
-	if [ -n "$DEBUG_TM_MONITOR_DISK" ]; then
-		splog "$DISK $DISK_ID $snap_id SIZE:$snap_size"
+	if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
+		splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($used)"
 	fi
 	echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
 done < <(eval $SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
