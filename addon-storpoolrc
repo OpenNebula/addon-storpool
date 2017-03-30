@@ -1,9 +1,18 @@
 MKFS="sudo /sbin/mkfs"
 MKSWAP="sudo /sbin/mkswap"
 
-#FORCED_DETACH_ALL="force yes"
-#FORCED_DETACH_HERE="force yes"
-#FORCED_DELVOL_DETACH="force yes"
+
+# By default the addon uses datastore attributes to reate datastore's
+# tempalte.
+#
+# Uncomment to disable autogeneration and manage StorPool templates manually
+#
+#AUTO_TEMPLATE=0
+
+#
+# Backward compatibility. Uncomment to disable it for StorPool 16.01+
+#
+#SP_WAIT_LINK=0
 
 #(Experimental)
 #
@@ -13,10 +22,31 @@ MKSWAP="sudo /sbin/mkswap"
 # Do not store the VM checkpoint on migrate
 #SP_CHECKPOINT=nomigrate
 
-# Delete VM snapshots when VM is terminated
+# (Experimental)
+# Code that overrides the VM snapshot interface creating atomic or in
+# single fsfreeze call snapshots of all VM disks.
 #
-#default enabled
-VMSNAPSHOTS_DELETE_ON_TERMINATE=1
+# uncoment and add to VM_MAD attributes:
+# `-l snapshotcreate=snapshot_create-storpool,snapshotdelete=snapshot_delete-storpool,snapshotrevert=snapshot_revert-storpool`
+#
+# Do fsfreeze/fsthaw during VM snapshot
+#
+VMSNAPSHOT_FSFREEZE=0
+
+# Do fsfreeze/fsthaw during VM snapshot
+# only when there are more than 1 VM disks
+#
+VMSNAPSHOT_FSFREEZE_MULTIDISKS=1
+
+# Do atomic VM (disk) snapshots
+# Rquire StorPool revision 16.01.877+
+# Set to 1 to enable
+VMSNAPSHOT_ATOMIC=0
+
+# Delete VM snapshots on VM terminate
+# Snampshots should be manually deleted when disabled
+#
+VMSNAPSHOT_DELETE_ON_TERMINATE=1
 
 #
 # variables enabling various Debuging
@@ -44,25 +74,4 @@ VMSNAPSHOTS_DELETE_ON_TERMINATE=1
 #DEBUG_oneTemplateInfo=1
 #DEBUG_oneHostInfo=1
 #DEBUG_oneDatastoreInfo=1
-
-
-# By default the addon uses datastore attributes to reate datastore's
-# tempalte.
-#
-# Unkomment to disable autogeneration and manage the templates manually
-#
-#AUTO_TEMPLATE=0
-
-#
-# Backward compatibility. Uncomment to disable it for StorPool 16.01+
-#
-#SP_WAIT_LINK=0
-
-# (Experimental)
-# Code that overrides the VM snapshot interface creating atomic or in
-# single fsfreeze call snapshots of all VM disks.
-#
-# uncoment and add to VM_MAD attributes:
-# `-l snapshotcreate=snapshot_create-storpool,snapshotdelete=snapshot_delete-storpool,snapshotrevert=snapshot_revert-storpool`
-#
-#VM_SNAPSHOT_OVERRIDE=1
+#DEBUG_oneVmVolumes=1

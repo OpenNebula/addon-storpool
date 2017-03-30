@@ -38,9 +38,11 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 LOG_PREFIX="vmm"
 
-splog "$0 $*"
+if boolTrue "$DEBUG_VMSNAPSHOT"; then
+    splog "$0 $*"
+fi
 
-if boolTrue "$VM_SNAPSHOT_OVERRIDE"; then
+if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
 	while read snap; do
 		storpool snapshot "$snap" delete "$snap"
 		ret=$?

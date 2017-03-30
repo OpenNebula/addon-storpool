@@ -32,8 +32,8 @@ VM_ID="$3"
 VMHOST="$4"
 
 DRIVER_PATH="$(dirname $0)"
-SNAP_TAG="ONESNAP"
-VM_SNAPSHOT_OVERRIDE=1
+VMSNAPSHOT_TAG="ONESNAP"
+VMSNAPSHOT_OVERRIDE=1
 DS_PATH="/var/lib/one/datastores"
 
 source "${DRIVER_PATH}/kvmrc"
@@ -42,10 +42,11 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 LOG_PREFIX="vmm"
 
-splog "$0 $*"
+if boolTrue "$DEBUG_VMSNAPSHOT"; then
+    splog "$0 $*"
+fi
 
-
-if boolTrue "$VM_SNAPSHOT_OVERRIDE"; then
+if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
 
         rCMD=$(cat <<EOF
@@ -94,7 +95,9 @@ EOF
     if [ -n "$pids" ]; then
          kill $pids
          ret=$?
-         splog "kill $pids ($?)"
+         if boolTrue "$DEBUG_VMSNAPSHOT"; then
+             splog "kill $pids ($?)"
+         fi
          if [ $ret -eq 0 ]; then
              splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN created"
          fi

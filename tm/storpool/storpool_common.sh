@@ -58,7 +58,9 @@ DEBUG_oneDsDriverAction=
 
 AUTO_TEMPLATE=1
 SP_WAIT_LINK=1
-VMSNAPSHOTS_DELETE_ON_TERMINATE=1
+VMSNAPSHOT_TAG="ONESNAP"
+VMSNAPSHOT_OVERRIDE=1
+VMSNAPSHOT_DELETE_ON_TERMINATE=1
 
 function lookup_file()
 {
@@ -274,10 +276,68 @@ function storpoolClientId()
     echo $result
 }
 
+function storpoolApi()
+{
+    if [ -z "$SP_API_HTTP_HOST" ]; then
+        if [ -x /usr/sbin/storpool_confget ]; then
+            eval `/usr/sbin/storpool_confget -S`
+        fi
+        if [ -z "$SP_API_HTTP_HOST" ]; then
+            splog "storpoolApi: ERROR! SP_API_HTTP_HOST is not set!"
+            return 1
+        fi
+    fi
+    if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available}"
+        splog ""
+    fi
+    curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
+    --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
+    --max-time "${3:-300}" ${2:+-d "$2"} \
+    "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>"/tmp/$$-${0##*/}.err" | tee "/tmp/$$-${0##*/}.out"
+    splog "storpoolApi $1 $2 ret:$?"
+}
+
+function storpoolWrapper()
+{
+	local json= res= ret=
+	case "$1" in
+		groupSnapshot)
+			shift
+			while [ -n "$2" ]; do
+				[ -z "$json" ] || json+=","
+				json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
+				shift 2
+			done
+			if [ -n "$json" ]; then
+				res="$(storpoolApi "VolumesGroupSnapshot" "{\"volumes\":[$json]}")"
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					splog "API communication error:$res ($ret)"
+					return $ret
+				else
+					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
+					if [ "$ok" = "true" ]; then
+						if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+							splog "API response:$res"
+						fi
+					else
+						splog "API Error:$res info:$ok"
+						return 1
+					fi
+				fi
+			else
+				splog "storpoolWrapper: Error: Empty volume list!"
+				return 1
+			fi
+			;;
+		*)
+			storpool "$@"
+			;;
+	esac
+}
+
 function storpoolRetry() {
-#    if boolTrue "$DEBUG_COMMON"; then
-#        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST"
-#    fi
     if boolTrue "$DEBUG_SP_RUN_CMD"; then
         if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
             splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
@@ -290,7 +350,7 @@ function storpoolRetry() {
     fi
     t=${STORPOOL_RETRIES:-10}
     while true; do
-        if storpool "$@"; then
+        if storpoolWrapper "$@"; then
             break
         fi
         if boolTrue "$_SOFT_FAIL" ]; then
@@ -1149,7 +1209,9 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 oneVmVolumes()
 {
     local VM_ID="$1"
-    splog "oneVmVolumes() VM_ID:$VM_ID"
+    if boolTrue "$DEBUG_oneVmVolumes"; then
+        splog "oneVmVolumes() VM_ID:$VM_ID"
+    fi
     unset XPATH_ELEMENTS i
     while read element; do
         XPATH_ELEMENTS[i++]="$element"
@@ -1203,14 +1265,20 @@ oneVmVolumes()
             esac
         fi
         vmVolumes+="$IMG "
-        splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        if boolTrue "$DEBUG_oneVmVolumes"; then
+            splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        fi
         vmDisks=$((vmDisks+1))
     done
     DISK_ID="$CONTEXT_DISK_ID"
     if [ -n "$DISK_ID" ]; then
         IMG="one-sys-${VM_ID}-${DISK_ID}-iso"
         vmVolumes+="$IMG "
-        splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        if boolTrue "$DEBUG_oneVmVolumes"; then
+            splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
+        fi
     fi
-    splog "oneVmVolumes() VM_ID:$VM_ID DS_ID=$DS_ID"
+    if boolTrue "$DEBUG_oneVmVolumes"; then
+        splog "oneVmVolumes() VM_ID:$VM_ID DS_ID=$DS_ID"
+    fi
 }

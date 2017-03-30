@@ -32,8 +32,9 @@ VM_ID="$3"
 VMHOST="$4"
 
 DRIVER_PATH="$(dirname $0)"
-SNAP_TAG="ONESNAP"
-VM_SNAPSHOT_OVERRIDE=1
+VMSNAPSHOT_TAG="ONESNAP"
+VMSNAPSHOT_OVERRIDE=1
+VMSNAPSHOT_ATOMIC=0
 
 source "${DRIVER_PATH}/kvmrc"
 source "${DRIVER_PATH}/../../scripts_common.sh"
@@ -43,11 +44,11 @@ LOG_PREFIX="vmm"
 
 splog "$0 $*"
 
-if boolTrue "$VM_SNAPSHOT_OVERRIDE"; then
+if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
     splog "vmDisks:$vmDisks vmVolumes:'$vmVolumes'"
     ts=$(date +%s)
-    res="${SNAP_TAG}-${SNAP_ID}-${ts}"
+    res="${VMSNAPSHOT_TAG}-${SNAP_ID}-${ts}"
 
     if boolTrue "$BACKUP_FSFREEZE_MULTIDISKS"; then
         if [ ${vmDisks:-1} -gt 1 ]; then
@@ -81,10 +82,17 @@ EOF
     fi
     for volume in $vmVolumes; do
         snap="${volume}-${res}"
-        storpool -j volume "$volume" snapshot "$snap" ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} 2>&1 >"/tmp/${vid}-${snap}.log"
-        ret=$?
-        splog "storpool volume $volume snapshot $snap ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} ($ret)"
+        if boolTrue "$VMSNAPSHOT_ATOMIC"; then
+            list+=($volume $snap)
+        else
+            storpoolRetry -j volume "$volume" snapshot "$snap" ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} 2>&1 >"/tmp/${vid}-${snap}.log"
+            ret=$?
+            splog "storpool volume $volume snapshot $snap ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} ($ret)"
+        fi
     done
+    if boolTrue "$VMSNAPSHOT_ATOMIC"; then
+        storpoolRetry groupSnapshot ${list[@]}
+    fi
     if boolTrue "$BACKUP_FSFREEZE" || boolTrue "$VM_BACKUP_FSFREEZE"; then
         pids=$(jobs -p)
         if [ -n "$pids" ]; then
