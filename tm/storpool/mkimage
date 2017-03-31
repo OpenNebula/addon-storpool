@@ -43,6 +43,12 @@ source "${TM_PATH}/../../datastore/libfs.sh"
 
 splog "SIZE=$SIZE FSTYPE=$FSTYPE DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
+if [ "${FSTYPE,,}" != "raw" ] && [ "${FSTYPE,,}" != "swap" ]; then
+    log_error "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
+    splog "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
+    exit 1
+fi
+
 #-------------------------------------------------------------------------------
 # Get template information from datastore TEMPLATE definition
 #-------------------------------------------------------------------------------
@@ -72,6 +78,14 @@ DST_HOST=`arg_host $DST`
 DST_DIR=`dirname $DST_PATH`
 
 DISK_ID=$(echo $DST | awk -F. '{print $NF}')
+
+oneVmInfo "$VM_ID" "$DISK_ID"
+
+if [ -n "$DRIVER" ] && [ "${DRIVER,,}" != "raw" ]; then
+    log_error "Unsupported DRIVER format '$DRIVER'! Please use 'raw'."
+    splog "Unsupported DRIVER format '$DRIVER'! Please use 'raw'."
+    exit 1
+fi
 
 #-------------------------------------------------------------------------------
 # Create image
