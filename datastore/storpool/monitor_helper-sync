@@ -194,12 +194,12 @@ function run_task()
 
 XPATH="${driverPath}/../xpath_multi.py"
 
-onedatastore list -x >"${SP_JSON_PATH}/${ONEDATASTORE_XML}"
+onedatastore list -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
 
 unset i XPATH_ELEMENTS
 while IFS= read element; do
 	XPATH_ELEMENTS[i++]="$element"
-done < <(cat "${SP_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
+done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
         /DATASTORE_POOL/DATASTORE/ID \
         /DATASTORE_POOL/DATASTORE/CLUSTER_ID \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/TM_MAD \
@@ -273,11 +273,11 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		unset j
 		while IFS= read element; do
 			CLUSTER_IDS[j++]="$element"
-		done < <(cat "${SP_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
+		done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
 			        %m%/DATASTORE_POOL/DATASTORE[ID=$DS_ID]/CLUSTERS/ID)
 	fi
 #	if [ -n "$MONITOR_SYNC_DEBUG" ]; then
-#		splog ">>>DS_ID=$DS_ID ${SP_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_IDS:${CLUSTER_IDS[@]}"
+#		splog ">>>DS_ID=$DS_ID ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_IDS:${CLUSTER_IDS[@]}"
 #	fi
 	
 	# create/update the template in StorPool
