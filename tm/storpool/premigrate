@@ -119,7 +119,6 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
         if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ] || [ "${DISK_SOURCE_ARRAY[i]}" = "" ]; then
             FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
             DISK_ID="${DISK_ID_ARRAY[i]}"
-            splog "i=$i DISK_ID=$DISK_ID (${DISK_ID_ARRAY[@]})"
             if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                 FORMAT="swap"
             fi

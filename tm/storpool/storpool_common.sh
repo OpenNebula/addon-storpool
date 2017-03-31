@@ -288,7 +288,6 @@ function storpoolApi()
     fi
     if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available}"
-        splog ""
     fi
     curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
     --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
