@@ -96,7 +96,7 @@ EOF
     if boolTrue "$BACKUP_FSFREEZE" || boolTrue "$VM_BACKUP_FSFREEZE"; then
         pids=$(jobs -p)
         if [ -n "$pids" ]; then
-            kill $pids
+            kill $pids 2>/dev/null >/dev/null
             ret=$?
             splog "kill $pids ($?)"
             if [ $ret -eq 0 ]; then
