@@ -44,9 +44,8 @@ fi
 
 if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
 	while read snap; do
-		storpool snapshot "$snap" delete "$snap"
-		ret=$?
-		splog "storpool snapshot $snap delete $snap ($ret)"
-	done < <(storpool -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+		storpoolRetry snapshot "$snap" delete "$snap"
+	done < <(storpoolRetry -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+    splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID"
 	exit 0
 fi

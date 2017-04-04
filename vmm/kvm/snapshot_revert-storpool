@@ -89,7 +89,7 @@ EOF
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)
         splog "END snapshot $snap ($te dt:$((te-tb)))"
-    done < <(storpool -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+    done < <(storpoolRetry -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
     finish=1
     pids=$(jobs -p)
     if [ -n "$pids" ]; then
@@ -109,6 +109,7 @@ EOF
             storpoolVolumeDelete "$volume" "force" "snaps"
         done
     fi
+    splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID"
     exit 0
 else
     splog "[CONTINUE]"

@@ -105,7 +105,7 @@ EOF
         fi
     fi
     echo "$res"
-    splog "DOMAIN=$DOMAIN SNAP_ID=$SNAP_ID VM_ID=$VM_ID VMHOST=$VMHOST (res:$res)"
+    splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID suffix:$res"
     exit 0
 else
     splog "[CONTINUE]"
