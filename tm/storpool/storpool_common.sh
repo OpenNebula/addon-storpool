@@ -876,9 +876,9 @@ function oneVmInfo()
     boolTrue "$DEBUG_oneVmInfo" || return
 
     splog "[oneVmInfo]\
-${VMSTATE:+VMSTATE=${VmState[$VMSTATE]:-$VMSTATE} }\
-${LCM_STATE:+LCM_STATE=${LcmState[$LCM_STATE]:-$LCM_STATE} }\
-${VMPREVSTATE:+VMPREVSTATE=${VmState[$VMPREVSTATE]:-$VMPREVSTATE} }\
+${VMSTATE:+VMSTATE=$VM_STATE(${VmState[$VMSTATE]}) }\
+${LCM_STATE:+LCM_STATE=$LCM_STATE(${LcmState[$LCM_STATE]}) }\
+${VMPREVSTATE:+VMPREVSTATE=$VMPREVSTATE(${VmState[$VMPREVSTATE]}) }\
 ${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
@@ -994,7 +994,7 @@ function oneTemplateInfo()
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
     if boolTrue "$DEBUG_oneTemplateInfo"; then
-        splog "VM_ID=$_VM_ID VM_STATE=${VmState[$_VM_STATE]:-$_VM_STATE} VM_LCM_STATE=${LcmState[$_VM_LCM_STATE]:-$_VM_LCM_STATE} VM_PREV_STATE=${VmState[$_VM_PREV_STATE]:-$_VM_PREV_STATE} CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
