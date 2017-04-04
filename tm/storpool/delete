@@ -67,7 +67,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
             SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             storpoolVolumeDelete "$SP_VOL" "force" "snaps"
-            if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+            if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
             fi
             RM_CMD="rm -rf '${DST_PATH}/disk.${DISK_ID_ARRAY[i]}'"
@@ -93,7 +93,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
 #        splog "[SYSTEM_DS] delete context iso"
         SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "$SP_VOL" "force" "snaps"
-        if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+        if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
             storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
         fi
     fi
@@ -126,7 +126,7 @@ else
     storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 fi
 
-if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
     storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
 fi
 
