@@ -58,7 +58,7 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1 >/dev/null
     logger -t vmm_sp_snapshot_revert_r "destroy $DOMAIN ret:\$? \$(date +%s.%N)"
     while [ -d /proc/\$PPID ]; do
-        logger -t vmm_sp_snapshot_revert_r "\$(virsh --connect \$LIBVIRT_URI dominfo "'$DOMAIN'") $(date +%s.%N)"
+        logger -t vmm_sp_snapshot_revert_r "\$(virsh --connect \$LIBVIRT_URI dominfo "'$DOMAIN'") \$(date +%s.%N)"
         sleep .1
     done
     virsh --connect \$LIBVIRT_URI create "\$deployment" 2>&1 >/dev/null
@@ -69,13 +69,14 @@ EOF
 )
         trapAdd "trap - SIGTERM && kill -- -$$"
         ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null &
-        splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed"
+        splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed $(date +%s%N)"
         sleep .5
     fi
     SP_TMP="$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes
     while read snap; do
-        splog "BEGIN snapshot $snap"
+        tb=$(date +%s%N)
+        splog "BEGIN snapshot $snap ($tb)"
         volume="${snap%-$SNAP_ID}"
         [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="ro"
         storpoolVolumeDetach "$volume" "force" "$VMHOST" "all"
@@ -86,11 +87,10 @@ EOF
         storpoolRetry volume "$volume" parent "$snap" >/dev/null
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
         tmpVolumes+=("$tmpVolume")
-        splog "END snapshot $snap"
+        te=$(date +%s%N)
+        splog "END snapshot $snap ($te dt:$((te-tb)))"
     done < <(storpool -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
-    for volume in ${tmpVolumes[@]}; do
-        storpoolVolumeDelete "$volume" "force" "snaps"
-    done
+    finish=1
     pids=$(jobs -p)
     if [ -n "$pids" ]; then
          kill $pids
@@ -99,8 +99,15 @@ EOF
              splog "kill $pids ($?)"
          fi
          if [ $ret -eq 0 ]; then
-             splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN created"
+             splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN created $(date +%s%N)"
+         else
+             finish=0
          fi
+    fi
+    if boolTrue "$finish"; then
+        for volume in ${tmpVolumes[@]}; do
+            storpoolVolumeDelete "$volume" "force" "snaps"
+        done
     fi
     exit 0
 else
