@@ -58,5 +58,9 @@ SP_VOL="one-img-$ID"
 
 storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 
+if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+fi
+
 splog "END $SP_VOL DELETED"
 exit 0
