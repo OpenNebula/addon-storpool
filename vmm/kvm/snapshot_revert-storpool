@@ -72,7 +72,7 @@ EOF
         splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed $(date +%s%N)"
         sleep .5
     fi
-    SP_TMP="$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
+    SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes
     while read snap; do
         tb=$(date +%s%N)
