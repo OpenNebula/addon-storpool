@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2017, StorPool (storpool.com)                               #
+#                                                                            #
+# Portions Copyright 2002-2016, OpenNebula Project, OpenNebula Systems       #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+DRIVER_PATH=$(dirname $0)
+
+source $DRIVER_PATH/kvmrc
+source $DRIVER_PATH/../../scripts_common.sh
+
+#one-88 /var/lib/one//datastores/101/88/checkpoint s06 88 s06
+DEPLOY_ID=$1
+FILE=$2
+HVHOST=$3
+VM_ID=$4
+DS_ID=$5
+
+source "$DRIVER_PATH/../../tm/storpool/storpool_common.sh"
+LOG_PREFIX=vmm
+
+splog "$*"
+
+if boolTrue "$SP_CHECKPOINT_BD"; then
+
+    DRV_MESSAGE="$(cat)"
+
+    SP_VOL="one-checkpoint-${VM_ID}"
+
+    if storpoolVolumeExists "$SP_VOL"; then
+        storpoolVolumeDelete "$SP_VOL" "force"
+    fi
+    DS_ID=( ${FILE//\// } )
+    DS_ID="${DS_ID[-3]}"
+    XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
+    VM_MEMORY=$(echo "$DRV_MESSAGE" | $XPATH /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
+    storpoolVolumeCreate "$SP_VOL" "$((VM_MEMORY*2))M" "one-ds-${DS_ID}"
+    trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
+
+    storpoolVolumeAttach "$SP_VOL" "${HVHOST}"
+    trapReset
+
+    ln -sf "/dev/storpool/$SP_VOL" "$FILE"
+
+fi

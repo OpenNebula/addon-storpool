@@ -1365,3 +1365,9 @@ oneVmVolumes()
         splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID"
     fi
 }
+
+# disable sp checkpoint transfer from file to block device
+# when the new code is enabled
+if boolTrue "$SP_CHECKPOINT_BD"; then
+    SP_CHECKPOINT=
+fi
