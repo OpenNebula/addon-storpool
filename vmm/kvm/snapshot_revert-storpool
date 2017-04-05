@@ -34,6 +34,7 @@ VMHOST="$4"
 DRIVER_PATH="$(dirname $0)"
 VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
+VMSNAPSHOT_REVERT_TIMEOUT=180
 DS_PATH="/var/lib/one/datastores"
 
 source "${DRIVER_PATH}/kvmrc"
@@ -57,9 +58,15 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
           logger -t vmm_sp_snapshot_revert_r "create '\$deployment' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
     virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1 >/dev/null
     logger -t vmm_sp_snapshot_revert_r "destroy $DOMAIN ret:\$? \$(date +%s.%N)"
+    ts=\$(date +%s)
     while [ -d /proc/\$PPID ]; do
         logger -t vmm_sp_snapshot_revert_r "\$(virsh --connect \$LIBVIRT_URI dominfo "'$DOMAIN'") \$(date +%s.%N)"
         sleep .1
+        tt=\$(date +%s)
+        if [ \$((tt - tb)) -gt ${VMSNAPSHOT_REVERT_TIMEOUT} ]; then
+            logger -t vmm_sp_snapshot_revert_r "VMSNAPSHOT_REVERT_TIMEOUT=${VMSNAPSHOT_REVERT_TIMEOUT} seconds reached!"
+            break
+        fi
     done
     virsh --connect \$LIBVIRT_URI create "\$deployment" 2>&1 >/dev/null
     logger -t vmm_sp_snapshot_revert_r "create "\$deployment" ret:\$? \$(date +%s.%N)"
