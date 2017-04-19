@@ -194,6 +194,8 @@ function run_task()
 
 XPATH="${driverPath}/../xpath_multi.py"
 
+[ -d "$SP_FE_JSON_PATH" ] || mkdir -p "$SP_FE_JSON_PATH"
+
 onedatastore list -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
 
 unset i XPATH_ELEMENTS
