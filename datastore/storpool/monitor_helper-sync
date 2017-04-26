@@ -440,7 +440,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p \"${_destDir}\" && cat >\"${_destDir}/${_jFile}\"" 2>/dev/null >/dev/null
 				ret=$?
 				if [ $ret -ne 0 ]; then
-					splog "${_rHost} ${_destDir}/${_jFile} returned ${ret}"
+					splog "${_rHost}:${_destDir}/${_jFile} returned ${ret}"
 				else
 					if boolTrue "$MONITOR_SYNC_DEBUG"; then
 						splog "${_rHost} ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
@@ -449,7 +449,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 			fi
 		done
 	else
-		splog "${_rHost} Directory not found! ${SP_MONITOR_CACHE_CLUSTER}"
+		splog "${_rHost} not in StorPopol cluster? ${SP_MONITOR_CACHE_CLUSTER}"
 	fi
 done
 
