@@ -56,11 +56,6 @@ if [ "${DRIVER,,}" != "raw" ]; then
     exit 1
 fi
 
-if [ "${FSTYPE,,}" != "raw" ]; then
-    log_error "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
-    splog "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
-    exit 1
-fi
 
 #-------------------------------------------------------------------------------
 # Get datastore host, validate variables and set up datastore
@@ -90,10 +85,18 @@ echo "$SP_DST"
 # Image FSTYPE:save_as. If it is HOT snapshot then tm/cpds will take care of it later
 #-------------------------------------------------------------------------------
 
-if [ "$FSTYPE" = "save_as" ]; then
-    splog "END ($FSTYPE) return:$SP_DST"
-    exit 0
-fi
+case "${FSTYPE,,}" in
+    raw)
+        ;;
+    save_as)
+        splog "END ($FSTYPE) return:$SP_DST"
+        exit 0
+        ;;
+    *)
+        log_error "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
+        splog "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
+        exit 1
+esac
 
 #-------------------------------------------------------------------------------
 # Create the image in the datastore
