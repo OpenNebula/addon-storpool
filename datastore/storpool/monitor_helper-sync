@@ -411,6 +411,12 @@ IFS=$_OLDIFS
 
 _lHost="$(hostname -s)"
 for i in ${!HOST_ID_ARRAY[@]}; do
+	if [ "${HOST_ID_ARRAY[i]}" = "" ]; then
+		if boolTrue "$MONITOR_SYNC_DEBUG_VERBOSE"; then
+			splog "Skip empty host ID $i:${HOST_ID_ARRAY[i]}"
+		fi
+		continue
+	fi
 	_rHost="${HOST_NAME_ARRAY[i]}"
 	_cluster_id="${HOST_CLUSTER_ID_ARRAY[i]}"
 	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-$SP_JSON_PATH}"
