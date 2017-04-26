@@ -455,7 +455,9 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 			fi
 		done
 	else
-		splog "${_rHost} not in StorPopol cluster? ${SP_MONITOR_CACHE_CLUSTER}"
+		if boolTrue "$MONITOR_SYNC_DEBUG"; then
+			splog "${_rHost} not on StorPopol cluster? ${SP_MONITOR_CACHE_CLUSTER}"
+		fi
 	fi
 done
 
