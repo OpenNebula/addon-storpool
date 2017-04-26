@@ -6,34 +6,36 @@ SLP=1
 vmname=SPTEST.fadCarlarr
 
 function waitforimg() {
-	do_waitfor oneimage $1 $2
+	do_waitfor $vmname oneimage $1 $2
 }
 
 function waitforvm() {
-	do_waitfor onevm $1 $2
+	do_waitfor $vmname onevm $1 $2
+}
+
+function waitfortmplimg() {
+	do_waitfor $tname oneimage $1 $2
 }
 
 function do_waitfor() {
-	local state
-	local timeout
-	local cmd
-	cmd="$1"
-	state="$2"
-	if [ -z "$3" ]; then
+	local name state timeout cmd
+
+	name="$1"
+	cmd="$2"
+	state="$3"
+	if [ -z "$4" ]; then
 		timeout=60
 	else
-		timeout="$3"
+		timeout="$4"
 	fi
 
-	local sec
+	local sec st
 
 	sec=0
 
-	local st
-
 	while /bin/true; do
 
-		st=`$cmd list --list STAT,NAME --csv | grep "$vmname"'$'|cut -d , -f 1`
+		st=`$cmd list --list STAT,NAME --csv | grep "$name"'$'|cut -d , -f 1`
 		if [ "$st" = "$state" ]; then
 			return 0
 		fi
@@ -73,19 +75,32 @@ if ! onedatastore list --list DS --csv |grep -q storpool; then
 	exit 2
 fi
 
-if [ -z "$3" ]; then
-	echo Usage: $0 templateid host1 host2
+if [ -z "$2" ]; then
+	echo Usage: $0 host1 host2
 	echo 
-	onetemplate list
 	onehost list
 	exit 2
 fi
 
-ds=`onedatastore list --list ID,TM,TYPE --csv  | grep 'storpool,img$' | head -n1 | cut -d , -f 1`
+h1="$1"
+h2="$2"
 
-tmpl="$1"
-h1="$2"
-h2="$3"
+ds=`onedatastore list --list ID,TM,TYPE --csv  | grep 'storpool,img$' | head -n1 | cut -d , -f 1`
+tname=t-${vmname}-tmpl
+
+
+if ! onetemplate show $tname > /dev/null 2>/dev/null; then
+	tmplid=`onemarketapp list --csv --list ID,STAT,NAME|grep -v DELETED |grep 'CentOS 7' |tail -n1 |cut -d , -f 1`
+
+	echo -n "Importing template $tmplid..."
+	onemarketapp export $tmplid $tname --datastore $ds
+	echo "done."
+fi
+
+tsimg=`onetemplate show "$tname" --xml | xmllint  --nocdata --xpath '//VMTEMPLATE/TEMPLATE/DISK[1]/IMAGE_ID/text()' -`
+echo -n "Waiting for template image to show up..."
+waitfortmplimg rdy 300
+echo "done."
 
 if onevm list --list NAME --csv |grep -q '^'$vmname'$'; then
 	echo vm $vmname exists, removing.
@@ -93,7 +108,7 @@ if onevm list --list NAME --csv |grep -q '^'$vmname'$'; then
 fi
 
 echo -n "Creating VM $vmname..."
-onetemplate instantiate $tmpl --name $vmname
+onetemplate instantiate $tname --name $vmname
 waitforvm runn 120 || die "vm creation failed"
 vmid=`onevm list --list ID,NAME --csv |grep "$vmname"'$' |cut -d , -f 1`
 chost=`onevm list --list HOST,NAME --csv |grep "$vmname"'$' |cut -d , -f 1`
@@ -204,8 +219,7 @@ if [[ -z "$did" ]]; then
 fi
 
 echo done.
-oneimage list
-onevm list
+
 echo -n "Detaching disk $did from vm $vmid..."
 for j in `seq 1 10`; do
 	onevm disk-detach $vmid $did
@@ -244,4 +258,5 @@ onevm terminate --hard "$vmname"
 waitforvm ""
 echo "done."
 
-echo "Validaion passed."
+echo "Validation passed."
+onetemplate delete $tname --recursive
