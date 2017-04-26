@@ -73,7 +73,7 @@ if ! onedatastore list --list DS --csv |grep -q storpool; then
 	exit 2
 fi
 
-if [ -z "$4" ]; then
+if [ -z "$3" ]; then
 	echo Usage: $0 templateid host1 host2
 	echo 
 	onetemplate list
