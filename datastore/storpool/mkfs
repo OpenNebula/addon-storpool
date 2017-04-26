@@ -79,16 +79,16 @@ SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="one-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
-echo "$SP_DST"
-
 #-------------------------------------------------------------------------------
 # Image FSTYPE:save_as. If it is HOT snapshot then tm/cpds will take care of it later
 #-------------------------------------------------------------------------------
 
 case "${FSTYPE,,}" in
     raw)
+        echo "$SP_DST"
         ;;
     save_as)
+        echo "$SP_DST"
         splog "END ($FSTYPE) return:$SP_DST"
         exit 0
         ;;
