@@ -48,6 +48,11 @@ VMSNAPSHOT_ATOMIC=0
 #
 VMSNAPSHOT_DELETE_ON_TERMINATE=1
 
+# Change DEV_PREFIX on imported images
+# Uncomment to enable
+#
+#DS_CP_FORCE_DEV_PREFIX=sd
+
 #
 # variables enabling various Debuging
 #
