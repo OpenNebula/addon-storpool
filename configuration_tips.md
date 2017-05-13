@@ -69,19 +69,6 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 
 ```DEFAULT_ATTACH_DISCARD=unmap```
 
-
-### Using StorPool system datastore when there are other SYSTEM datastores available
-
-To tell the OpenNebula's sheduler to deploy the VMs only on StorPool backed SYSTEM datastores set
-`SCHED_DS_REQUIREMENTS` in the VM template
-
-```
-SCHED_DS_REQUIREMENTS="TM_MAD=storpool"
-```
-
-in sunstone it is located in "Update VM template" -> "Scheduling" -> "Placement" -> "Datastore Requirements".
-Set the "Expression" to ```TM_MAD=storpool```
-
 ### Extras
 
 !!!Warning!!!
@@ -131,3 +118,16 @@ BACKUP_FSFREEZE_MULTIDISKS=1
 ```
 BACKUP_FSFREEZE=1
 ```
+
+### Using StorPool system datastore when there are other SYSTEM datastores available
+
+To tell the OpenNebula's sheduler to deploy the VMs only on StorPool backed SYSTEM datastores set
+`SCHED_DS_REQUIREMENTS` in the VM template
+
+```
+SCHED_DS_REQUIREMENTS="TM_MAD=storpool"
+```
+
+in sunstone it is located in "Update VM template" -> "Scheduling" -> "Placement" -> "Datastore Requirements".
+Set the "Expression" to ```TM_MAD=storpool```
+
