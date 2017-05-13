@@ -72,7 +72,7 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 ### Extras
 
 !!!Warning!!!
-These features are changing the defalt behavior of OpenNebula and should be used only when the VM has only StorPool backed images - both SYSTEM and IMAGE datastores are with StorPool MAD.
+These features are changing the defalt behavior of OpenNebula and should be used only when the StorPool addon is used for both SYSTEM and IMAGE datastores.
 
 
 #### VM snapshots
