@@ -59,7 +59,7 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 
 ```DEFAULT_ATTACH_CACHE=none```
 
-##### DEFAULT_ATTACH_CACHE_DISCARD
+##### DEFAULT_ATTACH_DISCARD
 
 (default)
 
