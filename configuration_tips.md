@@ -1,6 +1,6 @@
 ## OpenNebula configuration tips
 
-### Recommended
+### Recommended configuration
 
 #### /etc/one/oned.conf
 
