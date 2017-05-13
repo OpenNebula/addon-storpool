@@ -119,7 +119,9 @@ BACKUP_FSFREEZE_MULTIDISKS=1
 BACKUP_FSFREEZE=1
 ```
 
-### Using StorPool system datastore when there are other SYSTEM datastores available
+### Using StorPool SYSTEM datastore when there are other SYSTEM datastores available
+
+#### Using sheduler filters
 
 To tell the OpenNebula's sheduler to deploy the VMs only on StorPool backed SYSTEM datastores set
 `SCHED_DS_REQUIREMENTS` in the VM template
@@ -131,3 +133,6 @@ SCHED_DS_REQUIREMENTS="TM_MAD=storpool"
 in sunstone it is located in "Update VM template" -> "Scheduling" -> "Placement" -> "Datastore Requirements".
 Set the "Expression" to ```TM_MAD=storpool```
 
+#### Using Cluster definition
+
+Define an OpenNebula cluster selecting only StorPool backed SYSTEM and IMAGE datastores. Keep in mind that in this case the images used in the VM templates must be on the datastore selected in the cluster!
