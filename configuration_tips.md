@@ -2,7 +2,7 @@ OpenNebula configuration tips
 ==============================
 
 Recommended
-````````````
+___________
 
 /etc/one/oned.conf
 ------------------
@@ -68,7 +68,7 @@ suggested
 
 
 Using StorPool system datastore when there are other SYSTEM datastores available
-`````````````````````````````````````````````````````````````````````````````````````
+_________________________________________________________________________________
 
 To tell the OpenNebula's sheduler to deploy the VMs only on StorPool backed SYSTEM datastores set
 `SCHED_DS_REQUIREMENTS` in the VM template
@@ -81,7 +81,7 @@ in sunstone it is located in "Update VM template" -> "Scheduling" -> "Placement"
 Set the "Expression" to ```TM_MAD=storpool```
 
 Extras
-````````````
+________
 
 !!!Warning!!!
 These features are changing the defalt behavior of OpenNebula and should be used only when the VM has only StorPool backed images - both SYSTEM and IMAGE datastores are with StorPool MAD.
