@@ -8,7 +8,7 @@
 
 *virtio-scsi* is slightly slower than *virtio-blk* but is preffered because of it's support of TRIM/discard.
 
-This variable could be overrided by the image or VM template definition!
+This variable could be overrided by the image or VM template definition! Please take attention when defining the VM templates!
 
 (default)
 
