@@ -10,11 +10,12 @@
 
 This variable could be overrided by the image or VM template definition!
 
+(default)
 
-default
 ```DEFAULT_DEVICE_PREFIX = "hd"```
 
-suggested
+(suggested)
+
 ```DEFAULT_DEVICE_PREFIX = "sd"```
 
 
@@ -26,22 +27,22 @@ Note that these are the default values and could be changed with the IMAGE and V
 
 The addon could use fstrim/fsthaw to create entirely consistent snapshots/backups. The option enables the libvirtd side of the socket.
 
-default
+(default)
 
 ```FEATURES = [ PAE = "no", ACPI = "yes", APIC = "no", HYPERV = "no", GUEST_AGENT = "no" ]```
 
-suggested
+(suggested)
 
 ```FEATURES = [ PAE = "no", ACPI = "yes", APIC = "no", HYPERV = "no", GUEST_AGENT = "yes" ]```
 
 
 ##### Change defaults for IO and discard
 
-default
+(default)
 
 ```DISK     = [ driver = "raw" , cache = "none"]```
 
-suggested
+(suggested)
 
 ```DISK     = [ driver = "raw" , cache = "none" , io = "native" , discard = "unmap" ]```
 
@@ -49,18 +50,23 @@ suggested
 #### /var/lib/one/remotes/vmm/kvm/kvmrc
 
 ##### DEFAULT_ATTACH_CACHE
-default
+
+(default)
+
 ```#DEFAULT_ATTACH_CACHE=none```
 
-suggested
+(suggested)
+
 ```DEFAULT_ATTACH_CACHE=none```
 
 ##### DEFAULT_ATTACH_CACHE_DISCARD
 
-default
+(default)
+
 ```#DEFAULT_ATTACH_DISCARD=unmap```
 
-suggested
+(suggested)
+
 ```DEFAULT_ATTACH_DISCARD=unmap```
 
 
@@ -92,13 +98,13 @@ To enable the feature do the following changes:
 
 ##### /etc/one/oned.conf
 
- * edit the VM_MAD configuration and change the ARGUMENTS line as follow
+###### edit the VM_MAD configuration and change the ARGUMENTS line as follow
 
 ```
     ARGUMENTS      = "-t 15 -r 0 kvm -l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool",
 ```
 
- * edit the VM_MAD configuration and change KEEP_SNAPSHOTS to 'yes'
+ ###### edit the VM_MAD configuration and change KEEP_SNAPSHOTS to 'yes'
 
 ```
     KEEP_SNAPSHOTS = "yes",
@@ -106,21 +112,21 @@ To enable the feature do the following changes:
 
 ##### /var/lib/one/remotes/addon-storpoolrc
 
- * Append the following configuration variables
+###### Append the following configuration variables
 
 ```VMSNAPSHOT_OVERRIDE=1```
 
 ```VMSNAPSHOT_ATOMIC=1```
 
-The follwoing reuire working communication with the qemu-guest-agent process running inside the VM!!!
 
- * To do fsfreeze/fsthaw only when there are more than one VM disk attached set
+###### To do fsfreeze/fsthaw only when there are more than one VM disk attached set
+The follwoing reuire working communication with the qemu-guest-agent process running inside the VM!!!
 
 ```
 BACKUP_FSFREEZE_MULTIDISKS=1
 ```
 
- * or to always do fsfreeze/fsthaw set
+###### or to always do fsfreeze/fsthaw set
 
 ```
 BACKUP_FSFREEZE=1
