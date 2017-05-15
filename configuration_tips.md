@@ -125,6 +125,8 @@ BACKUP_FSFREEZE_MULTIDISKS=1
 BACKUP_FSFREEZE=1
 ```
 
+Please restart the `opennebula` service to activate the changes.
+
 ### Using StorPool SYSTEM datastore when there are other SYSTEM datastores available
 
 #### Using scheduler filters
