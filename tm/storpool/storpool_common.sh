@@ -923,7 +923,8 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
                             /DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
                             /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
-                            /DATASTORE/TEMPLATE/SP_CLONE_GW)
+                            /DATASTORE/TEMPLATE/SP_CLONE_GW \
+                            /DATASTORE/TEMPLATE/VMSNAPSHOT_LIMIT)
     unset i
     DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -945,6 +946,7 @@ function oneDatastoreInfo()
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
     SP_CLONE_GW="${XPATH_ELEMENTS[i++]}"
+    VMSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -958,7 +960,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }"
     _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
     _MSG+="${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }"
-    _MSG+="${DS_NAME:+NAME='$DS_NAME' }"
+    _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}"
     if boolTrue "$AUTO_TEMPLATE"; then
         _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
         _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
@@ -1252,7 +1254,8 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/FORMAT \
         /VM/TEMPLATE/DISK/TYPE \
         /VM/TEMPLATE/DISK/TARGET \
-        /VM/TEMPLATE/DISK/IMAGE_ID)
+        /VM/TEMPLATE/DISK/IMAGE_ID \
+        /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID)
     unset i
     DS_ID="${XPATH_ELEMENTS[i++]}"
     CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
@@ -1262,6 +1265,7 @@ oneVmVolumes()
     TYPE="${XPATH_ELEMENTS[i++]}"
     TARGET="${XPATH_ELEMENTS[i++]}"
     IMAGE_ID="${XPATH_ELEMENTS[i++]}"
+    SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
     _OFS=$IFS
     IFS=';'
     DISK_ID_A=($DISK_ID)
@@ -1270,6 +1274,7 @@ oneVmVolumes()
     TYPE_A=($TYPE)
     TARGET_A=($TARGET)
     IMAGE_ID_A=($IMAGE_ID)
+    SNAPSHOT_ID_A=($SNAPSHOT_ID)
     IFS=$_OFS
     for ID in ${!DISK_ID_A[@]}; do
         IMAGE_ID="${IMAGE_ID_A[$ID]}"
