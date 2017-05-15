@@ -8,7 +8,7 @@
 
 *virtio-scsi* is slightly slower than *virtio-blk* but is preferred because of it's support of TRIM/discard.
 
-This variable could be overridden by the image or VM template definition! Please take attention when defining the VM templates!
+This variable could be overridden by the IMAGE or VM template definition! Please take attention when defining the VM templates!
 
 (default)
 
@@ -21,11 +21,11 @@ This variable could be overridden by the image or VM template definition! Please
 
 #### /etc/one/vmm_exec/vmm_exec_kvm.conf
 
-Note that these are the default values and could be changed with the IMAGE and VM templates!
+Note that these are the default values and could be overridden in the IMAGE and VM templates!
 
 ##### Activate the qemu guest agent socket in libvirt
 
-The addon could use fstrim/fsthaw to create entirely consistent snapshots/backups. The option enables the libvirtd side of the socket.
+The addon could use fstrim/fsthaw to create consistent snapshots/backups. The option enables the host side of the setup. The `qemu-guest-agent` must be running inside the VM.
 
 (default)
 
@@ -37,6 +37,8 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 
 
 ##### Change defaults for IO and discard
+
+Add defaults for `io` and `discard`.
 
 (default)
 
@@ -51,6 +53,8 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 
 ##### DEFAULT_ATTACH_CACHE
 
+Uncomment to enable.
+
 (default)
 
 ```#DEFAULT_ATTACH_CACHE=none```
@@ -60,6 +64,8 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 ```DEFAULT_ATTACH_CACHE=none```
 
 ##### DEFAULT_ATTACH_DISCARD
+
+Uncomment to enable
 
 (default)
 
@@ -71,27 +77,27 @@ The addon could use fstrim/fsthaw to create entirely consistent snapshots/backup
 
 ### Extras
 
-!!!Warning!!!
-These features are changing the defalt behavior of OpenNebula and should be used only when the StorPool addon is used for both SYSTEM and IMAGE datastores.
+**!!! Warning !!!**
+*These features are changing the defalt behavior of OpenNebula and should be used only when the StorPool addon is used for both SYSTEM and IMAGE datastores.*
 
 
 #### VM snapshots
 
-The feature is working only with recent version of StorPool. Please contact StorPool Support for details.
+*The feature is working only with recent version of StorPool. Please contact StorPool Support for details.*
 
 The StorPool addon can re purpose the OpenNebula's interface for VM snapshots to do atomic snapshots on all VM disks at once. In addition there is an option to enable FSFREEZE before snapshotting and FSTHAW after the snapshots are taken always or when there are more than one VM disk image available(besides the contextualization iso).
 
-To enable the feature do the following changes:
+To enable the feature do the following changes.
 
 ##### /etc/one/oned.conf
 
-###### edit the VM_MAD configuration and change the ARGUMENTS line as follow
+###### edit the `VM_MAD` configuration for `kvm` and change the `ARGUMENTS` line as follow
 
 ```
     ARGUMENTS      = "-t 15 -r 0 kvm -l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool",
 ```
 
- ###### edit the VM_MAD configuration and change KEEP_SNAPSHOTS to 'yes'
+ ###### edit the `VM_MAD` configuration for `kvm` and change `KEEP_SNAPSHOTS` to 'yes'
 
 ```
     KEEP_SNAPSHOTS = "yes",
@@ -99,21 +105,21 @@ To enable the feature do the following changes:
 
 ##### /var/lib/one/remotes/addon-storpoolrc
 
-###### Append the following configuration variables
+###### Add `VMSNAPSHOT_OVERRIDE` and `VMSNAPSHOT_ATOMIC` configuration variables
 
 ```VMSNAPSHOT_OVERRIDE=1```
 
 ```VMSNAPSHOT_ATOMIC=1```
 
 
-###### To do fsfreeze/fsthaw only when there are more than one VM disk attached set
+###### (optional) do fsfreeze/fsthaw only when there are more than one attached VM disk
 The following require working communication with the qemu-guest-agent process running inside the VM!!!
 
 ```
 BACKUP_FSFREEZE_MULTIDISKS=1
 ```
 
-###### or to always do fsfreeze/fsthaw set
+###### (optional) or to always do fsfreeze/fsthaw set
 
 ```
 BACKUP_FSFREEZE=1
