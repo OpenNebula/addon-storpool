@@ -6,9 +6,9 @@
 
 ##### DEFAULT_DEVICE_PREFIX
 
-*virtio-scsi* is slightly slower than *virtio-blk* but is preffered because of it's support of TRIM/discard.
+*virtio-scsi* is slightly slower than *virtio-blk* but is preferred because of it's support of TRIM/discard.
 
-This variable could be overrided by the image or VM template definition! Please take attention when defining the VM templates!
+This variable could be overridden by the image or VM template definition! Please take attention when defining the VM templates!
 
 (default)
 
@@ -77,9 +77,9 @@ These features are changing the defalt behavior of OpenNebula and should be used
 
 #### VM snapshots
 
-The feature is working only with recent version of StorPool. Please contact StorPool for details.
+The feature is working only with recent version of StorPool. Please contact StorPool Support for details.
 
-The StorPool addon can repurpose the OpenNebula's interface for VM snapshots to do atomic snapshots on all VM disks at once. In addition there is an option to enable FSFREEZE before snapshotting and FSTHAW after the snapshots are taken always or when there are more than one VM disk image available(besides the contextualization iso).
+The StorPool addon can re purpose the OpenNebula's interface for VM snapshots to do atomic snapshots on all VM disks at once. In addition there is an option to enable FSFREEZE before snapshotting and FSTHAW after the snapshots are taken always or when there are more than one VM disk image available(besides the contextualization iso).
 
 To enable the feature do the following changes:
 
@@ -107,7 +107,7 @@ To enable the feature do the following changes:
 
 
 ###### To do fsfreeze/fsthaw only when there are more than one VM disk attached set
-The follwoing reuire working communication with the qemu-guest-agent process running inside the VM!!!
+The following require working communication with the qemu-guest-agent process running inside the VM!!!
 
 ```
 BACKUP_FSFREEZE_MULTIDISKS=1
@@ -121,18 +121,19 @@ BACKUP_FSFREEZE=1
 
 ### Using StorPool SYSTEM datastore when there are other SYSTEM datastores available
 
-#### Using sheduler filters
+#### Using scheduler filters
 
-To tell the OpenNebula's sheduler to deploy the VMs only on StorPool backed SYSTEM datastores set
+To tell the OpenNebula's scheduler to deploy the VMs only on StorPool backed SYSTEM datastores set
 `SCHED_DS_REQUIREMENTS` in the VM template
 
 ```
 SCHED_DS_REQUIREMENTS="TM_MAD=storpool"
 ```
 
-in sunstone it is located in "Update VM template" -> "Scheduling" -> "Placement" -> "Datastore Requirements".
+Using sunstone it is located in "Update VM template" -> "Scheduling" -> "Placement" -> "Datastore Requirements".
 Set the "Expression" to ```TM_MAD=storpool```
 
 #### Using Cluster definition
 
 Define an OpenNebula cluster selecting only StorPool backed SYSTEM and IMAGE datastores. Keep in mind that in this case the images used in the VM templates must be on the datastore selected in the cluster!
+
