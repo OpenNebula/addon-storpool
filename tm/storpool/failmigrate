@@ -36,7 +36,7 @@ TEMPLATE="$6"
 SYSTEM_MAD="$7"
 
 TM_PATH="$(dirname $0)"
-for _PATH in "$TM_PATH/"{,../storpool,../../storpool}; do
+for _PATH in "$TM_PATH"{,..,../..,../../..}/storpool; do
     if [ -f "${_PATH}/storpool_common.sh" ]; then
         source "${_PATH}/storpool_common.sh"
         break;
