@@ -141,7 +141,7 @@ case "$LCM_STATE" in
         # detach from all and attach to dst on PROLOG_MIGRATE_UNKNOWN
         #-----------------------------------------------------------------------
         MIGRATE_UNKNOWN="yes"
-        DETACH_ALL=1
+        DETACH_ALL="all"
         DO_SYMLINK="yes"
         SKIP_CONTEXT=1
         date >>"/tmp/one-${VM_ID}-${DISK_ID}-iso.skip"
