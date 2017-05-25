@@ -1294,15 +1294,15 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/IMAGE_ID \
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID)
     unset i
-    DS_ID="${XPATH_ELEMENTS[i++]}"
-    CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
-    DISK_ID="${XPATH_ELEMENTS[i++]}"
-    CLONE="${XPATH_ELEMENTS[i++]}"
-    FORMAT="${XPATH_ELEMENTS[i++]}"
-    TYPE="${XPATH_ELEMENTS[i++]}"
-    TARGET="${XPATH_ELEMENTS[i++]}"
-    IMAGE_ID="${XPATH_ELEMENTS[i++]}"
-    SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
+    local DS_ID="${XPATH_ELEMENTS[i++]}"
+    local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
+    local DISK_ID="${XPATH_ELEMENTS[i++]}"
+    local CLONE="${XPATH_ELEMENTS[i++]}"
+    local FORMAT="${XPATH_ELEMENTS[i++]}"
+    local TYPE="${XPATH_ELEMENTS[i++]}"
+    local TARGET="${XPATH_ELEMENTS[i++]}"
+    local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
+    local SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
     _OFS=$IFS
     IFS=';'
     DISK_ID_A=($DISK_ID)
