@@ -353,6 +353,35 @@ function storpoolWrapper()
 				return 1
 			fi
 			;;
+		groupDetach)
+			shift
+			while [ -n "$2" ]; do
+				[ -z "$json" ] || json+=","
+				json+="{\"volume\":\"$1\",\"detach\":[$2],\"force\":true}"
+				shift 2
+			done
+			if [ -n "$json" ]; then
+				res="$(storpoolApi "VolumesReassignWait" "{\"reassign\":[$json]}")"
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					splog "API communication error:$res ($ret)"
+					return $ret
+				else
+					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
+					if [ "$ok" = "true" ]; then
+						if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+							splog "API response:$res"
+						fi
+					else
+						splog "API Error:$res info:$ok"
+						return 1
+					fi
+				fi
+			else
+				splog "storpoolWrapper: Error: Empty volume list!"
+				return 1
+			fi
+			;;
 		*)
 			storpool "$@"
 			;;
@@ -547,7 +576,7 @@ function storpoolVolumeAttach()
 
 function storpoolVolumeDetach()
 {
-    local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5"
+    local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _VOLUMES_GROUP="$6"
     local _SP_CLIENT volume client
 #    splog "storpoolVolumeDetach($*)"
     if [ "$_DETACH_ALL" = "all" ]; then
@@ -560,6 +589,14 @@ function storpoolVolumeDetach()
                 exit -1
             fi
         fi
+    fi
+    if [ -n "$_VOLUMES_GROUP" ] && [ -n "$_SP_CLIENT" ]; then
+        local vList=
+        for volume in $_VOLUMES_GROUP; do
+            vList+="$volume $_SP_CLIENT "
+        done
+        storpoolRetry groupDetach $vList
+        splog "detachGroup $_VOLUMES_GROUP client:$_SP_CLIENT ($?)"
     fi
     while IFS=',' read volume client snapshot; do
         if [ "$_SOFT_FAIL" = "YES" ]; then

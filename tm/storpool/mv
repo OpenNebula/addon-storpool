@@ -270,7 +270,10 @@ else
     if [ -n "$ATTACH_ONLY" ]; then
         splog "$ATTACH_ONLY"
     else
-        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL" "$READONLY"
+        if [ "$MIGRATE_UNKNOWN" = "yes" ]; then
+            oneVmVolumes "$VM_ID"
+        fi
+        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL" "$READONLY" "$vmVolumes"
     fi
 fi
 
