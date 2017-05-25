@@ -136,9 +136,9 @@ case "$LCM_STATE" in
         ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
         DO_SYMLINK="yes"
     ;;
-    60)
+    6[01])
         #-----------------------------------------------------------------------
-        # detach from all and attach to dst on PROLOG_MIGRATE_UNKNOWN
+        # detach from all and attach to dst on PROLOG_MIGRATE_UNKNOWN[_FAILURE]
         #-----------------------------------------------------------------------
         MIGRATE_UNKNOWN="yes"
         DETACH_ALL="all"
