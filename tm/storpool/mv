@@ -94,6 +94,7 @@ MIGRATE_UNKNOWN=
 DETACH_ALL=
 DO_SYMLINK=
 SKIP_CONTEXT=
+DO_CONTEXT=yes
 case "$LCM_STATE" in
     8)
         #-----------------------------------------------------------------------
@@ -135,6 +136,7 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
         DO_SYMLINK="yes"
+        DO_CONTEXT="no"
     ;;
     6[01])
         #-----------------------------------------------------------------------
@@ -173,7 +175,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             oneCheckpointRestore "$DST"
         fi
         # context ISO. Do detach/attach only when hosts differ
-        if [ -n "$_CONTEXT_DISK_ID" ]; then
+        if [ -n "$_CONTEXT_DISK_ID" ] && boolTrue "$DO_CONTEXT"; then
             SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
             if [ "$SRC_HOST" != "$DST_HOST" ]; then
                 SP_LINK="/dev/storpool/$SP_VOL"
@@ -198,7 +200,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 fi
             fi
         fi
-        if [ "$SRC_PATH" != "$DST_PATH" ]; then
+        if [ "$SRC_PATH" != "$DST_PATH" ] && boolTrue "$DO_CONTEXT"; then
             splog "Change the CONTEXT image template to one-ds-$DS_ID"
             storpoolVolumeTemplate "$SP_VOL" "one-ds-$DS_ID"
         fi
