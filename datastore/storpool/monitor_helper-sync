@@ -107,7 +107,7 @@ fi
 # check that the oned process is sunning
 if pgrep 'oned' >/dev/null; then
 	if boolTrue "$MONITOR_SYNC_DEBUG"; then
-		splog "The oned process running."
+		splog "The oned process is running."
 	fi
 else
 	if boolTrue "$MONITOR_SYNC_DEBUG"; then
@@ -137,7 +137,7 @@ function doExpand()
 
 function run_task()
 {
-	local _run="$1" _jsonFile="$2" _cacheTime="$3"
+	local _run="$1" _jsonFile="$2" _cacheTime="$3" _reloadCache="$4"
 	local sp_api_http_host=${SP_API_HTTP_HOST:-0.0.0.0}
 	local cached=0 ret=1
 	
@@ -154,6 +154,10 @@ function run_task()
 				if [ $cTime -lt $dTime ]; then
 					cached=$((cTime-dTime))
  				fi
+			fi
+			if boolTrue "$_reloadCache"; then
+				splog "forced cache reset. Cache time was $cached"
+				cached=0
 			fi
 		else
 			splog "File not found! ${_jsonFile}${sp_api_http_host}"
@@ -286,6 +290,11 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv") #"
 	template_data=(${tmp//,/ })
 	
+	if [ -z "$tmp" ]; then
+		splog "Missing template $template_name"
+		reload_template=1
+	fi
+	
 	old=${template_data[0]//\"/}
 	new=${SP_REPLICATION_ARRAY[i]:-3}
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
@@ -342,7 +351,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 			if [ -n "$SP_TEMPLATE_STATUS_RUN" ]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile" "$SP_TEMPLATE_STATUS_MINUTES"
+				run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile" "$SP_TEMPLATE_STATUS_MINUTES" "$reload_template"
 			fi
 			if [ -n "$SP_VOLUME_SPACE_RUN" ]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
