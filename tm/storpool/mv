@@ -219,11 +219,15 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             else
                 TAR_SSH=$(cat <<EOF
 set -e -o pipefail
-logger -t "tm_sp_mv_r[\$\$]" -- "$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
-$TAR -C "$SRC_DS_DIR" --sparse -cf - "$SRC_VM_DIR" | $SSH "$DST_HOST" '$TAR -C "$DST_DIR" --sparse -xf -;logger -t "tm_sp_mv_r[\$\$]" -- "rDone \$? \\$?"'
-logger -t "tm_sp_mv_r[\$\$]" -- "rm -rf $SRC_PATH"
-rm -rf "$SRC_PATH"
-logger -t "tm_sp_mv_r[\$\$]" -- "END"
+if [ -d "$SRC_PATH" ]; then
+  logger -t "tm_sp_mv_r[\$\$]" -- "$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
+  $TAR -C "$SRC_DS_DIR" --sparse -cf - "$SRC_VM_DIR" | $SSH "$DST_HOST" '$TAR -C "$DST_DIR" --sparse -xf -;logger -t "tm_sp_mv_r[\$\$]" -- "rDone \$? \\$?"'
+  logger -t "tm_sp_mv_r[\$\$]" -- "rm -rf $SRC_PATH"
+  rm -rf "$SRC_PATH"
+else
+  logger -t "tm_sp_mv_r[\$\$]" -- "Nothing to transfer: $SRC_HOST:$SRC_PATH not found."
+fi
+ logger -t "tm_sp_mv_r[\$\$]" -- "END"
 EOF
 )
                 splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
