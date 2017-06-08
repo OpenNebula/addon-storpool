@@ -1294,7 +1294,7 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/IMAGE_ID \
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID)
     unset i
-    local DS_ID="${XPATH_ELEMENTS[i++]}"
+    VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     local DISK_ID="${XPATH_ELEMENTS[i++]}"
     local CLONE="${XPATH_ELEMENTS[i++]}"
@@ -1349,6 +1349,6 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "$DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID DS_ID=$DS_ID"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID"
     fi
 }

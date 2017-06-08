@@ -53,7 +53,7 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
         rCMD=$(cat <<EOF
     #echo "$DOMAIN"
     source /var/tmp/one/vmm/kvm/kvmrc
-    deployment=\$(ls "${DS_PATH}/${DS_ID}/${VM_ID}/deployment."* | tail -n 1)
+    deployment=\$(ls "${DS_PATH}/${VM_DS_ID}/${VM_ID}/deployment."* | tail -n 1)
     trap 'virsh --connect '\$LIBVIRT_URI' create "'\$deployment'" 2>&1 >/dev/null ;\
           logger -t vmm_sp_snapshot_revert_r "create '\$deployment' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
     virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1 >/dev/null
