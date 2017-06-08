@@ -92,6 +92,14 @@ EOF
         storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null
  #       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
         storpoolRetry volume "$volume" parent "$snap" >/dev/null
+        storpoolVolumeInfo "$tmpVolume"
+        OLD_SIZE_M=$((V_SIZE/1024/1024))
+        storpoolVolumeInfo "$volume"
+        NEW_SIZE_M=$((V_SIZE/1024/1024))
+        if [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
+            splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than backup. inflating..."
+            storpoolVolumeResize "$volume" "$OLD_SIZE_M"
+        fi
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)

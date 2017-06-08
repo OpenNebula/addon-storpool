@@ -480,6 +480,19 @@ function storpoolTemplate()
     fi
 }
 
+function storpoolVolumeInfo()
+{
+	local _SP_VOL="$1"
+	local _i _ELEMENTS _e
+	while read _e; do
+		_ELEMENTS[_i++]="${_e}"
+	done < <(storpoolRetry -j volume "$_SP_VOL" info|jq -r ".data|[.size,.parentName,.templateName][]")
+	unset _i
+	V_SIZE="${_ELEMENTS[_i++]}"
+	V_PARENT_NAME="${_ELEMENTS[_i++]//\"/}"
+	V_TEMPLATE_NAME="${_ELEMENTS[_i++]//\"/}"
+}
+
 function storpoolVolumeExists()
 {
     local _SP_VOL="$1"
