@@ -63,7 +63,7 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
         logger -t vmm_sp_snapshot_revert_r "\$(virsh --connect \$LIBVIRT_URI dominfo "'$DOMAIN'") \$(date +%s.%N)"
         sleep .1
         tt=\$(date +%s)
-        if [ \$((tt - tb)) -gt ${VMSNAPSHOT_REVERT_TIMEOUT} ]; then
+        if [ \$((tt - ts)) -gt ${VMSNAPSHOT_REVERT_TIMEOUT} ]; then
             logger -t vmm_sp_snapshot_revert_r "VMSNAPSHOT_REVERT_TIMEOUT=${VMSNAPSHOT_REVERT_TIMEOUT} seconds reached!"
             break
         fi
