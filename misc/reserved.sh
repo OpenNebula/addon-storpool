@@ -37,5 +37,5 @@ root_arr=($(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus ""))
 cg_cpus=`count_cpus "${cg_arr[1]}"`
 root_cpus=`count_cpus "${root_arr[1]}"`
 
-echo "RESERVED_CPUS=$(((root_cpus-cg_cpus)*100))"
+echo "RESERVED_CPU=$(((root_cpus-cg_cpus)*100))"
 echo "RESERVED_MEM=$(((mem[1]-cg_arr[0])/1024))"
