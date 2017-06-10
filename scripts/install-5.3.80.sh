@@ -209,9 +209,11 @@ pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/tm/$ONE_VER/00-ssh-monitor_ds.patch" "backup"
 popd >/dev/null
 
-echo "*** addon-storpoolrc ..."
-if [ ! -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
-    cp addon-storpoolrc "${ONE_VAR}/remotes/addon-storpoolrc"
+echo -n "*** addon-storpoolrc "
+if [ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
+    echo "(found)"
+else
+    cp -v addon-storpoolrc "${ONE_VAR}/remotes/addon-storpoolrc"
 fi
 grep -q "MKSWAP=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKSWAP="sudo /sbin/mkswap"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
 grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/mkfs"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
