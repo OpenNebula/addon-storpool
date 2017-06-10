@@ -218,6 +218,11 @@ fi
 grep -q "MKSWAP=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKSWAP="sudo /sbin/mkswap"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
 grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/mkfs"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
 
+echo "*** copying misc/reserved.sh to .../remotes"
+cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
+
 echo "*** Please sync hosts (onehost sync --force)"
 
 echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
+
+echo "*** Please update RESERVED_CPU and RESERVED_MEM with the values from `/var/tmp/one/reserved.sh` run on each host"
