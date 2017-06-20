@@ -476,7 +476,7 @@ function storpoolTemplate()
     fi
 
     if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACETAIL" ]; then
-        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} >/dev/null
+        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" ${SP_PLACEHEAD:+ placeHead $SP_PLACEHEAD} ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} >/dev/null
     fi
 }
 
@@ -972,6 +972,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
                             /DATASTORE/TEMPLATE/SP_PLACEALL \
                             /DATASTORE/TEMPLATE/SP_PLACETAIL \
+                            /DATASTORE/TEMPLATE/SP_PLACEHEAD \
                             /DATASTORE/TEMPLATE/SP_IOPS \
                             /DATASTORE/TEMPLATE/SP_BW \
                             /DATASTORE/TEMPLATE/SP_SYSTEM \
@@ -994,6 +995,7 @@ function oneDatastoreInfo()
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+    SP_PLACEHEAD="${XPATH_ELEMENTS[i++]}"
     SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
     SP_BW="${XPATH_ELEMENTS[i++]:--}"
     SP_SYSTEM="${XPATH_ELEMENTS[i++]}"
@@ -1018,7 +1020,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}"
     if boolTrue "$AUTO_TEMPLATE"; then
         _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
-        _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }"
+        _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }"
     fi
     splog "$_MSG"
 }
@@ -1122,6 +1124,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_REPLICATION \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEALL \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACETAIL \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_PLACEHEAD \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_IOPS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
@@ -1161,6 +1164,7 @@ function oneDsDriverAction()
     SP_REPLICATION="${XPATH_ELEMENTS[i++]:-2}"
     SP_PLACEALL="${XPATH_ELEMENTS[i++]}"
     SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
+    SP_PLACEHEAD="${XPATH_ELEMENTS[i++]}"
     SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
     SP_BW="${XPATH_ELEMENTS[i++]:--}"
     SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
@@ -1226,6 +1230,7 @@ ${BASE_PATH:+BASE_PATH=$BASE_PATH }\
 ${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
 ${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
 ${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
+${SP_PLACEHEAD+SP_PLACEHEAD=$SP_PLACEHEAD }\
 ${SP_IOPS+SP_IOPS=$SP_IOPS }\
 ${SP_BW+SP_BW=$SP_BW }\
 "
