@@ -53,7 +53,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
 #    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
 #        splog "[DBG]$PWD $0 $* (ds:$ds)"
 #    fi
-    SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds)"
+    SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds 2>/tmp/im_monitor_ds.error)"
 
     if [ -n "$SP_DS_SIZES" ]; then
         if boolTrue "$IM_MONITOR_DS_DEBUG"; then
