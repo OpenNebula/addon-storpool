@@ -115,4 +115,4 @@ while IFS=',' read name snap_size; do
 		splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($used)"
 	fi
 	echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
-done < <(eval $SP_CMD_SNAPSHOT_SPACE | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
+done < <(eval $SP_CMD_SNAPSHOT_SPACE 2>/dev/null | jq -r ".data | map( select( .name | contains(\"${spVolume}-snap\") ) ) | .[] | [.name, .${used}] | @csv" | sort)
