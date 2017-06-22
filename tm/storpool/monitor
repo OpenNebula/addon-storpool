@@ -86,8 +86,9 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_
 #	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 #fi
 
-while IFS=',' read n t f; do
+while IFS=',' read n t f u2 u3; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
+		f=$(( f + u2 + u3 ))
 		u=$(( t - f ))
 		if boolTrue "$DEBUG_TM_MONITOR"; then
 			splog "<$DS_ID> u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
@@ -104,7 +105,7 @@ while IFS=',' read n t f; do
 		esac
 		break
 	fi
-done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free]|@csv')
+done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
 
 if [ -d "$(readlink -f $BASE_PATH)" ]; then
 	if [ -f "$BASE_PATH/.monitor" ]; then
