@@ -56,7 +56,7 @@ function exit_error
 
 oneDatastoreInfo "$DS_ID"
 
-if booltTrue "$AUTO_TEMPLATE"; then
+if boolTrue "$AUTO_TEMPLATE"; then
     if [ "$SP_PLACEALL" = "" ]; then
         error_message "Datastore template missing 'SP_PLACEALL' attribute."
         exit -1
