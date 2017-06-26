@@ -194,6 +194,16 @@ echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
 
+echo "*** Copy VM checkpoint helpers to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+cp "$CWD/vmm/kvm/"{save,restore}.storpool* "${ONE_VAR}/remotes/vmm/kvm/"
+chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{save,restore}.storpool*
+
+echo "*** VMM checkpoint to block device patch ..."
+pushd "$ONE_VAR"
+    do_patch "$CWD/patches/vmm/${ONE_VER}/save.patch" "backup"
+    do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
+popd
+
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
 pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/im/$ONE_VER/00-monitor_ds.patch"
