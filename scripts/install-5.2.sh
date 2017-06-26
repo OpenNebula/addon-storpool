@@ -195,8 +195,8 @@ cp "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
 
 echo "*** Copy VM checkpoint helpers to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp "$CWD/vmm/kvm/"{save,restore}.storpool-* "${ONE_VAR}/remotes/vmm/kvm/"
-chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{save,restore}.storpool-*
+cp "$CWD/vmm/kvm/"{save,restore}.storpool* "${ONE_VAR}/remotes/vmm/kvm/"
+chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{save,restore}.storpool*
 
 echo "*** VMM checkpoint to block device patch ..."
 pushd "$ONE_VAR"
