@@ -116,8 +116,8 @@ storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST"
 #-------------------------------------------------------------------------------
 
 if [ -n "$DST_HOST" ]; then
-    splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=512k conv=fdatasync status=none"
-    exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=512k conv=fdatasync status=none" \
+    splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
+    exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct" \
                  "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
 else
     splog "$COPY_CMD"
