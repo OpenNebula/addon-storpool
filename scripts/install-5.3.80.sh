@@ -157,7 +157,7 @@ if grep -q -i storpool /etc/one/oned.conf >/dev/null 2>&1; then
     echo "*** StorPool is already enabled in /etc/one/oned.conf"
 else
     echo "*** enabling StorPool plugin in /etc/one/oned.conf"
-    cp /etc/one/oned.conf /etc/one/oned.conf.bak;
+    cp $CP_ARG /etc/one/oned.conf /etc/one/oned.conf.bak;
 
     sed -i -e 's|ceph,dev|ceph,dev,storpool|g' /etc/one/oned.conf
 
@@ -187,15 +187,15 @@ else
 fi
 
 echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
+cp $CP_ARG "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
 
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
+cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
 
 echo "*** Copy VM checkpoint helpers to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp "$CWD/vmm/kvm/"{save,restore}.storpool* "${ONE_VAR}/remotes/vmm/kvm/"
+cp $CP_ARG "$CWD/vmm/kvm/"{save,restore}.storpool* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{save,restore}.storpool*
 
 echo "*** VMM checkpoint to block device patch ..."
@@ -223,7 +223,7 @@ echo -n "*** addon-storpoolrc "
 if [ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
     echo "(found)"
 else
-    cp -v addon-storpoolrc "${ONE_VAR}/remotes/addon-storpoolrc"
+    cp $CP_ARG addon-storpoolrc "${ONE_VAR}/remotes/addon-storpoolrc"
 fi
 grep -q "MKSWAP=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKSWAP="sudo /sbin/mkswap"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
 grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/mkfs"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
