@@ -137,7 +137,7 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
         storpoolVolumeAttach "$SP_VOL" "$DST_SP_CLONE_GW"
 
         # SRC_HOST  dd if=SRC_VOL | ssh DST_HOST dd of=DST_VOL
-        DST_CMD="dd of=/dev/storpool/$SP_VOL bs=1M conv=fdatasync status=none"
+        DST_CMD="dd of=/dev/storpool/$SP_VOL bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
         if [ -n "$DST_SP_CLONE_GW" ]; then
             DST_CMD="ssh ${CLONE_COMPRESSION:+-C} $DST_SP_CLONE_GW '$DST_CMD'"
         fi
