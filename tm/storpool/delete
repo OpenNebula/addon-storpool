@@ -54,6 +54,7 @@ oneDatastoreInfo "$DS_ID"
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
+    LCM_STATE=${_VM_LCM_STATE}
     for i in ${!DISK_ID_ARRAY[@]}; do
         if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ]; then
 #            splog "[SYSTEM_DS] $i id:${DISK_ID_ARRAY[i]} type:${DISK_TYPE_ARRAY[i]} format:$FORMAT tm:${DISK_TM_MAD_ARRAY[i]}"
@@ -88,7 +89,6 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
             fi
         done
-
     else
 #        splog "[SYSTEM_DS] delete context iso"
         SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
@@ -103,7 +103,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
              "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
 
     if boolTrue "$SP_CHECKPOINT_BD"; then
-        storpoolVolumeDelelte "one-checkpoint-$VM_ID" "force" "snaps"
+        storpoolVolumeDelete "one-checkpoint-$VM_ID" "force"
     fi
 
     splog "END [SYSTEM_DS]"
