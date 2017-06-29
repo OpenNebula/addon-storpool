@@ -82,9 +82,9 @@ http://*|https://*)
     ;;
 esac
 
-SP_VOL="one-img-${ID}"
+SP_VOL="${ONE_PX}-img-${ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
-SP_TEMPLATE="one-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 SP_DST="$SP_TEMPLATE/$SP_VOL"
 SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
 SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"

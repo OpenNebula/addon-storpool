@@ -50,9 +50,9 @@ ID="$2"
 
 oneDsDriverAction "$DRIVER_PATH"
 
-SP_VOL="one-img-${ID}"
+SP_VOL="${ONE_PX}-img-${ID}"
 SP_PARENT="${IMAGE_PATH##*/}"
-SP_TEMPLATE="one-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
 echo "$SP_DST"
@@ -131,8 +131,8 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
         CLONE_GW="$DST_SP_CLONE_GW"
 
         #create DST volume with the given SIZE
-        storpoolTemplate "one-ds-${DATASTORE_ID}"
-        storpoolVolumeCreate "$SP_VOL" "${SIZE}"M "one-ds-${DATASTORE_ID}"
+        storpoolTemplate "${ONE_PX}-ds-${DATASTORE_ID}"
+        storpoolVolumeCreate "$SP_VOL" "${SIZE}"M "${ONE_PX}-ds-${DATASTORE_ID}"
         #attach DST volume to BRIDGE_LIST or here
         storpoolVolumeAttach "$SP_VOL" "$DST_SP_CLONE_GW"
 

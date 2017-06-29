@@ -21,14 +21,14 @@ function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
 
 DS_DIR="$1"
 
-DS_ID=$(basename "$DS_DIR")
-DS_NAME="one-ds-$DS_ID"
-
 DRIVER_PATH="${0%/*}"
 
 if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
     source "$DRIVER_PATH/../../addon-storpoolrc"
 fi
+
+DS_ID=$(basename "$DS_DIR")
+DS_NAME="${ONE_PX:-one}-ds-$DS_ID"
 
 function boolTrue()
 {

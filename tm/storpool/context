@@ -121,12 +121,12 @@ exec_and_set_error "$MKISOFS -o $ISO_FILE -V CONTEXT -J -R $ISO_DIR" \
 
 SP_SIZE=$(du -b $ISO_FILE | cut -f1)
 SP_SIZE=$(( (SP_SIZE +511) /512 *512 ))
-SP_VOL="one-sys-${VM_ID}-${DISK_ID}-iso"
+SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
 SP_LINK="/dev/storpool/$SP_VOL"
-SP_TEMPLATE="one-ds-$DS_ID"
+SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 
 CREATE_CONTEXT_ISO=1
-skip_context="/tmp/one-${VM_ID}-${DISK_ID}-iso.skip"
+skip_context="/tmp/${ONE_PX}-${VM_ID}-${DISK_ID}-iso.skip"
 if [ -f "$skip_context" ]; then
     skip_context_ts="$(<"$skip_context")"
     rm -f "$skip_context"

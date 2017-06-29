@@ -66,7 +66,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                 FORMAT="swap"
             fi
-            SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             storpoolVolumeDelete "$SP_VOL" "force" "snaps"
             if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
@@ -81,7 +81,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     done
 
     if boolTrue "$IS_DISK"; then
-        SP_VOL="one-sys-${VM_ID}-${DISK_ID}"
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 #        splog "[SYSTEM_DS] delete volatile $SP_VOL"
         for SP_VOL in `storpoolVolumeContains "$SP_VOL"`; do
             storpoolVolumeDelete "$SP_VOL" "force"
@@ -91,7 +91,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         done
     else
 #        splog "[SYSTEM_DS] delete context iso"
-        SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "$SP_VOL" "force" "snaps"
         if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
             storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
@@ -103,7 +103,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
              "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
 
     if boolTrue "$SP_CHECKPOINT_BD"; then
-        storpoolVolumeDelete "one-sys-${VM_ID}-rawcheckpoint" "force"
+        storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
     fi
 
     splog "END [SYSTEM_DS]"

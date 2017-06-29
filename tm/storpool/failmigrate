@@ -102,7 +102,7 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
             if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                 FORMAT="swap"
             fi
-            SP_VOL="one-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
             storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
         fi
@@ -111,7 +111,7 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     # Detach context ISO volume from DST_HOST
     #-------------------------------------------------------------------------------
-    SP_VOL="one-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
     storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
 

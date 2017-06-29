@@ -39,7 +39,7 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
 
     DRV_MESSAGE="$(cat)"
 
-    SP_VOL="one-sys-${VM_ID}-rawcheckpoint"
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
     if storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeDelete "$SP_VOL" "force"
@@ -48,7 +48,7 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
     DS_ID="${DS_ID[-3]}"
     XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
     VM_MEMORY=$(echo "$DRV_MESSAGE" | $XPATH /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
-    storpoolVolumeCreate "$SP_VOL" "$((VM_MEMORY*2))M" "one-ds-${DS_ID}"
+    storpoolVolumeCreate "$SP_VOL" "$((VM_MEMORY*2))M" "${ONE_PX}-ds-${DS_ID}"
     trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
 
     storpoolVolumeAttach "$SP_VOL" "${HVHOST}"

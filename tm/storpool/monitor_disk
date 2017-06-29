@@ -24,8 +24,6 @@ DS_ID="$2"
 VM_ID="$3"
 DRIVER="$4"
 
-DS_NAME="one-ds-$DS_ID"
-
 DRIVER_PATH="${0%/*}"
 
 SP_JSON_PATH="/tmp"
@@ -41,6 +39,8 @@ fi
 if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
 fi
+
+DS_NAME="${ONE_PX:-one}-ds-$DS_ID"
 
 function boolTrue()
 {

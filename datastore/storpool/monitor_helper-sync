@@ -76,6 +76,8 @@ if [ -f "${driverPath}/../../${0##*/}rc" ]; then
 	source "${driverPath}/../../${0##*/}rc"
 fi
 
+ONE_PX="${ONE_PX:-one}"
+
 function boolTrue()
 {
    case "${1^^}" in
@@ -276,7 +278,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	cmd=
 	comment=
 	DS_ID=${DS_ID_ARRAY[i]}
-	template_name="one-ds-${DS_ID}"
+	template_name="${ONE_PX}-ds-${DS_ID}"
 	sp_token="${SP_AUTH_TOKEN_ARRAY[i]}"
 	[ -n "$sp_token" ] && export SP_AUTH_TOKEN="$sp_token" || unset SP_AUTH_TOKEN
 	sp_host="${SP_API_HTTP_HOST_ARRAY[i]}"

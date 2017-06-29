@@ -200,3 +200,8 @@ export MONITOR_SYNC_REMOTE="NO"
 
 EOF
 ```
+
+#### Multiverse - use multiple OpenNebula instances on single StorPool
+
+For each OpenNebula instance set a different string in the `ONE_PX` variable.
+

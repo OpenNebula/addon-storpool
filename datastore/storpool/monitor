@@ -22,7 +22,7 @@ function splog() { logger -t "ds_sp_${0##*/}[$$]" "$*"; }
 DRV_ACTION="$1"
 DS_ID="$2"
 
-DS_NAME="one-ds-$DS_ID"
+DS_NAME="${ONE_PX}-ds-$DS_ID"
 DRIVER_PATH="${0%/*}"
 SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/tmp/monitor"

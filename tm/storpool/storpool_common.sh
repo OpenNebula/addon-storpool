@@ -79,6 +79,8 @@ function lookup_file()
     done
 }
 
+ONE_PX="${ONE_PX:-one}"
+
 DRIVER_PATH="$(dirname $0)"
 sprcfile="$(lookup_file "addon-storpoolrc" "$DRIVER_PATH")"
 
@@ -796,8 +798,8 @@ function oneCheckpointSave()
     local _vmid="$(basename "$_path")"
     local _dsid="$(basename $(dirname "$_path"))"
     local checkpoint="${_path}/checkpoint"
-    local template="one-ds-$_dsid"
-    local volume="one-sys-${_vmid}-checkpoint"
+    local template="${ONE_PX}-ds-$_dsid"
+    local volume="${ONE_PX}-sys-${_vmid}-checkpoint"
     local sp_link="/dev/storpool/$volume"
 
     SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
@@ -853,7 +855,7 @@ function oneCheckpointRestore()
     local _path="${1#*:}"
     local _vmid="$(basename "$_path")"
     local checkpoint="${_path}/checkpoint"
-    local volume="one-sys-${_vmid}-checkpoint"
+    local volume="${ONE_PX}-sys-${_vmid}-checkpoint"
     local sp_link="/dev/storpool/$volume"
 
     SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
@@ -1178,7 +1180,7 @@ function oneTemplateInfo()
     boolTrue "$DEBUG_oneTemplateInfo" || return
 
     splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
-#    echo $_TEMPLATE | base64 -d >/tmp/one-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
+#    echo $_TEMPLATE | base64 -d >/tmp/${ONE_PX}-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
 }
 
 
@@ -1449,7 +1451,7 @@ oneVmVolumes()
         TYPE="${TYPE_A[$ID]}"
         TARGET="${TARGET_A[$ID]}"
         DISK_ID="${DISK_ID_A[$ID]}"
-        IMG="one-img-$IMAGE_ID"
+        IMG="${ONE_PX}-img-$IMAGE_ID"
         if [ -n "$IMAGE_ID" ]; then
             if boolTrue "$CLONE"; then
                 IMG+="-$VM_ID-$DISK_ID"
@@ -1457,10 +1459,10 @@ oneVmVolumes()
         else
             case "$TYPE" in
                 swap)
-                    IMG="one-sys-${VM_ID}-${DISK_ID}-swap"
+                    IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-swap"
                     ;;
                 *)
-                    IMG="one-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
+                    IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
             esac
         fi
         vmVolumes+="$IMG "
@@ -1472,7 +1474,7 @@ oneVmVolumes()
     done
     DISK_ID="$CONTEXT_DISK_ID"
     if [ -n "$DISK_ID" ]; then
-        IMG="one-sys-${VM_ID}-${DISK_ID}-iso"
+        IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
         vmVolumes+="$IMG "
         if boolTrue "$DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"

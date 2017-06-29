@@ -74,9 +74,9 @@ set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
 
 IMAGE_HASH=`generate_image_hash`
 
-SP_VOL="one-img-${ID}"
+SP_VOL="${ONE_PX}-img-${ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
-SP_TEMPLATE="one-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
 #-------------------------------------------------------------------------------
