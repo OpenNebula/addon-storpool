@@ -203,7 +203,7 @@ function oneHostInfo()
     unset XPATH_ELEMENTS i
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(onehost show "$_name" -x | "$_XPATH" --stdin \
+    done < <(onehost show "$_name" -x | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /HOST/ID \
                             /HOST/NAME \
                             /HOST/STATE \
@@ -882,7 +882,7 @@ function oneVmInfo()
     unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(onevm show -x "$_VM_ID" | "$_XPATH" --stdin \
+        done < <(onevm show -x "$_VM_ID" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /VM/DEPLOY_ID \
                             /VM/STATE \
                             /VM/PREV_STATE \
@@ -958,7 +958,7 @@ function oneDatastoreInfo()
     unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(onedatastore show -x "$_DS_ID" | "$_XPATH" --stdin \
+        done < <(onedatastore show -x "$_DS_ID" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
