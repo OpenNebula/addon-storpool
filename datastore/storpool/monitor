@@ -44,7 +44,7 @@ else
 	splog "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh not found!"
 fi
 
-if boolTrue "$DEBUG_DATASTORE_MONITOR"; then
+if boolTrue "$DEBUG_DS_MONITOR"; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 fi
 
@@ -76,7 +76,7 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/$SP_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
 
-if boolTrue "$DEBUG_DATASTORE_MONITOR_VERBOSE"; then
+if boolTrue "$DEBUG_DS_MONITOR_VERBOSE"; then
 	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 fi
 
@@ -84,19 +84,21 @@ while IFS=',' read name storedCapacity storedFree u2 u3; do
 	if [ "${name//\"/}" = "$DS_NAME" ]; then
 		storedFree=$(( storedFree + u2 + u3 ))
 		used=$(( storedCapacity - storedFree ))
-		if boolTrue "$DEBUG_DATASTORE_MONITOR"; then
-			splog "DS ID:$DS_ID used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024))"
-		fi
 		case "${DRV_ACTION:0:6}" in
 			system)
 				echo $((used/1024/1024)) $((storedCapacity/1024/1024)) $((storedFree/1024/1024))
+				DS_TYPE="SYSTEM"
 				;;
 			*)
 				echo "USED_MB=$((used/1024/1024))"
 				echo "TOTAL_MB=$((storedCapacity/1024/1024))"
 				echo "FREE_MB=$((storedFree/1024/1024))"
+				DS_TYPE="IMAGE"
 				;;
 		esac
+		if boolTrue "$DEBUG_DS_MONITOR"; then
+			splog "${DS_TYPE}_DS ID:$DS_ID used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024))"
+		fi
 		break
 	fi
 done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
