@@ -31,6 +31,9 @@ DST="$2"
 VM_ID="$3"
 DS_ID="$4"
 
+SKIP_UNDEPLOY_SSH=0
+CLEAN_SRC_ON_UNDEPLOY=1
+
 TM_PATH="$(dirname $0)"
 source "${TM_PATH}/storpool_common.sh"
 
@@ -95,6 +98,7 @@ DETACH_ALL=
 DO_SYMLINK=
 SKIP_CONTEXT=
 DO_CONTEXT=yes
+IS_UNDEPLOY=
 case "$LCM_STATE" in
     8)
         #-----------------------------------------------------------------------
@@ -129,6 +133,7 @@ case "$LCM_STATE" in
         #-----------------------------------------------------------------------
         DETACH_ONLY="DETACH_ONLY (LCM_STATE=$LCM_STATE EPILOG_UNDEPLOY)"
         DETACH_ALL="all"
+        IS_UNDEPLOY=1
     ;;
     31)
         #-----------------------------------------------------------------------
@@ -137,6 +142,7 @@ case "$LCM_STATE" in
         ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=$LCM_STATE PROLOG_UNDEPLOY)"
         DO_SYMLINK="yes"
         DO_CONTEXT="no"
+        IS_UNDEPLOY=1
     ;;
     6[01])
         #-----------------------------------------------------------------------
@@ -163,7 +169,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     else
         REMOTE_MONITOR=
     fi
-    ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
+    if [ $LCM_STATE -eq 30 ] and boolTrue "$SKIP_UNDEPLOY_SSH"; then
+        splog "Skip ssh_make_path $DST_HOST"
+    else
+       ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
+    fi
     TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
@@ -217,7 +227,14 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                         "Failed moving $SRC_PATH/* to $DST_PATH"
                 fi
             else
-                TAR_SSH=$(cat <<EOF
+                if boolTrue "$IS_UNDEPLOY" && boolTrue "$SKIP_UNDEPLOY_SSH"; then
+                    splog "Transfer from $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR SKIPPED"
+                    if [ $LCM_STATE -eq 30 ] && boolTrue "$CLEAN_SRC_ON_UNDEPLOY"; then
+                        splog "Claenup $SRC_HOST:$SRC_PATH"
+                        ssh_exec_and_log "$SRC_HOST" "rm -rf \"$SRC_PATH\"" "Error deleting $SRC_PATH from $SRC_HOST!"
+                    fi
+                else
+                    TAR_SSH=$(cat <<EOF
 set -e -o pipefail
 if [ -d "$SRC_PATH" ]; then
   logger -t "tm_sp_mv_r[\$\$]" -- "$TAR -C $SRC_DS_DIR --sparse -cf - $SRC_VM_DIR | $SSH $DST_HOST '$TAR -C $DST_DIR --sparse -xf -'"
@@ -230,8 +247,9 @@ fi
  logger -t "tm_sp_mv_r[\$\$]" -- "END"
 EOF
 )
-                splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
-                ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
+                    splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
+                    ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
+                fi
             fi
         fi
      else
