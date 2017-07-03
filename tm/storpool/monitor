@@ -121,6 +121,10 @@ else
 		if [ ! -L "$BASE_PATH" ]; then
 			mkdir -p "$BASE_PATH"
 			splog "mkdir -p $BASE_PATH ($?)"
+		else
+			if boolTrue "$DEBUG_TM_MONITOR_VERBOSE"; then
+				splog "BASE_PATH:$BASE_PATH is symlink"
+			fi
 		fi
 	else
 		splog "BASE_PATH variable is empty!"
