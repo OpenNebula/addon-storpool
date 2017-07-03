@@ -26,7 +26,7 @@
 #     echo "  ID = $ds,"
 #-------------------------------------------------------------------------------
 
-function splog() { logger -t "ds_sp_monitor_im[$$]" "$*"; }
+function splog() { logger -t "im_sp_monitor_ds[$$]" "$*"; }
 
 SP_MONITOR_DS="../../datastore/storpool/monitor"
 ONE_VERSION="$(<../../VERSION)"
@@ -70,8 +70,9 @@ if [ -f "$SP_MONITOR_DS" ]; then
             if boolTrue "$IM_MONITOR_DS_DEBUG"; then
                 if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
                     splog "DS_ID $ds (StorPool) SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB $dir"
+                else
+                    splog "DS ID=$ds USED_MB=$SP_USED_MB TOTAL_MB=$SP_TOTAL_MB FREE_MB=$SP_FREE_MB"
                 fi
-                splog "DS ID=$ds USED_MB=$SP_USED_MB TOTAL_MB=$SP_TOTAL_MB FREE_MB=$SP_FREE_MB"
             fi
 
             echo "DS = ["
@@ -93,7 +94,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                 SCRIPT_PATH="${REMOTES_DIR}/tm/${DRIVER:-ssh}/monitor_ds"
                 if [ -e "$SCRIPT_PATH" ]; then
                     if boolTrue "$IM_MONITOR_DS_DEBUG"; then
-                        splog "run $SCRIPT_PATH $dir"
+                        splog "run $SCRIPT_PATH $dir (set DEBUG_TM_MONITOR_DS=1)"
                         export DEBUG_TM_MONITOR_DS=1
                     fi
                     "$SCRIPT_PATH" "$dir"
