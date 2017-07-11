@@ -73,6 +73,23 @@ DST_HOST=$SRC_HOST
 DST_PATH="$SRC_PATH"
 
 #-------------------------------------------------------------------------------
+# Check snapshots limits
+#-------------------------------------------------------------------------------
+
+if [ -n "$DISKSNAPSHOT_LIMIT" ] && [ "${DISKSNAPSHOT_LIMIT//[[:digit:]]/}" = "" ]; then
+    if [ $DISKSNAPSHOT_LIMIT -ge 0 ] ; then
+        oneVmDiskSnapshots "$VM_ID" "$DISK_ID"
+        if [ ${#DISK_SNAPSHOTS[@]} -gt $DISKSNAPSHOT_LIMIT ]; then
+            source "$TM_PATH/../../scripts_common.sh"
+            msg="DISKSNAPSHOT_LIMIT of $DISKSNAPSHOT_LIMIT snaphosts exceeded!"
+            splog "$msg"
+            error_message "$msg"
+            exit 1
+        fi
+    fi
+fi
+
+#-------------------------------------------------------------------------------
 # Create snapshot
 #-------------------------------------------------------------------------------
 

@@ -902,7 +902,9 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_ACTIVE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
-                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE)
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
+                            /VM/TEMPLATE/CONTEXT/VMSNAPSHOT_LIMIT \
+                            /VM/TEMPLATE/CONTEXT/DISKSNAPSHOT_LIMIT)
 
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
@@ -925,6 +927,8 @@ function oneVmInfo()
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
+    VMSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
+    DISKSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "$DEBUG_oneVmInfo" || return
 
@@ -945,6 +949,8 @@ ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${IMAGE:+IMAGE='$IMAGE' }\
 ${SIZE:+SIZE='$SIZE' }\
 ${ORIGINAL_SIZE:+ORIGINAL_SIZE='$ORIGINAL_SIZE' }\
+${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
+${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
 "
     _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
     [ -n "$_MSG" ] && splog "$_MSG"
@@ -980,7 +986,8 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
                             /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                             /DATASTORE/TEMPLATE/SP_CLONE_GW \
-                            /DATASTORE/TEMPLATE/VMSNAPSHOT_LIMIT)
+                            /DATASTORE/TEMPLATE/VMSNAPSHOT_LIMIT \
+                            /DATASTORE/TEMPLATE/DISKSNAPSHOT_LIMIT)
     unset i
     DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -1004,6 +1011,7 @@ function oneDatastoreInfo()
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
     SP_CLONE_GW="${XPATH_ELEMENTS[i++]}"
     VMSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
+    DISKSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -1017,7 +1025,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }"
     _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
     _MSG+="${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }"
-    _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}"
+    _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT} ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}"
     if boolTrue "$AUTO_TEMPLATE"; then
         _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
         _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }"
@@ -1312,7 +1320,9 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/TYPE \
         /VM/TEMPLATE/DISK/TARGET \
         /VM/TEMPLATE/DISK/IMAGE_ID \
-        /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID)
+        /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
+        /VM/TEMPLATE/CONTEXT/VMSNAPSHOT_LIMIT \
+        /VM/TEMPLATE/CONTEXT/DISKSNAPSHOT_LIMIT)
     unset i
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
@@ -1323,6 +1333,11 @@ oneVmVolumes()
     local TARGET="${XPATH_ELEMENTS[i++]}"
     local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
     local SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
+    local _TMP=
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    VMSNAPSHOT_LIMIT="${VMSNAPSHOT_LIMIT:-$_TMP}"
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    DISKSNAPSHOT_LIMIT="${DISKSNAPSHOT_LIMIT:-$_TMP}"
     _OFS=$IFS
     IFS=';'
     DISK_ID_A=($DISK_ID)
@@ -1369,7 +1384,27 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "$DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT} ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}"
+    fi
+}
+
+oneVmDiskSnapshots()
+{
+    local VM_ID="$1" DISK_ID="$2"
+    if boolTrue "$DEBUG_oneVmDiskSnapshots_VERBOSE"; then
+        splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID"
+    fi
+    unset XPATH_ELEMENTS i
+    while read element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(onevm show -x "$VM_ID" |\
+        ${DRIVER_PATH}/../../datastore/xpath.rb \
+        %m%/VM/SNAPSHOTS[DISK_ID="$DISK_ID"]/SNAPSHOT/ID)
+    unset i
+    local _DISK_SNAPSHOTS="${XPATH_ELEMENTS[i++]}"
+    DISK_SNAPSHOTS=(${_DISK_SNAPSHOTS})
+    if boolTrue "$DEBUG_oneVmDiskSnapshots"; then
+        splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID SNAPSHOTS:${#DISK_SNAPSHOTS[@]} SNAPSHOT_IDs:$_DISK_SNAPSHOTS "
     fi
 }
 
@@ -1378,3 +1413,4 @@ oneVmVolumes()
 if boolTrue "$SP_CHECKPOINT_BD"; then
     SP_CHECKPOINT=
 fi
+
