@@ -49,6 +49,10 @@ fi
 
 if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
+    declare -A vmVolumesMap
+    for disk in $vmDisksMap; do
+        vmVolumesMap["${disk%:*}"]="${disk##*:}"
+    done
 
         rCMD=$(cat <<EOF
     #echo "$DOMAIN"
@@ -88,17 +92,29 @@ EOF
         [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="ro"
         storpoolVolumeDetach "$volume" "force" "$VMHOST" "all"
 #        trapAdd APPEND "storpoolVolumeAttach \"$volume\" \"$VMHOST\" \"$mode\""
+        storpoolVolumeInfo "$volume"
+        OLD_SIZE_M=$((V_SIZE/1024/1024))
         tmpVolume="${volume}-${SP_TMP}"
         storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null
- #       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
-        storpoolRetry volume "$volume" parent "$snap" >/dev/null
-        storpoolVolumeInfo "$tmpVolume"
-        OLD_SIZE_M=$((V_SIZE/1024/1024))
+#       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
+        storpoolSnapshotClone "$snap" "$volume" "$V_TEMPLATE_NAME"
         storpoolVolumeInfo "$volume"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
-        if [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
-            splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than backup. inflating..."
-            storpoolVolumeResize "$volume" "$OLD_SIZE_M"
+        if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
+            if boolTrue "$UPDATE_ONE_DISK_SIZE"; then
+                if [ -n "${vmVolumesMap["$volume"]}" ]; then
+                    DISK_ID="${vmVolumesMap[$volume]}"
+                    onedb change-body vm --id $VM_ID "/VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SIZE" $NEW_SIZE_M
+                    splog "onedb change VM_ID:$VM_ID DISK_ID:$DISK_ID SIZE:$NEW_SIZE_M (OLD_SIZE:$OLD_SIZE_M)($?)"
+                else
+                    splog "vmVolumesMap[$volume] not found"
+                fi
+            elif [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
+                splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than backup. inflating..."
+                storpoolVolumeResize "$volume" "$OLD_SIZE_M"
+            fi
+        else
+            splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
         fi
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
         tmpVolumes+=("$tmpVolume")

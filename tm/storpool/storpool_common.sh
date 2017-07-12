@@ -1373,6 +1373,7 @@ oneVmVolumes()
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
         vmDisks=$((vmDisks+1))
+        vmDisksMap+="$IMG:$DISK_ID "
     done
     DISK_ID="$CONTEXT_DISK_ID"
     if [ -n "$DISK_ID" ]; then

@@ -76,7 +76,36 @@ storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
 trapAdd "storpoolVolumeAttach \"$SP_VOL\" \"$SRC_HOST\""
 trapAdd "oneSymlink \"$SRC_HOST\" \"$SP_LINK\" \"$SRC_PATH\""
 
-storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
+storpoolVolumeInfo "$SP_VOL"
+OLD_SIZE_M=$((V_SIZE/1024/1024))
+
+storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL" "$V_TEMPLATE_NAME"
+
+storpoolVolumeInfo "$SP_VOL"
+NEW_SIZE_M=$((V_SIZE/1024/1024))
+
+if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
+    if boolTrue "$UPDATE_ONE_DISK_SIZE"; then
+        oneVmVolumes "$VM_ID"
+        declare -A vmVolumesMap
+        for disk in $vmDisksMap; do
+            vmVolumesMap["${disk%:*}"]="${disk##*:}"
+        done
+        if [ -n "${vmVolumesMap["$SP_VOL"]}" ]; then
+            DISK_ID="${vmVolumesMap[$SP_VOL]}"
+            onedb change-body vm --id $VM_ID "/VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SIZE" $NEW_SIZE_M
+            splog "onedb change VM_ID:$VM_ID DISK_ID:$DISK_ID SIZE:$NEW_SIZE_M (OLD_SIZE:$OLD_SIZE_M)($?)"
+        else
+            splog "vmVolumesMap[$volume] not found"
+        fi
+    elif [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
+        splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than backup. inflating..."
+        storpoolVolumeResize "$SP_VOL" "$OLD_SIZE_M"
+    fi
+else
+    splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
+fi
+
 
 storpoolVolumeAttach "$SP_VOL" "$SRC_HOST"
 oneSymlink "$SRC_HOST" "$SP_LINK" "$SRC_PATH"
