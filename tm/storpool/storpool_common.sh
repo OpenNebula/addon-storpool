@@ -670,22 +670,6 @@ function storpoolSnapshotDelete()
     storpoolRetry snapshot "$_SP_SNAPSHOT" delete "$_SP_SNAPSHOT" >/dev/null
 }
 
-function storpoolSnapshotRevert()
-{
-    local _SP_SNAPSHOT="$1" _SP_VOL="$2"
-    local _SP_TMP="$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
-
-    storpoolRetry volume "$_SP_VOL" rename "${_SP_VOL}-${_SP_TMP}" >/dev/null
-
-    trapAdd "storpool volume \"$_SP_TMP\" rename \"$_SP_VOL\""
-
-    storpoolRetry volume "$_SP_VOL" parent "$_SP_SNAPSHOT" >/dev/null
-
-    trapReset
-
-    storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
-}
-
 function storpoolSnapshotClone()
 {
     local _SP_SNAP="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
@@ -693,6 +677,21 @@ function storpoolSnapshotClone()
     storpoolRetry volume "$_SP_VOL" parent "$_SP_SNAP" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
 }
 
+function storpoolSnapshotRevert()
+{
+    local _SP_SNAPSHOT="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
+    local _SP_TMP="$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
+
+    storpoolRetry volume "$_SP_VOL" rename "${_SP_VOL}-${_SP_TMP}" >/dev/null
+
+    trapAdd "storpool volume \"$_SP_TMP\" rename \"$_SP_VOL\""
+
+    storpoolSnapshotClone "$_SP_SNAPSHOT" "$_SP_VOL" "$_SP_TEMPLATE"
+
+    trapReset
+
+    storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
+}
 
 function oneSymlink()
 {
@@ -1374,6 +1373,7 @@ oneVmVolumes()
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
         vmDisks=$((vmDisks+1))
+        vmDisksMap+="$IMG:$DISK_ID "
     done
     DISK_ID="$CONTEXT_DISK_ID"
     if [ -n "$DISK_ID" ]; then
