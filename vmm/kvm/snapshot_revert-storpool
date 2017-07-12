@@ -78,7 +78,7 @@ EOF
         ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null &
         splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed $(date +%s%N)"
         sleep .5
-    fi
+
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes
     while read snap; do
