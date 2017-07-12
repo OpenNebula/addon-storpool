@@ -103,7 +103,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
              "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
 
     if boolTrue "$SP_CHECKPOINT_BD"; then
-        storpoolVolumeDelete "one-checkpoint-$VM_ID" "force"
+        storpoolVolumeDelete "one-sys-${VM_ID}-rawcheckpoint" "force"
     fi
 
     splog "END [SYSTEM_DS]"

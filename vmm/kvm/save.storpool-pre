@@ -39,7 +39,7 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
 
     DRV_MESSAGE="$(cat)"
 
-    SP_VOL="one-checkpoint-${VM_ID}"
+    SP_VOL="one-sys-${VM_ID}-rawcheckpoint"
 
     if storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeDelete "$SP_VOL" "force"
