@@ -926,8 +926,14 @@ function oneVmInfo()
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
-    VMSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
-    DISKSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
+        VMSNAPSHOT_LIMIT="${_TMP}"
+    fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
+        DISKSNAPSHOT_LIMIT="${_TMP}"
+    fi
 
     boolTrue "$DEBUG_oneVmInfo" || return
 
@@ -1009,8 +1015,14 @@ function oneDatastoreInfo()
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
     SP_CLONE_GW="${XPATH_ELEMENTS[i++]}"
-    VMSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
-    DISKSNAPSHOT_LIMIT="${XPATH_ELEMENTS[i++]}"
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
+        VMSNAPSHOT_LIMIT="${_TMP}"
+    fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
+        DISKSNAPSHOT_LIMIT="${_TMP}"
+    fi
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -1334,9 +1346,13 @@ oneVmVolumes()
     local SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
     local _TMP=
     _TMP="${XPATH_ELEMENTS[i++]}"
-    VMSNAPSHOT_LIMIT="${VMSNAPSHOT_LIMIT:-$_TMP}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
+        VMSNAPSHOT_LIMIT="${_TMP}"
+    fi
     _TMP="${XPATH_ELEMENTS[i++]}"
-    DISKSNAPSHOT_LIMIT="${DISKSNAPSHOT_LIMIT:-$_TMP}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
+        DISKSNAPSHOT_LIMIT="${_TMP}"
+    fi
     _OFS=$IFS
     IFS=';'
     DISK_ID_A=($DISK_ID)
