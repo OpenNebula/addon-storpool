@@ -48,16 +48,20 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
     splog "vmDisks:$vmDisks vmVolumes:'$vmVolumes'"
     if boolTrue "$VMSNAPSHOT_ENABLE_LIMIT"; then
-        oneDatastoreInfo "$VM_DS_ID"
+        if [ -n "$VM_VMSNAPSHOT_LIMIT" ]; then
+            VMSNAPSHOT_LIMIT="$VM_VMSNAPSHOT_LIMIT"
+        else
+            oneDatastoreInfo "$VM_DS_ID"
+        fi
         if [ -n "$VMSNAPSHOT_LIMIT" ] && \
            [ "${VMSNAPSHOT_LIMIT//[[:digit:]]}" = "" ]; then
            if [ $VMSNAPSHOT_LIMIT -lt ${#SNAPSHOT_ID_A[@]} ]; then
-               res= "VM snapshots limit set in SYSTEM DS $VM_DS_ID exceeded! limit:$VMSNAPSHOT_LIMIT < snapshots:${#SNAPSHOT_ID_A[@]}"
+               res="VMSNAPSHOT_LIMIT of $VMSNAPSHOT_LIMIT snaphosts exceeded!"
                splog "$res"
-               log "$res"
+               error_message "$res"
                exit 1
            else
-               res="VM snapshots limit set in SYSTEM_DS $VM_DS_ID: $VMSNAPSHOT_LIMIT >= ${#SNAPSHOT_ID_A[@]}"
+               res="VM snapshots limit VMSNAPSHOT_LIMIT:$VMSNAPSHOT_LIMIT >= ${#SNAPSHOT_ID_A[@]}"
                log "$res"
                splog "$res"
            fi

@@ -1347,7 +1347,7 @@ oneVmVolumes()
     local _TMP=
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
-        VMSNAPSHOT_LIMIT="${_TMP}"
+        VM_VMSNAPSHOT_LIMIT="${_TMP}"
     fi
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
