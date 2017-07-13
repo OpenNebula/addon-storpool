@@ -45,6 +45,8 @@ DISK_ID=$(echo ${SRC##*/} | awk -F. '{print $NF}')
 # Get Datastore information
 #-------------------------------------------------------------------------------
 
+oneDatastoreInfo "$(basename "$(dirname "$(dirname "$SRC_PATH")")")"
+
 oneDatastoreInfo "$DS_ID"
 
 #-------------------------------------------------------------------------------
