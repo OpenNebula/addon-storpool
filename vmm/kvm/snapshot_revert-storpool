@@ -84,8 +84,12 @@ EOF
         sleep .5
 
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
-    declare -a tmpVolumes
+    declare -a tmpVolumes snapList
     while read snap; do
+        snapList+=("$snap")
+    done < <(storpoolRetry -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+    splog "snapList: ${snapList[@]}"
+    for snap in ${snapList[@]}; do
         tb=$(date +%s%N)
         splog "BEGIN snapshot $snap ($tb)"
         volume="${snap%-$SNAP_ID}"
@@ -120,7 +124,7 @@ EOF
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)
         splog "END snapshot $snap ($te dt:$((te-tb)))"
-    done < <(storpoolRetry -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+    done
     finish=1
     pids=$(jobs -p)
     if [ -n "$pids" ]; then
