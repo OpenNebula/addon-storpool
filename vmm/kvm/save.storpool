@@ -18,15 +18,15 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
+DRIVER_PATH="$(dirname $0)"
 
-source $DRIVER_PATH/kvmrc
-source $DRIVER_PATH/../../scripts_common.sh
+source "$DRIVER_PATH/kvmrc"
+source "$DRIVER_PATH/../../scripts_common.sh"
 
-FILE=$1
-HVHOST=$2
-DEPLOY_ID=$3
-
+#one-88 /var/lib/one//datastores/101/88/checkpoint s06 88 s06
+DEPLOY_ID=$1
+FILE=$2
+HVHOST=$3
 VM_ID=$4
 DS_ID=$5
 
