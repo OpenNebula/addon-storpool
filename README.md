@@ -54,7 +54,7 @@ Support standard OpenNebula datastore operations:
 * support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 * support VM checkpoint file to be archived on StorPool backed block device (see extras)
 
-## Extras
+### Extras
 * support two different modes of disk usage reporting - LVM style and StorPool style
 * support managing datastores on different StorPool clusters
 * support migrate-live when TM_MAD='ssh' is used for SYSTEM datastore
