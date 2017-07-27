@@ -170,6 +170,20 @@ DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY
 _EOF_
 fi
 
+if grep -q -i DISKSNAPSHOT_LIMIT /etc/one/oned.conf >/dev/null 2>&1; then
+    echo "*** DISKSNAPSHOT_LIMIT found in /etc/one/oned.conf"
+else
+    echo "*** Appending VM_RESTRICTED_ATTR = DISKSNAPSHOT_LIMIT in /etc/one/oned.conf"
+    echo 'VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"' >> /etc/one/oned.conf
+fi
+
+if grep -q -i VMSNAPSHOTOT_LIMIT /etc/one/oned.conf >/dev/null 2>&1; then
+    echo "*** VMSNAPSHOT_LIMIT found in /etc/one/oned.conf"
+else
+    echo "*** Appending VM_RESTRICTED_ATTR = VMSNAPSHOT_LIMIT in /etc/one/oned.conf"
+    echo 'VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"' >> /etc/one/oned.conf
+fi
+
 # Enable snap_create_live in vmm_exec/vmm_execrc
 LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' /etc/one/vmm_exec/vmm_execrc | tail -n 1)
 if [ "x${LIVE_DISK_SNAPSHOTS_LINE/kvm-storpool/}" = "x$LIVE_DISK_SNAPSHOTS_LINE" ]; then
