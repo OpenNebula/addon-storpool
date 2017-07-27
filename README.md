@@ -22,6 +22,7 @@ More info:
 ## Compatibility
 
 This add-on is compatible with OpenNebula 4.10+ and StorPool 15.02+.
+The additional extras requires latest stable versions of OpenNebula and StorPool.
 
 ## Requirements
 
@@ -34,35 +35,46 @@ This add-on is compatible with OpenNebula 4.10+ and StorPool 15.02+.
 ### OpenNebula Node (or Bridge Node)
 
 * StorPool initiator driver (storpool_block)
+* StorPool CLI installed, authorization token and access to the StorPool API network
 * If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
-* If it is only Bridge Node - it must be configured as Host in open nebula but separated to not run VMs.
-* The Bridge node must have qemu-img available - used by the addon during marketplace imports to convert the qcow2 images to RAW ones.
+* If it is only Bridge Node - it must be configured as Host in open nebula but configured to not run VMs.
+* The Bridge node must have qemu-img available - used by the addon during imports to convert various source image formats to StorPool baclked RAW images.
 
 ### StorPool cluster
 
 A working StorPool cluster is required.
 
 ## Features
+Support standard OpenNebula datastore operations:
 * support for datstore configuration via CLI and sunstone
 * support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
-* support SYSTEM datastore on shared filesystem or over ssh
-* support SYSTEM datastore volatile disks and context image as StorPool block devices (see limitations)
-* support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD (see limitations)
+* support SYSTEM datastore on shared filesystem or ssh when TM_MAD=storpool is used
+* support SYSTEM datastore volatile disk and context images as StorPool block devices
+* support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
 * support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
+* support VM checkpoint file to be archived on StorPool backed block device (see extras)
+
+## Extras
 * support two different modes of disk usage reporting - LVM style and StorPool style
 * support managing datastores on different StorPool clusters
-* extend migrate-live when ssh TM_MAD is used for SYSTEM datastore
-* all disk images are thin provisioned
-* Improved storage security: no storage management access from the hypervisors is needed so if rogue user manage to escape from the VM to the host the impact on the storage will be reduced at most to the locally attached disks(the VMs local to the host)
-* (optional) helper tool to tweak the number of queues for virtio-scsi (require `DEVICE_PREFIX=sd`)
+* support migrate-live when TM_MAD='ssh' is used for SYSTEM datastore
+* support limit (per disk) on the number of disk snapshots
+* support import of VmWare (VMDK) and Hyper-V (VHDX) images in addition to default (QCOW2) format
+* all disk images are thin provisioned RAW block devices
+* (optional) Replace "VM snapshot" interface to do atomic disk snapshots on StorPool (see limitations)
+* (optional) Option to set limit on the number of "VM snaphots"
+* (optional) support VM checkpoint file to be written and red directly from StorPool backed block device (see limitations)
+* (optional) Improved storage security: no storage management access from the hypervisors is needed so if rogue user manage to escape from the VM to the host the impact on the storage will be reduced at most to the locally attached disks(see limitations)
 * (optional) helper tool to enable virtio-blk-data-plane for virtio-blk (require `DEVICE_PREFIX=vd`)
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 
 ## Limitations
 
 1. Tested only with KVM hypervisor
-1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the management interface to do disk snapshots only
-1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool. The system filesystem monitoring could be possible by enabling the default SYSTEM DS in the cluster for monitoring purposes only
+1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the management interface to do disk snapshots when only StorPool bacled datastores are used.
+1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool. The system filesystem monitoring could be possible by enabling the default SYSTEM DS in the cluster for monitoring purposes only.
+1. The extra to use VM checkpoint file directly on StorPool backed block device requires qemu-kvm-ev and StorPool CLI with access to the StorPool's management API installed in the hypervisor nodes. 
+1. The extra features are tested/confirmed working on CentOS. Please notify the author for any success/failure when used on another OS.
 
 ## Installation
 
@@ -73,7 +85,7 @@ A working StorPool cluster is required.
 ```bash
 # on the front-end
 yum -y install --enablerepo=epel patch git jq lz4 npm
-npm install bower@1.6.5 -g
+npm install bower -g
 npm install grunt-cli -g
 ```
 
@@ -85,6 +97,7 @@ yum -y install --enablerepo=epel lz4 jq python-lxml
 
 ### Get the addon from github
 ```bash
+cd ~
 git clone https://github.com/OpenNebula/addon-storpool
 ```
 
@@ -100,6 +113,8 @@ If oned and sunstone services are on different servers it is possible to install
  * set environment variable SKIP_ONED=1 to skip the oned integration
 
 ### manual installation
+
+The following commands are related to latest OpenNebula version.
 
 #### oned related pieces
 
@@ -133,20 +148,21 @@ chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 * Patch IM_MAD/kvm-probes.d/monitor_ds.sh
 ```bash
 pushd /var/lib/one
-patch -p0 <~/addon-storpool/patches/im/4.14/00-monitor_ds.patch
+patch -p0 <~/addon-storpool/patches/im/5.2/00-monitor_ds.patch
 popd
 ```
 
 * Patch TM_MAD/shared/monitor
 ```bash
 pushd /var/lib/one
-patch --backup -p0 <~/addon-storpool/patches/tm/5.2/00-shared-monitor.patch
+patch --backup -p0 <~/addon-storpool/patches/tm/5.0/00-shared-monitor.patch
 popd
 ```
+
 * Patch TM_MAD/ssh/monitor_ds
 ```bash
 pushd /var/lib/one
-patch --backup -p0 <~/addon-storpool/patches/tm/5.2/00-ssh-monitor_ds.patch
+patch --backup -p0 <~/addon-storpool/patches/tm/5.0/00-ssh-monitor_ds.patch
 popd
 ```
 
@@ -172,9 +188,7 @@ crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 ```bash
 pushd /usr/lib/one/sunstone/public
 # patch the sunstone interface
-patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.2.0/datastores-tab.patch
-# (optional, for 5.2.x only) backported patch for warning dialog for VMsnapshot restore
-patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.2.0/F-5068-Added-dialog-in-Revert-Snapshots-228.patch
+patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.4.0/datastores-tab.patch
 
 # rebuild the interface
 npm install
@@ -210,10 +224,12 @@ DATASTORE_MAD = [
     arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool  -s shared,ssh,ceph,fs_lvm,qcow2,storpool"
 ]
 ```
+
 * Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool
 ```
-TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes" ]
+TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes" ]
 ```
+
 * Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool
 ```
 DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "" ]
@@ -224,7 +240,8 @@ To enable live disk snapshots support for storpool
 ```
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 ```
- When the SYSTEM datastore is on storpool (TM_MAD=storpool), to enable save/restore of the checkpoint file to a storpool volume.
+
+When the SYSTEM datastore is on storpool (TM_MAD=storpool), to enable save/restore of the checkpoint file to a storpool volume.
 * Edit/create the addon-storpool global configuration file /var/lib/one/remotes/addon-storpoolrc and define/set the following variable
 ```
 SP_CHECKPOINT=yes
@@ -233,15 +250,21 @@ SP_CHECKPOINT=yes
 ```
 SP_CHECKPOINT=nomigrate
 ```
+* When qemu-kvm-ev is installed enable the direct save/restore to StorPool backed block device
+```
+SP_CHECKPOINT_BD=1
+```
 
-* (option) Reconfigure the VMsnapshot scripts to do grouped disk snapshots. Append the following string to the VM_MAD ARGUMENTS
+* (option) Reconfigure the 'VM snapshot' scripts to do atomic disk snapshots. Append the following string to the VM_MAD ARGUMENTS:
 ```
 -l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool
 ```
-* Edit `/etc/one/oned.conf` and change KEEP_SNAPSHOTS=YES to the VM_MAD
+* Edit `/etc/one/oned.conf` and change KEEP_SNAPSHOTS=YES in the VM_MAD section
 ```
 VM_MAD = [
+    ...
     KEEP_SNAPSHOTS = "yes",
+    ...
 ]
 ```
 When there are more than one disk per VM it is recommended to do fsfreese/fsthaw while the disks are snapshotted. Enable in addon-storpoolrc:
@@ -251,6 +274,29 @@ VMSNAPSHOT_FSFREEZE_MULTIDISKS=1
 There is alternative option which require the StorPool feature to do atomic grouped snapshots available in StorPool revision 16.01.877+. In this case it is acceptable to do snapshots without fsfreeze/fsthaw. To enable the feature set in addon-storpoolrc:
 ```
 VMSNAPSHOT_ATOMIC=1
+```
+
+To enable VM snaphost limits:
+```
+VMSNAPSHOT_ENABLE_LIMIT=1
+```
+
+The snaphost limits could be set as global in addon-storpoolrc:
+```
+VMSNAPSHOT_LIMIT=10
+DISKSNAPSHOT_LIMIT=15
+```
+It is possible to override the global defined values in the SYSTEM datastore configuration.
+
+Also, it is possible to override them per VM defining the variables in the VM's USER_TEMPLATE (the attributes at the bottom in the Sunstone's "VM Info" tab). In this case it is possible (and recommended ) to restrict the variables to be managed by the members of 'oneadmin' group by setting in /etc/one/oned.conf:
+```
+cat >>/etc/one/oned.conf <<EOF
+VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"
+VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"
+EOF
+
+# and restart oned to refresh it's configuration
+systemctl restart opennebula
 ```
 
 #### space usage monitoring configuration
@@ -303,32 +349,12 @@ export MONITOR_SYNC_REMOTE="NO"
 EOF
 ```
 
-When the system datastore is ssh backed to enable proper reporting the addon must be called in non-shared context. To achieve this an additional TM_MAD is defined which should be used as TM_MAD for the SYSTEM datastore. Follow the procedure to accomplish this setup:
-
-* create artificial driver by symlinking to the original
-
-```
-cd /var/lib/one/remotes/tm/
-ln -s storpool storpool_ssh
-```
-* create TM_MAD definition for the "driver" in /etc/one/oned.conf
-
-```
-TM_MAD_CONF = [ NAME = "storpool_ssh", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "no" ]
-```
-* add the driver to the list of enabled drivers at the TM_MAD configuration in /etc/one/oned.conf
-
-```
-TM_MAD = [
-    EXECUTABLE = "one_tm",
-    ARGUMENTS = "-t 15 -d storpool,storpool_ssh"
-]
-```
-* change configuration of StorPool enabled SYSTEM datastore: change the `TM_MAD` variable from `storpool` to `storpool_ssh` and leave blank the `SP_SYSTEM` variable
-
-
 Additional configuration when there is datastore on another(non default) storpool cluster:
 Include `SP_API_HTTP_HOST` `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN` as additional attributes to the Datstores.
+
+There are rare cases when the driver could not determine the StorPool node ID:
+Set the SP_OURID attribute in the HOST configuration.
+
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
@@ -356,7 +382,7 @@ If TM_MAD is storpool it is possible to have both shared and ssh datastores, con
 * DATASTORE_LOCATION in cluster configuration should be set (pre OpenNebula 5.x+)
 * By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But if the given datastore is not shared *SP_SYSTEM=ssh* should be set in the datastore configuration
 
-It is possible to manage different set of hosts working with different StorPool clusters from single front-end. In this case the separation of the resources in Clusters is mandatory. I this case it is highly advised to set the StorPool API details(`SP_API_HTTP_HOST`, `SP_AUTH_TOKEN` and optionally `SP_API_HTTP_PORT`) in each StorPool enabled datastore.
+It is possible to manage different set of hosts working with different StorPool clusters from a single front-end. In this case the separation of the resources in Clusters is mandatory. I this case it is highly advised to set the StorPool API details(`SP_API_HTTP_HOST`, `SP_AUTH_TOKEN` and optionally `SP_API_HTTP_PORT`) in each StorPool enabled datastore.
 
 ### Configuring the Datastore
 
@@ -369,17 +395,21 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (2)
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
 * **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)
+* **SP_PLACEHEAD**: [optional] The name of StorPool placement group of disks for last data replica. String (5)
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS. Global datastore configuration for storpol TM_MAD is with *SHARED=yes* set. If the datastore is not on shared filesystem this parameter should be set to *SP_SYSTEM=ssh* to copy non-storpool files from one node to another.
 * **SP_API_HTTP_HOST**: [optional] The IP address of the StorPool API to use for this datastore. IP address.
 * **SP_API_HTTP_PORT**: [optional] The port of the StorPool API to use for this datastore. Number.
 * **SP_AUTH_TOKEN**: [optional] The AUTH tocken for of the StorPool API to use for this datastore. String.
 * **SP_BW**: [optional] The BW limit per volume on the DATASTORE.
 * **SP_IOPS**: [optional] The IOPS limit per volume on the DATASTORE. Number.
+* **DISKSNAPSHOT_LIMIT**: [optional] disk snapshots limit per VM disk. Number. (SYSTEM_DS)
+* **VMSNAPSHOT_LIMIT**: [optional] VM snapshots limit. Number. (SYSTEM_DS)
 
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
-1. The PlaceTail placement group is defined in StorPool as list of drives. used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
+1. The PlaceTail placement group is defined in StorPool as list of drives. Used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
+1. The PlaceHead placement group is defined in StorPool as list of drives. Used in StorPool hybrid setups with one HDD replica and two SSD replicas of the data.
 
 The following example illustrates the creation of a StorPool datastore of hybrid type with 3 replicas. In this case the datastore will use hosts node1, node2 and node3 for imports and creating images.
 
@@ -465,12 +495,13 @@ $ onedatastore list
  101 StorPoolSys           0M -     -                 0 sys  -        storpool
  ```
 
-Note that by default OpenNebula assumes that the Datastore is accessible by all hypervisors and all bridges. If you need to configure datastores for just a subset of the hosts check the [Cluster guide](http://docs.opennebula.org/5.2/operation/host_cluster_management/cluster_guide.html).
+Note that by default OpenNebula assumes that the Datastore is accessible by all hypervisors and all bridges. If you need to configure datastores for just a subset of the hosts check the [Cluster guide](http://docs.opennebula.org/5.4/operation/host_cluster_management/cluster_guide.html).
 
 ### Usage
 
 Once configured, the StorPool image datastore can be used as a backend for disk images.
 
-Non-persistent images are StorPool volumes. When you use a non-persistent image for a VM the driver creates a new temporary volume and attaches the new volume to the VM. When the VM is destroyed, the temporary volume is deleted.
+Non-persistent images are StorPool volumes. When a non-persistent image is used for a VM the driver clone the volume and attaches the cloned volume to the VM. When the VM is destroyed, the cloned volume is deleted.
 
-When the StorPool driver is enabled for the SYSTEM datastore the context ISO image and the volatile disks are placed on StorPool volumes. In this case on the disk is kept only VM configuration XML and the RAM dumps during migrate, suspend etc.
+When the StorPool driver is enabled for the SYSTEM datastore the context ISO image and the volatile disks are placed on StorPool volumes. In this case hypervisor's filesystem only VM configuration XML and the RAM dumps during migrate, suspend etc are stored. (the RAM dumps are on StorPool too when SP_CPECKPOINT* is enabled)
+
