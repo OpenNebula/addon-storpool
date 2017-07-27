@@ -902,8 +902,8 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
-                            /VM/TEMPLATE/CONTEXT/VMSNAPSHOT_LIMIT \
-                            /VM/TEMPLATE/CONTEXT/DISKSNAPSHOT_LIMIT)
+                            /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
+                            /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
 
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
@@ -1332,8 +1332,8 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/TARGET \
         /VM/TEMPLATE/DISK/IMAGE_ID \
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
-        /VM/TEMPLATE/CONTEXT/VMSNAPSHOT_LIMIT \
-        /VM/TEMPLATE/CONTEXT/DISKSNAPSHOT_LIMIT)
+        /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
+        /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
     unset i
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
