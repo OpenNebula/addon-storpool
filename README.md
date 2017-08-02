@@ -392,10 +392,16 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **TM_MAD**: [mandatory] Transfer driver for the datastore. String, use value `storpool`
 * **DISK_TYPE**: [mandatory] Type for the VM disks using images from this datastore. String, use value `block`
 * **BRIDGE_LIST**: [optional] Nodes to use for image datastore operations. String (1)
-* **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (2)
-* **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (3)
-* **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (4)
-* **SP_PLACEHEAD**: [optional] The name of StorPool placement group of disks for last data replica. String (5)
+
+
+1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
+
+### Advanced configuration variables
+
+* **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (1)
+* **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (2)
+* **SP_PLACETAIL**: [optional] The name of StorPool placement group of disks from where to read data. String (3)
+* **SP_PLACEHEAD**: [optional] The name of StorPool placement group of disks for last data replica. String (4)
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS. Global datastore configuration for storpol TM_MAD is with *SHARED=yes* set. If the datastore is not on shared filesystem this parameter should be set to *SP_SYSTEM=ssh* to copy non-storpool files from one node to another.
 * **SP_API_HTTP_HOST**: [optional] The IP address of the StorPool API to use for this datastore. IP address.
 * **SP_API_HTTP_PORT**: [optional] The port of the StorPool API to use for this datastore. Number.
@@ -405,7 +411,6 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 * **DISKSNAPSHOT_LIMIT**: [optional] disk snapshots limit per VM disk. Number. (SYSTEM_DS)
 * **VMSNAPSHOT_LIMIT**: [optional] VM snapshots limit. Number. (SYSTEM_DS)
 
-1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 1. The replication level defines how many separate copies to keep for each data block. Supported values are: `1`, `2` and `3`.
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
 1. The PlaceTail placement group is defined in StorPool as list of drives. Used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
