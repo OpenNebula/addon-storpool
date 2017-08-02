@@ -116,13 +116,13 @@ To enable the feature do the following changes.
 The following require working communication with the qemu-guest-agent process running inside the VM!!!
 
 ```
-BACKUP_FSFREEZE_MULTIDISKS=1
+VMSNAPSHOT_FSFREEZE_MULTIDISKS=1
 ```
 
 ###### (optional) or to always do fsfreeze/fsthaw set
 
 ```
-BACKUP_FSFREEZE=1
+VMSNAPSHOT_FSFREEZE=1
 ```
 
 Please restart the `opennebula` service to activate the changes.

@@ -86,7 +86,7 @@
 +      <label for="sp_system">
 +        {{tr "StorPool system"}}
 +        <span class="tip">
-+          {{tr "Used when SYSTEM datastore type is selected. Set to 'ssh' if the datastore is not on shared fs"}}
++          {{tr "Used when SYSTEM datastore type is selected. Set to 'shared' if the datastore is on a shared filesystem"}}
 +        </span>
 +      </label>
 +      <input type="text" name="sp_system" id="sp_system" />

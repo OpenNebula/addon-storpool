@@ -2,16 +2,19 @@ MKFS="sudo /sbin/mkfs"
 MKSWAP="sudo /sbin/mkswap"
 
 
-# By default the addon uses datastore attributes to reate datastore's
-# tempalte.
+# (obsolete)there is a code in the addon to manage the attributes of the
+# StorPool templates which represent the OpenNebula datastores
 #
-# Uncomment to disable autogeneration and manage StorPool templates manually
+# The new polisy is to setup the datastore attributes using the storpool CLI
 #
+# Set to '1' to enable the template management via the datastore templates.
+#
+# Default: 0 (disabled)
 #AUTO_TEMPLATE=0
 
-#
-# Backward compatibility. Uncomment to disable it for StorPool 16.01+
-#
+# Releases before StorPool 16.01+ was using udevd to create the symlinks in
+# '/dev/storpool' which was causing some synchronisation issues.
+# Default: 0 (disabled)
 #SP_WAIT_LINK=0
 
 #(Experimental)
