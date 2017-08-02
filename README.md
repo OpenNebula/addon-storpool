@@ -250,7 +250,7 @@ SP_CHECKPOINT=yes
 ```
 SP_CHECKPOINT=nomigrate
 ```
-* When qemu-kvm-ev is installed enable the direct save/restore to StorPool backed block device
+* When qemu-kvm-ev is installed enable the direct save/restore to StorPool backed block device (the above variables are disabled)
 ```
 SP_CHECKPOINT_BD=1
 ```
@@ -367,9 +367,13 @@ service opennebula-sunstone restart
 su - oneadmin -c 'onehost sync --force'
 ```
 
-## Upgrade
+## Upgrade notes
 
-Follow the installation procedure. If something can not be upgraded automatically a note is printed with hints what should be done manually. Take care of such notes and follow them.
+Please follw the notes for the OpenNebula version you are using.
+
+* [OpenNebula 5.4](docs/upgrade_notes_5.4.md)
+* [OpenNebula 5.2.1](docs/upgrade_notes_5.2.1.md)
+
 
 ## Configuration
 
@@ -501,6 +505,10 @@ $ onedatastore list
  ```
 
 Note that by default OpenNebula assumes that the Datastore is accessible by all hypervisors and all bridges. If you need to configure datastores for just a subset of the hosts check the [Cluster guide](http://docs.opennebula.org/5.4/operation/host_cluster_management/cluster_guide.html).
+
+#### [Advanced confguration](docs/advanced_configuration.md)
+
+#### [Configuration tips](docs/configuration_tips.md)
 
 ### Usage
 
