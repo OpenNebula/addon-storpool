@@ -47,24 +47,25 @@ A working StorPool cluster is mandatory.
 
 ## Features
 Support standard OpenNebula datastore operations:
-* support for datstore configuration via CLI and sunstone
-* support all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
-* support SYSTEM datastore on shared filesystem or ssh when TM_MAD=storpool is used
-* support SYSTEM datastore volatile disk and context images as StorPool block devices
+* datstore configuration via CLI and sunstone
+* all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
+* SYSTEM datastore on shared filesystem or ssh when TM_MAD=storpool is used
+* SYSTEM datastore volatile disk and context images as StorPool block devices
 * support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
-* support TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
+* TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 
 ### Extras
-* support two different modes of disk usage reporting - LVM style and StorPool style
-* support managing datastores on different StorPool clusters
-* support migrate-live when TM_MAD='ssh' is used for SYSTEM datastore
-* support limit (per disk) on the number of disk snapshots
-* support import of VmWare (VMDK) and Hyper-V (VHDX) images in addition to default (QCOW2) format
 * all disk images are thin provisioned RAW block devices
-* (optional) Replace "VM snapshot" interface to do atomic disk snapshots on StorPool (see limitations)
-* (optional) Option to set limit on the number of "VM snaphots"
+* two different modes of disk usage reporting - LVM style and StorPool style
+* different StorPool clusters as separate datastores
+* migrate-live when TM_MAD='ssh' is used for SYSTEM datastore(native StorPool driver is recommended)
+* limit the number of disk snapshots (per disk)
+* import of VmWare (VMDK) images
+* import of Hyper-V (VHDX) images
+* (optional) replace "VM snapshot" interface to do atomic disk snapshots on StorPool (see limitations)
+* (optional) set limit on the number of "VM snaphots"
 * (optional) support VM checkpoint file directly on StorPool backed block device (see limitations)
-* (optional) Improved storage security: no storage management access from the hypervisors is needed so if rogue user manage to escape from the VM to the host the impact on the storage will be reduced at most to the locally attached disks(see limitations)
+* (optional) improved storage security: no storage management access from the hypervisors is needed so if rogue user manage to escape from the VM to the host the impact on the storage will be reduced at most to the locally attached disks(see limitations)
 * (optional) helper tool to enable virtio-blk-data-plane for virtio-blk (require `DEVICE_PREFIX=vd`)
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 
@@ -73,7 +74,7 @@ Support standard OpenNebula datastore operations:
 1. Tested only with KVM hypervisor
 1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the management interface to do disk snapshots when only StorPool bacled datastores are used.
 1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool. The system filesystem monitoring could be possible by enabling the default SYSTEM DS in the cluster for monitoring purposes only.
-1. The extra to use VM checkpoint file directly on StorPool backed block device requires qemu-kvm-ev and StorPool CLI with access to the StorPool's management API installed in the hypervisor nodes. 
+1. The extra to use VM checkpoint file directly on StorPool backed block device requires qemu-kvm-ev and StorPool CLI with access to the StorPool's management API installed in the hypervisor nodes.
 1. The extra features are tested/confirmed working on CentOS. Please notify the author for any success/failure when used on another OS.
 
 ## Installation
@@ -381,72 +382,4 @@ Please follow the notes for the OpenNebula version you are using.
 
 ## StorPool naming convention
 
-### Datastore templates
-
-Each Datastore in Opennebula has a StorPool template with the following format
-```bash
-one-ds-${DATASTORE_ID}
-```
-
-### Images
-
-#### PERSISTENT images
-
-Each persistent image registered in a StorPool backed IMAGE datastore is mapped to StorPool volume
-```bash
-one-img-${IMAGE_ID}
-```
-
-#### Non-PERSISTENT images
-
-The non-persistent images are clones of a image registered in the IMAGE datastore mapped to StorPool volume
-```bash
-one-img-${IMAGE_ID}-${VM_ID}-${VMDISK_ID}
-```
-
-#### VOLATILE images
-
-The volatile images are registered in the StorPool backed SYSTEM datastore as a StorPool volume
-```bash
-one-sys-${VM_ID}-${VMDISK_ID}-raw
-```
-
-#### CONTEXTUALIZATION images
-
-Each contextualization image registered in a StorPool backed IMAGE datastore is mapped to StorPool volume
-```bash
-one-sys-${VM_ID}-${VMDISK_ID}-iso
-```
-
-#### CHECKPOINT images
-
-When the addon is configured in `qemu-kvm-ev` backed flavour each checkpoint file is a StorPool volume
-```bash
-one-sys-${VM_ID}-rawcheckpoint
-```
-
-When the default `qemu-kvm` package is used the StorPool volume holding the archive of the checkpoint file has following name
-```bash
-one-sys-${VM_ID}-checkpoint
-```
-
-#### Staging images
-
-In the process of importing of image to a StorPool backed IMAGE datastore the source is stored temporary on a StorPool volume name suffixed with the md5sum of it's name
-```bash
-one-img-IMAGE_ID-${MD5SUM}
-```
-
-### Snapshots
-
-#### Disk snapshot
-
-```bash
-${VOLUME_NAME}-ONESNAP-snap${SNAP_ID}
-```
-
-#### VM snapshot
-
-```bash
-${VOLUME_NAME}-ONESNAP-${VMSNAPSHOT_ID}-${UNIX_TIMESTAMP}
-```
+Please follow the [naming convention](docs/naming_convention.md) for details how the OpenNebula datastores, and images are mapped to StorPool.
