@@ -276,7 +276,7 @@ bash /var/tmp/one/reserved.sh
 
 ### Configuring the System Datastore
 
-This addon enables full support of transfer manager (TM_MAD) backend of type shared, ssh, or storpool for the system datastore. The system datastore will hold only the symbolic links to the StorPool block devices, so it will not take much space. See more details on the [System Datastore Guide](http://docs.opennebula.org/4.10/administration/storage/system_ds.html).
+This addon enables full support of transfer manager (TM_MAD) backend of type shared, ssh, or storpool for the system datastore. The system datastore will hold only the symbolic links to the StorPool block devices, so it will not take much space. See more details on the [Open Cloud Storage Setup](http://docs.opennebula.org/5.4/deployment/open_cloud_storage_setup/).
 
 If TM_MAD is storpool it is possible to have both shared and ssh datastores, configured per cluster. To achieve this two attributes should be set:
 
@@ -297,7 +297,7 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 
 The following example illustrates the creation of a StorPool datastore of hybrid type with 3 replicas. In this case the datastore will use hosts node1, node2 and node3 for imports and creating images.
 
-#### Image datastore through Sunstone
+#### Image datastore through *Sunstone*
 
 Sunstone -> Infrastructure -> Datastores -> Add [+]
 
@@ -306,7 +306,7 @@ Sunstone -> Infrastructure -> Datastores -> Add [+]
 * Type: Images
 * Host Bridge List: node1 node2 node3
 
-#### Image datastore through onedatastore
+#### Image datastore through *onedatastore*
 
 ```bash
 # create datastore configuration file
@@ -332,7 +332,7 @@ $ onedatastore list
  100 StorPool            2.4T 99%   -                 0 img  storpool storpool
 ```
 
-#### System datastore through Sunstone
+#### System datastore through *Sunstone*
 
 Sunstone -> Infrastructure -> Datastores -> Add [+]
 
@@ -341,7 +341,7 @@ Sunstone -> Infrastructure -> Datastores -> Add [+]
 * Type: System
 * Host Bridge List: node1 node2 node3
 
-#### System datastore through onedatastore
+#### System datastore through *onedatastore*
 
 ```bash
 # create datastore configuration file
@@ -377,16 +377,15 @@ Please follow the  [cofiguration tips](docs/configuration_tips.md) for suggestio
 
 Please follow the notes for the OpenNebula version you are using.
 
-* [OpenNebula 5.4](docs/upgrade_notes_5.4.md)
-* [OpenNebula 5.2.1](docs/upgrade_notes_5.2.1.md)
+* [OpenNebula 5.2.1](docs/upgrade_notes-5.2.1.md)
 
 ## StorPool naming convention
 
 ### Datastore templates
 
 Each Datastore in Opennebula has a StorPool template with the following format
-```
-one-ds-$DATASTORE_ID
+```bash
+one-ds-${DATASTORE_ID}
 ```
 
 ### Images
@@ -394,60 +393,60 @@ one-ds-$DATASTORE_ID
 #### PERSISTENT images
 
 Each persistent image registered in a StorPool backed IMAGE datastore is mapped to StorPool volume
-```
-one-img-$IMAGE_ID
+```bash
+one-img-${IMAGE_ID}
 ```
 
 #### Non-PERSISTENT images
 
 The non-persistent images are clones of a image registered in the IMAGE datastore mapped to StorPool volume
-```
-one-img-$IMAGE_ID-$VM_ID-$VMDISK_ID
+```bash
+one-img-${IMAGE_ID}-${VM_ID}-${VMDISK_ID}
 ```
 
 #### VOLATILE images
 
 The volatile images are registered in the StorPool backed SYSTEM datastore as a StorPool volume
-```
-one-sys-$VM_ID-$VMDISK_ID-raw
+```bash
+one-sys-${VM_ID}-${VMDISK_ID}-raw
 ```
 
 #### CONTEXTUALIZATION images
 
 Each contextualization image registered in a StorPool backed IMAGE datastore is mapped to StorPool volume
-```
-one-sys-$VM_ID-$VMDISK_ID-iso
+```bash
+one-sys-${VM_ID}-${VMDISK_ID}-iso
 ```
 
 #### CHECKPOINT images
 
 When the addon is configured in `qemu-kvm-ev` backed flavour each checkpoint file is a StorPool volume
-```
-one-sys-$VM_ID-rawcheckpoint
+```bash
+one-sys-${VM_ID}-rawcheckpoint
 ```
 
 When the default `qemu-kvm` package is used the StorPool volume holding the archive of the checkpoint file has following name
-```
-one-sys-$VM_ID-checkpoint
+```bash
+one-sys-${VM_ID}-checkpoint
 ```
 
 #### Staging images
 
 In the process of importing of image to a StorPool backed IMAGE datastore the source is stored temporary on a StorPool volume name suffixed with the md5sum of it's name
-```
-one-img-IMAGE_ID-$MD5SUM
+```bash
+one-img-IMAGE_ID-${MD5SUM}
 ```
 
 ### Snapshots
 
 #### Disk snapshot
 
-```
-$VOLUME_NAME-ONESNAP-snap$SNAP_ID
+```bash
+${VOLUME_NAME}-ONESNAP-snap${SNAP_ID}
 ```
 
 #### VM snapshot
 
-```
-$VOLUME_NAME-ONESNAP-$VMSNAPSHOT_ID-$UNIX_TIMESTAMP
+```bash
+${VOLUME_NAME}-ONESNAP-${VMSNAPSHOT_ID}-${UNIX_TIMESTAMP}
 ```
