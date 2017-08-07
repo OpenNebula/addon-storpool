@@ -200,10 +200,3 @@ export MONITOR_SYNC_REMOTE="NO"
 
 EOF
 ```
-
-
-
-#### *SNAPSHOT_LIMIT configuration
-
-* **DISKSNAPSHOT_LIMIT**: [optional] disk snapshots limit per VM disk. Number. (SYSTEM_DS)
-* **VMSNAPSHOT_LIMIT**: [optional] VM snapshots limit. Number. (SYSTEM_DS)
