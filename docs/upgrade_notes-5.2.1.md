@@ -2,7 +2,7 @@
 
 It is highly recommended to install `qemu-kvm-ev` package from `centos-release-kvm-ev` reposytory.
 
-When the addon is run on clean opennebula configuration, the essential defaults will be applied. So the suggested upgrade procedure is as follow
+When the addon installation script is run on clean opennebula configuration, the essential defaults will be applied.
 
 The suggested upgrade procedure is as follow
 
@@ -30,3 +30,4 @@ To restore this code:
 ONE_LOCATION=/var/lib/one
 echo "AUTO_TEMPLATE=1" >>$ONE_LOCATION/remotes/addon-storpoolrc
 ```
+

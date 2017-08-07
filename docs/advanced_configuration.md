@@ -21,7 +21,7 @@ echo "AUTO_TEMPLATE" >>$ONE_LOCATION/remotes/addon-storpoolrc
 1. The PlaceHead placement group is defined in StorPool as list of drives. Used in StorPool hybrid setups with one HDD replica and two SSD replicas of the data.
 
 
-#### StorPool backd SYSTEM datastore on shared filesystem
+#### StorPool backed SYSTEM datastore on shared filesystem
 
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS.
 
@@ -147,7 +147,7 @@ VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"
 VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"
 EOF
 
-# and restart oned to refresh it's configuration
+# restart oned to refresh the configuration
 systemctl restart opennebula
 ```
 
