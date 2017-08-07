@@ -211,6 +211,7 @@ The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-sto
 ```bash
 usermod -a -G disk oneadmin
 ```
+
 * Edit `/etc/one/oned.conf` and add `storpool` to the `TM_MAD` arguments
 ```
 TM_MAD = [
@@ -218,6 +219,7 @@ TM_MAD = [
     arguments = "-t 15 -d dummy,lvm,shared,fs_lvm,qcow2,ssh,vmfs,ceph,dev,storpool"
 ]
 ```
+
 * Edit `/etc/one/oned.conf` and add `storpool` to the `DATASTORE_MAD` arguments
 
 ```
@@ -238,10 +240,12 @@ DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY
 ```
 
 * Edit `/etc/one/oned.conf` and append the following _VM_RESTRICTED_ATTR_
+```bash
 cat >>/etc/one/oned.conf <<EOF
 VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"
 VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"
 EOF
+```
 
 * Enable live disk snapshots support for storpool by adding `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` variable in `/etc/one/vmm_exec/vmm_execrc`
 ```
