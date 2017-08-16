@@ -116,6 +116,19 @@ else
 	exit 0
 fi
 
+if [ -n "$RAFT_LEADER_IP" ]; then
+	tmp="$(ip route get "$RAFT_LEADER_IP"|head -n 1)"
+	if [ "${tmp:0:5}" == "local" ]; then
+		if boolTrue "$MONITOR_SYNC_DEBUG"; then
+			splog "Found shared IP."
+		fi
+	else
+		if boolTrue "$MONITOR_SYNC_DEBUG"; then
+			splog "There is no shared IP found. Exit."
+		fi
+		exit 0
+	fi
+fi
 echo $$ >"$lockFile"
 trap "rm -f \"$lockFile\"" EXIT TERM INT
 
