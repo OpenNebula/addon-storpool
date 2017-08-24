@@ -385,7 +385,7 @@ function storpoolWrapper()
 			fi
 			;;
 		*)
-			storpool "$@"
+			storpool -B "$@"
 			;;
 	esac
 }
