@@ -25,6 +25,12 @@ MKSWAP="sudo /sbin/mkswap"
 # Do not store the VM checkpoint on migrate
 #SP_CHECKPOINT=nomigrate
 
+
+# Save VM checkpoint file on a StorPool volume
+# To enable set to '1'
+# Default: 0 (disabled)
+#SP_CHECKPOINT_BD=0
+
 # (Experimental)
 # Code that overrides the VM snapshot interface creating atomic or in
 # single fsfreeze call snapshots of all VM disks.
