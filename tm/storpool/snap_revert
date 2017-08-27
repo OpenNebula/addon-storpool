@@ -99,7 +99,7 @@ if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
             splog "vmVolumesMap[$volume] not found"
         fi
     elif [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
-        splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than backup. inflating..."
+        splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than snapshot. Inflating..."
         storpoolVolumeResize "$SP_VOL" "$OLD_SIZE_M"
     fi
 else

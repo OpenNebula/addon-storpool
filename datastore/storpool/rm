@@ -63,7 +63,7 @@ if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
 fi
 
 # Remove the temp volume in case of stale broken import
-SP_TEMP_VOL="$(echo $SP_VOL | md5sum | awk '{print $1}')"
+SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
 storpoolVolumeDelete "$SP_TEMP_VOL" "force"
 
 

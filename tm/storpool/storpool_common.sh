@@ -56,11 +56,13 @@ DEBUG_oneDatastoreInfo=
 DEBUG_oneTemplateInfo=
 DEBUG_oneDsDriverAction=
 
-AUTO_TEMPLATE=1
-SP_WAIT_LINK=1
+AUTO_TEMPLATE=0
+SP_WAIT_LINK=0
 VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
 VMSNAPSHOT_DELETE_ON_TERMINATE=1
+SP_SYSTEM="ssh"
+UPDATE_ONE_DISK_SIZE=1
 
 function lookup_file()
 {
@@ -383,7 +385,7 @@ function storpoolWrapper()
 			fi
 			;;
 		*)
-			storpool "$@"
+			storpool -B "$@"
 			;;
 	esac
 }
@@ -1010,7 +1012,10 @@ function oneDatastoreInfo()
     SP_PLACEHEAD="${XPATH_ELEMENTS[i++]}"
     SP_IOPS="${XPATH_ELEMENTS[i++]:--}"
     SP_BW="${XPATH_ELEMENTS[i++]:--}"
-    SP_SYSTEM="${XPATH_ELEMENTS[i++]}"
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] ; then
+        SP_SYSTEM="${_TMP}"
+    fi
     SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
