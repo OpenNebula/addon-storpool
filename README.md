@@ -72,9 +72,9 @@ Support standard OpenNebula datastore operations:
 ## Limitations
 
 1. Tested only with KVM hypervisor
-1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the management interface to do disk snapshots when only StorPool bacled datastores are used.
-1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool. The system filesystem monitoring could be possible by enabling the default SYSTEM DS in the cluster for monitoring purposes only.
-1. The extra to use VM checkpoint file directly on StorPool backed block device requires qemu-kvm-ev and StorPool CLI with access to the StorPool's management API installed in the hypervisor nodes.
+1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the 'VM snapshot' interface to do disk snapshots when only StorPool backed datastores are used.
+1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool.
+1. The extra to use VM checkpoint file directly on StorPool backed block device requires qemu-kvm-ev and StorPool CLI with access to the StorPool's management API installed on the hypervisor nodes.
 1. The extra features are tested/confirmed working on CentOS. Please notify the author for any success/failure when used on another OS.
 
 ## Installation
@@ -252,6 +252,11 @@ EOF
 ```
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 ```
+* If OpenNebula 5.4+ HA setup is in use set RAFT_LEADER_IP in the addon configuration file
+
+```bash
+echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
+```
 
 ### Post-install
 * Restart `opennebula` and `opennebula-sunstone` services
@@ -271,8 +276,9 @@ su - oneadmin -c 'onehost sync --force'
 StorPool uses resource separation utilizing the cgroup subsystem. The reserved resources should be updated in the 'Overcommitment' section on each host (RESERVED_CPU and RESERVED_MEM in pre ONE-5.4). There is a hepler script that report the values that should be set on each host. The script should be available after a host is added to OpenNebula.
 
 ```bash
-ssh hostN
-bash /var/tmp/one/reserved.sh
+# for each host do
+ssh hostN /var/tmp/one/reserved.sh >reserved.tmpl
+onehost update 'hostN' --append reserved.tmpl
 ```
 
 ### Configuring the System Datastore
