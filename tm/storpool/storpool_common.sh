@@ -202,15 +202,33 @@ function oneHostInfo()
     local _self="$(dirname $0)"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "$_self")"
 
+    local tmpXML="$(mktemp -t oneHostInfo-${_name}-XXXXXX)"
+    local ret=$? errmsg=
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneHostInfo) Error: Can't create temp file! (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+    onehost show -x "$_name" >"$tmpXML"
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneHostInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+
     unset XPATH_ELEMENTS i
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(onehost show "$_name" -x | sed '/\/>$/d' | "$_XPATH" --stdin \
+    done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /HOST/ID \
                             /HOST/NAME \
                             /HOST/STATE \
                             /HOST/TEMPLATE/SP_OURID \
                             /HOST/TEMPLATE/HOSTNAME 2>/dev/null)
+    rm -f "$tmpXML"
     unset i
     HOST_ID="${XPATH_ELEMENTS[i++]}"
     HOST_NAME="${XPATH_ELEMENTS[i++]}"
@@ -880,10 +898,27 @@ function oneVmInfo()
     local _VM_ID="$1" _DISK_ID="$2"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
 
+    local tmpXML="$(mktemp -t oneVmInfo-${_VM_ID}-XXXXXX)"
+    local ret=$? errmsg=
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmInfo) Error: Can't create temp file! (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+    onevm show -x "$_VM_ID" >"$tmpXML"
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+
     unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(onevm show -x "$_VM_ID" | sed '/\/>$/d' | "$_XPATH" --stdin \
+        done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /VM/DEPLOY_ID \
                             /VM/STATE \
                             /VM/PREV_STATE \
@@ -906,7 +941,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
-
+    rm -f "$tmpXML"
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
     VMSTATE="${XPATH_ELEMENTS[i++]}"
@@ -968,10 +1003,28 @@ function oneDatastoreInfo()
     local _DS_ID="$1"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
 
+    local tmpXML="$(mktemp -t oneDatastoreInfo-${_DS_ID}-XXXXXX)"
+    local ret=$? errmsg=
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneDatastoreInfo) Error: Can't create temp file! (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+    trapAdd "rm -f '$tmpXML'"
+    onedatastore show -x "$_DS_ID" >"$tmpXML"
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+
     unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(onedatastore show -x "$_DS_ID" | sed '/\/>$/d' | "$_XPATH" --stdin \
+        done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
@@ -995,6 +1048,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_CLONE_GW \
                             /DATASTORE/TEMPLATE/VMSNAPSHOT_LIMIT \
                             /DATASTORE/TEMPLATE/DISKSNAPSHOT_LIMIT)
+    rm -f "$tmpXML"
     unset i
     DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -1323,10 +1377,29 @@ oneVmVolumes()
     if boolTrue "$DEBUG_oneVmVolumes"; then
         splog "oneVmVolumes() VM_ID:$VM_ID"
     fi
+
+    local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
+    local ret=$? errmsg=
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmVolumes) Error: Can't create temp file! (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+    trapAdd "rm -f '$tmpXML'"
+    onevm show -x "$VM_ID" >"$tmpXML"
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmVolumes) Error: Can't get VM info! $(head -n 1 "$tmpXML") (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+
     unset XPATH_ELEMENTS i
     while read element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(onevm show -x "$VM_ID" |\
+    done < <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath_multi.py -s \
         /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
         /VM/TEMPLATE/CONTEXT/DISK_ID \
@@ -1339,6 +1412,7 @@ oneVmVolumes()
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
+    rm -f "$tmpXML"
     unset i
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
@@ -1415,12 +1489,31 @@ oneVmDiskSnapshots()
     if boolTrue "$DEBUG_oneVmDiskSnapshots_VERBOSE"; then
         splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID"
     fi
+
+    local tmpXML="$(mktemp -t oneVmDiskSnapshots-${VM_ID}-XXXXXX)"
+    local ret=$? errmsg=
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmDiskSnapshots) Error: Can't create temp file! (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+    onevm show -x "$VM_ID" >"$tmpXML"
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmDiskSnapshots) Error: Can't get info for ${VM_ID}! $(head -n 1 "$tmpXML") (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+
     unset XPATH_ELEMENTS i
     while read element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(onevm show -x "$VM_ID" |\
+    done < <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath.rb \
         %m%/VM/SNAPSHOTS[DISK_ID="$DISK_ID"]/SNAPSHOT/ID)
+    rm -f "$tmpXML"
     unset i
     local _DISK_SNAPSHOTS="${XPATH_ELEMENTS[i++]}"
     DISK_SNAPSHOTS=(${_DISK_SNAPSHOTS})

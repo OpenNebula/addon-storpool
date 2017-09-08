@@ -214,6 +214,11 @@ XPATH="${driverPath}/../xpath_multi.py"
 [ -d "$SP_FE_JSON_PATH" ] || mkdir -p "$SP_FE_JSON_PATH"
 
 onedatastore list -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
+ret=$?
+if [ $ret -ne 0 ]; then
+	splog "Error: Can't get datastore XML! $(head -n 1 "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}") (ret:$ret)"
+	exit $ret
+fi
 
 unset i XPATH_ELEMENTS
 while IFS= read element; do
@@ -400,16 +405,29 @@ done
 
 # hosts processing
 
+tmpXML="$(mktemp -t onHostList-$$-XXXXXX)"
+ret=$?
+if [ $ret -ne 0 ]; then
+    splog "(oneHostList) Error: Can't create temp file! (ret:$ret)"
+    exit $ret
+fi
+onehost list -x >"$tmpXML"
+ret=$?
+if [ $ret -ne 0 ]; then
+    splog "(oneHostList) Error: Can't get info! $(head -n1 "$tmpXML") (ret:$ret)"
+    exit $ret
+fi
+
 unset i XPATH_ELEMENTS
 while IFS= read element; do
 	XPATH_ELEMENTS[i++]="$element"
-done < <(onehost list -x | $XPATH -s \
+done < <(cat "$tmpXML" | $XPATH -s \
   /HOST_POOL/HOST/ID \
   /HOST_POOL/HOST/NAME \
   /HOST_POOL/HOST/STATE \
   /HOST_POOL/HOST/CLUSTER_ID \
   /HOST_POOL/HOST/SP_JSON_PATH)
-
+rm -f "$tmpXML"
 unset i
 _HOST_ID="${XPATH_ELEMENTS[i++]}"
 _HOST_NAME="${XPATH_ELEMENTS[i++]}"
