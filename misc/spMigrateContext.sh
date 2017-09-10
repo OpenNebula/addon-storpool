@@ -26,6 +26,7 @@
 
 DRY_RUN=${DRY_RUN+echo }
 ONE_LOCATION=${ONE_LOCATION:-/var/lib/one}
+ONE_PX="${ONE_PX:-one}"
 
 unset i XPATH_ELEMENTS
 while read -r element; do
@@ -75,9 +76,9 @@ for i in ${!VM_ID_ARRAY[@]}; do
         HOST=$HOSTNAME
     fi
     echo "$VM_ID $DEPLOY_ID '$VM_NAME' CONTEXT_DISK_ID:$CONTEXT_DISK_ID $HOST:${DISK}"
-    SP_VOL="one-sys-${VM_ID}-${DISK_ID}-iso"
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
     SP_LINK="/dev/storpool/$SP_VOL"
-    SP_TEMPLATE="one-ds-$DS_ID"
+    SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
     SP_SIZE=$(ssh $HOST "[ -f $DISK ] && du -b $DISK | cut -f1")
     SP_SIZE=$(( (SP_SIZE +511) /512 *512 ))
     if [ $SP_SIZE -eq 0 ]; then

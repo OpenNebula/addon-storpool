@@ -53,7 +53,7 @@ oneDsDriverAction "$DRIVER_PATH"
 SP_VOL="${SOURCE##*/}"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
 SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
-SP_TEMPLATE="one-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 
 storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
 

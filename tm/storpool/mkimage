@@ -92,9 +92,9 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_SIZE="${SIZE}M"
-SP_VOL="one-sys-${VM_ID}-${DISK_ID}-${FSTYPE}"
+SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FSTYPE}"
 SP_LINK="/dev/storpool/$SP_VOL"
-SP_TEMPLATE="one-ds-$DS_ID"
+SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 
 storpoolTemplate "$SP_TEMPLATE"
 

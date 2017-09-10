@@ -1,6 +1,11 @@
 MKFS="sudo /sbin/mkfs"
 MKSWAP="sudo /sbin/mkswap"
 
+# Prefix for the OpenNebula instance in StorPool
+# Set to a different name to avoid naming collision when multiple OpenNebula
+# instances are using single StorPool storage
+# default: "one"
+#ONE_PX="one"
 
 # (obsolete)there is a code in the addon to manage the attributes of the
 # StorPool templates which represent the OpenNebula datastores
