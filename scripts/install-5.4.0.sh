@@ -65,7 +65,7 @@ else
                 case "$b" in
                     bower)
                         echo " ** Note! installing $b"
-                        npm install -g bower@1.6.5
+                        npm install -g bower
                         $b --version
                         [ $? -ne 0 ] && bin_err="$bin_err $b"
                         ;;
