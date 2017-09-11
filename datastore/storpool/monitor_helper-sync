@@ -121,12 +121,12 @@ fi
 if [ -n "$RAFT_LEADER_IP" ]; then
 	tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
 	if [ "${tmp:0:5}" == "local" ]; then
-		if boolTrue "$MONITOR_SYNC_DEBUG"; then
-			splog "Found shared IP."
+		if boolTrue "$MONITOR_SYNC_DEBUG_VERBOSE"; then
+			splog "Found leader IP ($RAFT_LEADER_IP)."
 		fi
 	else
-		if boolTrue "$MONITOR_SYNC_DEBUG"; then
-			splog "There is no shared IP found. Exit."
+		if boolTrue "$MONITOR_SYNC_DEBUG_VERBOSE"; then
+			splog "There is no leader IP found ($RAFT_LEADER_IP). Exit."
 		fi
 		exit 0
 	fi
