@@ -82,24 +82,43 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 # variables enabling various Debuging
 #
+# (obsolete)
 #POLL_DISK_INFO_DEBUG=1
+
+# tm/storpool_common.sh
 #DEBUG_COMMON=1
 #DEBUG_SP_RUN_CMD=1
 #DEBUG_SP_RUN_CMD_VERBOSE=1
+
+# datastore/monitor_helper-sync
 #MONITOR_SYNC_DEBUG=1
+#MONITOR_SYNC_DEBUG_VERBOSE=1
+
+# datastore/monitor
 #DEBUG_DS_MONITOR=1
 #DEBUG_DS_MONITOR_VERBOSE=1
+
+# tm/monitor
 #DEBUG_TM_MONITOR=1
 #DEBUG_TM_MONITOR_VERBOSE=1
+
+# tm/monitor_ds
 #DEBUG_TM_MONITOR_DS=1
 #DEBUG_TM_MONITOR_DS_VERBOSE=1
+
+# tm/monitor_disk
 #DEBUG_TM_MONITOR_DISK=1
 #DEBUG_TM_MONITOR_DISK_VERBOSE=1
+
+# tm/monitor_disk-misc
 #DEBUG_TM_MONITOR_DISK_MISC=1
 #DEBUG_TM_MONITOR_DISK_MISC_VERBOSE=1
+
+# datastore/monitor_ds.sh (sets DEBUG_TM_MONITOR_DS=1)
 #IM_MONITOR_DS_DEBUG=1
 #IM_MONITOR_DS_DEBUG_VERBOSE=1
-#
+
+# tm/storpool_common.sh (verbosity per funcion)
 #DEBUG_oneDsDriverAction=1
 #DEBUG_oneDsInfo=1
 #DEBUG_oneVmInfo=1
