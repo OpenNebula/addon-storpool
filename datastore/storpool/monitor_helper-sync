@@ -23,6 +23,8 @@ function splog() { logger -t "ds_sp_${0##*/}[$$]" "$*"; }
 
 SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/tmp/monitor"
+ONE_HOME="${ONE_HOME:-/var/lib/one}"
+
 
 # datastores stats
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
@@ -118,6 +120,14 @@ else
 	exit 0
 fi
 
+# try detecting RAFT_LEADER_IP from opennebula's config
+if [ -z "$RAFT_LEADER_IP" ] && [ -f "$ONE_HOME/config" ]; then
+	RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "$ONE_HOME/config")"
+	if [ -n "$RAFT_IP" ]; then
+		RAFT_LEADER_IP="${RAFT_IP%%/*}"
+	fi
+fi
+
 if [ -n "$RAFT_LEADER_IP" ]; then
 	tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
 	if [ "${tmp:0:5}" == "local" ]; then
@@ -128,9 +138,11 @@ if [ -n "$RAFT_LEADER_IP" ]; then
 		if boolTrue "$MONITOR_SYNC_DEBUG_VERBOSE"; then
 			splog "There is no leader IP found ($RAFT_LEADER_IP). Exit."
 		fi
+#		[ -n "$SP_FE_JSON_PATH" ] && rm -f "${SP_FE_JSON_PATH}/*json*"
 		exit 0
 	fi
 fi
+
 echo $$ >"$lockFile"
 trap "rm -f \"$lockFile\"" EXIT TERM INT
 

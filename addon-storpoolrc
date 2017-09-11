@@ -22,6 +22,12 @@ MKSWAP="sudo /sbin/mkswap"
 # Default: 0 (disabled)
 #SP_WAIT_LINK=0
 
+# Run stats collecting only on the LEADER instance
+# If autodetction fails set the leader IP manually
+#
+# Default: '' (autodetect)
+#RAFT_LEADER_IP=
+
 #(Experimental)
 #
 # save VM checkpoint file to a StorPool volume

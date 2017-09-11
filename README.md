@@ -252,8 +252,10 @@ EOF
 ```
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 ```
-* If OpenNebula 5.4+ HA setup is in use set RAFT_LEADER_IP in the addon configuration file
 
+* RAFT_LEADER_IP (OpenNebula 5.4+)
+
+The addon will try to autodetect the leader IP address from oned confioguration but if it fail set it manually in addon-storpoolrc
 ```bash
 echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
 ```
