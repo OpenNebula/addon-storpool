@@ -119,7 +119,7 @@ else
 fi
 
 if [ -n "$RAFT_LEADER_IP" ]; then
-	tmp="$(ip route get "$RAFT_LEADER_IP"|head -n 1)"
+	tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
 	if [ "${tmp:0:5}" == "local" ]; then
 		if boolTrue "$MONITOR_SYNC_DEBUG"; then
 			splog "Found shared IP."
