@@ -678,6 +678,14 @@ function storpoolVolumeGetParent()
     echo "${parentName//\"/}"
 }
 
+function storpoolSnapshotInfo()
+{
+    SNAPSHOT_INFO=($(storpoolRetry -j snapshot "$1" info | jq -r '.data|[.size,.templateName]|@csv' | tr '[,"]' ' '  ))
+    if boolTrue "$DEBUG_storpoolSnapshotInfo"; then
+        splog "storpoolSnapshotInfo($1):${SNAPSHOT_INFO[@]}"
+    fi
+}
+
 function storpoolSnapshotCreate()
 {
     local _SP_SNAPSHOT="$1" _SP_VOL="$2"
@@ -1196,6 +1204,8 @@ function oneDsDriverAction()
         XPATH_ELEMENTS[i++]="$element"
     done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/UID \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/GID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTER_ID \
                     %m%/DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTERS/ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TM_MAD \
@@ -1230,12 +1240,16 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/CLONING_ID \
                     /DS_DRIVER_ACTION_DATA/IMAGE/CLONING_OPS \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE)
+                    /DS_DRIVER_ACTION_DATA/IMAGE/SIZE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/UID \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/GID)
 
 
     unset i
     BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+    DATASTORE_UID="${XPATH_ELEMENTS[i++]}"
+    DATASTORE_GID="${XPATH_ELEMENTS[i++]}"
     CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
     CLUSTERS_ID="${XPATH_ELEMENTS[i++]}"
     TM_MAD="${XPATH_ELEMENTS[i++]}"
@@ -1271,6 +1285,8 @@ function oneDsDriverAction()
     CLONING_OPS="${XPATH_ELEMENTS[i++]}"
     TARGET_SNAPSHOT="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
+    IMAGE_UID="${XPATH_ELEMENTS[i++]}"
+    IMAGE_GID="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -1280,6 +1296,8 @@ function oneDsDriverAction()
 
     _MSG="[oneDsDriverAction]\
 ${ID:+ID=$ID }\
+${IMAGE_UID:+IMAGE_UID=$IMAGE_UID }\
+${IMAGE_GID:+IMAGE_GID=$IMAGE_GID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
 ${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
 ${CLUSTERS_ID:+CLUSTERS_ID=$CLUSTERS_ID }\
@@ -1522,6 +1540,107 @@ oneVmDiskSnapshots()
     if boolTrue "$DEBUG_oneVmDiskSnapshots"; then
         splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID SNAPSHOTS:${#DISK_SNAPSHOTS[@]} SNAPSHOT_IDs:$_DISK_SNAPSHOTS "
     fi
+}
+
+oneVmSnapshots()
+{
+    local VM_ID="$1" snapshot_id="$2" disk_id="$3"
+    if boolTrue "$DEBUG_oneVmSnapshots_VERBOSE"; then
+        splog "oneVmSnapshots() VM_ID:$VM_ID"
+    fi
+
+    local tmpXML="$(mktemp -t oneVmSnapshots-${VM_ID}-XXXXXX)"
+    local ret=$? errmsg=
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmSnapshots) Error: Can't create temp file! (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+    onevm show -x "$VM_ID" >"$tmpXML"
+    ret=$?
+    if [ $ret -ne 0 ]; then
+        errmsg="(oneVmSnapshots) Error: Can't get info for ${VM_ID}! $(head -n 1 "$tmpXML") (ret:$ret)"
+        log_error "$errmsg"
+        splog "$errmsg"
+        exit $ret
+    fi
+
+    local query="
+        /VM/UID
+        /VM/GID
+        /VM/TEMPLATE/CONTEXT/DISK_ID
+        %m%/VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID
+        %m%/VM/TEMPLATE/SNAPSHOT/HYPERVISOR_ID"
+    [ -n "$snapshot_id" ] && query="
+        /VM/UID
+        /VM/GID
+        /VM/TEMPLATE/CONTEXT/DISK_ID
+        /VM/TEMPLATE/SNAPSHOT[SNAPSHOT_ID="$snapshot_id"]/SNAPSHOT_ID
+        /VM/TEMPLATE/SNAPSHOT[SNAPSHOT_ID="$snapshot_id"]/HYPERVISOR_ID"
+    [ -n "$disk_id" ] && query+=" /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/DATASTORE_ID
+        /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/DISK_TYPE
+        /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/TYPE
+        /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/SOURCE
+        /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/CLONE
+        /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/FORMAT"
+    unset XPATH_ELEMENTS i
+    while IFS= read -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done < <(cat "$tmpXML" |\
+        ${DRIVER_PATH}/../../datastore/xpath.rb $query)
+    rm -f "$tmpXML"
+    unset i
+    VM_UID="${XPATH_ELEMENTS[i++]}"
+    VM_GID="${XPATH_ELEMENTS[i++]}"
+    CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
+    local _SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
+    local _HYPERVISOR_ID="${XPATH_ELEMENTS[i++]}"
+    SNAPSHOT_IDS=(${_SNAPSHOT_ID})
+    HYPERVISOR_IDS=(${_HYPERVISOR_ID})
+    if [ -n "$disk_id" ]; then
+        DISK_A="${XPATH_ELEMENTS[i++]}"
+        DISK_B="${XPATH_ELEMENTS[i++]}"
+        DISK_C="${XPATH_ELEMENTS[i++]}"
+        DISK_D="${XPATH_ELEMENTS[i++]}"
+        DISK_E="${XPATH_ELEMENTS[i++]}"
+        DISK_F="${XPATH_ELEMENTS[i++]}"
+    fi
+    if boolTrue "$DEBUG_oneVmSnapshots"; then
+        splog "oneVmSnapshots() VM_ID:$VM_ID (U:$VM_UID/G:$VM_GID) vmsnap=$snapshot_id disk:$disk_id SNAPSHOT_IDs:${SNAPSHOT_IDS[@]} HYPERVISOR_IDs:${HYPERVISOR_IDS[@]}"
+        splog "$CONTEXT_DISK_ID A:$DISK_A B:$DISK_B C:$DISK_C D:$DISK_D E:$DISK_E F:$DISK_F"
+    fi
+}
+
+oneSnapshotLookup()
+{
+    #VM:51-DISK:0-VMSNAP:0
+    local arr=(${1//-/ }) volumeName=
+    declare -A snap
+    for e in ${arr[@]}; do
+       snap["${e%:*}"]="${e#*:}"
+    done
+    oneVmSnapshots "${snap["VM"]}" "${snap["VMSNAP"]}" "${snap["DISK"]}"
+    if [ "${DISK_B^^}" = "BLOCK" ] && [ "${DISK_C^^}" = "BLOCK" ]; then
+        volumeName="${DISK_D#*/}"
+        if [ "${DISK_E^^}" = "YES" ]; then
+            volumeName+="-${snap["VM"]}-${snap["DISK"]}"
+        fi
+    elif [ "${DISK_B^^}" = "FILE" ] && [ "${DISK_C^^}" = "FS" ]; then
+        volumeName="${ONE_PX}-sys-${snap["VM"]}-${snap["DISK"]}-raw"
+    elif [ "${CONTEXT_DISK_ID}" = "${snap["DISK"]}" ]; then
+        # ONE can't register image with size less than 1MB
+        # but it is possible to have bigger contextualization
+        volumeName="${ONE_PX}-sys-${snap["VM"]}-${snap["DISK"]}-iso"
+    fi
+    if [ -n "$volumeName" ] && [ ${#HYPERVISOR_IDS[@]} -gt 0 ]; then
+        SNAPSHOT_NAME="${volumeName}-${HYPERVISOR_IDS[0]}"
+        if boolTrue "DEBUG_oneSnapshotLookup"; then
+            splog "oneSnapshotLookup($1): SNAPSHOT_NAME:$SNAPSHOT_NAME"
+        fi
+        return 0
+    fi
+    return 1
 }
 
 # disable sp checkpoint transfer from file to block device

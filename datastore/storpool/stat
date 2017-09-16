@@ -70,6 +70,16 @@ case "${IMAGE_PATH,,}" in
 esac
 
 if [ "$SIZE" = "0" ]; then
+    oneSnapshotLookup "${IMAGE_PATH##*/}"
+    if [ -n "$SNAPSHOT_NAME" ]; then
+        storpoolSnapshotInfo "$SNAPSHOT_NAME"
+        SIZE="${SNAPSHOT_INFO[0]}"
+        SIZE=$((SIZE/1024**2))
+        splog "$SNAPSHOT_NAME SIZE:$SIZE"
+    fi
+fi
+
+if [ "$SIZE" = "0" ]; then
     log_error "Cannot determine size for $IMAGE_PATH"
     splog "Cannot determine size for $IMAGE_PATH"
     exit -1
