@@ -67,7 +67,7 @@ set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
 IMAGE_HASH=`generate_image_hash`
 
 case "$IMAGE_PATH" in
-*VMSNAP:*)
+*VMSNAP:*|*SPSNAPSHOT:*)
     oneSnapshotLookup "${IMAGE_PATH##*/}"
     ;;
 http://*|https://*)
@@ -92,7 +92,7 @@ SP_DST="$SP_TEMPLATE/$SP_VOL"
 
 if [ -n "$SNAPSHOT_NAME" ]; then
 
-    if [ $IMAGE_GID -ne 0 ]; then
+    if [[ $IMAGE_GID -ne 0 ]]; then
         if [[ $VM_UID -ne $IMAGE_UID ]]; then
             errmsg="UID $IMAGE_UID is not allowed to import snapshot from VM with UID:$VM_UID"
             log_error "$errmsg"

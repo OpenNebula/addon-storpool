@@ -1620,6 +1620,14 @@ oneSnapshotLookup()
     for e in ${arr[@]}; do
        snap["${e%%:*}"]="${e#*:}"
     done
+    # SPSNAPSHOT:<StorPool snashotName>
+    if [ -n "${snap["SPSNAPSHOT"]}" ]; then
+        SNAPSHOT_NAME="${1#*SPSNAPSHOT:}"
+        if boolTrue "DEBUG_oneSnapshotLookup"; then
+            splog "oneSnapshotLookup($1): full SNAPSHOT_NAME:$SNAPSHOT_NAME"
+        fi
+        return 0
+    fi
     oneVmSnapshots "${snap["VM"]}" "${snap["VMSNAP"]}" "${snap["DISK"]}"
     if [ "${DISK_B^^}" = "BLOCK" ] && [ "${DISK_C^^}" = "BLOCK" ]; then
         volumeName="${DISK_D#*/}"
@@ -1636,7 +1644,7 @@ oneSnapshotLookup()
     if [ -n "$volumeName" ] && [ ${#HYPERVISOR_IDS[@]} -gt 0 ]; then
         SNAPSHOT_NAME="${volumeName}-${HYPERVISOR_IDS[0]}"
         if boolTrue "DEBUG_oneSnapshotLookup"; then
-            splog "oneSnapshotLookup($1): SNAPSHOT_NAME:$SNAPSHOT_NAME"
+            splog "oneSnapshotLookup($1): VM SNAPSHOT_NAME:$SNAPSHOT_NAME"
         fi
         return 0
     fi
