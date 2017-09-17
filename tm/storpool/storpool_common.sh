@@ -1618,7 +1618,7 @@ oneSnapshotLookup()
     local arr=(${1//-/ }) volumeName=
     declare -A snap
     for e in ${arr[@]}; do
-       snap["${e%:*}"]="${e#*:}"
+       snap["${e%%:*}"]="${e#*:}"
     done
     oneVmSnapshots "${snap["VM"]}" "${snap["VMSNAP"]}" "${snap["DISK"]}"
     if [ "${DISK_B^^}" = "BLOCK" ] && [ "${DISK_C^^}" = "BLOCK" ]; then

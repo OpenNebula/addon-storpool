@@ -92,26 +92,28 @@ SP_DST="$SP_TEMPLATE/$SP_VOL"
 
 if [ -n "$SNAPSHOT_NAME" ]; then
 
-    if [ $VM_UID -ne $IMAGE_UID ]; then
-        if [ $IMAGE_GID -ne 0 ]; then
+    if [ $IMAGE_GID -ne 0 ]; then
+        if [[ $VM_UID -ne $IMAGE_UID ]]; then
             errmsg="UID $IMAGE_UID is not allowed to import snapshot from VM with UID:$VM_UID"
             log_error "$errmsg"
             error_message "$errmsg"
             splog "$errmsg"
             exit -1
-        else
-            msg="UID $IMAGE_UID with GID:$IMAGE_GID imported $SNAPSHOT_NAME (UID:$VM_UID) as $SP_DST"
-            log "$msg"
-            splog "$msg"
         fi
     fi
+
+    msg="UID $IMAGE_UID with GID:$IMAGE_GID imported $SNAPSHOT_NAME (UID:$VM_UID) as $SP_DST"
+    log "$msg"
+    splog "$msg"
 
     storpoolSnapshotClone "$SNAPSHOT_NAME" "$SP_VOL" "$SP_TEMPLATE"
 
     FORMAT="raw"
 
     echo $SP_DST
+
 else
+
     echo $SP_DST
 
     SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
