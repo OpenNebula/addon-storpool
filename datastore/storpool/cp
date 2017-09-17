@@ -67,6 +67,9 @@ set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
 IMAGE_HASH=`generate_image_hash`
 
 case "$IMAGE_PATH" in
+*VMSNAP:*|*SPSNAPSHOT:*)
+    oneSnapshotLookup "${IMAGE_PATH##*/}"
+    ;;
 http://*|https://*)
     log "Downloading $IMAGE_PATH to the image repository"
     ;;
@@ -86,76 +89,100 @@ SP_VOL="${ONE_PX}-img-${ID}"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 SP_DST="$SP_TEMPLATE/$SP_VOL"
-SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
-SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"
 
-echo $SP_DST
+if [ -n "$SNAPSHOT_NAME" ]; then
 
-if [ -n "$DST_HOST" ]; then
-    DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" -`
+    if [[ $IMAGE_GID -ne 0 ]]; then
+        if [[ $VM_UID -ne $IMAGE_UID ]]; then
+            errmsg="UID $IMAGE_UID is not allowed to import snapshot from VM with UID:$VM_UID"
+            log_error "$errmsg"
+            error_message "$errmsg"
+            splog "$errmsg"
+            exit -1
+        fi
+    fi
+
+    msg="UID $IMAGE_UID with GID:$IMAGE_GID imported $SNAPSHOT_NAME (UID:$VM_UID) as $SP_DST"
+    log "$msg"
+    splog "$msg"
+
+    storpoolSnapshotClone "$SNAPSHOT_NAME" "$SP_VOL" "$SP_TEMPLATE"
+
+    FORMAT="raw"
+
+    echo $SP_DST
+
 else
-    DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" "$SP_TEMP_LINK"`
-fi
 
-COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
+    echo $SP_DST
 
-#-------------------------------------------------------------------------------
-# Transfer the image to a temp volume
-#-------------------------------------------------------------------------------
+    SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
+    SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"
+    if [ -n "$DST_HOST" ]; then
+        DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" -`
+    else
+        DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" "$SP_TEMP_LINK"`
+    fi
 
-storpoolTemplate "$SP_TEMPLATE"
+    COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
 
-storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE"M "$SP_TEMPLATE"
+    #-------------------------------------------------------------------------------
+    # Transfer the image to a temp volume
+    #-------------------------------------------------------------------------------
 
-trapAdd "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
-
-storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST"
-
-#-------------------------------------------------------------------------------
-# Import image to temp volume
-#-------------------------------------------------------------------------------
-
-if [ -n "$DST_HOST" ]; then
-    splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
-    exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct" \
-                 "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
-else
-    splog "$COPY_CMD"
-    exec_and_log "$COPY_CMD" \
-                 "Error dumping $IMAGE_PATH to $SP_TEMP_VOL"
-fi
-
-#-------------------------------------------------------------------------------
-# Process imported image
-#-------------------------------------------------------------------------------
-
-if [ -n "$DST_HOST" ]; then
-    FORMAT=$($SSH $DST_HOST $QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print $3}')
-else
-    FORMAT=$($QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print $3}')
-fi
-splog "$SP_TEMP_LINK FORMAT=$FORMAT SIZE=$SIZE $QEMU_IMG status:$?"
-
-if [ "$FORMAT" != "$DRIVER" ]; then
-    splog "$QEMU_IMG detected format $FORMAT but DRIVER=$DRIVER in the image template"
-fi
-
-if [ "$FORMAT" = "raw" ]; then
-    storpoolVolumeRename "$SP_TEMP_VOL" "$SP_VOL" "$SP_TEMPLATE"
-
-    trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
-
-    trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
-else
     storpoolTemplate "$SP_TEMPLATE"
 
-    storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
+    storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
-    trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+    trapAdd "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
-    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+    storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST"
 
-    POST_COPY_CMD=$(cat <<EOF
+    #-------------------------------------------------------------------------------
+    # Import image to temp volume
+    #-------------------------------------------------------------------------------
+
+    if [ -n "$DST_HOST" ]; then
+        splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
+        exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct" \
+                     "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
+    else
+        splog "$COPY_CMD"
+        exec_and_log "$COPY_CMD" \
+                     "Error dumping $IMAGE_PATH to $SP_TEMP_VOL"
+    fi
+
+    #-------------------------------------------------------------------------------
+    # Process imported image
+    #-------------------------------------------------------------------------------
+
+    if [ -n "$DST_HOST" ]; then
+        FORMAT=$($SSH $DST_HOST $QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print $3}')
+    else
+        FORMAT=$($QEMU_IMG info $SP_TEMP_LINK | grep "^file format:" | $AWK '{print $3}')
+    fi
+    splog "$SP_TEMP_LINK FORMAT=$FORMAT SIZE=$SIZE $QEMU_IMG status:$?"
+
+    if [ "$FORMAT" != "$DRIVER" ]; then
+        splog "$QEMU_IMG detected format $FORMAT but DRIVER=$DRIVER in the image template"
+    fi
+
+    if [ "$FORMAT" = "raw" ]; then
+        storpoolVolumeRename "$SP_TEMP_VOL" "$SP_VOL" "$SP_TEMPLATE"
+
+        trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
+
+        trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+    else
+        storpoolTemplate "$SP_TEMPLATE"
+
+        storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
+
+        trapAdd "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+
+        storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+
+        POST_COPY_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t "ds_sp_${0##*/}[\$\$]" "\$*"; }
@@ -166,27 +193,30 @@ else
 EOF
 )
 
-    if [ -n "$DST_HOST" ]; then
-        splog "convert from $FORMAT to raw at $DST_HOST"
-        ssh_exec_and_log "$DST_HOST" "$POST_COPY_CMD" \
-                         "Error converting image on $DST_HOST"
-    else
-        splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
-        $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
-        sync
+        if [ -n "$DST_HOST" ]; then
+            splog "convert from $FORMAT to raw at $DST_HOST"
+            ssh_exec_and_log "$DST_HOST" "$POST_COPY_CMD" \
+                             "Error converting image on $DST_HOST"
+        else
+            splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
+            $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
+            sync
+        fi
+
+        trapDel "storpoolVolumeDelete \"$SP_VOL\" force snaps"
+
+        storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST"
+
+        trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
+
+        storpoolVolumeDelete "$SP_TEMP_VOL" "force" "snaps"
+
     fi
 
-    trapDel "storpoolVolumeDelete \"$SP_VOL\" force snaps"
-
-    storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST"
-
-    trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
-
-    storpoolVolumeDelete "$SP_TEMP_VOL" "force" "snaps"
+    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
 
 fi
 
-storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
 
 #-------------------------------------------------------------------------------
 # fix image DRIVER to raw
