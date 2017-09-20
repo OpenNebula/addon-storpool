@@ -79,6 +79,8 @@ Support standard OpenNebula datastore operations:
 
 ## Installation
 
+If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) first!
+
 ### Pre-install
 
 #### front-end dependencies
