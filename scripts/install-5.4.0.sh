@@ -177,7 +177,7 @@ else
     echo 'VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"' >> /etc/one/oned.conf
 fi
 
-if grep -q -i VMSNAPSHOTOT_LIMIT /etc/one/oned.conf >/dev/null 2>&1; then
+if grep -q -i VMSNAPSHOT_LIMIT /etc/one/oned.conf >/dev/null 2>&1; then
     echo "*** VMSNAPSHOT_LIMIT found in /etc/one/oned.conf"
 else
     echo "*** Appending VM_RESTRICTED_ATTR = VMSNAPSHOT_LIMIT in /etc/one/oned.conf"
