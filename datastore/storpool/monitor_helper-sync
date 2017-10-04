@@ -23,8 +23,9 @@ function splog() { logger -t "ds_sp_${0##*/}[$$]" "$*"; }
 
 SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/tmp/monitor"
-ONE_HOME="${ONE_HOME:-/var/lib/one}"
+ONE_HOME="${ONE_HOME:-~oneadmin}"
 
+[ -r "$ONE_HOME/.one/sp_auth" ] && export ONE_AUTH="$ONE_HOME/.one/sp_auth"
 
 # datastores stats
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
