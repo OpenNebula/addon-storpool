@@ -28,6 +28,7 @@ The additional extras requires latest stable versions of OpenNebula and StorPool
 
 ### OpenNebula Front-end
 
+* Working OpenNebula CLI interface with `oneadmin` account authorized to OpenNebula's core with UID=0
 * Password-less SSH access from the front-end `oneadmin` user to the `node` instances.
 * StorPool CLI installed, authorization token and access to the StorPool API network
 * (Optional) member of the StorPool cluster with working StorPool initiator driver(storpool_block). In this case the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
