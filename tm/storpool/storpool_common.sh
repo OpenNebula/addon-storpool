@@ -35,17 +35,13 @@ function splog()
 if [ -n "${ONE_LOCATION}" ]; then
     PATH="$PATH:$ONE_LOCATION"
     TMCOMMON="$ONE_LOCATION/var/remotes/tm/tm_common.sh"
-    ONE_HOME=${ONE_HOME:-$ONE_LOCATION}
 else
     TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
-    ONE_HOME=${ONE_HOME:-~oneadmin}
 fi
 
 if [ -f "$TMCOMMON" ]; then
 	source "$TMCOMMON"
 fi
-
-[ -r "$ONE_HOME/.one/sp_auth" ] && export ONE_AUTH="$ONE_HOME/.one/sp_auth"
 
 #-------------------------------------------------------------------------------
 # load local configuration parameters
