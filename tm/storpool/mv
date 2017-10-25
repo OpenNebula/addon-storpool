@@ -169,7 +169,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     else
         REMOTE_MONITOR=
     fi
-    if [ $LCM_STATE -eq 30 ] and boolTrue "$SKIP_UNDEPLOY_SSH"; then
+    if [ $LCM_STATE -eq 30 ] && boolTrue "$SKIP_UNDEPLOY_SSH"; then
         splog "Skip ssh_make_path $DST_HOST"
     else
        ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
