@@ -64,6 +64,9 @@ if boolTrue "$AUTO_TEMPLATE"; then
     if [ "$SP_PLACETAIL" = "" ]; then
         SP_PLACETAIL="$SP_PLACEALL"
     fi
+    if [ "$SP_PLACEHEAD" = "" ]; then
+        SP_PLACEHEAD="$SP_PLACEALL"
+    fi
     if [ -n "${SP_REPLICATION/[123]/}" ] || [ -n "${SP_REPLICATION/[[:digit:]]/}" ]; then
         error_message "The template of the datastore with ID $DS_ID is with unknown value for 'SP_REPLICATION' attribute (SP_REPLICATION=$SP_REPLICATION)."
         exit -1
