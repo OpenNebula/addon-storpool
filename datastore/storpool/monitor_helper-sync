@@ -326,7 +326,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		jqPlaceHead=""
 	fi
 	
-	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw${jqPlaceHead}]|@csv") #"
+	tmp=$(storpool -B -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw${jqPlaceHead}]|@csv") #"
 	template_data=(${tmp//,/ })
 	
 	if [ -z "$tmp" ]; then
@@ -374,10 +374,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	fi
 	
 	if [ -n "$cmd" ] && boolTrue "$AUTO_TEMPLATE"; then
-		storpool template "$template_name" $cmd
+		storpool -B template "$template_name" $cmd
 		splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
 		if boolTrue "$SP_TEMPLATE_PROPAGATE"; then
-			storpool template "$template_name" propagate 2>&1 >/dev/null
+			storpool -B template "$template_name" propagate 2>&1 >/dev/null
 			splog "($?) template $template_name propagate"
 		fi
 	fi
