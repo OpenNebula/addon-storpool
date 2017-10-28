@@ -319,7 +319,14 @@ for i in ${!DS_ID_ARRAY[@]}; do
 #	fi
 	
 	# create/update the template in StorPool
-	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw]|@csv") #"
+	
+	if [ -n "${SP_PLACEHEAD_ARRAY[i]}" ]; then
+		jqPlaceHead=",.placeHead"
+	else
+		jqPlaceHead=""
+	fi
+	
+	tmp=$(storpool -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw${jqPlaceHead}]|@csv") #"
 	template_data=(${tmp//,/ })
 	
 	if [ -z "$tmp" ]; then
@@ -327,35 +334,43 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		reload_template=1
 	fi
 	
-	old=${template_data[0]//\"/}
-	new=${SP_REPLICATION_ARRAY[i]:-3}
+	old="${template_data[0]//\"/}"
+	new="${SP_REPLICATION_ARRAY[i]:-3}"
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
 		cmd+="replication $new "
 		comment+=" replication:$old"
 	fi
-	old=${template_data[1]//\"/}
-	new=${SP_PLACEALL_ARRAY[i]}
+	old="${template_data[1]//\"/}"
+	new="${SP_PLACEALL_ARRAY[i]}"
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
 		cmd+="placeAll $new "
 		comment+=" placeAll:$old"
 	fi
-	old=${template_data[2]//\"/}
-	new=${SP_PLACETAIL_ARRAY[i]}
+	old="${template_data[2]//\"/}"
+	new="${SP_PLACETAIL_ARRAY[i]}"
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
 		cmd+="placeTail $new "
 		comment+=" placeTail:$old"
 	fi
-	old=${template_data[3]//\"/}
-	new=${SP_IOPS_ARRAY[i]:--}
+	old="${template_data[3]//\"/}"
+	new="${SP_IOPS_ARRAY[i]:--}"
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
 		cmd+="iops $new "
 		comment+=" iops:$old"
 	fi
-	old=${template_data[4]//\"/}
-	new=${SP_BW_ARRAY[i]:--}
+	old="${template_data[4]//\"/}"
+	new="${SP_BW_ARRAY[i]:--}"
 	if [ -n "$new" ] && [ "$old" != "$new" ]; then
 		cmd+="bw $new "
 		comment+=" bw:$old"
+	fi
+	if [ -n "$jqPlaceHead" ]; then
+		old="${template_data[5]//\"/}"
+		new="${SP_PLACEHEAD_ARRAY[i]}"
+		if [ -n "$new" ] && [ "$old" != "$new" ]; then
+			cmd+="placeHead $new "
+			comment+=" placeHead:$old"
+		fi
 	fi
 	
 	if [ -n "$cmd" ] && boolTrue "$AUTO_TEMPLATE"; then
