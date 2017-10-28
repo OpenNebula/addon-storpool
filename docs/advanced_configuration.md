@@ -4,8 +4,10 @@
 The template management is disabled by default. To enable set `AUTO_TEMPLATE=1` in storpool-addonrc file.
 ```
 ONE_LOCATION=/var/lib/one
-echo "AUTO_TEMPLATE" >>$ONE_LOCATION/remotes/addon-storpoolrc
+echo "AUTO_TEMPLATE=1" >>$ONE_LOCATION/remotes/addon-storpoolrc
 ```
+
+The following variables should be set on all StorPool backed datastores:
 
 * **SP_REPLICATION**: [mandatory] The StorPool replication level for the datastore. Number (1)
 * **SP_PLACEALL**: [mandatory] The name of StorPool placement group of disks where to store data. String (2)
@@ -19,6 +21,10 @@ echo "AUTO_TEMPLATE" >>$ONE_LOCATION/remotes/addon-storpoolrc
 1. The PlaceAll placement group is defined in StorPool as list of drives where to store the data.
 1. The PlaceTail placement group is defined in StorPool as list of drives. Used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
 1. The PlaceHead placement group is defined in StorPool as list of drives. Used in StorPool hybrid setups with one HDD replica and two SSD replicas of the data.
+
+When adding a new datastore the reported size will appear after refresh cycle of the cached StorPool data. Default is every 4th minute set in `/etc/cron.d/addon-storpoolrc`.
+
+> :exclamation: The implemented management of StorPool templates is not deleting StorPool templates! After deleting a datastore in OpenNebula the corresponding template in StorPool should be deleted manually.
 
 
 #### StorPool backed SYSTEM datastore on shared filesystem

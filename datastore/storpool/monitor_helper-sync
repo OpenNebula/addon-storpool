@@ -170,7 +170,7 @@ function run_task()
 	
 	mkdir -p "${_jsonFile%/*}"
 	
-	if [ "${sp_api_list/|${_run}$sp_api_http_host|/}" = "$sp_api_list" ]; then
+	if [ "${sp_api_list/|${_run}$sp_api_http_host|/}" = "$sp_api_list" ] || boolTrue "$_reloadCache"; then
 		sp_api_list+="|${_run}$sp_api_http_host|"
 		if [ -f "${_jsonFile}${sp_api_http_host}" ]; then
 			if [ -n "${_cacheTime}" ] && [ "${_cacheTime//[[:digit:]]/}" = "" ]; then
@@ -183,7 +183,7 @@ function run_task()
  				fi
 			fi
 			if boolTrue "$_reloadCache"; then
-				splog "forced cache reset. Cache time was $cached"
+				splog "run_task: Force cache reset. Cache time was $cached"
 				cached=0
 			fi
 		else
@@ -214,7 +214,7 @@ function run_task()
 		ln -sf "${_jsonFile}${sp_api_http_host}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
 		ret=$?
 		if boolTrue "$MONITOR_SYNC_DEBUG" || [ $ret -ne 0 ] ; then
-			splog "($ret) ln -s ${_jsonFile}${sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/} cached:$cached sec"
+			splog "($ret) ln -sf ${_jsonFile}${sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/} cached:$cached sec"
 		fi
 	else
 		splog "directory not found $SP_MONITOR_CACHE_CLUSTER"
@@ -330,8 +330,11 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	template_data=(${tmp//,/ })
 	
 	if [ -z "$tmp" ]; then
-		splog "Missing template $template_name"
+		splog "Missing StorPool template '$template_name' for datastore $DS_ID"
 		reload_template=1
+		clusters=
+	else
+		reload_template=""
 	fi
 	
 	old="${template_data[0]//\"/}"
