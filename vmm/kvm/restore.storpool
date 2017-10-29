@@ -42,6 +42,7 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
     if storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeAttach "$SP_VOL" "${HVHOST}"
         ln -sf "/dev/storpool/$SP_VOL" "$FILE"
+        splog "ln -sf /dev/storpool/$SP_VOL $FILE ($?)"
     fi
 
 fi

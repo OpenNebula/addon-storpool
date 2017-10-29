@@ -41,6 +41,7 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
 
     if storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeDetach "$SP_VOL" "" "${HVHOST}"
+        splog "Detach $SP_VOL from $HVHOST ($?)"
     fi
 
 fi

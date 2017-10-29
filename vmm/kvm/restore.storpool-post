@@ -41,6 +41,7 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
 
     if storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeDelete "$SP_VOL" "force"
+        splog "Delete $SP_VOL ($?)"
     fi
 
 fi

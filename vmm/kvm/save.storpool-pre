@@ -55,5 +55,6 @@ if boolTrue "$SP_CHECKPOINT_BD"; then
     trapReset
 
     ln -sf "/dev/storpool/$SP_VOL" "$FILE"
+    splog "ln -sf /dev/storpool/$SP_VOL $FILE ($?)"
 
 fi

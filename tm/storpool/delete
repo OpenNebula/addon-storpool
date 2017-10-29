@@ -104,6 +104,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
 
     if boolTrue "$SP_CHECKPOINT_BD"; then
         storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
+        splog "Delete ${ONE_PX}-sys-${VM_ID}-rawcheckpoint ($?)"
     fi
 
     splog "END [SYSTEM_DS]"
