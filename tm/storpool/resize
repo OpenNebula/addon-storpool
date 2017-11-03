@@ -56,6 +56,14 @@ if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
+if [ "$SP_VOL" = "" ] && [ "${FORMAT,,}" = "raw" ]; then
+    FORMAT="raw"
+    if [ "${TYPE,,}" = "swap" ]; then
+        FORMAT="swap"
+    fi
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT}"
+fi
+
 #-------------------------------------------------------------------------------
 # Resize the volume
 #-------------------------------------------------------------------------------
