@@ -194,7 +194,7 @@ crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 ```bash
 pushd /usr/lib/one/sunstone/public
 # patch the sunstone interface
-patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.4.0/datastores-tab.patch
+patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.4.1/datastores-tab.patch
 
 # rebuild the interface
 npm install
