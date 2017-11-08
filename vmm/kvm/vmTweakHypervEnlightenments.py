@@ -20,6 +20,7 @@
 # Credits: Todor Tanev <tt@storpool.com>
 #
 # vmTweakHypervEnlightenments.py <XMLfile>
+#
 # add the following line after cat >$domain in remotes/vmm/kvm/deploy
 #  "$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
 
@@ -27,7 +28,7 @@
 from sys import argv
 import syslog
 
-dbg = 1
+dbg = 0
 thrnum = u'1'
 
 if dbg:
@@ -37,8 +38,6 @@ try:
 	import lxml.etree as ET
 except ImportError:
 	raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
-
-nQueues = None
 
 xmlFile = argv[1]
 
