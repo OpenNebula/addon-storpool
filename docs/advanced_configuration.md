@@ -78,7 +78,7 @@ ONE_LOCATION=/var/lib/one
 echo "SP_CHECKPOINT=nomigrates" >> $ONE_LOCATION/remotes/addon-storpoolrc
 ```
 
-### Disk snapshot limits
+#### Disk snapshot limits
 
 It is possible to limit the number of snapshots per disk. When the limit is reached the addon will return an error which will be logged in the VM log and the _ERROR_ variable will be set in the VM's Info tab with relevant error message.
 
@@ -211,3 +211,60 @@ EOF
 
 For each OpenNebula instance set a different string in the `ONE_PX` variable.
 
+#### Enable iothreads and Windows performance optimisation
+
+There is a helper script that add separate iothread for VM disks IO processing. In addition it is enabling some Hyperv enlightments on Windows VMs
+
+Edit _~oneadmin/remotes/vmm/kvm/deploy_ and add _"$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"_ just after _cat >$domain_ line. The edited file should look like this:
+`
+
+```bash
+kdir -p `dirname $domain`
+cat > $domain
+
+"$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
+
+data=`virsh --connect $LIBVIRT_URI create $domain`
+```
+
+The scripts add a iothread and assign all virtio-blk disks and virio-scsi controllers to the thread:
+
+```xml
+<domain>
+  ...
+  <devices>
+    ...
+    <disk type="block" device="disk">
+      <source dev="/var/lib/one//datastores/103/68/disk.1"/>
+      <target dev="vda"/>
+      <driver name="qemu" type="raw" cache="none" io="native" discard="unmap" iothread="1"/>
+    </disk>
+    ...
+    <controller model="virtio-scsi" type="scsi">
+      <driver iothread="1"/>
+    </controller>
+    ...
+  </devices>
+  ...
+  <iothreads>1</iothreads>
+  ...
+<</domain>>
+
+```
+
+When the _HYPERV_ feature is enabled in the _OS Booting_ entry the tweaking tool will add a _clock_ entry in the domain XML
+
+```xml
+<domain>
+...
+  <clock offset="utc">
+    <timer name="hypervclock" present="yes"/>
+    <timer name="rtc" tickpolicy="catchup"/>
+    <timer name="pit" tickpolicy="delay"/>
+    <timer name="hpet" present="no"/>
+    <timer name="hypervclock" present="yes"/>
+  </clock>
+</domain>
+```
+
+In Sunstone -> VM Template -> Update -> OS Booting -> Features -> HYPERV = YES
