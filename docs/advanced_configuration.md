@@ -216,10 +216,9 @@ For each OpenNebula instance set a different string in the `ONE_PX` variable.
 There is a helper script that add separate iothread for VM disks IO processing. In addition it is enabling some Hyperv enlightments on Windows VMs
 
 Edit _~oneadmin/remotes/vmm/kvm/deploy_ and add _"$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"_ just after _cat >$domain_ line. The edited file should look like this:
-`
 
 ```bash
-kdir -p `dirname $domain`
+mkdir -p `dirname $domain`
 cat > $domain
 
 "$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
