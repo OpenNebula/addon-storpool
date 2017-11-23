@@ -1,6 +1,9 @@
 ### Advanced configuration variables
 
 #### StorPool template management
+
+##### StorPool template management
+
 The template management is disabled by default. To enable set `AUTO_TEMPLATE=1` in storpool-addonrc file.
 ```
 ONE_LOCATION=/var/lib/one
@@ -26,6 +29,9 @@ When adding a new datastore the reported size will appear after refresh cycle of
 
 > :exclamation: The implemented management of StorPool templates is not deleting StorPool templates! After deleting a datastore in OpenNebula the corresponding template in StorPool should be deleted manually.
 
+##### StorPool volume template management
+
+Set `NO_VOLUME_TEMPLATE=1` in storpool-addonrc to not enforce the datastore template on the StorPool volumes. The newly created images and the contextualization ISO images still will have datastore template enforced.
 
 #### StorPool backed SYSTEM datastore on shared filesystem
 

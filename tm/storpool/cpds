@@ -69,6 +69,8 @@ if boolTrue "$CLONE"; then
     SP_PARENT+="-${VM_ID}-${DISK_ID}"
 fi
 
+boolTrue "$NO_VOLUME_TEMPLATE" && SP_TEMPLATE=
+
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------

@@ -72,6 +72,8 @@ fi
 
 SP_TEMPLATE="${DST%%/*}"
 
+boolTrue "$NO_VOLUME_TEMPLATE" && SP_TEMPLATE=
+
 splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}"
 
 #-------------------------------------------------------------------------------

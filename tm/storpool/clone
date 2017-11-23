@@ -66,6 +66,8 @@ SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
 SP_TEMPLATE="${SRC_PATH%%/*}"
 SP_LINK="/dev/storpool/$SP_VOL"
 
+boolTrue "$NO_VOLUME_TEMPLATE" && SP_TEMPLATE=
+
 #-------------------------------------------------------------------------------
 # Action
 #-------------------------------------------------------------------------------
