@@ -2,7 +2,7 @@
 
 #### StorPool template management
 
-##### StorPool template management
+##### StorPool template management via datastore variables
 
 The template management is disabled by default. To enable set `AUTO_TEMPLATE=1` in storpool-addonrc file.
 ```
