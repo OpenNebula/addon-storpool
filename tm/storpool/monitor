@@ -89,7 +89,9 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_
 
 while IFS=',' read n t f u2 u3; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
-		f=$(( f + u2 + u3 ))
+		if boolTrue "$ALT_STATS"; then
+			f=$(( f + u2 + u3 ))
+		fi
 		u=$(( t - f ))
 		case "${DRV_ACTION:0:6}" in
 			system)

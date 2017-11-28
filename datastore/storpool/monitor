@@ -83,7 +83,9 @@ fi
 
 while IFS=',' read name storedCapacity storedFree u2 u3; do
 	if [ "${name//\"/}" = "$DS_NAME" ]; then
-		storedFree=$(( storedFree + u2 + u3 ))
+		if boolTrue "$ALT_STATS"; then
+			storedFree=$(( storedFree + u2 + u3 ))
+		fi
 		used=$(( storedCapacity - storedFree ))
 		case "${DRV_ACTION:0:6}" in
 			system)
