@@ -77,24 +77,19 @@ except IndexError:
 	pass
 
 conf = ET.Element('driver', iothread = thrnum)
-try:
-	alldevices = [ i for i in domain if i.tag == 'devices' ][0]
-	# set iothread on scsi controllers
-	controllers = [ c for c in alldevices if c.tag == 'controller' and 'model="virtio-scsi"' in ET.tostring(c) ][0]
-	for controller in controllers:
-		try:
-			driver = [ e for e in controller if e.tag == 'driver'][0]
-		except IndexError:
-			# no such element
-			controller.append(conf)
-except IndexError:
-	# no controllers found adding a scsi controller
-	ctrl=(ET.Element('controller', type = 'scsi', model = 'virtio-scsi'))
-#	ctrl=(ET.Element('controller', type = 'scsi', index = '0', model = 'virtio-scsi'))
-#	ctrl.append(ET.Element('alias', name = 'scsi0'))
-#	ctrl.append(ET.Element('address', type = 'pci', domain="0x0000", bus="0x00", slot="0x04", function="0x0"))
-	ctrl.append(conf)
-	alldevices.append(ctrl)
+controllers = [ c for c in domain.findall(".//controller") if 'model="virtio-scsi"' in ET.tostring(c) ]
+for controller in controllers:
+	try:
+		driver = [ e for e in controller if e.tag == 'driver'][0]
+		driver.set('iothread', thrnum)
+	except IndexError:
+		controller.append(conf)
+if not controllers:
+	# get first <devices>
+	devices = domain.findall(".//devices")[0]
+	controller=(ET.Element('controller', type = 'scsi', index = '0', model = 'virtio-scsi'))
+	controller.append(conf)
+	devices.append(controller)
 
 # It is possible to recognize windows VMs by the availability of /domain/featrues/hyperv entry
 if et.find(".//hyperv") is not None:
