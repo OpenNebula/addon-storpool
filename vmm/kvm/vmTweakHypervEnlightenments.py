@@ -19,7 +19,8 @@
 #
 # Credits: Todor Tanev <tt@storpool.com>
 #
-# vmTweakHypervEnlightenments.py <XMLfile>
+# vmTweakHypervEnlightenments.py [--forcequeues] <XMLfile>
+#   --forcequeues - always set virtio-scsi nqueues to the number of vCPUS
 #
 # add the following line after cat >$domain in remotes/vmm/kvm/deploy
 #  "$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
@@ -38,6 +39,12 @@ try:
 	import lxml.etree as ET
 except ImportError:
 	raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
+
+forceq = False
+if argv[1][0] == '-':
+	if argv[1] == '--forcequeues':
+		forceq = 1
+	argv = argv[1:]
 
 xmlFile = argv[1]
 
@@ -76,14 +83,14 @@ except IndexError:
 	# no devices section found
 	pass
 
+vcpu = domain.find('.//vcpu').text
 conf = ET.Element('driver', iothread = thrnum)
 controllers = [ c for c in domain.findall(".//controller") if 'model="virtio-scsi"' in ET.tostring(c) ]
 for controller in controllers:
 	try:
 		driver = [ e for e in controller if e.tag == 'driver'][0]
 		driver.set('iothread', thrnum)
-		if 'queues' in driver.keys():
-			vcpu = domain.find('.//vcpu').text
+		if forceq or 'queues' in driver.keys():
 			driver.set('queues', vcpu)
 	except IndexError:
 		controller.append(conf)
@@ -91,6 +98,8 @@ if not controllers:
 	# get first <devices>
 	devices = domain.findall(".//devices")[0]
 	controller=(ET.Element('controller', type = 'scsi', index = '0', model = 'virtio-scsi'))
+	if forceq:
+		conf.set('queues', vcpu)
 	controller.append(conf)
 	devices.append(controller)
 
