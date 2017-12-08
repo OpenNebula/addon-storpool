@@ -19,8 +19,9 @@
 #
 # Credits: Todor Tanev <tt@storpool.com>
 #
-# vmTweakHypervEnlightenments.py [--forcequeues] <XMLfile>
+# vmTweakHypervEnlightenments.py [--forcequeues] [--ioeventfd] <XMLfile>
 #   --forcequeues - always set virtio-scsi nqueues to the number of vCPUS
+#   --ioeventfd - set virtio-scsi ioeventfd=on
 #
 # add the following line after cat >$domain in remotes/vmm/kvm/deploy
 #  "$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
@@ -41,10 +42,14 @@ except ImportError:
 	raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
 
 forceq = False
-if argv[1][0] == '-':
-	if argv[1] == '--forcequeues':
-		forceq = 1
-	argv = argv[1:]
+ioeventfd = False
+for arg in argv[1:]:
+	if arg[0] == '-':
+		if arg == '--forcequeues':
+			forceq = 1
+		if arg == '--ioeventfd':
+			ioeventfd = 1
+		argv = argv[1:]
 
 xmlFile = argv[1]
 
@@ -92,6 +97,8 @@ for controller in controllers:
 		driver.set('iothread', thrnum)
 		if forceq or 'queues' in driver.keys():
 			driver.set('queues', vcpu)
+		if ioeventfd:
+			driver.set('ioeventfd', 'on')
 	except IndexError:
 		controller.append(conf)
 if not controllers:
@@ -100,6 +107,8 @@ if not controllers:
 	controller=(ET.Element('controller', type = 'scsi', index = '0', model = 'virtio-scsi'))
 	if forceq:
 		conf.set('queues', vcpu)
+	if ioeventfd:
+		conf.set('ioeventfd', 'on')
 	controller.append(conf)
 	devices.append(controller)
 
