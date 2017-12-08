@@ -82,6 +82,9 @@ for controller in controllers:
 	try:
 		driver = [ e for e in controller if e.tag == 'driver'][0]
 		driver.set('iothread', thrnum)
+		if 'queues' in driver.keys():
+			vcpu = domain.find('.//vcpu').text
+			driver.set('queues', vcpu)
 	except IndexError:
 		controller.append(conf)
 if not controllers:
