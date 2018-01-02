@@ -126,7 +126,6 @@ if et.find(".//hyperv") is not None:
 	clock.append(ET.Element("timer", name = 'rtc', tickpolicy = 'catchup'))
 	clock.append(ET.Element("timer", name = 'pit', tickpolicy = 'delay'))
 	clock.append(ET.Element("timer", name = 'hpet', present = 'no'))
-	clock.append(ET.Element("timer", name = 'hypervclock', present = 'yes'))
 
 #with open('{0}-{1}.XML'.format(xmlFile,vm_name), 'w') as d:
 #	d.write(ET.tostring(domain, pretty_print = True))
