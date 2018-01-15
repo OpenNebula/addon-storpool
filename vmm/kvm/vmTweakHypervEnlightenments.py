@@ -88,7 +88,13 @@ except IndexError:
 	# no devices section found
 	pass
 
-vcpu = domain.find('.//vcpu').text
+vcpu_e = domain.find('.//vcpu')
+
+if vcpu_e:
+	vcpu = vcpu_e.text
+else:
+	vcpu = '1'
+
 conf = ET.Element('driver', iothread = thrnum)
 controllers = [ c for c in domain.findall(".//controller") if 'model="virtio-scsi"' in ET.tostring(c) ]
 for controller in controllers:
