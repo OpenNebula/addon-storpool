@@ -55,6 +55,7 @@ function boolTrue()
 
 if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
 	splog "$PWD $DISK $DS_ID $VM_ID $DRIVER"
+	[ -d "$SP_DS_TMP" ] && splog "found SP_DS_TMP:$SP_DS_TMP"
 fi
 
 DISK_LINK="$(readlink "$DISK")"
@@ -73,6 +74,58 @@ else
 	fi
 fi
 
+DISK_ID="${DISK##*\.}"
+spVolume=${DISK_LINK#/dev/storpool/}
+
+if boolTrue "$SP_SPACE_USED_LVMWAY"; then
+	used="storedSize"
+	columns="data other"
+else
+	used="spaceUsed"
+	columns="other data"
+fi
+
+#"name",storedSize,spaceUsed
+if [ -f "$SP_DS_TMP/sizes" ]; then
+	#if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
+	#	splog "walking $SP_DS_TMP/sizes for volume $spVolume"
+	#fi
+	fgrep "$spVolume" "$SP_DS_TMP/sizes" | while IFS=, read name $columns; do
+		name=${name//\"/}
+		if [ -n "$disk_size" ]; then
+			snap_id=${name#*snap}
+			if [ "$snap_id" = "$name" ]; then
+				if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
+					splog "skipping $name looking for *snap"
+				fi
+				continue
+			fi
+			snap_size=$((data/1024/1024))
+			if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
+				splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($((other/1024/1024))) snapshot:$name"
+			fi
+			echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+		else
+			if [ "$spVolume" = "$name" ]; then
+				disk_size="${data:-0}"
+				disk_size=$((disk_size/1024/1024))
+				if [ "$disk_size" = "0" ] && [ -n "$data" ] && [ "$data" -gt "0" ]; then
+					disk_size=1
+				fi
+				if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
+					splog "$DISK ID:$DISK_ID SIZE:$disk_size ($((other/1024/1024))) volume:$name"
+				fi
+				echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+			else
+				splog "skip '$name' looking for '$spVolume'"
+			fi
+		fi
+	done
+	exit
+else
+	splog "not found $SP_DS_TMP/sizes"
+fi
+
 # expand SP_CMD_VOLUME_SPACE macro variables
 SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
 SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
@@ -87,14 +140,7 @@ SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_
 SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
 SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
 
-DISK_ID="${DISK##*\.}"
-spVolume=${DISK_LINK#/dev/storpool/}
 
-if boolTrue "$SP_SPACE_USED_LVMWAY"; then
-	used="storedSize"
-else
-	used="spaceUsed"
-fi
 spSize=$(eval $SP_CMD_VOLUME_SPACE 2>/dev/null | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv") #"
 
 disk_size="${spSize:-0}"

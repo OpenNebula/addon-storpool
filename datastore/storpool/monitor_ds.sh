@@ -31,6 +31,13 @@ function splog() { logger -t "im_sp_monitor_ds[$$]" "$*"; }
 SP_MONITOR_DS="../../datastore/storpool/monitor"
 ONE_VERSION="$(<../../VERSION)"
 
+SP_JSON_PATH="/tmp"
+SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
+SP_CMD_VOLUME_SPACE="cat _SP_JSON_PATH_/_SP_VOLUME_SPACE_JSON_"
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
+SP_CMD_SNAPSHOT_SPACE="cat _SP_JSON_PATH_/_SP_SNAPSHOT_SPACE_JSON_"
+
+
 if [ -f "../../addon-storpoolrc" ]; then
     source "../../addon-storpoolrc"
 fi
@@ -49,11 +56,61 @@ function boolTrue()
    esac
 }
 
+
 if [ -f "$SP_MONITOR_DS" ]; then
 #    if [ "$IM_MONITOR_DS_DEBUG" = "1" ]; then
 #        splog "[DBG]$PWD $0 $* (ds:$ds)"
 #    fi
-    SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds 2>/tmp/im_monitor_ds.error)"
+    if [ -d "$SP_DS_TMP" ]; then
+        if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+            splog "found SP_DS_TMP:$SP_DS_TMP"
+        fi
+    else
+        SP_DS_TMP="$(mktemp -d -t sp-tmp-XXXXXXXX)"
+        _ret=$?
+        export SP_DS_TMP
+        if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+            START_TIME="$(date +%s)"
+            export START_TIME
+            splog "mktemp $SP_DS_TMP returned $_ret, START_TIME=$START_TIME"
+        fi
+        function sp_trap()
+        {
+            local _ret=$?
+            if [ $_ret -ne 0 ]; then
+                splog "(${_ret}) $0 $*"
+            fi
+            if [ -d "$SP_DS_TMP" ]; then
+                rm -rf "$SP_DS_TMP"
+            fi
+            if [ -n "$START_TIME" ]; then
+                local end_time="$(date +%s)"
+                splog "'$0' runtime:$((end_time - START_TIME))sec"
+            fi
+            exit $_ret
+        }
+        trap sp_trap EXIT TERM INT HUP
+
+        if [ $_ret -eq 0 ]; then
+            if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+                splog "generating disk space data cache $SP_DS_TMP/sizes"
+            fi
+            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
+            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+            #splog "eval $SP_CMD_VOLUME_SPACE"
+            eval $SP_CMD_VOLUME_SPACE 2>"$SP_DS_TMP/ERROR-volume-eval" |\
+              jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"$SP_DS_TMP/ERROR-volume" |\
+                sort >"$SP_DS_TMP/sizes"
+            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
+            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+            #splog "eval $SP_CMD_SNAPSHOT_SPACE"
+            eval $SP_CMD_SNAPSHOT_SPACE 2>"$SP_DS_TMP/ERROR-snapshot-eval" |\
+              jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"$SP_DS_TMP/ERROR-snapshot" |\
+                sort >>"$SP_DS_TMP/sizes"
+        fi
+    fi
+
+    SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds 2>/dev/null)"
 
     if [ -n "$SP_DS_SIZES" ]; then
         if boolTrue "$IM_MONITOR_DS_DEBUG"; then
