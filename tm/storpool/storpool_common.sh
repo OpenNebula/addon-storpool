@@ -339,7 +339,7 @@ function storpoolApi()
     curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
     --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
     --max-time "${3:-300}" ${2:+-d "$2"} \
-    "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>"/tmp/$$-${0##*/}.err" | tee "/tmp/$$-${0##*/}.out"
+    "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>/dev/null
     splog "storpoolApi $1 $2 ret:$?"
 }
 

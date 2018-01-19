@@ -105,7 +105,7 @@ EOF
         if boolTrue "$VMSNAPSHOT_ATOMIC"; then
             list+=($volume $snap)
         else
-            storpoolRetry -j volume "$volume" snapshot "$snap" ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} 2>&1 >"/tmp/${vid}-${snap}.log"
+            storpoolRetry -j volume "$volume" snapshot "$snap" ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} 2>&1 >/dev/null
             ret=$?
             splog "storpool volume $volume snapshot $snap ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} ($ret)"
         fi
