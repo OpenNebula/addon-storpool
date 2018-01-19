@@ -94,17 +94,23 @@ if [ -f "$SP_DS_TMP/sizes" ]; then
 		name=${name//\"/}
 		if [ -n "$disk_size" ]; then
 			snap_id=${name#*snap}
-			if [ "$snap_id" = "$name" ]; then
-				if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
-					splog "skipping $name looking for *snap"
+			if [ -n "$snap_id" ]; then
+				if [ "$snap_id" = "$name" ]; then
+					if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
+						splog "skipping $name looking for *snap"
+					fi
+					continue
 				fi
-				continue
+				snap_size=$((data/1024/1024))
+				if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
+					splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($((other/1024/1024))) snapshot:$name"
+				fi
+				echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+			else
+				if boolTrue "$DEBUG_TM_MONITOR_DISK_VERBOSE"; then
+					splog "skipping $name looking for *snap but snap_id=$snap_id"
+				fi
 			fi
-			snap_size=$((data/1024/1024))
-			if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
-				splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($((other/1024/1024))) snapshot:$name"
-			fi
-			echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
 		else
 			if [ "$spVolume" = "$name" ]; then
 				disk_size="${data:-0}"
