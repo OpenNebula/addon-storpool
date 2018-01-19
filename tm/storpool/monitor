@@ -120,6 +120,9 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 		fi
 		exit 0
 	fi
+	if boolTrue "$DEBUG_TM_MONITOR"; then
+		splog "run $DRIVER_PATH/monitor_ds $BASE_PATH"
+	fi
 	$DRIVER_PATH/monitor_ds "$BASE_PATH"
 else
 	if [ -n "$BASE_PATH" ]; then

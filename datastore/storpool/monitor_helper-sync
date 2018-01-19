@@ -205,8 +205,9 @@ function run_task()
 				return $ret
 			fi
 			cp -f "${_jsonFile}" "${_jsonFile}${sp_api_http_host}"
-			if boolTrue "$MONITOR_SYNC_DEBUG" || [ $? -ne 0 ]; then
-				splog "run_task:($ret) cp ${_jsonFile} ${_jsonFile}${sp_api_http_host}"
+			_ret=$?
+			if boolTrue "$MONITOR_SYNC_DEBUG" || [ $_ret -ne 0 ]; then
+				splog "run_task:($_ret) cp ${_jsonFile} ${_jsonFile}${sp_api_http_host}"
 			fi
 		fi
 	fi
