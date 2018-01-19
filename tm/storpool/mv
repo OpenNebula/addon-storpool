@@ -200,7 +200,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
                     if boolTrue "$DO_SYMLINK"; then
-                        oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH" "${CTX_PATH}.iso"
+                        oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH"
                     fi
                 fi
                 if boolTrue "$SKIP_CONTEXT"; then
