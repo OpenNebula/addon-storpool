@@ -97,12 +97,14 @@ if [ -f "$SP_MONITOR_DS" ]; then
             fi
             SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
             SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
             #splog "eval $SP_CMD_VOLUME_SPACE"
             eval $SP_CMD_VOLUME_SPACE 2>"$SP_DS_TMP/ERROR-volume-eval" |\
               jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"$SP_DS_TMP/ERROR-volume" |\
                 sort >"$SP_DS_TMP/sizes"
             SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
             SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
             #splog "eval $SP_CMD_SNAPSHOT_SPACE"
             eval $SP_CMD_SNAPSHOT_SPACE 2>"$SP_DS_TMP/ERROR-snapshot-eval" |\
               jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"$SP_DS_TMP/ERROR-snapshot" |\
