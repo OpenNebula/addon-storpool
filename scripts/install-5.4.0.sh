@@ -222,6 +222,7 @@ echo "*** VMM attach_disk patch (IO) ..."
 pushd "$ONE_VAR"
     do_patch "$CWD/patches/remotes/${ONE_VER}/scripts_common.sh.patch" "backup"
     do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
+    do_patch "$CWD/patches/vmm/${ONE_VER}/kvmrc.patch" "backup"
 popd
 
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
