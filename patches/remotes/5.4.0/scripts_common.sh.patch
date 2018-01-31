@@ -1,0 +1,19 @@
+diff -urN remotes.orig/scripts_common.sh remotes/scripts_common.sh
+--- remotes.orig/scripts_common.sh	2018-01-23 18:16:23.000000000 +0000
++++ remotes/scripts_common.sh	2018-01-31 08:02:11.957482855 +0000
+@@ -704,6 +704,7 @@
+                         $DISK_XPATH/READONLY \
+                         $DISK_XPATH/CACHE \
+                         $DISK_XPATH/DISCARD \
++                        $DISK_XPATH/IO \
+                         $DISK_XPATH/SOURCE \
+                         $DISK_XPATH/DISK_ID \
+                         $DISK_XPATH/CLONE \
+@@ -725,6 +726,7 @@
+     READONLY="${XPATH_ELEMENTS[j++]}"
+     CACHE="${XPATH_ELEMENTS[j++]}"
+     DISCARD="${XPATH_ELEMENTS[j++]}"
++    IO="${XPATH_ELEMENTS[j++]}"
+     IMG_SRC="${XPATH_ELEMENTS[j++]}"
+     DISK_ID="${XPATH_ELEMENTS[j++]}"
+     CLONE="${XPATH_ELEMENTS[j++]}"
