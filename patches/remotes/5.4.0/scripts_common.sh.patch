@@ -8,7 +8,7 @@ diff -urN remotes.orig/scripts_common.sh remotes/scripts_common.sh
 -                        $DISK_XPATH/TARGET)
 +                        $DISK_XPATH/TARGET \
 +                        $DISK_XPATH/IO)
-.
+
      VMID="${XPATH_ELEMENTS[j++]}"
      DRIVER="${XPATH_ELEMENTS[j++]:-$DEFAULT_TYPE}"
 @@ -737,8 +738,8 @@
@@ -18,6 +18,6 @@ diff -urN remotes.orig/scripts_common.sh remotes/scripts_common.sh
 -    SIZE="${XPATH_ELEMENTS[j++]}"
      DISK_TARGET="${XPATH_ELEMENTS[j++]}"
 +    IO="${XPATH_ELEMENTS[j++]}"
-.
+
      TYPE=$(echo "$TYPE"|tr A-Z a-z)
-.
+
