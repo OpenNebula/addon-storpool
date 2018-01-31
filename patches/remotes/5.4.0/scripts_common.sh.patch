@@ -1,19 +1,23 @@
 diff -urN remotes.orig/scripts_common.sh remotes/scripts_common.sh
 --- remotes.orig/scripts_common.sh	2018-01-23 18:16:23.000000000 +0000
 +++ remotes/scripts_common.sh	2018-01-31 08:02:11.957482855 +0000
-@@ -704,6 +704,7 @@
-                         $DISK_XPATH/READONLY \
-                         $DISK_XPATH/CACHE \
-                         $DISK_XPATH/DISCARD \
-+                        $DISK_XPATH/IO \
-                         $DISK_XPATH/SOURCE \
-                         $DISK_XPATH/DISK_ID \
-                         $DISK_XPATH/CLONE \
-@@ -725,6 +726,7 @@
-     READONLY="${XPATH_ELEMENTS[j++]}"
-     CACHE="${XPATH_ELEMENTS[j++]}"
-     DISCARD="${XPATH_ELEMENTS[j++]}"
+@@ -717,7 +717,8 @@
+                         $DISK_XPATH/DISK_TYPE \
+                         $DISK_XPATH/POOL_NAME \
+                         $DISK_XPATH/SIZE \
+-                        $DISK_XPATH/TARGET)
++                        $DISK_XPATH/TARGET \
++                        $DISK_XPATH/IO)
+.
+     VMID="${XPATH_ELEMENTS[j++]}"
+     DRIVER="${XPATH_ELEMENTS[j++]:-$DEFAULT_TYPE}"
+@@ -737,8 +738,8 @@
+     ISCSI_IQN="${XPATH_ELEMENTS[j++]}"
+     DISK_TYPE="${XPATH_ELEMENTS[j++]}"
+     POOL_NAME="${XPATH_ELEMENTS[j++]}"
+-    SIZE="${XPATH_ELEMENTS[j++]}"
+     DISK_TARGET="${XPATH_ELEMENTS[j++]}"
 +    IO="${XPATH_ELEMENTS[j++]}"
-     IMG_SRC="${XPATH_ELEMENTS[j++]}"
-     DISK_ID="${XPATH_ELEMENTS[j++]}"
-     CLONE="${XPATH_ELEMENTS[j++]}"
+.
+     TYPE=$(echo "$TYPE"|tr A-Z a-z)
+.
