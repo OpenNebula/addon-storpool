@@ -218,6 +218,12 @@ pushd "$ONE_VAR"
     do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
 popd
 
+echo "*** VMM attach_disk patch (IO) ..."
+pushd "$ONE_VAR"
+    do_patch "$CWD/patches/remotes/${ONE_VER}/scripts_common.sh.patch" "backup"
+    do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
+popd
+
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
 pushd "$ONE_VAR" >/dev/null
     do_patch "$CWD/patches/im/$ONE_VER/00-monitor_ds.patch"
