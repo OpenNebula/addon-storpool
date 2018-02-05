@@ -70,10 +70,9 @@ case "$IMAGE_PATH" in
 *VMSNAP:*|*SPSNAPSHOT:*)
     oneSnapshotLookup "${IMAGE_PATH##*/}"
     ;;
-http://*|https://*)
+http://*|https://*|ssh://*|s3://*|rbd://*|vcenter://*)
     log "Downloading $IMAGE_PATH to the image repository"
     ;;
-
 *)
     if [ `check_restricted $IMAGE_PATH` -eq 1 ]; then
         log_error "Not allowed to copy images from $RESTRICTED_DIRS"
@@ -82,6 +81,10 @@ http://*|https://*)
     fi
 
     log "Copying local image $IMAGE_PATH to the image repository"
+    if [ "${MD5}${SHA1}" = "" ]; then
+        localFile="$(echo "$IMAGE_PATH" | sed -e "s/'/'\\\''/g")"
+        log "Using direct IO"
+    fi
     ;;
 esac
 
@@ -127,7 +130,7 @@ else
     COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
 
     #-------------------------------------------------------------------------------
-    # Transfer the image to a temp volume
+    # Import image to temp volume
     #-------------------------------------------------------------------------------
 
     storpoolTemplate "$SP_TEMPLATE"
@@ -138,15 +141,18 @@ else
 
     storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST"
 
-    #-------------------------------------------------------------------------------
-    # Import image to temp volume
-    #-------------------------------------------------------------------------------
 
     if [ -n "$DST_HOST" ]; then
-        splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
-        exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct" \
+        if [ -n "$localFile" ] && [ -f "$localFile" ]; then
+            COPY_CMD="dd if=$localFile bs=1M iflag=direct"
+        fi
+        splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M status=none iflag=fullblock oflag=direct"
+        exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M status=none iflag=fullblock oflag=direct" \
                      "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
     else
+        if [ -n "$localFile" ] && [ -f "$localFile" ]; then
+            COPY_CMD="dd if=$localFile of=$SP_TEMP_LINK bs=1M iflag=direct oflag=direct"
+        fi
         splog "$COPY_CMD"
         exec_and_log "$COPY_CMD" \
                      "Error dumping $IMAGE_PATH to $SP_TEMP_VOL"
