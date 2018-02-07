@@ -127,7 +127,7 @@ else
             echo $$ | sudo tee "/sys/fs/cgroup/${cg}/tasks" >/dev/null
             splog "($?) pin to cgroup $cg"
         done
-        splog "$(</proc/self/cgroup)"
+#        splog "$(</proc/self/cgroup)"
     fi
 
     SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
