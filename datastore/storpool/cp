@@ -193,8 +193,8 @@ else
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t "ds_sp_${0##*/}[\$\$]" "\$*"; }
 
-    splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
-    $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
+    splog "$FORMAT $QEMU_IMG convert -t none -T none -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
+    $QEMU_IMG convert -t none -T none -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
     sync
 EOF
 )
@@ -204,8 +204,8 @@ EOF
             ssh_exec_and_log "$DST_HOST" "$POST_COPY_CMD" \
                              "Error converting image on $DST_HOST"
         else
-            splog "$FORMAT $QEMU_IMG convert -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
-            $QEMU_IMG convert -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
+            splog "$FORMAT $QEMU_IMG convert -t none -T none -O raw -S 4k  $SP_TEMP_LINK $SP_LINK"
+            $QEMU_IMG convert -t none -T none -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
             sync
         fi
 
