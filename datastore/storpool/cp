@@ -81,7 +81,7 @@ http://*|https://*|ssh://*|s3://*|rbd://*|vcenter://*)
     fi
 
     log "Copying local image $IMAGE_PATH to the image repository"
-    if [ "${MD5}${SHA1}" = "" ]; then
+    if [ "${MD5}${SHA1}${NOLOCAL}" = "" ]; then
         localFile="$(echo "$IMAGE_PATH" | sed -e "s/'/'\\\''/g")"
         log "Using direct IO"
     fi
@@ -118,6 +118,17 @@ if [ -n "$SNAPSHOT_NAME" ]; then
 else
 
     echo $SP_DST
+
+    if [ -n "$SP_IMPORT_CGROUPS" ]; then
+        set -o pipefail
+        for cg in $SP_IMPORT_CGROUPS; do
+            [ "${cg/../}" = "$cg" ] || continue
+            [ -d "/sys/fs/cgroup/$cg" ] || continue
+            echo $$ | sudo tee "/sys/fs/cgroup/${cg}/tasks" >/dev/null
+            splog "($?) pin to cgroup $cg"
+        done
+#        splog "$(</proc/self/cgroup)"
+    fi
 
     SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
     SP_TEMP_LINK="/dev/storpool/$SP_TEMP_VOL"
