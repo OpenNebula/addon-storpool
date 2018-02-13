@@ -67,7 +67,7 @@ SP_TEMPLATE_PROPAGATE="YES"
 
 ONEDATASTORE_XML="ds.xml"
 
-AUTO_TEMPLATE=1
+AUTO_TEMPLATE=0
 
 # load config
 driverPath="${0%/*}"
