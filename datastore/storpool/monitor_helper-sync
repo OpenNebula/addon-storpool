@@ -478,7 +478,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 #	fi
 done
 rm -rf "$tmpDir"
-trap - EXIT TERM
+trap "rm -f \"$lockFile\"" EXIT TERM INT HUP
 
 # hosts processing
 
