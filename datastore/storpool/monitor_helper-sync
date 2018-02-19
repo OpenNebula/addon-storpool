@@ -340,10 +340,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	tmpFile="$tmpDir/${DS_ID}.update"
 	
 	old="${template_data[0]//\"/}"
-	new="${SP_REPLICATION_ARRAY[i]:-3}"
+	new="${SP_REPLICATION_ARRAY[i]}"
 	if [ "$old" != "$new" ]; then
 		if boolTrue "$AUTO_TEMPLATE"; then
-			if [ -n "$new" ]; then
+			if [ -n "${new:-3}" ]; then
 				cmd+="replication $new "
 				comment+=" replication:$old"
 			fi
