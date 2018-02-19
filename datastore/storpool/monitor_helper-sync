@@ -248,6 +248,7 @@ done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACEHEAD \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_IOPS \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_BW \
+        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_AUTO_TEMPLATE \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
@@ -263,6 +264,7 @@ _SP_PLACETAIL="${XPATH_ELEMENTS[i++]}"
 _SP_PLACEHEAD="${XPATH_ELEMENTS[i++]}"
 _SP_IOPS="${XPATH_ELEMENTS[i++]}"
 _SP_BW="${XPATH_ELEMENTS[i++]}"
+_SP_AUTO_TEMPLATE="${XPATH_ELEMENTS[i++]}"
 _SP_TEMPLATE_PROPAGATE="${XPATH_ELEMENTS[i++]}"
 _SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
 _SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
@@ -279,6 +281,7 @@ SP_PLACETAIL_ARRAY=($_SP_PLACETAIL)
 SP_PLACEHEAD_ARRAY=($_SP_PLACEHEAD)
 SP_IOPS_ARRAY=($_SP_IOPS)
 SP_BW_ARRAY=($_SP_BW)
+SP_AUTO_TEMPLATE_ARRAY=($_SP_AUTO_TEMPLATE)
 SP_TEMPLATE_PROPAGATE_ARRAY=($_SP_TEMPLATE_PROPAGATE)
 SP_API_HTTP_HOST_ARRAY=($_SP_API_HTTP_HOST)
 SP_API_HTTP_PORT_ARRAY=($_SP_API_HTTP_PORT)
@@ -411,6 +414,11 @@ for i in ${!DS_ID_ARRAY[@]}; do
 			echo "SP_PLACEHEAD=$old" >>"$tmpFile"
 		fi
 	fi
+	old="$AUTO_TEMPLATE"
+	new="${SP_AUTO_TEMPLATE_ARRAY[i]}"
+	if [ "$old" != "$new" ]; then
+		echo "SP_AUTO_TEMPLATE=$old" >>"$tmpFile"
+	fi
 	
 	if boolTrue "$AUTO_TEMPLATE"; then
 		if [ -n "$cmd" ]; then
@@ -421,11 +429,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				splog "($?) template $template_name propagate"
 			fi
 		fi
-	else
-		if [ -s "$tmpFile" ]; then
-			onedatastore update "$DS_ID" --append "$tmpFile"
-			splog "($?) onedatastore update $DS_ID --append"
-		fi
+	fi
+	if [ -s "$tmpFile" ]; then
+		onedatastore update "$DS_ID" --append "$tmpFile"
+		splog "($?) onedatastore update $DS_ID --append"
 	fi
 	
 	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
