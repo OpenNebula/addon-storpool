@@ -67,7 +67,7 @@ SP_TEMPLATE_PROPAGATE="YES"
 
 ONEDATASTORE_XML="ds.xml"
 
-AUTO_TEMPLATE=1
+AUTO_TEMPLATE=0
 
 # load config
 driverPath="${0%/*}"
@@ -144,7 +144,7 @@ if [ -n "$RAFT_LEADER_IP" ]; then
 fi
 
 echo $$ >"$lockFile"
-trap "rm -f \"$lockFile\"" EXIT TERM INT
+trap "rm -f \"$lockFile\"" EXIT TERM INT HUP
 
 # Global arrays ...
 declare -a template_data
@@ -285,6 +285,10 @@ SP_API_HTTP_PORT_ARRAY=($_SP_API_HTTP_PORT)
 SP_AUTH_TOKEN_ARRAY=($_SP_AUTH_TOKEN)
 IFS=$_OLDIFS
 
+tmpDir=$(mktemp -d one-sp-XXXXXXXX)
+trap "rm -rf \"$lockFile\" \"$tmpDir\"" EXIT TERM INT HUP
+
+
 for i in ${!DS_ID_ARRAY[@]}; do
 	[ "${DS_TM_MAD_ARRAY[i]}" = "storpool" ] || continue
 	
@@ -320,14 +324,9 @@ for i in ${!DS_ID_ARRAY[@]}; do
 #	fi
 	
 	# create/update the template in StorPool
+	# or update ONE datastore
 	
-	if [ -n "${SP_PLACEHEAD_ARRAY[i]}" ]; then
-		jqPlaceHead=",.placeHead"
-	else
-		jqPlaceHead=""
-	fi
-	
-	tmp=$(storpool -B -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw${jqPlaceHead}]|@csv") #"
+	tmp=$(storpool -B -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw,.placeHead]|@csv") #"
 	template_data=(${tmp//,/ })
 	
 	if [ -z "$tmp" ]; then
@@ -338,51 +337,94 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		reload_template=""
 	fi
 	
+	tmpFile="$tmpDir/${DS_ID}.update"
+	
 	old="${template_data[0]//\"/}"
 	new="${SP_REPLICATION_ARRAY[i]:-3}"
-	if [ -n "$new" ] && [ "$old" != "$new" ]; then
-		cmd+="replication $new "
-		comment+=" replication:$old"
+	if [ "$old" != "$new" ]; then
+		if boolTrue "$AUTO_TEMPLATE"; then
+			if [ -n "$new" ]; then
+				cmd+="replication $new "
+				comment+=" replication:$old"
+			fi
+		else
+			echo "SP_REPLICATION=$old" >>"$tmpFile"
+		fi
 	fi
 	old="${template_data[1]//\"/}"
 	new="${SP_PLACEALL_ARRAY[i]}"
-	if [ -n "$new" ] && [ "$old" != "$new" ]; then
-		cmd+="placeAll $new "
-		comment+=" placeAll:$old"
+	if [ "$old" != "$new" ]; then
+		if boolTrue "$AUTO_TEMPLATE"; then
+			if [ -n "$new" ]; then
+				cmd+="placeAll $new "
+				comment+=" placeAll:$old"
+			fi
+		else
+			echo "SP_PLACEALL=$old" >>"$tmpFile"
+		fi
 	fi
 	old="${template_data[2]//\"/}"
 	new="${SP_PLACETAIL_ARRAY[i]}"
-	if [ -n "$new" ] && [ "$old" != "$new" ]; then
-		cmd+="placeTail $new "
-		comment+=" placeTail:$old"
+	if [ "$old" != "$new" ]; then
+		if boolTrue "$AUTO_TEMPLATE"; then
+			if [ -n "$new" ]; then
+				cmd+="placeTail $new "
+				comment+=" placeTail:$old"
+			fi
+		else
+			echo "SP_PLACETAIL=$old" >>"$tmpFile"
+		fi
 	fi
 	old="${template_data[3]//\"/}"
 	new="${SP_IOPS_ARRAY[i]:--}"
-	if [ -n "$new" ] && [ "$old" != "$new" ]; then
-		cmd+="iops $new "
-		comment+=" iops:$old"
+	if [ "$old" != "$new" ]; then
+		if boolTrue "$AUTO_TEMPLATE"; then
+			if [ -n "$new" ]; then
+				cmd+="iops $new "
+				comment+=" iops:$old"
+			fi
+		else
+			echo "SP_IOPS=$old" >>"$tmpFile"
+		fi
 	fi
 	old="${template_data[4]//\"/}"
 	new="${SP_BW_ARRAY[i]:--}"
-	if [ -n "$new" ] && [ "$old" != "$new" ]; then
-		cmd+="bw $new "
-		comment+=" bw:$old"
+	if [ "$old" != "$new" ]; then
+		if boolTrue "$AUTO_TEMPLATE"; then
+			if [ -n "$new" ]; then
+				cmd+="bw $new "
+				comment+=" bw:$old"
+			fi
+		else
+			echo "SP_BW=$old" >>"$tmpFile"
+		fi
 	fi
-	if [ -n "$jqPlaceHead" ]; then
-		old="${template_data[5]//\"/}"
-		new="${SP_PLACEHEAD_ARRAY[i]}"
-		if [ -n "$new" ] && [ "$old" != "$new" ]; then
-			cmd+="placeHead $new "
-			comment+=" placeHead:$old"
+	old="${template_data[5]//\"/}"
+	new="${SP_PLACEHEAD_ARRAY[i]}"
+	if [ "$old" != "$new" ]; then
+		if boolTrue "$AUTO_TEMPLATE"; then
+			if [ -n "$new" ]; then
+				cmd+="placeHead $new "
+				comment+=" placeHead:$old"
+			fi
+		else
+			echo "SP_PLACEHEAD=$old" >>"$tmpFile"
 		fi
 	fi
 	
-	if [ -n "$cmd" ] && boolTrue "$AUTO_TEMPLATE"; then
-		storpool -B template "$template_name" $cmd
-		splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
-		if boolTrue "$SP_TEMPLATE_PROPAGATE"; then
-			storpool -B template "$template_name" propagate 2>&1 >/dev/null
-			splog "($?) template $template_name propagate"
+	if boolTrue "$AUTO_TEMPLATE"; then
+		if [ -n "$cmd" ]; then
+			storpool -B template "$template_name" $cmd
+			splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
+			if boolTrue "$SP_TEMPLATE_PROPAGATE"; then
+				storpool -B template "$template_name" propagate 2>&1 >/dev/null
+				splog "($?) template $template_name propagate"
+			fi
+		fi
+	else
+		if [ -s "$tmpFile" ]; then
+			onedatastore update "$DS_ID" --append "$tmpFile"
+			splog "($?) onedatastore update $DS_ID --append"
 		fi
 	fi
 	
@@ -435,6 +477,8 @@ for i in ${!DS_ID_ARRAY[@]}; do
 #		splog "jFiles:${jFiles[@]}"
 #	fi
 done
+rm -rf "$tmpDir"
+trap - EXIT TERM
 
 # hosts processing
 
