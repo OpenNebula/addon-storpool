@@ -95,6 +95,8 @@ npm install grunt-cli -g
 
 #### node dependencies
 
+ :grey_exclamation:*use when adding new hosts too*:grey_exclamation:
+
 ```bash
 yum -y install --enablerepo=epel lz4 jq python-lxml
 ```
