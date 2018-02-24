@@ -392,10 +392,10 @@ Please follow the  [cofiguration tips](docs/configuration_tips.md) for suggestio
 * The suggested upgrade procedure is as follow
 
     1. Stop all opennebula services
-    2. Upgrade the opennebula packages. But not reconfigure anything yet
+    2. Upgrade the opennebula packages. But do not reconfigure anything yet
     3. Upgrade the addon (checkout/clone latest from github and run install.sh)
     4. Follow the addon configuration chapter in README.md to (re)configure the extras
-    5. Continue (re0configuring OpenNebula following the upstream docs
+    5. Continue (re)configuring OpenNebula following the upstream docs
 
 Please follow the notes for the OpenNebula version you are using.
 
