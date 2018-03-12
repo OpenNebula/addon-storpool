@@ -366,7 +366,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				comment+=" replication:$old"
 			fi
 		else
-			echo "SP_REPLICATION=$old" >>"$tmpFile"
+			if [ -n "$old" ]; then
+				echo "SP_REPLICATION=$old" >>"$tmpFile"
+				splog "DS_ID $DS_ID update SP_REPLICATION=$old"
+			fi
 		fi
 	fi
 	old="${template_data[1]//\"/}"
@@ -378,7 +381,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				comment+=" placeAll:$old"
 			fi
 		else
-			echo "SP_PLACEALL=$old" >>"$tmpFile"
+			if [ -n "$old" ]; then
+				echo "SP_PLACEALL=$old" >>"$tmpFile"
+				splog "DS_ID $DS_ID update SP_PLACEALL=$old"
+			fi
 		fi
 	fi
 	old="${template_data[2]//\"/}"
@@ -390,7 +396,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				comment+=" placeTail:$old"
 			fi
 		else
-			echo "SP_PLACETAIL=$old" >>"$tmpFile"
+			if [ -n "$old" ]; then
+				echo "SP_PLACETAIL=$old" >>"$tmpFile"
+				splog "DS_ID $DS_ID update SP_PLACETAIL=$old"
+			fi
 		fi
 	fi
 	old="${template_data[3]//\"/}"
@@ -402,7 +411,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				comment+=" iops:$old"
 			fi
 		else
-			echo "SP_IOPS=$old" >>"$tmpFile"
+			if [ -n "$old" ]; then
+				echo "SP_IOPS=$old" >>"$tmpFile"
+				splog "DS_ID $DS_ID update SP_IOPS=$old"
+			fi
 		fi
 	fi
 	old="${template_data[4]//\"/}"
@@ -414,7 +426,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				comment+=" bw:$old"
 			fi
 		else
-			echo "SP_BW=$old" >>"$tmpFile"
+			if [ -n "$old" ]; then
+				echo "SP_BW=$old" >>"$tmpFile"
+				splog "DS_ID $DS_ID update SP_BW=$old"
+			fi
 		fi
 	fi
 	old="${template_data[5]//\"/}"
@@ -426,7 +441,10 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				comment+=" placeHead:$old"
 			fi
 		else
-			echo "SP_PLACEHEAD=$old" >>"$tmpFile"
+			if [ -n "$old" ]; then
+				echo "SP_PLACEHEAD=$old" >>"$tmpFile"
+				splog "DS_ID $DS_ID update SP_PLACEHEAD=$old"
+			fi
 		fi
 	fi
 	old="$AUTO_TEMPLATE"
