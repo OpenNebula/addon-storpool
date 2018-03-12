@@ -466,7 +466,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	fi
 	if [ -s "$tmpFile" ]; then
 		onedatastore update "$DS_ID" --append "$tmpFile"
-		splog "($?) onedatastore update $DS_ID --append"
+		splog "($?) onedatastore update $DS_ID --append $tmpFile"
 	fi
 	
 	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
