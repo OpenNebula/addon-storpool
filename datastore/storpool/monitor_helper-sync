@@ -20,6 +20,7 @@ export PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 
 function splog() { logger -t "ds_sp_${0##*/}[$$]" "$*"; }
 
+set -o pipefail
 
 SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/tmp/monitor"
@@ -330,10 +331,14 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	# create/update the template in StorPool
 	# or update ONE datastore
 	
-	tmp=$(storpool -B -j template list | jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw,.placeHead]|@csv") #"
-	template_data=(${tmp//,/ })
-	
+	tmp="$(storpool -B -j template list 2>"$tmpDir/error.log"| jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw,.placeHead]|@csv")" #"
+	ret=$?
 	if [ -z "$tmp" ]; then
+		if [ $ret -ne 0 ] && [ -s "$tmpDir/error.log" ]; then
+			cat "$tmpDir/error.log" | while read line; do
+				splog "($ret) Error:$line"
+			done
+		fi
 		splog "Missing StorPool template '$template_name' for datastore $DS_ID"
 		reload_template=1
 		clusters=
@@ -343,6 +348,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	
 	tmpFile="$tmpDir/${DS_ID}.update"
 	
+	template_data=(${tmp//,/ })
 	old="${template_data[0]//\"/}"
 	new="${SP_REPLICATION_ARRAY[i]}"
 	if [ "$old" != "$new" ]; then
