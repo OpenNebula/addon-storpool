@@ -447,10 +447,11 @@ for i in ${!DS_ID_ARRAY[@]}; do
 			fi
 		fi
 	fi
-	old="$AUTO_TEMPLATE"
+	old="${AUTO_TEMPLATE:-0}"
 	new="${SP_AUTO_TEMPLATE_ARRAY[i]}"
 	if [ "$old" != "$new" ]; then
 		echo "SP_AUTO_TEMPLATE=$old" >>"$tmpFile"
+		splog "DS_ID $DS_ID update SP_AUTO_TEMPLATE=$old"
 	fi
 	
 	if boolTrue "$AUTO_TEMPLATE"; then
