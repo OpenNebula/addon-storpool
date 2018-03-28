@@ -17,11 +17,6 @@ MKSWAP="sudo /sbin/mkswap"
 # Default: 0 (disabled)
 #AUTO_TEMPLATE=0
 
-# Releases before StorPool 16.01+ was using udevd to create the symlinks in
-# '/dev/storpool' which was causing some synchronisation issues.
-# Default: 0 (disabled)
-#SP_WAIT_LINK=0
-
 # Run stats collecting only on the LEADER instance
 # If autodetction fails set the leader IP manually
 #
