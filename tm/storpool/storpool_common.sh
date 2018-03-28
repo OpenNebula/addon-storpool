@@ -58,8 +58,6 @@ DEBUG_oneDsDriverAction=
 
 # Manage StorPool templates from the DATASTORE variables (not recommended)
 AUTO_TEMPLATE=0
-# (obsoilete) Whait for udev to create the symlink in /dev/storpool/$VOLUMENAME
-SP_WAIT_LINK=0
 
 # enable the alternate VM Snapshot function to do atomic snapshots
 VMSNAPSHOT_OVERRIDE=1
@@ -468,44 +466,6 @@ function storpoolRetry() {
     done
 }
 
-function storpoolWaitLink()
-{
-    local _SP_LINK="$1" _SP_HOST="$2"
-    local _REMOTE=$(cat <<EOF
-    # storpoolWaitLink
-    t=15
-    while [ ! -L "$_SP_LINK" ]; do
-        if [ \$t -lt 1 ]; then
-            splog "Timeout waiting for $_SP_LINK"
-            echo "Timeout waiting for $_SP_LINK" >&2
-            exit -1
-        fi
-        sleep .5
-        t=\$((t-1))
-    done
-
-    endmsg="storpoolWaitLink $_SP_LINK (\$t)"
-EOF
-)
-#    splog "storpoolWaitLink $_SP_LINK${_SP_HOST:+ on $_SP_HOST}"
-    if [ -n "$_SP_HOST" ]; then
-        ssh_exec_and_log "$_SP_HOST" "${REMOTE_HDR}${_REMOTE}$REMOTE_FTR" \
-            "Error symlink '$_SP_LINK' not found. Giving up"
-    else
-        t=15
-        while [ ! -L "$_SP_LINK" ]; do
-            if [ $t -lt 1 ]; then
-                splog "Timeout waiting for $_SP_LINK"
-                echo "Timeout waiting for $_SP_LINK" >&2
-                exit -1
-            fi
-            sleep .5
-            t=$((t-1))
-        done
-        splog "END storpoolWaitLink $_SP_LINK ($t)"
-    fi
-}
-
 function storpoolTemplate()
 {
     local _SP_TEMPLATE="$1"
@@ -627,14 +587,6 @@ function storpoolVolumeAttach()
         fi
     fi
     storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
-
-    trapAdd "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
-
-    if boolTrue "$SP_WAIT_LINK"; then
-        storpoolWaitLink "/dev/storpool/$_SP_VOL" "$_SP_HOST"
-    fi
-
-    trapDel "storpoolRetry detach ${_SP_TARGET} \"$_SP_VOL\" ${_SP_CLIENT:-here}"
 }
 
 function storpoolVolumeDetach()
