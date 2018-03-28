@@ -31,9 +31,6 @@ DST="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-SKIP_UNDEPLOY_SSH=0
-CLEAN_SRC_ON_UNDEPLOY=1
-
 TM_PATH="$(dirname $0)"
 source "${TM_PATH}/storpool_common.sh"
 
