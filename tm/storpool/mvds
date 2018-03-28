@@ -77,7 +77,7 @@ boolTrue "$NO_VOLUME_TEMPLATE" && SP_TEMPLATE=
 splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}"
 
 #-------------------------------------------------------------------------------
-# Detach and if it is deferred snapshot "convert" to Image
+# Detach and if it is deferred OpenNebula snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
 storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
