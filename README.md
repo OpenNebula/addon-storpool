@@ -309,6 +309,8 @@ Some configuration attributes must be set to enable an datastore as StorPool ena
 
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
 
+After datastore is created in OpenNebula a StorPool template must be created to represent the datastore in StorPool. The name of the template must be *one-ds-<DATASTORE_ID>* where *<DATASTORE_ID>* is the *ID* of the OpenNebula's Datastore. Please refer the *StorPool's User Guide* for details how to configure a StorPool template.
+
 The following example illustrates the creation of a StorPool datastore of hybrid type with 3 replicas. In this case the datastore will use hosts node1, node2 and node3 for imports and creating images.
 
 #### Image datastore through *Sunstone*
@@ -346,6 +348,12 @@ $ onedatastore list
  100 StorPool            2.4T 99%   -                 0 img  storpool storpool
 ```
 
+Create a StorPool template for the datastore with ID 100:
+
+```bash
+storpool template one-ds-100 replication 3 placeAll hdd placeTail ssd
+```
+
 #### System datastore through *Sunstone*
 
 Sunstone -> Infrastructure -> Datastores -> Add [+]
@@ -378,6 +386,12 @@ $ onedatastore list
  100 StorPool            2.4T 99%   -                 0 img  storpool storpool
  101 StorPoolSys           0M -     -                 0 sys  -        storpool
  ```
+
+Create a StorPool template for the datastore with ID 101:
+
+```bash
+storpool template one-ds-101 replication 3 placeAll hdd placeTail ssd
+```
 
 #### Advanced addon confguration
 
