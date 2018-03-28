@@ -28,6 +28,8 @@ SP_FE_JSON_PATH="/tmp/monitor"
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
 SP_CMD_TEMPLATE_STATUS="cat _SP_JSON_PATH_/_SP_TEMPLATE_STATUS_JSON_"
 SP_CMD_TEMPLATE_STATUS_IMAGE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_TEMPLATE_STATUS_JSON_"
+# alternate calculation of the Free space
+ALT_STATS=
 
 if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
     source "${DRIVER_PATH}/../../addon-storpoolrc"

@@ -56,14 +56,41 @@ DEBUG_oneDatastoreInfo=
 DEBUG_oneTemplateInfo=
 DEBUG_oneDsDriverAction=
 
+# Manage StorPool templates from the DATASTORE variables (not recommended)
 AUTO_TEMPLATE=0
+# (obsoilete) Whait for udev to create the symlink in /dev/storpool/$VOLUMENAME
 SP_WAIT_LINK=0
-VMSNAPSHOT_TAG="ONESNAP"
+
+# enable the alternate VM Snapshot function to do atomic snapshots
 VMSNAPSHOT_OVERRIDE=1
+# the common tag of the snapshots created by the alternate VM Snapshot interface
+VMSNAPSHOT_TAG="ONESNAP"
+# (obsolete) used for the alternate VM snapshot interface before atomic snapshotting was implemented
+VMSNAPSHOT_FSFREEZE=0
+# do fsfreeze only if there are more than one disk attached to a VM
+VMSNAPSHOT_FSFREEZE_MULTIDISKS=0
+# Delete VM snapshots when terminating a VM
 VMSNAPSHOT_DELETE_ON_TERMINATE=1
+# block creating new VM Snapshots when the limit is reached
+VMSNAPSHOT_LIMIT=
+# alter the SYSTEM snapshot behavior depending on the underlying file system
 SP_SYSTEM="ssh"
+# update Disk size in OpenNebula when reverting a snapshot
 UPDATE_ONE_DISK_SIZE=1
+# Do not enforce the datastore template on the StorPool volumes
 NO_VOLUME_TEMPLATE=
+# save the VM's checkpoint file directly to a block device, require qemu-kvm-ev
+SP_CHECKPOINT_BD=0
+# clasify the import process to a given cgroup(s)
+SP_IMPORT_CGROUPS=
+# override datastore bridge list for datastore/export script
+EXPORT_BRIDGE_LIST=
+# do no copy th eVM home back to sunstone on undeploy
+SKIP_UNDEPLOY_SSH=0
+# cleanup the VM home on undeploy
+CLEAN_SRC_ON_UNDEPLOY=1
+# block creation of new disk snapshots when the limit is reached
+DISKSNAPSHOT_LIMIT=
 
 function lookup_file()
 {
