@@ -148,8 +148,6 @@ case "$LCM_STATE" in
         MIGRATE_UNKNOWN="yes"
         DETACH_ALL="all"
         DO_SYMLINK="yes"
-        SKIP_CONTEXT=1
-        date >>"/tmp/${ONE_PX}-${VM_ID}-${DISK_ID}-iso.skip"
     ;;
     *)
         splog ">>> STATE=$VMSTATE LCM_STATE=$LCM_STATE <<<"
@@ -182,34 +180,30 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             oneCheckpointRestore "$DST"
         fi
         # context ISO. Do detach/attach only when hosts differ
-        if [ -n "$_CONTEXT_DISK_ID" ] && boolTrue "$DO_CONTEXT"; then
-            SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-            if [ "$SRC_HOST" != "$DST_HOST" ]; then
-                SP_LINK="/dev/storpool/$SP_VOL"
-                CTX_PATH="$DST_DIR/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
-                if [ -n "$ATTACH_ONLY" ]; then
-                    splog "$ATTACH_ONLY"
-                else
-                    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
-                fi
-                if [ -n "$DETACH_ONLY" ]; then
-                    splog "$DETACH_ONLY"
-                else
-                    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
-                    if boolTrue "$DO_SYMLINK"; then
-                        oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH"
+        if boolTrue "$DO_CONTEXT"; then
+            if [ -n "$_CONTEXT_DISK_ID" ]; then
+                SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+                if [ "$SRC_HOST" != "$DST_HOST" ]; then
+                    SP_LINK="/dev/storpool/$SP_VOL"
+                    CTX_PATH="$DST_DIR/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
+                    if [ -n "$ATTACH_ONLY" ]; then
+                        splog "$ATTACH_ONLY"
+                    else
+                        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
+                    fi
+                    if [ -n "$DETACH_ONLY" ]; then
+                        splog "$DETACH_ONLY"
+                    else
+                        storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+                        if boolTrue "$DO_SYMLINK"; then
+                            oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH"
+                        fi
                     fi
                 fi
-                if boolTrue "$SKIP_CONTEXT"; then
-                    skip_context_ts="$(date -u)"
-                    echo "$skip_context_ts" >"/tmp/${ONE_PX}-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip"
-                    splog "create /tmp/${ONE_PX}-${VM_ID}-${_CONTEXT_DISK_ID}-iso.skip ($skip_context_ts)"
-                fi
             fi
-        fi
-        if [ "$SRC_PATH" != "$DST_PATH" ] && boolTrue "$DO_CONTEXT"; then
-            splog "Change the CONTEXT image template to ${ONE_PX}-ds-$DS_ID"
-            storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+            if [ "$SRC_PATH" != "$DST_PATH" ]; then
+                storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+            fi
         fi
         # other files in the VM home
         SRC_DS_DIR=`dirname  $SRC_PATH`

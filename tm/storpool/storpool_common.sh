@@ -568,9 +568,9 @@ function storpoolVolumeClone()
 
 function storpoolVolumeResize()
 {
-    local _SP_VOL="$1" _SP_SIZE="$2"
+    local _SP_VOL="$1" _SP_SIZE="$2" _SP_SHRINKOK="$3"
 
-    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}M" >/dev/null
+    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}M${_SP_SHRINKOK:+ shrinkOk}" >/dev/null
 }
 
 function storpoolVolumeAttach()

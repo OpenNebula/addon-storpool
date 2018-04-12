@@ -125,42 +125,29 @@ SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 
-CREATE_CONTEXT_ISO=1
-skip_context="/tmp/${ONE_PX}-${VM_ID}-${DISK_ID}-iso.skip"
-if [ -f "$skip_context" ]; then
-    skip_context_ts="$(<"$skip_context")"
-    rm -f "$skip_context"
-    if storpoolVolumeExists "$SP_VOL"; then
-        CREATE_CONTEXT_ISO=0
-    fi
+if storpoolVolumeExists "$SP_VOL"; then
+    storpoolVolumeResize "$SP_VOL" "$SP_SIZE" "shrinkOk"
+    storpoolTemplate "$SP_TEMPLATE"
+else
+    storpoolVolumeCreate "$SP_VOL" "$SP_SIZE" "$SP_TEMPLATE"
 fi
 
-if boolTrue "$CREATE_CONTEXT_ISO" ]; then
-    storpoolVolumeDelete "$SP_VOL" "force"
+#-------------------------------------------------------------------------------
+# Import image to the context volume
+#-------------------------------------------------------------------------------
 
-    storpoolTemplate "$SP_TEMPLATE"
-
-    storpoolVolumeCreate "$SP_VOL" "$SP_SIZE" "$SP_TEMPLATE"
-
-    #-------------------------------------------------------------------------------
-    # Import image to the context volume
-    #-------------------------------------------------------------------------------
-
-    if [ -n "$BRIDGE_LIST" ]; then
-        storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-        PIPE_CMD="cat $ISO_FILE"
-        splog "eval $PIPE_CMD | $SSH $DST_HOST $DD of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct"
-        exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct" \
-                 "Error importing $ISO_FILE to $DST_HOST:/dev/storpool/$SP_VOL"
-    else
-        storpoolVolumeAttach "$SP_VOL"
-        splog "$DD if=$ISO_FILE of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none oflag=direct"
-        exec_and_log "$DD if=$ISO_FILE of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none oflag=direct" \
-                 "Error importing $ISO_FILE to /dev/storpool/$SP_VOL"
-        storpoolVolumeDetach "$SP_VOL"
-    fi
+if [ -n "$BRIDGE_LIST" ]; then
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+    PIPE_CMD="cat $ISO_FILE"
+    splog "eval $PIPE_CMD | $SSH $DST_HOST $DD of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct"
+    exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct" \
+             "Error importing $ISO_FILE to $DST_HOST:/dev/storpool/$SP_VOL"
 else
-    splog "found $skip_context ($skip_context_ts) re-using the context ISO"
+    storpoolVolumeAttach "$SP_VOL"
+    splog "$DD if=$ISO_FILE of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none oflag=direct"
+    exec_and_log "$DD if=$ISO_FILE of=/dev/storpool/$SP_VOL bs=512k conv=fdatasync status=none oflag=direct" \
+             "Error importing $ISO_FILE to /dev/storpool/$SP_VOL"
+    storpoolVolumeDetach "$SP_VOL"
 fi
 #-------------------------------------------------------------------------------
 # (re)attach readonly
