@@ -169,7 +169,7 @@ function trapReset()
         splog "trapReset"
     fi
 
-    trap "$TRAP_CMD" EXIT TERM INT HUP
+    trap "$TRAP_CMD" TERM INT QUIT HUP
 }
 function trapAdd()
 {
@@ -192,7 +192,7 @@ function trapAdd()
     fi
 
 #    splog "trapAdd:$TRAP_CMD"
-    trap "$TRAP_CMD" EXIT TERM INT HUP
+    trap "$TRAP_CMD" TERM INT QUIT HUP
 }
 function trapDel()
 {
@@ -205,7 +205,7 @@ function trapDel()
         if boolTrue "$DEBUG_TRAPS"; then
             splog "trapDel:$TRAP_CMD"
         fi
-        trap "$TRAP_CMD" EXIT TERM INT HUP
+        trap "$TRAP_CMD" TERM INT QUIT HUP
     else
         trapReset
     fi
@@ -717,10 +717,10 @@ function oneSymlink()
             true
         else
             splog "mkdir -p \$dst_dir (for:\$(basename "\$dst"))"
-            trap "splog \"Can't create destination dir \$dst_dir (\$?)\"" EXIT TERM INT HUP
+            trap "splog \"Can't create destination dir \$dst_dir (\$?)\"" TERM INT QUIT HUP
             splog "mkdir -p \$dst_dir"
             mkdir -p "\$dst_dir"
-            trap - EXIT TERM INT HUP
+            trap - TERM INT QUIT HUP
         fi
         if [ -n "$MONITOR_TM_MAD" ]; then
             [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"

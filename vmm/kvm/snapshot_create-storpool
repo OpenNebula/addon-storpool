@@ -92,10 +92,10 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null
     logger -t vmm_sp_snapshot_create_r "fsthaw $DOMAIN ret:\$? \$(date +%s.%N)"
     logger -t vmm_sp_snapshot_create_r \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
-    #trap - EXIT QUIT TERM KILL INT HUP
+    #trap - TERM INT QUIT HUP
 EOF
 )
-        trap "trap - SIGTERM && kill -- -$$" INT TERM EXIT HUP QUIT
+        trap "trap - SIGTERM && kill -- -$$" TERM INT QUIT HUP
         ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null &
         splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN is frosen"
         sleep .1
