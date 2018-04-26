@@ -19,9 +19,10 @@
 #
 # Credits: Todor Tanev <tt@storpool.com>
 #
-# vmTweakHypervEnlightenments.py [--forcequeues] [--ioeventfd] <XMLfile>
+# vmTweakHypervEnlightenments.py [--forcequeues] [--ioeventfd] [--host-passthrough] <XMLfile>
 #   --forcequeues - always set virtio-scsi nqueues to the number of vCPUS
 #   --ioeventfd - set virtio-scsi ioeventfd=on
+#   --host-passthrough - set cpu mode to 'host-passthrough'
 #
 # add the following line after cat >$domain in remotes/vmm/kvm/deploy
 #  "$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
@@ -43,12 +44,15 @@ except ImportError:
 
 forceq = False
 ioeventfd = False
+passthrough = False
 for arg in argv[1:]:
 	if arg[0] == '-':
 		if arg == '--forcequeues':
 			forceq = 1
 		if arg == '--ioeventfd':
 			ioeventfd = 1
+		if arg == '--host-passthrough':
+			passthrough = 1
 		argv = argv[1:]
 
 xmlFile = argv[1]
@@ -135,5 +139,12 @@ if et.find(".//hyperv") is not None:
 
 #with open('{0}-{1}.XML'.format(xmlFile,vm_name), 'w') as d:
 #	d.write(ET.tostring(domain, pretty_print = True))
+
+if passthrough:
+	cpu = domain.find(".//cpu")
+	if cpu is None:
+		cpu = ET.Element("cpu")
+	cpu.set('mode','host-passthrough')
+	domain.append(cpu)
 
 et.write(xmlFile,pretty_print=True)
