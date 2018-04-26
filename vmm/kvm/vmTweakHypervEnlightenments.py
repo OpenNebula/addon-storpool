@@ -90,7 +90,7 @@ except IndexError:
 
 vcpu_e = domain.find('.//vcpu')
 
-if vcpu_e:
+if vcpu_e is not None:
 	vcpu = vcpu_e.text
 else:
 	vcpu = '1'
