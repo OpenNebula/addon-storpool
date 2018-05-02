@@ -1,0 +1,31 @@
+# -------------------------------------------------------------------------- #
+# Copyright 2018, StorPool (storpool.com)                                    #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+# An udev rule for triggering live disk resize in a Linux VM managed by
+# OpenNebula
+#
+# To install in the VM:
+# 1. copy the file to '/etc/udev/rules.d'
+# 2. reload the udev rules 'udevadm control --reload-rules'
+#
+
+SUBSYSTEM!="block", GOTO="oneend"
+ACTION=="change", GOTO="onediskresize"
+GOTO="oneend"
+LABEL="onediskresize"
+ENV{PATH}="/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+PROGRAM!="/etc/one-context.d/loc-05-grow-rootfs", GOTO="oneend"
+LABEL="oneend"
