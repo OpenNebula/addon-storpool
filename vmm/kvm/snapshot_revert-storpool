@@ -37,7 +37,7 @@ VMSNAPSHOT_OVERRIDE=1
 VMSNAPSHOT_REVERT_TIMEOUT=180
 DS_PATH="/var/lib/one/datastores"
 
-source "${DRIVER_PATH}/kvmrc"
+[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
 source "${DRIVER_PATH}/../../scripts_common.sh"
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
@@ -56,7 +56,7 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
 
         rCMD=$(cat <<EOF
     #echo "$DOMAIN"
-    source /var/tmp/one/vmm/kvm/kvmrc
+    [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
     deployment=\$(ls "${DS_PATH}/${VM_DS_ID}/${VM_ID}/deployment."* | tail -n 1)
     trap 'virsh --connect '\$LIBVIRT_URI' create "'\$deployment'" 2>&1 >/dev/null ;\
           logger -t vmm_sp_snapshot_revert_r "create '\$deployment' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
