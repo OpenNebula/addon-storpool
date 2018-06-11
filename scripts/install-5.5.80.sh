@@ -57,6 +57,7 @@ else
             fi
         done
     else
+        echo "*** No sunstone patches available."
         REBUILD_JS=
     fi
     bin_err=
@@ -100,10 +101,10 @@ else
             echo "*** grunt requirejs"
             grunt requirejs
         fi
+        end_msg="opennebula-sunstone"
     fi
     popd &>/dev/null
     set -e
-    end_msg="opennebula-sunstone"
 fi
 
 if [ -n "$SKIP_ONED" ]; then
