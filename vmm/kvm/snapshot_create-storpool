@@ -36,7 +36,7 @@ VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
 VMSNAPSHOT_ATOMIC=1
 
-source "${DRIVER_PATH}/kvmrc"
+[ -f "${DRIVER_PATH}../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
 source "${DRIVER_PATH}/../../scripts_common.sh"
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
@@ -80,7 +80,7 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     if boolTrue "$VMSNAPSHOT_FSFREEZE"; then
         rCMD=$(cat <<EOF
     #echo "$DOMAIN"
-    source /var/tmp/one/vmm/kvm/kvmrc
+    [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
     trap 'virsh --connect '\$LIBVIRT_URI' qemu-agent-command "'$DOMAIN'" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null ;\
     logger -t vmm_sp_snapshot_create_r "fsthaw '$DOMAIN' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
     virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null

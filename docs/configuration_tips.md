@@ -49,7 +49,9 @@ Add defaults for `io` and `discard`.
 ```DISK     = [ driver = "raw" , cache = "none" , io = "native" , discard = "unmap" ]```
 
 
-#### /var/lib/one/remotes/vmm/kvm/kvmrc
+#### /var/lib/one/remotes/etc/vmm/kvm/kvmrc
+
+or _/var/lib/one/remotes/vmm/kvm/kvmrc_ for OpenNebula before version 5.6
 
 ##### DEFAULT_ATTACH_CACHE
 
