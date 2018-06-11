@@ -1,10 +1,10 @@
---- remotes/vmm/kvm/restore.orig	2017-06-25 23:04:09.698231380 +0300
-+++ remotes/vmm/kvm/restore	2017-06-25 23:05:52.546656416 +0300
-@@ -80,3 +80,14 @@
- 
+--- remotes/vmm/kvm/restore.orig	2018-06-09 14:51:54.885071980 +0300
++++ remotes/vmm/kvm/restore	2018-06-09 14:53:16.301420607 +0300
+@@ -95,4 +95,13 @@
  rm "$FILE"
  rm "$FILE_XML"
-+
+ 
+-exit 0
 +if [ -t 0 ]; then
 +    exit 0
 +fi
