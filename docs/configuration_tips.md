@@ -75,6 +75,18 @@ Uncomment to enable
 
 ```DEFAULT_ATTACH_DISCARD=unmap```
 
+##### DEFAULT_ATTACH_IO
+
+Uncomment and set to _native_
+
+(default)
+
+```#DEFAULT_ATTACH_IO=```
+
+(suggested)
+
+```DEFAULT_ATTACH_IO=native```
+
 ### Extras
 
 **!!! Warning !!!**
