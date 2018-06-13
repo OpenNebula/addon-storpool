@@ -619,6 +619,8 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 	fi
 done
 
+rm -f "$lockFile"
+
 if boolTrue "$MONITOR_SYNC_DEBUG"; then
 	splog "END"
 fi
