@@ -293,7 +293,7 @@ SP_AUTH_TOKEN_ARRAY=($_SP_AUTH_TOKEN)
 SP_SKIP_MONITOR_ARRAY=($_SP_SKIP_MONITOR)
 IFS=$_OLDIFS
 
-tmpDir=$(mktemp -d one-sp-XXXXXXXX)
+tmpDir="$(mktemp --tmpdir -d one-sp-XXXXXXXX)"
 trap "rm -rf \"$lockFile\" \"$tmpDir\"" TERM INT QUIT HUP
 
 
@@ -523,7 +523,7 @@ trap "rm -f \"$lockFile\"" TERM INT QUIT HUP
 
 # hosts processing
 
-tmpXML="$(mktemp -t onHostList-$$-XXXXXX)"
+tmpXML="$(mktemp --tmpdir onHostList-$$-XXXXXX)"
 ret=$?
 if [ $ret -ne 0 ]; then
     splog "(oneHostList) Error: Can't create temp file! (ret:$ret)"

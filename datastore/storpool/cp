@@ -241,7 +241,7 @@ fi
 
 if [ "$DRIVER" != "raw" ]; then
     splog "Image template DRIVER=$DRIVER updating to DRIVER=raw"
-    TMP_XML="$(mktemp)"
+    TMP_XML="$(mktemp --tmpdir cp-sp-XXXXXXXX)"
     trapAdd "rm -f \"$TMP_XML\""
     echo "DRIVER=raw" >"$TMP_XML"
     echo "FORMAT=raw" >>"$TMP_XML"

@@ -66,7 +66,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             splog "found SP_DS_TMP:$SP_DS_TMP"
         fi
     else
-        SP_DS_TMP="$(mktemp -d -t sp-tmp-XXXXXXXX)"
+        SP_DS_TMP="$(mktemp --tmpdir -d sp-tmp-XXXXXXXX)"
         _ret=$?
         export SP_DS_TMP
         if boolTrue "$IM_MONITOR_DS_DEBUG"; then
