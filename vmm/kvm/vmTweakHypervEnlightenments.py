@@ -19,10 +19,11 @@
 #
 # Credits: Todor Tanev <tt@storpool.com>
 #
-# vmTweakHypervEnlightenments.py [--forcequeues] [--ioeventfd] [--host-passthrough] <XMLfile>
+# vmTweakHypervEnlightenments.py [--forcequeues] [--ioeventfd] [--host-passthrough|--cpu-model=<model>] <XMLfile>
 #   --forcequeues - always set virtio-scsi nqueues to the number of vCPUS
 #   --ioeventfd - set virtio-scsi ioeventfd=on
 #   --host-passthrough - set cpu mode to 'host-passthrough'
+#   --cpu-model=<model> - set custom CPU model, Example: "--cpu-model=SandyBridge"
 #
 # add the following line after cat >$domain in remotes/vmm/kvm/deploy
 #  "$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
@@ -30,6 +31,7 @@
 
 from sys import argv
 import syslog
+import getopt
 
 dbg = 0
 thrnum = u'1'
@@ -45,17 +47,25 @@ except ImportError:
 forceq = False
 ioeventfd = False
 passthrough = False
-for arg in argv[1:]:
-	if arg[0] == '-':
-		if arg == '--forcequeues':
-			forceq = 1
-		if arg == '--ioeventfd':
-			ioeventfd = 1
-		if arg == '--host-passthrough':
-			passthrough = 1
-		argv = argv[1:]
+cpuModel = False
 
-xmlFile = argv[1]
+try:
+	opts, args = getopt.getopt(argv[1:],'',['forcequeues','ioeventfd','host-passthrough','cpu-model='])
+except:
+	opts = []
+	args = argv[1:]
+
+for key, val in opts:
+	if key == "--forcequeues":
+		forceq = 1
+	elif key == "--ioeventfd":
+		ioeventfd = 1
+	elif key == "--host-passthrough":
+		passthrough = 1
+	elif key == "--cpu-model":
+		cpuModel = val
+
+xmlFile = args[0]
 
 et = ET.parse(xmlFile, ET.XMLParser(strip_cdata=False,remove_blank_text=True))
 
@@ -110,9 +120,12 @@ for controller in controllers:
 		if ioeventfd:
 			driver.set('ioeventfd', 'on')
 	except IndexError:
+		if forceq:
+			conf.set('queues', vcpu)
+		if ioeventfd:
+			conf.set('ioeventfd', 'on')
 		controller.append(conf)
 if not controllers:
-	# get first <devices>
 	devices = domain.findall(".//devices")[0]
 	controller=(ET.Element('controller', type = 'scsi', index = '0', model = 'virtio-scsi'))
 	if forceq:
@@ -140,11 +153,32 @@ if et.find(".//hyperv") is not None:
 #with open('{0}-{1}.XML'.format(xmlFile,vm_name), 'w') as d:
 #	d.write(ET.tostring(domain, pretty_print = True))
 
+cpu = domain.find(".//cpu")
+if cpu is None:
+	cpu = ET.Element("cpu")
+	cpuAppend = 1
+else:
+	cpuAppend = 0
+
 if passthrough:
-	cpu = domain.find(".//cpu")
-	if cpu is None:
-		cpu = ET.Element("cpu")
-	cpu.set('mode','host-passthrough')
+	cpu.set('mode', 'host-passthrough')
+elif cpuModel:
+	cpumode = cpu.get('mode')
+	if cpumode is not 'custom':
+		cpu.set('mode', 'custom')
+		#cpu.set('match', 'exact')
+		try:
+			model = cpu.find(".//model")
+			model = model[0]
+		except:
+			model = ET.SubElement(cpu, "model")
+		model.text = cpuModel
+		for feature in ['pcid', 'invpcid']:
+			e = ET.SubElement(cpu, "feature")
+			e.set('policy', 'optional')
+			e.set('name', feature)
+
+if cpuAppend:
 	domain.append(cpu)
 
 et.write(xmlFile,pretty_print=True)
