@@ -82,10 +82,16 @@ if [ -f "$SP_MONITOR_DS" ]; then
             fi
             if [ -d "$SP_DS_TMP" ]; then
                 rm -rf "$SP_DS_TMP"
+                if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+                    splog "rm -rf $SP_DS_TMP"
+                fi
             fi
             if [ -n "$START_TIME" ]; then
                 local end_time="$(date +%s)"
                 splog "'$0' runtime:$((end_time - START_TIME))sec"
+            fi
+            if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+                splog "$0 do exit $_ret"
             fi
             exit $_ret
         }
