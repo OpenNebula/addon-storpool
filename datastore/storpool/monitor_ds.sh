@@ -89,7 +89,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             fi
             exit $_ret
         }
-        trap sp_trap TERM INT QUIT HUP
+        trap sp_trap TERM INT QUIT HUP EXIT
 
         if [ $_ret -eq 0 ]; then
             if boolTrue "$IM_MONITOR_DS_DEBUG"; then

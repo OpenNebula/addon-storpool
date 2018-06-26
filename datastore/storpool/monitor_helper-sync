@@ -146,7 +146,7 @@ if [ -n "$RAFT_LEADER_IP" ]; then
 fi
 
 echo $$ >"$lockFile"
-trap "rm -f \"$lockFile\"" TERM INT QUIT HUP
+trap "rm -f \"$lockFile\"" TERM INT QUIT HUP EXIT
 
 # Global arrays ...
 declare -a template_data
@@ -294,7 +294,7 @@ SP_SKIP_MONITOR_ARRAY=($_SP_SKIP_MONITOR)
 IFS=$_OLDIFS
 
 tmpDir="$(mktemp --tmpdir -d one-sp-XXXXXXXX)"
-trap "rm -rf \"$lockFile\" \"$tmpDir\"" TERM INT QUIT HUP
+trap "rm -rf \"$lockFile\" \"$tmpDir\"" TERM INT QUIT HUP EXIT
 
 
 for i in ${!DS_ID_ARRAY[@]}; do
@@ -519,7 +519,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 #	fi
 done
 rm -rf "$tmpDir"
-trap "rm -f \"$lockFile\"" TERM INT QUIT HUP
+trap "rm -f \"$lockFile\"" TERM INT QUIT HUP EXIT
 
 # hosts processing
 
