@@ -48,7 +48,7 @@ if curl --silent --location -o "${TAG_NAME}.tar.gz" "$URL"; then
     if tar xf "${NAME}.tar.gz"; then
         if cd "$NAME"; then
             echo "+ Installing dependencies ..."
-            yum -y --enablerepo=epel install patch jq lz4 npm
+            yum -y --enablerepo=epel install patch git jq lz4 npm
             LOG="${NAME}-install-$(date +%s).log"
             echo "+ Installing  $NAME"
             if bash install.sh 2>&1 | tee "../$LOG"; then

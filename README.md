@@ -93,7 +93,7 @@ If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) f
 
 ```bash
 # on the front-end
-yum -y install --enablerepo=epel git patch jq lz4 npm
+yum -y install --enablerepo=epel patch git jq lz4 npm
 ```
 
 #### node dependencies
