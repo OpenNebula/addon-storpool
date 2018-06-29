@@ -82,7 +82,7 @@ Support standard OpenNebula datastore operations:
 
 The installation instructions are for OpenNebula 5.5+.
 
-For OpenNebula 5.4.x please use the following [installation instructions](docs/install-5.4.x.md)
+For OpenNebula 5.4.x please use the following [installation instructions](docs/install-5.4.0.md)
 
 If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) first!
 
