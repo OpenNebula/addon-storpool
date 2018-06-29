@@ -2,7 +2,7 @@
 
 ## Installation
 
-If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) first!
+If you are upgrading the addon please read the [Upgrade notes](../README.md#upgrade-notes) first!
 
 ### Pre-install
 
@@ -199,4 +199,4 @@ su - oneadmin -c 'onehost sync --force'
 ```
 
 
-Please continue with the Configuration section in README.md
+Please continue with the [Configuration section in README.md](../README.md#configuration)
