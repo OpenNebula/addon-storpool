@@ -63,8 +63,10 @@ else
     bin_err=
     if [ -n "$REBUILD_JS" ]; then
         cp -f dist/main.js dist/main.js-tmp
+        echo "*** Running ./build.sh -d ..."
         ./build.sh -d
         export PATH=$PATH:$PWD/node_modules/.bin
+        echo "*** Running ./build.sh ..."
         ./build.sh
         mv dist/main.js-tmp dist/main.js
         end_msg="opennebula-sunstone"
