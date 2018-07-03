@@ -1,0 +1,21 @@
+--- remotes/vmm/kvm/poll.orig	2018-07-03 10:12:30.432152889 +0000
++++ remotes/vmm/kvm/poll	2018-07-03 10:13:20.576257890 +0000
+@@ -84,7 +84,7 @@
+ 
+         values[:state]  = get_state(dominfo['State'])
+         values[:cpu]    = cpu[vm[:pid]] if cpu[vm[:pid]]
+-        values[:memory] = [resident_mem, max_mem].max
++        values[:memory] = resident_mem
+ 
+         xml = dump_xml(one_vm)
+ 
+@@ -142,7 +142,7 @@
+ 
+             values[:state]  = get_state(dominfo['State'])
+             values[:cpu]    = cpu[vm[:pid]] if cpu[vm[:pid]]
+-            values[:memory] = [resident_mem, max_mem].max
++            values[:memory] = resident_mem
+ 
+             xml = dump_xml(name)
+ 
+
