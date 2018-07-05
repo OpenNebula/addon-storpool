@@ -95,7 +95,7 @@ if ! onedatastore list --list DS --csv |grep -q storpool; then
 fi
 
 if [ -z "$2" ]; then
-	echo Usage: $0 host1 host2
+	echo Usage: $0 host1 host2 '[templateid]'
 	echo 
 	onehost list
 	exit 2
@@ -104,22 +104,47 @@ fi
 h1="$1"
 h2="$2"
 
-ds=`onedatastore list --list ID,TM,TYPE --csv  | grep 'storpool,img$' | head -n1 | cut -d , -f 1`
-tname=t-${vmname}-tmpl
 
+cluster_1=`onehost show "$h1" --xml |  xmllint  --nocdata --xpath '//HOST/CLUSTER_ID/text()' -`
+cluster_2=`onehost show "$h2" --xml |  xmllint  --nocdata --xpath '//HOST/CLUSTER_ID/text()' -`
 
-if ! onetemplate show $tname > /dev/null 2>/dev/null; then
-	tmplid=`onemarketapp list --csv --list ID,STAT,NAME|grep -v DELETED |grep 'CentOS 7' |tail -n1 |cut -d , -f 1`
-
-	echo -n "Importing template $tmplid..."
-	onemarketapp export $tmplid $tname --datastore $ds
-	echo "done."
+if [ "$cluster_1" != "$cluster_2" ] ; then
+	echo cluster IDs of both hosts do not match, exiting.
+	exit 2
 fi
 
-tsimg=`onetemplate show "$tname" --xml | xmllint  --nocdata --xpath '//VMTEMPLATE/TEMPLATE/DISK[1]/IMAGE_ID/text()' -`
-echo -n "Waiting for template image to show up..."
-waitfortmplimg rdy 300
-echo "done."
+
+ds=`onedatastore list --list ID,CLUSTERS,TM,TYPE --filter CLUSTERS="$cluster_1" --csv  | grep 'storpool,img$' | head -n1 | cut -d , -f 1`
+
+dsname=`onedatastore show "$ds" --xml |  xmllint  --nocdata --xpath '//DATASTORE/NAME/text()' -`
+
+echo Using datastore: "$ds" "($dsname)"
+
+if [ -z "$3" ]; then
+
+	tname=t-${vmname}-tmpl
+	
+	
+	if ! onetemplate show $tname > /dev/null 2>/dev/null; then
+		tmplid=`onemarketapp list --csv --list ID,STAT,NAME|grep -v DELETED |grep -E 'CentOS 7.*KVM' |tail -n1 |cut -d , -f 1`
+	
+		echo -n "Importing template $tmplid..."
+		onemarketapp export $tmplid $tname --datastore $ds
+		echo "done."
+	
+	fi
+
+	tsimg=`onetemplate show "$tname" --xml | xmllint  --nocdata --xpath '//VMTEMPLATE/TEMPLATE/DISK[1]/IMAGE_ID/text()' -`
+	echo -n "Waiting for template image to show up..."
+	waitfortmplimg rdy 300
+	echo "done."
+	deltemplate=y
+else
+	tname="$3"
+	deltemplate=n
+fi
+
+
 
 if onevm list --list NAME --csv |grep -q '^'$vmname'$'; then
 	echo vm $vmname exists, removing.
@@ -211,7 +236,7 @@ if ! [ -z "$iid" ]; then
 fi
 
 echo -n "Creating test image..."
-oneimage create --name $vmname -d $ds --size 10000 --type datablock --driver raw --prefix vd >/dev/null
+oneimage create --name $vmname --datastore $ds --size 10000 --type datablock --driver raw --prefix vd >/dev/null
 
 waitforimg rdy || die "image creation failed"
 
@@ -278,4 +303,7 @@ waitforvm ""
 echo "done."
 
 echo "Validation passed."
-onetemplate delete $tname --recursive
+
+if [ "$deltemplate" = "y" ]; then
+	onetemplate delete $tname --recursive
+fi
