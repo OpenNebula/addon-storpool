@@ -2,16 +2,19 @@ Installation procedure:
 cwd=$(pwd)
 cd /usr/lib/one/sunstone/public
 patch -p1 < $cwd/VMsnapshot-5.4.11.patch
-grunt sass
-grunt requirejs
+[ -L dist/main.js ] && mv -vf dist/main.js main.js-tmp
+./build.sh -d
+export PATH=$PATH:$PWD/node_modules/.bin
+./build.sh
+[ -L main.js-tmp ] && ([ -L dist/main.js ] && rm -vf main.js-tmp) || mv -vf main.js-tmp dist/main.js
 systemctl restart opennebula-sunstone
 
-diff -urN public-5.4.11/app/tabs/vms-tab/panels/snapshots.js public/app/tabs/vms-tab/panels/snapshots.js
---- public-5.4.11/app/tabs/vms-tab/panels/snapshots.js	2018-04-19 19:06:12.000000000 +0300
-+++ public/app/tabs/vms-tab/panels/snapshots.js	2018-04-20 12:46:49.071484677 +0300
-@@ -127,6 +127,13 @@
+diff -urN public/app/tabs/vms-tab/panels/snapshots.js public/app/tabs/vms-tab/panels/snapshots.js
+--- public/app/tabs/vms-tab/panels/snapshots.js-orig	2018-07-15 17:01:49.000000000 +0000
++++ public/app/tabs/vms-tab/panels/snapshots.js	2018-07-17 09:14:21.322300735 +0000
+@@ -131,6 +131,13 @@
              if (Config.isTabActionEnabled("vms-tab", "VM.snapshot_delete")) {
-               actions += '<a href="VM.snapshot_delete" class="snapshot_delete" ><i class="fa fa-times"/>' + Locale.tr("Delete") + '</a>'
+               actions += '<a href="VM.snapshot_delete" class="snapshot_delete" ><i class="fas fa-times"/>' + Locale.tr("Delete") + '</a>'
              }
 +          } else if (that.element.STATE == OpenNebulaVM.STATES.POWEROFF && that.element.HISTORY_RECORDS.HISTORY[that.element.HISTORY_RECORDS.HISTORY.length - 1].TM_MAD == "storpool"){
 +            if (Config.isTabActionEnabled("vms-tab", "VM.snapshot_revert")) {
