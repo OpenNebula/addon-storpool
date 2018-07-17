@@ -1,0 +1,17 @@
+--- remotes/vmm/kvm/restore.orig	2018-06-09 14:51:54.885071980 +0300
++++ remotes/vmm/kvm/restore	2018-06-09 14:53:16.301420607 +0300
+@@ -95,4 +95,13 @@
+ rm "$FILE"
+ rm "$FILE_XML"
+ 
+-exit 0
++if [ -t 0 ]; then
++    exit 0
++fi
++
++# If there is a specific post hook for this TM_MAD call it:
++RESTORE_TM_FILE="${DRIVER_PATH}/restore.${TM_MAD}-post"
++
++if [ -x "$RESTORE_TM_FILE" ]; then
++    echo "$DRV_MESSAGE" | $RESTORE_TM_FILE "$@"
++fi

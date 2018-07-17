@@ -80,7 +80,12 @@ Support standard OpenNebula datastore operations:
 
 ## Installation
 
+The installation instructions are for OpenNebula 5.5+.
+
+For OpenNebula 5.4.x please use the following [installation instructions](docs/install-5.4.0.md)
+
 If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) first!
+
 
 ### Pre-install
 
@@ -89,8 +94,6 @@ If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) f
 ```bash
 # on the front-end
 yum -y install --enablerepo=epel patch git jq lz4 npm
-npm install bower -g
-npm install grunt-cli -g
 ```
 
 #### node dependencies
@@ -98,7 +101,7 @@ npm install grunt-cli -g
  :grey_exclamation:*use when adding new hosts too*:grey_exclamation:
 
 ```bash
-yum -y install --enablerepo=epel lz4 jq python-lxml
+yum -y install --enablerepo=epel jq lz4 python-lxml
 ```
 
 ### Get the addon from github
@@ -195,14 +198,14 @@ crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 * Patch and rebuild the sunstone interface
 ```bash
 pushd /usr/lib/one/sunstone/public
+
 # patch the sunstone interface
 patch -b -V numbered -N -p0 <~/addon-storpool/patches/sunstone/5.4.1/datastores-tab.patch
 
 # rebuild the interface
-npm install
-bower --allow-root install
-grunt sass
-grunt requirejs
+./build.sh -d
+export PATH=$PATH:$PWD/node_modules/.bin
+./build.sh
 popd
 ```
 
@@ -253,12 +256,12 @@ VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"
 EOF
 ```
 
-* Enable live disk snapshots support for storpool by adding `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` variable in `/etc/one/vmm_exec/vmm_execrc`
+* Enable live disk snapshots support for StorPool by adding `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` variable in `/etc/one/vmm_exec/vmm_execrc`
 ```
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 ```
 
-* RAFT_LEADER_IP (OpenNebula 5.4+)
+* RAFT_LEADER_IP
 
 The addon will try to autodetect the leader IP address from oned confioguration but if it fail set it manually in addon-storpoolrc
 ```bash
