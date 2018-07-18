@@ -63,6 +63,7 @@ else
     bin_err=
     if [ -n "$REBUILD_JS" ]; then
         if [ -L dist/main.js ]; then
+            echo "*** Backing up dist/main.js ..."
             mv -vf dist/main.js main.js-tmp
         fi
         echo "*** Running ./build.sh -d ..."
@@ -72,8 +73,10 @@ else
         ./build.sh
         if [ -L main.js-tmp ]; then
             if [ -L dist/main.js ]; then
+                echo "*** Removing backup of dist/main.js ..."
                 rm -vf main.js-tmp
             else
+                echo "*** Restoring dist/main.js ..."
                 mv -vf main.js-tmp dist/main.js
             fi
         fi
