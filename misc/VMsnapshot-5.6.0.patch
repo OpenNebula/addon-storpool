@@ -1,7 +1,7 @@
 Installation procedure:
 cwd=$(pwd)
 cd /usr/lib/one/sunstone/public
-patch -p1 < $cwd/VMsnapshot-5.4.11.patch
+patch -p1 < $cwd/VMsnapshot-5.6.0.patch
 [ -L dist/main.js ] && mv -vf dist/main.js main.js-tmp
 ./build.sh -d
 export PATH=$PATH:$PWD/node_modules/.bin
