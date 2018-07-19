@@ -4,7 +4,7 @@
 
 ##### StorPool template management via datastore variables
 
-The template management is disabled by default. To enable set `AUTO_TEMPLATE=1` in storpool-addonrc file.
+The template management is disabled by default (recommended). To enable set `AUTO_TEMPLATE=1` in storpool-addonrc file.
 ```
 ONE_LOCATION=/var/lib/one
 echo "AUTO_TEMPLATE=1" >>$ONE_LOCATION/remotes/addon-storpoolrc
@@ -25,7 +25,7 @@ The following variables should be set on all StorPool backed datastores:
 1. The PlaceTail placement group is defined in StorPool as list of drives. Used in StorPool hybrid setup. If the setup is not of hybrid type leave blank or same as **SP_PLACEALL**
 1. The PlaceHead placement group is defined in StorPool as list of drives. Used in StorPool hybrid setups with one HDD replica and two SSD replicas of the data.
 
-When adding a new datastore the reported size will appear after refresh cycle of the cached StorPool data. Default is every 4th minute set in `/etc/cron.d/addon-storpoolrc`.
+When adding a new datastore the reported size will appear after a refresh cycle of the cached StorPool data. Default is every 4th minute set in `/etc/cron.d/addon-storpoolrc`.
 
 > :exclamation: The implemented management of StorPool templates is not deleting StorPool templates! After deleting a datastore in OpenNebula the corresponding template in StorPool should be deleted manually.
 
@@ -109,7 +109,6 @@ Open the VM's Info tab and add to the Attributes
 ```
 DISKSNAPSHOT_LIMIT=15
 ```
-
 
 ### Re-configure the 'VM snapshot' to do atomic disk snapshots
 
@@ -213,7 +212,7 @@ export MONITOR_SYNC_REMOTE="NO"
 EOF
 ```
 
-#### Multiverse - use multiple OpenNebula instances on single StorPool
+#### Multiverse - use multiple OpenNebula instances on single StorPool cluster
 
 For each OpenNebula instance set a different string in the `ONE_PX` variable.
 
@@ -257,7 +256,7 @@ The scripts add a iothread and assign all virtio-blk disks and virio-scsi contro
 
 ```
 
-When the _HYPERV_ feature is enabled in the _OS Booting_ entry the tweaking tool will add a _clock_ entry in the domain XML
+When the _HYPERV_ feature is enabled in the _OS & CPU_ / _Features_ entry the tweaking tool will add a _clock_ entry in the domain XML
 
 ```xml
 <domain>
@@ -272,4 +271,4 @@ When the _HYPERV_ feature is enabled in the _OS Booting_ entry the tweaking tool
 </domain>
 ```
 
-In Sunstone -> VM Template -> Update -> OS Booting -> Features -> HYPERV = YES
+In Sunstone -> Templates -> VMs -> Update -> OS Booting -> Features -> HYPERV = YES

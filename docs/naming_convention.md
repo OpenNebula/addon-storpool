@@ -1,5 +1,9 @@
 ## StorPool naming convention
 
+### Addon version
+
+The addon has the folloing versioning schema `YY.MM.R` where `YY` is the year of the release, `MM` is the month of the release and `R` is the revision in the month.
+
 ### Datastore templates
 
 Each Datastore in Opennebula has a StorPool template with the following format
@@ -39,7 +43,7 @@ one-sys-${VM_ID}-${VMDISK_ID}-iso
 
 #### CHECKPOINT images
 
-When the addon is configured in `qemu-kvm-ev` backed flavour each checkpoint file is a StorPool volume
+When the addon is configured in `qemu-kvm-ev` backed flavour (`SP_CHECKPOINT_BD=1`) each checkpoint file is a StorPool volume
 ```bash
 one-sys-${VM_ID}-rawcheckpoint
 ```
@@ -51,7 +55,7 @@ one-sys-${VM_ID}-checkpoint
 
 #### Staging images
 
-In the process of importing of image to a StorPool backed IMAGE datastore the source is stored temporary on a StorPool volume name suffixed with the md5sum of it's name
+In the process of importing of an image to a StorPool backed IMAGE datastore the source is stored temporary on a StorPool volume name suffixed with the md5sum of it's name
 ```bash
 one-img-IMAGE_ID-${MD5SUM}
 ```
