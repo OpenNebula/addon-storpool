@@ -1,5 +1,5 @@
---- public/app/tabs/vms-tab/panels/snapshots.js-orig	2018-07-15 17:01:49.000000000 +0000
-+++ public/app/tabs/vms-tab/panels/snapshots.js	2018-07-17 09:14:21.322300735 +0000
+--- app/tabs/vms-tab/panels/snapshots.js-orig	2018-07-15 17:01:49.000000000 +0000
++++ app/tabs/vms-tab/panels/snapshots.js	2018-07-17 09:14:21.322300735 +0000
 @@ -131,6 +131,13 @@
              if (Config.isTabActionEnabled("vms-tab", "VM.snapshot_delete")) {
                actions += '<a href="VM.snapshot_delete" class="snapshot_delete" ><i class="fas fa-times"/>' + Locale.tr("Delete") + '</a>'
