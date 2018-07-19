@@ -57,7 +57,6 @@ Support standard OpenNebula datastore operations:
 
 ### Extras
 * all disk images are thin provisioned RAW block devices
-* two different modes of disk usage reporting - LVM style and StorPool style
 * different StorPool clusters as separate datastores
 * migrate-live when TM_MAD='ssh' is used for SYSTEM datastore(native StorPool driver is recommended)
 * limit the number of disk snapshots (per disk)
@@ -213,8 +212,6 @@ popd
 The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
 
 * If you plan to do live disk snapshots with fsfreeze via qemu-guest-agent but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the addon global configuration.
-
-* To change disk space usage reporting to be as LVM is reporting it, define `SP_SPACE_USED_LVMWAY` variable to anything
 
 * Add the `oneadmin` user to group `disk` on all nodes
 ```bash
