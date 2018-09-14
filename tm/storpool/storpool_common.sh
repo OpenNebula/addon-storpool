@@ -95,6 +95,8 @@ UPDATE_IMAGE_ON_IMPORT=
 # Tag all VM disks with tag $VM_TAG=$VM_ID
 # Empty string will disable the tagging
 VM_TAG=nvm
+# common opennebula tools args
+ONE_ARGS=
 
 function lookup_file()
 {
@@ -246,7 +248,7 @@ function oneHostInfo()
         splog "$errmsg"
         exit $ret
     fi
-    onehost show -x "$_name" >"$tmpXML"
+    onehost show $ONE_ARGS -x "$_name" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneHostInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -915,7 +917,7 @@ function oneVmInfo()
         splog "$errmsg"
         exit $ret
     fi
-    onevm show -x "$_VM_ID" >"$tmpXML"
+    onevm show $ONE_ARGS -x "$_VM_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -1021,7 +1023,7 @@ function oneDatastoreInfo()
         exit $ret
     fi
     trapAdd "rm -f '$tmpXML'"
-    onedatastore show -x "$_DS_ID" >"$tmpXML"
+    onedatastore show $ONE_ARGS -x "$_DS_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -1400,7 +1402,7 @@ oneVmVolumes()
         exit $ret
     fi
     trapAdd "rm -f '$tmpXML'"
-    onevm show -x "$VM_ID" >"$tmpXML"
+    onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmVolumes) Error: Can't get VM info! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -1511,7 +1513,7 @@ oneVmDiskSnapshots()
         splog "$errmsg"
         exit $ret
     fi
-    onevm show -x "$VM_ID" >"$tmpXML"
+    onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmDiskSnapshots) Error: Can't get info for ${VM_ID}! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -1550,7 +1552,7 @@ oneVmSnapshots()
         splog "$errmsg"
         exit $ret
     fi
-    onevm show -x "$VM_ID" >"$tmpXML"
+    onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmSnapshots) Error: Can't get info for ${VM_ID}! $(head -n 1 "$tmpXML") (ret:$ret)"

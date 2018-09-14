@@ -230,7 +230,7 @@ XPATH="${driverPath}/../xpath_multi.py"
 
 [ -d "$SP_FE_JSON_PATH" ] || mkdir -p "$SP_FE_JSON_PATH"
 
-onedatastore list -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
+onedatastore list $ONE_ARGS -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
 ret=$?
 if [ $ret -ne 0 ]; then
 	splog "Error: Can't get datastore XML! $(head -n 1 "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}") (ret:$ret)"
@@ -465,8 +465,8 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		fi
 	fi
 	if [ -s "$tmpFile" ]; then
-		onedatastore update "$DS_ID" --append "$tmpFile"
-		splog "($?) onedatastore update $DS_ID --append $tmpFile"
+		onedatastore update $ONE_ARGS "$DS_ID" --append "$tmpFile"
+		splog "($?) onedatastore update $ONE_ARGS $DS_ID --append $tmpFile"
 	fi
 	
 	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
