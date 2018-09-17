@@ -74,6 +74,11 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #DS_CP_FORCE_DEV_PREFIX=sd
 
+# OpenNebula RPC endpoint
+# Uncomment and edit when the default does not works
+#export ONE_XMLRPC=http://localhost:2633/RPC2
+# alternatively create a file '~oneadmin/.one/one_endpoint' containig the endpoint details
+
 #
 # variables enabling various Debuging
 #
