@@ -395,13 +395,13 @@ Create a StorPool template for the datastore with ID 101:
 storpool template one-ds-101 replication 3 placeAll hdd placeTail ssd
 ```
 
-#### Advanced addon confguration
+#### Advanced addon configuration
 
-Please follow the [advanced confguration](docs/advanced_configuration.md) guide to enable the extras that are not covered by the basic configuration.
+Please follow the [advanced configuration](docs/advanced_configuration.md) guide to enable the extras that are not covered by the basic configuration.
 
 #### Configuration tips
 
-Please follow the  [cofiguration tips](docs/configuration_tips.md) for suggestions how to optionally reconfigure OpenNebula.
+Please follow the  [configuration tips](docs/configuration_tips.md) for suggestions how to optionally reconfigure OpenNebula.
 
 ## Upgrade notes
 
