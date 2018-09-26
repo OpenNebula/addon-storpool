@@ -79,6 +79,12 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #export ONE_XMLRPC=http://localhost:2633/RPC2
 # alternatively create a file '~oneadmin/.one/one_endpoint' containig the endpoint details
 
+# Tag all VM disks with tag $VM_TAG=$VM_ID
+# Empty string will disable the tagging
+# Default: nvm
+#
+#VM_TAG=nvm
+
 #
 # variables enabling various Debuging
 #

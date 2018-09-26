@@ -129,6 +129,8 @@ else
     splog "Not CLONE $DST_PATH. Only detaching $SP_VOL"
 
     storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
+
+    storpoolVolumeTag "$SP_VOL" ""
 fi
 
 if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then

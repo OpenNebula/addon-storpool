@@ -84,6 +84,8 @@ fi
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
+storpoolVolumeTag "$SP_VOL" "$VM_ID"
+
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 
 splog "END $VM_ID"

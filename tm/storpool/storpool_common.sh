@@ -92,6 +92,9 @@ DISKSNAPSHOT_LIMIT=
 # update image template's variables DRIVER=raw and FORMAT=raw during import
 # disabled by default because one-5.6+ locks the image and update is impossible
 UPDATE_IMAGE_ON_IMPORT=
+# Tag all VM disks with tag $VM_TAG=$VM_ID
+# Empty string will disable the tagging
+VM_TAG=nvm
 
 function lookup_file()
 {
@@ -706,6 +709,14 @@ function storpoolSnapshotRevert()
     trapReset
 
     storpoolVolumeDelete "${_SP_VOL}-$_SP_TMP"
+}
+
+function storpoolVolumeTag()
+{
+    local _SP_VOL="$1" _SP_VM_ID="$2"s
+    if [ -n "$VM_TAG" ]; then
+        storpoolRetry volume "$_SP_VOL" tag "$VM_TAG"="$_SP_VM_ID" >/dev/null
+    fi
 }
 
 function oneSymlink()
@@ -1635,4 +1646,3 @@ oneSnapshotLookup()
 if boolTrue "$SP_CHECKPOINT_BD"; then
     SP_CHECKPOINT=
 fi
-

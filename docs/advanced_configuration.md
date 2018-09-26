@@ -216,6 +216,8 @@ EOF
 
 For each OpenNebula instance set a different string in the `ONE_PX` variable.
 
+It is possible to change the default volume tagging by setting `VM_TAG` variable.
+
 #### Enable iothreads and Windows performance optimisation
 
 There is a helper script that add separate iothread for VM disks IO processing. In addition it is enabling some Hyperv enlightments on Windows VMs
