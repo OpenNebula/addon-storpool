@@ -36,14 +36,14 @@ one-sys-${VM_ID}-${VMDISK_ID}-raw
 
 #### CONTEXTUALIZATION images
 
-Each contextualization image registered in a StorPool backed IMAGE datastore is mapped to StorPool volume
+Each contextualization image registered in a StorPool backed SYSTEM datastore is mapped to StorPool volume
 ```bash
 one-sys-${VM_ID}-${VMDISK_ID}-iso
 ```
 
 #### CHECKPOINT images
 
-When the addon is configured in `qemu-kvm-ev` backed flavour (`SP_CHECKPOINT_BD=1`) each checkpoint file is a StorPool volume
+When the addon is configured in `qemu-kvm-ev` backed flavour (`SP_CHECKPOINT_BD=1`) The VM's checkpoint file is a StorPool volume
 ```bash
 one-sys-${VM_ID}-rawcheckpoint
 ```
