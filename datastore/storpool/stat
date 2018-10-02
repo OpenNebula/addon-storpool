@@ -66,6 +66,7 @@ case "${IMAGE_PATH,,}" in
         ;;
     *)
         SIZE=`fs_size $IMAGE_PATH`
+        [ $? -eq 0 ] || SIZE=0
         ;;
 esac
 
