@@ -713,7 +713,7 @@ function storpoolSnapshotRevert()
 
 function storpoolVolumeTag()
 {
-    local _SP_VOL="$1" _SP_VM_ID="$2"s
+    local _SP_VOL="$1" _SP_VM_ID="$2"
     if [ -n "$VM_TAG" ]; then
         storpoolRetry volume "$_SP_VOL" tag "$VM_TAG"="$_SP_VM_ID" >/dev/null
     fi
