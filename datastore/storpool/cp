@@ -158,14 +158,14 @@ else
             COPY_CMD="dd if=$localFile bs=1M iflag=direct"
         fi
         splog "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M status=none iflag=fullblock oflag=direct"
-        exec_and_log "eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M status=none iflag=fullblock oflag=direct" \
+        multiline_exec_and_log "set -e -o pipefail; eval $COPY_CMD | $SSH $DST_HOST $DD of=$SP_TEMP_LINK bs=1M status=none iflag=fullblock oflag=direct" \
                      "Error dumping $IMAGE_PATH to $DST_HOST:$SP_TEMP_LINK"
     else
         if [ -n "$localFile" ] && [ -f "$localFile" ]; then
             COPY_CMD="dd if=$localFile of=$SP_TEMP_LINK bs=1M iflag=direct oflag=direct"
         fi
         splog "$COPY_CMD"
-        exec_and_log "$COPY_CMD" \
+        multiline_exec_and_log "$COPY_CMD" \
                      "Error dumping $IMAGE_PATH to $SP_TEMP_VOL"
     fi
 
