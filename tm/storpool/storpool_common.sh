@@ -366,8 +366,11 @@ function storpoolApi()
             return 1
         fi
     fi
+    if boolTrue "$NO_PROXY_API";then
+        export NO_PROXY="${NO_PROXY:+${NO_PROXY},}$SP_API_HTTP_HOST"
+    fi
     if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
-        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available}"
+        splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}}"
     fi
     curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
     --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
