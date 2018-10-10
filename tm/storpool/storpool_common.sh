@@ -1649,3 +1649,6 @@ oneSnapshotLookup()
 if boolTrue "$SP_CHECKPOINT_BD"; then
     SP_CHECKPOINT=
 fi
+
+# backward compatibility
+type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
