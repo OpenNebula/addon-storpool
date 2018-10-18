@@ -85,6 +85,9 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #VM_TAG=nvm
 
+# Optional common arguments to OpenNebula shell tools
+#ONE_ARGS=
+
 #
 # variables enabling various Debuging
 #
