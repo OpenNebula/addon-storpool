@@ -78,7 +78,7 @@ storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
 
 if [ -n "$SIZE" ]; then
     if [ $SIZE -gt ${ORIGINAL_SIZE:-0} ]; then
-        storpoolVolumeResize "$SP_VOL" "$SIZE"
+        storpoolVolumeResize "$SP_VOL" "$SIZE"M
     fi
 fi
 

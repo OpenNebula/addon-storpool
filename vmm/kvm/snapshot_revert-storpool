@@ -115,7 +115,7 @@ EOF
                 fi
             elif [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
                 splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than snapshot. Inflating..."
-                storpoolVolumeResize "$volume" "$OLD_SIZE_M"
+                storpoolVolumeResize "$volume" "${OLD_SIZE_M}M"
             fi
         else
             splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"

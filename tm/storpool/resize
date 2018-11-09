@@ -68,7 +68,7 @@ fi
 # Resize the volume
 #-------------------------------------------------------------------------------
 
-storpoolVolumeResize "$SP_VOL" "$NEWSIZE"
+storpoolVolumeResize "$SP_VOL" "$NEWSIZE"M
 
 splog "END $VM_ID"
 exit 0
