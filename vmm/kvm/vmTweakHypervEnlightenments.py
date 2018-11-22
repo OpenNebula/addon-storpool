@@ -98,6 +98,8 @@ try:
 						if e[0] == 'io' and e[1] == 'native':
 							# tweak iothread for this device
 							el.set('iothread', thrnum)
+					if ioeventfd:
+						el.set('ioeventfd', 'on')
 except IndexError:
 	# no devices section found
 	pass
