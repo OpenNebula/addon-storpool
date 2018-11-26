@@ -195,6 +195,9 @@ crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 
 * Patch and rebuild the sunstone interface
 ```bash
+# First do a backup of the sunstone/public folder
+cp -a /usr/lib/one/sunstone/public{,-bak-$(date +%s)}
+
 pushd /usr/lib/one/sunstone/public
 
 # patch the sunstone interface to update the Datastore Wizard to support StorPool
@@ -208,6 +211,9 @@ export PATH=$PATH:$PWD/node_modules/.bin
 ./build.sh
 
 popd
+
+# Don't forget to delete the created backup after configmig that sunstone works
+# rm -fr /usr/lib/one/sunstone/public-bak-*
 ```
 
 ### addon configuration
@@ -279,6 +285,11 @@ service opennebula-sunstone restart
 su - oneadmin -c 'onehost sync --force'
 ```
 
+* Check that Sunstone works and the _New Datastore Wizard_ is showing StorPool in the _Storage backend_. Remove the backup of sunstone/public folder.
+```bash
+rm -fr /usr/lib/one/sunstone/public-bak-*
+```
+
 ## Configuration
 
 Make sure that the OpenNebula shell tools are working without additional argumets. When OpenNebula endpoint differ from default one eider create `~oneadmin/.one/one_endpoint` file or set `ONE_XMLRPC` in `addon-storpoolrc`.
@@ -289,7 +300,7 @@ Make sure that the OpenNebula shell tools are working without additional argumet
 StorPool uses resource separation utilizing the cgroup subsystem. The reserved resources should be updated in the 'Overcommitment' section on each host (RESERVED_CPU and RESERVED_MEM in pre ONE-5.4). There is a hepler script that report the values that should be set on each host. The script should be available after a host is added to OpenNebula.
 
 ```bash
-# for each host do
+# for each host do as oneadmin user
 ssh hostN /var/tmp/one/reserved.sh >reserved.tmpl
 onehost update 'hostN' --append reserved.tmpl
 ```
