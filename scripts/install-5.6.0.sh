@@ -49,6 +49,10 @@ else
     patch_err=
     set +e
     pushd "$SUNSTONE_PUBLIC" &>/dev/null
+    ts="$(date "+%Y%m%d%H%M%S")"
+    SUNSTONE_BACKUP="${SUNSTONE_PUBLIC}-bak-${ts}"
+    echo "*** Backing up sunstone/public to $SUNSTONE_BACKUP ..."
+    cp -a "$SUNSTONE_PUBLIC" "$SUNSTONE_BACKUP"
     if [ -d ${CWD}/patches/sunstone/${ONE_VER} ]; then
         for p in `ls ${CWD}/patches/sunstone/${ONE_VER}/*.patch`; do
             do_patch "$p" "backup"
@@ -232,5 +236,10 @@ cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
 echo "*** Please sync hosts (onehost sync --force)"
 
 echo "*** Please restart opennebula${end_msg:+ and $end_msg} service${end_msg:+s}"
+
+if [ -n "$SUNSTONE_BACKUP" ] && [ -d "$SUNSTONE_BACKUP" ] ; then
+    echo "*** There is a backup of the sunstone interface that could be removed in case of no issues"
+    echo "*** (rm -rf $SUNSTONE_BACKUP)"
+fi
 
 echo "*** Please update RESERVED_CPU and RESERVED_MEM with the values from '/var/tmp/one/reserved.sh' run on each host"
