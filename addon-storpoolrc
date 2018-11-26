@@ -90,10 +90,9 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 
 # during image import OpenNebula 5.6+ do exclusive lock on the image resource
 # which prevent Image Template manipulation
-# Enable the variable on OpenNebula 5.4 and below
-# Default: 0 (disabled)
+# Default: 1 (enabled)
 #
-UPDATE_IMAGE_ON_IMPORT=0
+UPDATE_IMAGE_ON_IMPORT=1
 
 #
 # variables enabling various Debuging

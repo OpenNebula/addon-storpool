@@ -90,8 +90,7 @@ CLEAN_SRC_ON_UNDEPLOY=1
 # block creation of new disk snapshots when the limit is reached
 DISKSNAPSHOT_LIMIT=
 # update image template's variables DRIVER=raw and FORMAT=raw during import
-# disabled by default because one-5.6+ locks the image and update is impossible
-UPDATE_IMAGE_ON_IMPORT=
+UPDATE_IMAGE_ON_IMPORT=1
 # Tag all VM disks with tag $VM_TAG=$VM_ID
 # Empty string will disable the tagging
 VM_TAG=nvm
