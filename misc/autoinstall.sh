@@ -18,6 +18,14 @@
 #--------------------------------------------------------------------------- #
 #
 
+#
+# bash autoinstall.sh [branch_or_tag_name]
+#
+# Script that automate the download and installation of addon-storpool.
+# By default the script fetches latest 'release' tag. If there is a need to
+# install older release or current master branch provide the tag or branch name
+# as first argument.
+
 set -o pipefail
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH
@@ -53,10 +61,12 @@ if curl --silent --location -o "${TAG_NAME}.tar.gz" "$URL"; then
             echo "+ Installing  $NAME"
             if bash install.sh 2>&1 | tee "../$LOG"; then
                 echo "+ DONE"
+                cd -
+                rm -fr "$NAME"
             else
                 echo " ! Error: Installation failed! Search for details in $LOG"
+                cd -
             fi
-           cd -
         else
            echo " ! Error: Can't cd $NAME"
            exit 1
