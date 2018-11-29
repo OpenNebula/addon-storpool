@@ -124,9 +124,11 @@ fi
 
 # try detecting RAFT_LEADER_IP from opennebula's config
 if [ -z "$RAFT_LEADER_IP" ] && [ -f "$ONE_HOME/config" ]; then
-	RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "$ONE_HOME/config")"
+	#RAFT_LEADER_HOOK=ARGUMENTS=leader vlan11 10.163.1.250,COMMAND=raft/vip.sh
+	RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "$ONE_HOME/config" | tail -n 1)"
 	if [ -n "$RAFT_IP" ]; then
 		RAFT_LEADER_IP="${RAFT_IP%%/*}"
+		RAFT_LEADER_IP="${RAFT_IP%%,*}"
 	fi
 fi
 
