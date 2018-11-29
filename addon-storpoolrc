@@ -19,6 +19,7 @@ MKSWAP="sudo /sbin/mkswap"
 
 # Run stats collecting only on the LEADER instance
 # If autodetction fails set the leader IP manually
+# Or to administratively disable set to 'disabled'
 #
 # Default: '' (autodetect)
 #RAFT_LEADER_IP=

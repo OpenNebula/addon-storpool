@@ -130,7 +130,7 @@ if [ -z "$RAFT_LEADER_IP" ] && [ -f "$ONE_HOME/config" ]; then
 	fi
 fi
 
-if [ -n "$RAFT_LEADER_IP" ]; then
+if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
 	tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
 	if [ "${tmp:0:5}" == "local" ]; then
 		if boolTrue "$MONITOR_SYNC_DEBUG_VERBOSE"; then
