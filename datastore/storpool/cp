@@ -84,6 +84,8 @@ http://*|https://*|ssh://*|s3://*|rbd://*|vcenter://*)
     if [ "${MD5}${SHA1}${NOLOCAL}" = "" ]; then
         localFile="$(echo "$IMAGE_PATH" | sed -e "s/'/'\\\''/g")"
         log "Using direct IO"
+    else
+        splog "${MD5:+MD5:$MD5 }${SHA1:+SHA1:$SHA1 }${NOLOCAL:+NOLOCAL:$NOLOCAL}"
     fi
     ;;
 esac
