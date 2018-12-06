@@ -154,7 +154,7 @@ else
 
     storpoolVolumeAttach "$SP_TEMP_VOL" "$DST_HOST"
 
-
+    tStart=$(date +%s)
     if [ -n "$DST_HOST" ]; then
         if [ -n "$localFile" ] && [ -f "$localFile" ]; then
             COPY_CMD="dd if=$localFile bs=\"${COPY_CMD_DS_BS:-1M}\" iflag=direct"
@@ -170,6 +170,8 @@ else
         multiline_exec_and_log "$COPY_CMD" \
                      "Error dumping $IMAGE_PATH to $SP_TEMP_VOL"
     fi
+    tEnd=$(date +%s)
+    splog "Image transferred in $((tEnd-tStart)) seconds ($((SIZE/(tEnd-tStart)))MB/s)"
 
     #-------------------------------------------------------------------------------
     # Process imported image
@@ -211,7 +213,7 @@ else
     sync
 EOF
 )
-
+        tStart=$(date +%s)
         if [ -n "$DST_HOST" ]; then
             splog "convert from $FORMAT to raw at $DST_HOST"
             ssh_exec_and_log "$DST_HOST" "$POST_COPY_CMD" \
@@ -221,6 +223,8 @@ EOF
             $QEMU_IMG convert -t none -T none -O raw -S 4k "$SP_TEMP_LINK" "$SP_LINK"
             sync
         fi
+        tEnd=$(date +%s)
+        splog "Image converted to raw in $((tEnd-tStart)) seconds"
 
         trapDel "storpoolVolumeDelete \"$SP_VOL\" force snaps"
 
