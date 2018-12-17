@@ -55,10 +55,10 @@ SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
 SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 
-parent=$(storpoolVolumeGetParent "$SP_VOL")
+storpoolVolumeInfo "$SP_VOL"
 
-if [ "$parent" = "$SP_SNAP" ]; then
-    splog "$SP_VOL already based on $parent"
+if [ "$V_PARENT_NAME" = "$SP_SNAP" ]; then
+    splog "$SP_VOL already based on $V_PARENT_NAME"
 else
     storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
 fi

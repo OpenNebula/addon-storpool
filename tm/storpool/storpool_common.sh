@@ -663,13 +663,6 @@ function storpoolVolumeTemplate()
     storpoolRetry volume "$_SP_VOL" template "$_SP_TEMPLATE" >/dev/null
 }
 
-function storpoolVolumeGetParent()
-{
-    local _SP_VOL="$1" parentName
-    parentName=$(storpoolRetry -j volume list | jq -r ".data|map(select(.name==\"$_SP_VOL\"))|.[]|[.parentName]|@csv") #"
-    echo "${parentName//\"/}"
-}
-
 function storpoolSnapshotInfo()
 {
     SNAPSHOT_INFO=($(storpoolRetry -j snapshot "$1" info | jq -r '.data|[.size,.templateName]|@csv' | tr '[,"]' ' '  ))
