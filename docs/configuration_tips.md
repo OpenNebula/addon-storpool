@@ -92,7 +92,7 @@ Uncomment and set to _native_
 ### Extras
 
 **!!! Warning !!!**
-*These features are changing the defalt behavior of OpenNebula and should be used only when the StorPool addon is used for both SYSTEM and IMAGE datastores.*
+*These features are changing the defalt behavior of OpenNebula and should be used when the StorPool addon is the only storage driver and used for both SYSTEM and IMAGE datastores!*
 
 
 #### VM snapshots
