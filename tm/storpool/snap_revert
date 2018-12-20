@@ -103,9 +103,8 @@ if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
         storpoolVolumeResize "$SP_VOL" "$OLD_SIZE_M"M
     fi
 else
-    splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
+    splog "Volume size not changed (${NEW_SIZE_M}M)"
 fi
-
 
 storpoolVolumeAttach "$SP_VOL" "$SRC_HOST"
 oneSymlink "$SRC_HOST" "$SP_LINK" "$SRC_PATH"
