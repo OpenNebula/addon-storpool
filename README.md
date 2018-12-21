@@ -72,9 +72,10 @@ Support standard OpenNebula datastore operations:
 
 1. Tested only with KVM hypervisor
 1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the 'VM snapshot' interface to do disk snapshots when only StorPool backed datastores are used.
+1. Image export is disabled until issue OpenNebula/one#1159 is resolved
 1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space)
-1. The extra to use VM checkpoint file directly on StorPool backed block device requires `qemu-kvm-ev` and StorPool CLI with access to the StorPool's management API installed on the hypervisor nodes.
-1. The extra features are tested/confirmed working on CentOS. Please notify the author for any success/failure when used on another OS.
+1. The option to use VM checkpoint file directly on a StorPool backed block device requires `qemu-kvm-ev` and StorPool CLI with access to the StorPool's management API installed on the hypervisor nodes.
+1. The extra features are tested/confirmed working on CentOS.
 
 ## Installation
 
@@ -154,6 +155,7 @@ chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 ```
 
 * Patch IM_MAD/kvm-probes.d/monitor_ds.sh
+OpenNebula collect datastore space only for integrated drivers. This patch enable reporting of datastore space from StorPool.
 ```bash
 pushd /var/lib/one
 patch -p0 <~/addon-storpool/patches/im/5.2/00-monitor_ds.patch
@@ -161,6 +163,7 @@ popd
 ```
 
 * Patch TM_MAD/shared/monitor
+OpenNebula collect disk stats for integrated drivers. This patch enable disks stats reporting for addon drivers.
 ```bash
 pushd /var/lib/one
 patch --backup -p0 <~/addon-storpool/patches/tm/5.0/00-shared-monitor.patch
@@ -168,6 +171,7 @@ popd
 ```
 
 * Patch TM_MAD/ssh/monitor_ds
+OpenNebula collect disk stats for integrated drivers. This patch enable disks stats reporting for addon drivers.
 ```bash
 pushd /var/lib/one
 patch --backup -p0 <~/addon-storpool/patches/tm/5.0/00-ssh-monitor_ds.patch
