@@ -45,7 +45,7 @@ if boolTrue "$DEBUG_TM_MONITOR_DS"; then
 	splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR"
 fi
 if [ -f "$DS_DIR/.monitor" ]; then
-	DS_DRIVER="$(<$DS_DIR/.monitor)"
+	DS_DRIVER="$(<"$DS_DIR/.monitor")"
 else 
 	DS_DRIVER="storpool"
 fi
