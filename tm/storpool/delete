@@ -96,18 +96,17 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
             storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
         fi
+        if boolTrue "$SP_CHECKPOINT_BD"; then
+            storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
+            splog "Delete ${ONE_PX}-sys-${VM_ID}-rawcheckpoint ($?)"
+        fi
     fi
     RM_CMD="rm -rf '$DST_PATH'"
     splog "run RM_CMD on $DST_HOST ($DST_PATH)"
     ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
              "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
 
-    if boolTrue "$SP_CHECKPOINT_BD"; then
-        storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
-        splog "Delete ${ONE_PX}-sys-${VM_ID}-rawcheckpoint ($?)"
-    fi
-
-    splog "END [SYSTEM_DS]"
+    splog "END $VM_ID [SYSTEM_DS]"
     exit 0
 fi
 
