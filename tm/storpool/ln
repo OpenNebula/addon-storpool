@@ -95,6 +95,8 @@ if boolTrue "${READONLY}"; then
     SP_MODE="ro"
 fi
 
+storpoolVolumeDetach "$SP_VOL" "force" "" "all"
+
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
