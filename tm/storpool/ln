@@ -101,6 +101,10 @@ storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
+if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+    MONITOR_TM_MAD="storpool"
+fi
+
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 
 splog "END $VM_ID"
