@@ -165,7 +165,23 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         REMOTE_MONITOR=
     fi
     if [ $LCM_STATE -eq 30 ] && boolTrue "$SKIP_UNDEPLOY_SSH"; then
-        splog "Skip ssh_make_path $DST_HOST"
+        splog "Skip ssh_make_path $DST_HOST $DST_DIR $REMOTE_MONITOR (front-end)"
+        if [ "$DST_HOST" = "$HOSTNAME" ]; then
+            [ -d "$DST_DIR" ] || mkdir -p "$DST_DIR"
+            monitor_file="$DST_DIR/.monitor"
+            [ -f "$monitor_file" ] && monitor=$(<"$monitor_file")
+            if [ -n "$REMOTE_MONITOR" ] ; then
+                if [ "$REMOTE_MONITOR" != "$monitor" ]; then
+                    echo "$REMOTE_MONITOR" >"$monitor_file"
+                    splog "Wrote $REMOTE_MONITOR to $monitor_file ($?)"
+                fi
+            else
+                if [ -n "$monitor" ]; then
+                    rm -f "$monitor_file"
+                    splog "Removed $monitor_file '$monitor' ($?)"
+                fi
+            fi
+        fi
     else
        ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
     fi
