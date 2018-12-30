@@ -736,7 +736,10 @@ function oneSymlink()
             trap - TERM INT QUIT HUP EXIT
         fi
         if [ -n "$MONITOR_TM_MAD" ]; then
-            [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"
+            if [ ! -f "\$dst_dir/../.monitor" ]; then
+                echo "$MONITOR_TM_MAD" >"\$dst_dir/../.monitor"
+                splog "Wrote 'storpool' to \$dst_dir/../.monitor (\$?)"
+            fi
         fi
         splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
