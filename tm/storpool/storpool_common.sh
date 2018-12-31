@@ -1646,3 +1646,28 @@ fi
 
 # backward compatibility
 type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
+
+# redefine ssh_make_path
+function ssh_make_path
+{
+    SSH_EXEC_ERR=`$SSH "$1" bash -s 2>&1 1>/dev/null <<EOF
+set -e -o pipefail
+if [ ! -d "$2" ]; then
+   mkdir -p "$2"
+fi
+if [ -n "$3" ]; then
+   monitor_file="$(dirname $2)/.monitor"
+   if [ -f "\\$monitor_file" ]; then
+       monitor="\\$(<"\\$monitor_file" 2>/dev/null)"
+   fi
+   [ "\\$monitor" = "$3" ] || echo "$3" > "\\$monitor_file" 2>&1
+fi
+EOF`
+    SSH_EXEC_RC=$?
+
+    if [ $SSH_EXEC_RC -ne 0 ]; then
+        error_message "Error creating directory $2 at $1: $SSH_EXEC_ERR"
+
+        exit $SSH_EXEC_RC
+    fi
+}
