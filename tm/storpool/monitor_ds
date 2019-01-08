@@ -45,8 +45,12 @@ if boolTrue "$DEBUG_TM_MONITOR_DS"; then
 	splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR"
 fi
 if [ -f "$DS_DIR/.monitor" ]; then
-	DS_DRIVER="$(<$DS_DIR/.monitor)"
-else 
+	DS_DRIVER="$(<"$DS_DIR/.monitor")"
+	HAS_DOT_MONITOR=1
+else
+	if boolTrue "$DEBUG_TM_MONITOR_DS_VERBOSE"; then
+		splog "File $DS_DIR/.monitor not found. Using default DS_DERIVER=storpool"
+	fi
 	DS_DRIVER="storpool"
 fi
 
@@ -58,7 +62,9 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 	DRIVER_RUN=
 	for DISK in `ls $VM_DIR/disk.[[:digit:]]* 2>/dev/null | grep '/disk\.[0-9]\+$'`; do
 #		splog "DISK=$DISK"
-		[ -e "$DISK" ] || continue
+		if [ -n "$HAS_DOT_MONITOR" ]; then
+			[ -e "$DISK" ] || continue
+		fi
 		
 		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,POLL=\""
 		

@@ -74,7 +74,7 @@ if [ -n "$EXPORT_TO" ]; then
     $QEMU_IMG convert -O $EXPORT_TO $SP_LINK $STAGING_FILE
     ${DU} -Lm ${STAGING_FILE} | cut -f1
 EOF
-    storpoolVolumeDetach "$SP_SNAPSHOT" "$DST_HOST"
+    storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
     storpoolSnapshotDelete "$SP_SNAPSHOT"
 )
     SIZE=$(ssh_monitor_and_log "$DST_HOST" "$CMD" "export file convert ")

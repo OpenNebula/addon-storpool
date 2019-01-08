@@ -50,7 +50,7 @@ ID=$2
 
 oneDsDriverAction "$DRIVER_PATH"
 
-if [ "${DRIVER,,}" != "raw" ]; then
+if [ -n "$DRIVER" ] && [ "${DRIVER,,}" != "raw" ]; then
     log_error "Unsupported DRIVER format '$DRIVER'! Please use 'raw'."
     splog "Unsupported DRIVER format '$DRIVER'! Please use 'raw'."
     exit 1

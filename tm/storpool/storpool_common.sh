@@ -663,13 +663,6 @@ function storpoolVolumeTemplate()
     storpoolRetry volume "$_SP_VOL" template "$_SP_TEMPLATE" >/dev/null
 }
 
-function storpoolVolumeGetParent()
-{
-    local _SP_VOL="$1" parentName
-    parentName=$(storpoolRetry -j volume list | jq -r ".data|map(select(.name==\"$_SP_VOL\"))|.[]|[.parentName]|@csv") #"
-    echo "${parentName//\"/}"
-}
-
 function storpoolSnapshotInfo()
 {
     SNAPSHOT_INFO=($(storpoolRetry -j snapshot "$1" info | jq -r '.data|[.size,.templateName]|@csv' | tr '[,"]' ' '  ))
@@ -743,7 +736,10 @@ function oneSymlink()
             trap - TERM INT QUIT HUP EXIT
         fi
         if [ -n "$MONITOR_TM_MAD" ]; then
-            [ -f "\$dst_dir/../.monitor" ] || echo "storpool" >"\$dst_dir/../.monitor"
+            if [ ! -f "\$dst_dir/../.monitor" ]; then
+                echo "$MONITOR_TM_MAD" >"\$dst_dir/../.monitor"
+                splog "Wrote 'storpool' to \$dst_dir/../.monitor (\$?)"
+            fi
         fi
         splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
@@ -1219,6 +1215,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_CLONE_GW \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_SYSTEM \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE \
@@ -1263,6 +1260,10 @@ function oneDsDriverAction()
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
     SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
     SP_CLONE_GW="${XPATH_ELEMENTS[i++]}"
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] ; then
+        SP_SYSTEM="${_TMP}"
+    fi
     NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -1301,10 +1302,10 @@ ${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
 ${CLUSTERS_ID:+CLUSTERS_ID=$CLUSTERS_ID }\
 ${STATE:+STATE=$STATE }\
 ${SIZE:+SIZE=$SIZE }\
-${SP_API_HTTP_HOST+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
-${SP_API_HTTP_PORT+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
-${SP_AUTH_TOKEN+SP_AUTH_TOKEN=DEFINED }\
-${SP_CLONE_GW+SP_CLONE_GW=$SP_CLONE_GW }\
+${SP_API_HTTP_HOST:+SP_API_HTTP_HOST=$SP_API_HTTP_HOST }\
+${SP_API_HTTP_PORT:+SP_API_HTTP_PORT=$SP_API_HTTP_PORT }\
+${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=DEFINED }\
+${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${DRIVER:+DRIVER=$DRIVER }\
@@ -1320,12 +1321,13 @@ ${IMAGE_PATH:+IMAGE_PATH=$IMAGE_PATH }\
 ${BRIDGE_LIST:+BRIDGE_LIST=$BRIDGE_LIST }\
 ${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }\
 ${BASE_PATH:+BASE_PATH=$BASE_PATH }\
-${SP_REPLICATION+SP_REPLICATION=$SP_REPLICATION }\
-${SP_PLACEALL+SP_PLACEALL=$SP_PLACEALL }\
-${SP_PLACETAIL+SP_PLACETAIL=$SP_PLACETAIL }\
-${SP_PLACEHEAD+SP_PLACEHEAD=$SP_PLACEHEAD }\
-${SP_IOPS+SP_IOPS=$SP_IOPS }\
-${SP_BW+SP_BW=$SP_BW }\
+${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }\
+${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }\
+${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }\
+${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }\
+${SP_IOPS:+SP_IOPS=$SP_IOPS }\
+${SP_BW:+SP_BW=$SP_BW }\
+${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }\
 "
     splog "$_MSG"
 }
@@ -1653,3 +1655,28 @@ fi
 
 # backward compatibility
 type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
+
+# redefine ssh_make_path
+function ssh_make_path
+{
+    SSH_EXEC_ERR=`$SSH "$1" bash -s 2>&1 1>/dev/null <<EOF
+set -e -o pipefail
+if [ ! -d "$2" ]; then
+   mkdir -p "$2"
+fi
+if [ -n "$3" ]; then
+   monitor_file="$(dirname $2)/.monitor"
+   if [ -f "\\$monitor_file" ]; then
+       monitor="\\$(<"\\$monitor_file" 2>/dev/null)"
+   fi
+   [ "\\$monitor" = "$3" ] || echo "$3" > "\\$monitor_file" 2>&1
+fi
+EOF`
+    SSH_EXEC_RC=$?
+
+    if [ $SSH_EXEC_RC -ne 0 ]; then
+        error_message "Error creating directory $2 at $1: $SSH_EXEC_ERR"
+
+        exit $SSH_EXEC_RC
+    fi
+}
