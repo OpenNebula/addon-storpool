@@ -129,7 +129,9 @@ if [ -f "$SP_DS_TMP/sizes" ]; then
 	done
 	exit
 else
-	splog "not found $SP_DS_TMP/sizes"
+	if boolTrue "$DEBUG_TM_MONITOR_DISK"; then
+		splog "${DRIVER}:${DISK} not found $SP_DS_TMP/sizes"
+	fi
 fi
 
 # expand SP_CMD_VOLUME_SPACE macro variables
