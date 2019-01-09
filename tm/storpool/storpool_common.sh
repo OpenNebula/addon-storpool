@@ -738,7 +738,7 @@ function oneSymlink()
         if [ -n "$MONITOR_TM_MAD" ]; then
             if [ ! -f "\$dst_dir/../.monitor" ]; then
                 echo "$MONITOR_TM_MAD" >"\$dst_dir/../.monitor"
-                splog "Wrote 'storpool' to \$dst_dir/../.monitor (\$?)"
+                splog "Wrote '$MONITOR_TM_MAD' to \$dst_dir/../.monitor (\$?)"
             fi
         fi
         splog "ln -sf $_src \$dst"
@@ -945,6 +945,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
+                            /VM/HISTORY_RECORDS/HISTORY[last\(\)]/TM_MAD \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
     rm -f "$tmpXML"
@@ -969,6 +970,7 @@ function oneVmInfo()
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
+    VM_TM_MAD="${XPATH_ELEMENTS[i++]}"
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         VMSNAPSHOT_LIMIT="${_TMP}"
@@ -997,6 +999,7 @@ ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${IMAGE:+IMAGE='$IMAGE' }\
 ${SIZE:+SIZE='$SIZE' }\
 ${ORIGINAL_SIZE:+ORIGINAL_SIZE='$ORIGINAL_SIZE' }\
+${VM_TM_MAD:+VM_TM_MAD=$VM_TM_MAD }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
 "

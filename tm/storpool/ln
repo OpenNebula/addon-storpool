@@ -103,6 +103,8 @@ storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
 if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
     MONITOR_TM_MAD="storpool"
+elif [ "$VM_TM_MAD" = "ssh" ]; then
+    MONITOR_TM_MAD="ssh"
 fi
 
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
