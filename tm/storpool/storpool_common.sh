@@ -1659,9 +1659,10 @@ fi
 # backward compatibility
 type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
 
-# redefine ssh_make_path
+# redefine own version of ssh_make_path()
 function ssh_make_path
 {
+    [ -z "$3" ] || splog "ssh_make_path($1, $2, $3)"
     SSH_EXEC_ERR=`$SSH "$1" bash -s 2>&1 1>/dev/null <<EOF
 set -e -o pipefail
 if [ ! -d "$2" ]; then
@@ -1676,10 +1677,8 @@ if [ -n "$3" ]; then
 fi
 EOF`
     SSH_EXEC_RC=$?
-
     if [ $SSH_EXEC_RC -ne 0 ]; then
         error_message "Error creating directory $2 at $1: $SSH_EXEC_ERR"
-
         exit $SSH_EXEC_RC
     fi
 }
