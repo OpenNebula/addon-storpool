@@ -52,9 +52,11 @@ IS_DISK=`is_disk $DST_PATH`
 # Get Datastore information
 #-------------------------------------------------------------------------------
 if [ $IS_DISK == 0 ] && [ "$SRC_PATH" != "$DST_PATH" ]; then
-    oneDatastoreInfo "$(basename $(dirname $SRC_PATH))"
+    SRC_DS_ID="$(basename $(dirname $SRC_PATH))"
+    oneDatastoreInfo "$SRC_DS_ID"
     SRC_DS_SHARED="$DS_SHARED"
     SRC_SP_SYSTEM="$SP_SYSTEM"
+    splog "SRC_DS_ID=$SRC_DS_ID SRC_DS_SHARED=$SRC_DS_SHARED SRC_SP_SYSTEM=$SRC_SP_SYSTEM"
 fi
 
 oneDatastoreInfo "$DS_ID"
@@ -223,8 +225,14 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         # other files in the VM home
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`
-        if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ] || [ "$SRC_SP_SYSTEM" = "ssh" ] || [ "$SRC_DS_SHARED" != "YES"  ]; then
-            if [ "$SRC_HOST" = "$DST_HOST" ] || [ "$MIGRATE_UNKNOWN" = "yes" ]; then
+        SYSTEM_DS_TRANSFER=
+        if [ -n "$SRC_SP_SYSTEM" ]; then
+            if [ "${SRC_SP_SYSTEM^^}" = "SSH" ] || [ "${SRC_DS_SHARED^^}" != "YES" ]; then
+                SYSTEM_DS_TRANSFER=1
+            fi
+        fi
+        if ! boolTrue "$DS_SHARED" "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ] || [ -n "$SYSTEM_DS_TRANSFER" ]; then
+            if [ "$SRC_HOST" = "$DST_HOST" ] || boolTrue "$MIGRATE_UNKNOWN" "MIGRATE_UNKNOWN"; then
                 if [ "$SRC_PATH" = "$DST_PATH" ]; then
                     splog "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
                 else
