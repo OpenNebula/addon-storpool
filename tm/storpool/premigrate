@@ -63,6 +63,19 @@ if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
 fi
 if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
     MONITOR_TM_MAD="$DS_TM_MAD"
+    oneVmVolumes "$VM_ID"
+    if [ -n "$vmVolumes" ]; then
+        if [ -n "$oneVmVolumesNotStorPool" ]; then
+            msg="Unsupported configuration! SYSTEM datastore not on shared filesystem and non-storpool disks! ($oneVmVolumesNotStorPool)"
+        fi
+    else
+        msg="Can't get VM disk info!"
+    fi
+    if [ -n "$msg" ]; then
+        splog "$msg"
+        log_error "$msg"
+        exit 1
+    fi
 fi
 if [ -n "$MONITOR_TM_MAD" ]; then
     #-------------------------------------------------------------------------------

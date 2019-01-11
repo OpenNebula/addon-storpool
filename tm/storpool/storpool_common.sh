@@ -1433,6 +1433,7 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/CLONE \
         /VM/TEMPLATE/DISK/FORMAT \
         /VM/TEMPLATE/DISK/TYPE \
+        /VM/TEMPLATE/DISK/TM_MAD \
         /VM/TEMPLATE/DISK/TARGET \
         /VM/TEMPLATE/DISK/IMAGE_ID \
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
@@ -1446,6 +1447,7 @@ oneVmVolumes()
     local CLONE="${XPATH_ELEMENTS[i++]}"
     local FORMAT="${XPATH_ELEMENTS[i++]}"
     local TYPE="${XPATH_ELEMENTS[i++]}"
+    local TM_MAD="${XPATH_ELEMENTS[i++]}"
     local TARGET="${XPATH_ELEMENTS[i++]}"
     local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
     local SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
@@ -1458,12 +1460,14 @@ oneVmVolumes()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
+    local IMG=
     _OFS=$IFS
     IFS=';'
     DISK_ID_A=($DISK_ID)
     CLONE_A=($CLONE)
     FORMAT_A=($FORMAT)
     TYPE_A=($TYPE)
+    TM_MAD_A=($TM_MAD)
     TARGET_A=($TARGET)
     IMAGE_ID_A=($IMAGE_ID)
     SNAPSHOT_ID_A=($SNAPSHOT_ID)
@@ -1473,8 +1477,14 @@ oneVmVolumes()
         CLONE="${CLONE_A[$ID]}"
         FORMAT="${FORMAT_A[$ID]}"
         TYPE="${TYPE_A[$ID]}"
+        TM_MAD="${TM_MAD_A[$ID]}"
         TARGET="${TARGET_A[$ID]}"
         DISK_ID="${DISK_ID_A[$ID]}"
+        if [ "${TM_MAD:0:8}" != "storpool" ]; then
+            splog "DISK_ID:$DISK_ID TYPE:$TYPE TM_MAD:$TM_MAD "
+            oneVmVolumesNotStorPool="$TM_MAD:disk.$DISK_ID"
+            continue
+        fi
         IMG="${ONE_PX}-img-$IMAGE_ID"
         if [ -n "$IMAGE_ID" ]; then
             if boolTrue "$CLONE"; then
