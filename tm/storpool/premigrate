@@ -89,8 +89,10 @@ if [ -n "$MONITOR_TM_MAD" ]; then
     TAR_SSH=$(cat <<EOF
 set -e -o pipefail
 logger -t "tm_sp_premigrate_r[\$\$]" -- "$TAR -C $VM_PATH --sparse -cf - . | $SSH $DST_HOST '$TAR -C $VM_PATH --sparse -xf -'"
-$TAR -C "$VM_PATH" --sparse -cf - . | $SSH "$DST_HOST" '$TAR -C "$VM_PATH" --sparse -xf -;logger -t "tm_sp_premigrate_r[\$\$]" -- "rDone \$? \\$?"'
-logger -t "tm_sp_premigrate_r[\$\$]" -- "END"
+$TAR -C "$VM_PATH" --sparse -cf - . | $SSH "$DST_HOST" '$TAR -C "$VM_PATH" --sparse -xf -'
+ret=\$?
+logger -t "tm_sp_premigrate_r[\$\$]" -- "END $VM_ID (\$ret)"
+exit \$ret
 EOF
 )
     splog "Copy $VM_PATH from $SRC_HOST to $DST_HOST (ssh)"
