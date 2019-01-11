@@ -629,7 +629,7 @@ function storpoolVolumeDetach()
         _SP_CLIENT="all"
     fi
     while IFS=',' read volume client snapshot; do
-        if [ "$_SOFT_FAIL" = "YES" ]; then
+        if boolTrue "$_SOFT_FAIL" "_SOFT_FAIL"; then
             _FORCE=
         fi
         if [ $snapshot = "true" ]; then

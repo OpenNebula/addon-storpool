@@ -311,7 +311,7 @@ else
     if [ -n "$ATTACH_ONLY" ]; then
         splog "$ATTACH_ONLY"
     else
-        if [ "$MIGRATE_UNKNOWN" = "yes" ]; then
+        if boolTrue "$MIGRATE_UNKNOWN" "MIGRATE_UNKNOWN"; then
             oneVmVolumes "$VM_ID"
         fi
         storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL" "$READONLY" "$vmVolumes"

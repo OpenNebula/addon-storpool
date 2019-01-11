@@ -601,7 +601,7 @@ for i in ${!HOST_ID_ARRAY[@]}; do
 						splog "${_rHost} (localhost) ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
-			elif [ "$MONITOR_SYNC_REMOTE" = "YES" ]; then
+			elif boolTrue "$MONITOR_SYNC_REMOTE" "MONITOR_SYNC_REMOTE"; then
 				cat "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" | ssh -o ConnectTimeout="${sshConnectTimeout:-3}" -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
 				    ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p \"${_destDir}\" && cat >\"${_destDir}/${_jFile}\"" 2>/dev/null >/dev/null
 				ret=$?
