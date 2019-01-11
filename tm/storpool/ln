@@ -61,7 +61,7 @@ DST_DIR=`dirname $DST_PATH`
 DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
-# Get Datastore information
+# Get IMAGE Datastore information
 #-------------------------------------------------------------------------------
 
 oneDatastoreInfo "$DS_ID"
@@ -71,6 +71,7 @@ oneDatastoreInfo "$DS_ID"
 #-------------------------------------------------------------------------------
 
 oneVmInfo "$VM_ID" "$DISK_ID"
+
 
 SP_VOL="${SOURCE##*/}"
 SP_TEMPLATE="${SOURCE%%/*}"

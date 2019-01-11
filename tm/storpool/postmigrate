@@ -53,7 +53,7 @@ fi
 splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD"
 
 #-------------------------------------------------------------------------------
-# Get Datastore information
+# Get SYSTEM Datastore information
 #-------------------------------------------------------------------------------
 oneDatastoreInfo "$DS_ID"
 
