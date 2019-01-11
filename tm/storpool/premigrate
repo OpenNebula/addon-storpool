@@ -53,15 +53,22 @@ fi
 splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD"
 
 #-------------------------------------------------------------------------------
-# Get Datastore information
+# Get SYSTEM Datastore information
 #-------------------------------------------------------------------------------
 oneDatastoreInfo "$DS_ID"
 
-if ! boolTrue "$DS_SHARED" || [ "$SP_SYSTEM" = "ssh" ]; then
+MONITOR_TM_MAD=
+if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
+    MONITOR_TM_MAD="$DS_TM_MAD"
+fi
+if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
+    MONITOR_TM_MAD="$DS_TM_MAD"
+fi
+if [ -n "$MONITOR_TM_MAD" ]; then
     #-------------------------------------------------------------------------------
     # Create DST path
     #-------------------------------------------------------------------------------
-    ssh_make_path "$DST_HOST" "$VM_PATH" "storpool"
+    ssh_make_path "$DST_HOST" "$VM_PATH" "$MONITOR_TM_MAD"
 
     #-------------------------------------------------------------------------------
     # Copy VM related content to dst host.

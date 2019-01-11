@@ -721,7 +721,7 @@ function oneSymlink()
     local _host="$1" _src="$2"
     shift 2
     local _dst="$*"
-    splog "symlink $_src -> ${_host}:{${_dst//[[:space:]]/,}}"
+    splog "symlink $_src -> ${_host}:{${_dst//[[:space:]]/,}}${MONITOR_TM_MAD:+ (.monitor=$MONITOR_TM_MAD)}"
     local remote_cmd=$(cat <<EOF
     #_SYMLINK
     for dst in $_dst; do
@@ -736,9 +736,13 @@ function oneSymlink()
             trap - TERM INT QUIT HUP EXIT
         fi
         if [ -n "$MONITOR_TM_MAD" ]; then
-            if [ ! -f "\$dst_dir/../.monitor" ]; then
+            monitor_mad=
+            if [ -f "\$dst_dir/../.monitor" ]; then
+                monitor_mad=\$(<"\$dst_dir/../.monitor")
+            fi
+            if [ "\$monitor_mad" != "$MONITOR_TM_MAD" ]; then
                 echo "$MONITOR_TM_MAD" >"\$dst_dir/../.monitor"
-                splog "Wrote '$MONITOR_TM_MAD' to \$dst_dir/../.monitor (\$?)"
+                splog "Wrote '$MONITOR_TM_MAD' to \$dst_dir/../.monitor (\$?)\${monitor_mad:+ was \$monitor_mad}"
             fi
         fi
         splog "ln -sf $_src \$dst"
@@ -946,6 +950,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/TM_MAD \
+                            /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
     rm -f "$tmpXML"
@@ -971,6 +976,7 @@ function oneVmInfo()
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
     VM_TM_MAD="${XPATH_ELEMENTS[i++]}"
+    VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         VMSNAPSHOT_LIMIT="${_TMP}"
@@ -1000,6 +1006,7 @@ ${IMAGE:+IMAGE='$IMAGE' }\
 ${SIZE:+SIZE='$SIZE' }\
 ${ORIGINAL_SIZE:+ORIGINAL_SIZE='$ORIGINAL_SIZE' }\
 ${VM_TM_MAD:+VM_TM_MAD=$VM_TM_MAD }\
+${VM_DS_ID:+VM_DS_ID=$VM_DS_ID }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
 "

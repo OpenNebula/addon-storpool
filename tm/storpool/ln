@@ -101,10 +101,18 @@ storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
-if [ "$DS_SHARED" != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
-    MONITOR_TM_MAD="storpool"
-elif [ "$VM_TM_MAD" = "ssh" ]; then
-    MONITOR_TM_MAD="ssh"
+#-------------------------------------------------------------------------------
+# Get SYSTEM Datastore information
+#-------------------------------------------------------------------------------
+
+oneDatastoreInfo "$VM_DS_ID"
+
+MONITOR_TM_MAD=
+if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
+    MONITOR_TM_MAD="$DS_TM_MAD"
+fi
+if [ "${DS_TM_MAD:0:8}" = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
+    MONITOR_TM_MAD="$DS_TM_MAD"
 fi
 
 oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"

@@ -159,10 +159,9 @@ esac
 # check if it is called in SYSTEM_DS context
 #-------------------------------------------------------------------------------
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
-    if [ $DS_SHARED != "YES" ] || [ "$SP_SYSTEM" = "ssh" ]; then
+    REMOTE_MONITOR=
+    if ! boolTrue "$DS_SHARED" "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
         REMOTE_MONITOR="storpool"
-    else
-        REMOTE_MONITOR=
     fi
     if [ $LCM_STATE -eq 30 ] && boolTrue "$SKIP_UNDEPLOY_SSH"; then
         splog "Skip ssh_make_path $DST_HOST $DST_DIR $REMOTE_MONITOR (front-end)"
@@ -336,6 +335,15 @@ storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
 if boolTrue "$DO_SYMLINK"; then
+    # Get SYSTEM datastore info
+    oneDatastoreInfo "$VM_DS_ID"
+    MONITOR_TM_MAD=
+    if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
+        MONITOR_TM_MAD="$VM_TM_MAD"
+    fi
+    if [ "${VM_TM_MAD:0:8}" = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
+        MONITOR_TM_MAD="$VM_TM_MAD"
+    fi
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 fi
 
