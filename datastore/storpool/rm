@@ -66,5 +66,5 @@ fi
 SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
 storpoolVolumeDelete "$SP_TEMP_VOL" "force"
 
-splog "END $SP_VOL DELETED"
+splog "END $SP_VOL"
 exit 0

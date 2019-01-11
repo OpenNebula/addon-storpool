@@ -670,27 +670,66 @@ function storpoolVolumeSnapshotsDelete()
 function storpoolVolumeDelete()
 {
     local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE_LOCATION="$4"
+    local _ret=0
     if storpoolVolumeExists "$_SP_VOL"; then
 
         storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all"
+        _ret=$?
 
         if [ -n "${_REMOTE_LOCATION}" ]; then
 			local _REMOTE_LOCATION_ARGS="${_REMOTE_LOCATION#*:}"
 			_REMOTE_LOCATION="${_REMOTE_LOCATION%:*}"
 			storpoolRetry volume "$_SP_VOL" backup "$_REMOTE_LOCATION" ${_REMOTE_LOCATION_ARGS} >/dev/null
-			local RET=$?
-			if [ $RET -ne 0 ]; then
+			_ret=$?
+			if [ $_ret -ne 0 ]; then
 				storpoolVolumeRename "${_SP_VOL}" "${_SP_VOL}-"$(date +%s) "tag del=y" >/dev/null
 				return $?
 			fi
 		fi
-		storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+        if [ -n "$DELAY_DELETE" ]; then
+            local DELAY_DELETE_tmp="${DELAY_DELETE//[[:digit:]]/}"
+            if [ -n "$DELAY_DELETE_tmp" ] && [ -z "${DELAY_DELETE_tmp/[smhd]/}" ]; then
+                storpoolRetry volume "$_SP_VOL" snapshot deleteAfter "$DELAY_DELETE" >/dev/null
+                _ret=$?
+                if [ $_ret -eq 0 ]; then
+                    storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+                    _ret=$?
+                else
+                   splog "Can't create anonymous snapshot for $_SP_VOL!"
+                fi
+            else
+                local msg="Unsupported format in DELAY_DELETE='$DELAY_DELETE'!"
+                local newName="${_sp_vol}_DELETE$(date +%s)"
+                storpoolRetry volume "$_SP_VOL" rename "$newName" >/dev/null
+                _ret=$?
+                if [ $_ret -ne 0 ]; then
+                    storpoolRetry volume "$newName" freeze >/dev/null
+                    _ret=$?
+                    if [ $_ret -eq 0 ]; then
+                        msg+=" $_SP_VOL converted to snapshot $newName"
+                    else
+                        msg+=" Unable to convert $_SP_VOL as snapshot $newName"
+                    fi
+                else
+                    msg+=" Unable to rename $_SP_VOL to $newName."
+                fi
+                splog "$msg"
+            fi
+        else
+            storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+            _ret=$?
+        fi
     else
         splog "volume $_SP_VOL not found "
     fi
-    if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
-        storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
+    if [ $_ret -eq 0 ]; then
+        if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
+            storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
+        fi
+    else
+        splog "Volume snapshots not deleted!"
     fi
+    return $_ret
 }
 
 function storpoolVolumeRename()
