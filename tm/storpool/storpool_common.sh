@@ -745,8 +745,8 @@ function oneSymlink()
                 splog "Wrote '$MONITOR_TM_MAD' to \$dst_dir/../.monitor (\$?)\${monitor_mad:+ was \$monitor_mad}"
             fi
         fi
-        splog "ln -sf $_src \$dst"
         ln -sf "$_src" "\$dst"
+        splog "ln -sf $_src \$dst (\$?)"
         echo "storpool" >"\$dst".monitor
     done
 EOF
