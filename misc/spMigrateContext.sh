@@ -29,9 +29,9 @@ ONE_LOCATION=${ONE_LOCATION:-/var/lib/one}
 ONE_PX="${ONE_PX:-one}"
 
 unset i XPATH_ELEMENTS
-while read -r element; do
+while read -u 5 -r element; do
     XPATH_ELEMENTS[i++]="$element"
-done < <(onevm list -x | ${ONE_LOCATION}/remotes/datastore/xpath_multi.py -s \
+done 5< <(onevm list -x | ${ONE_LOCATION}/remotes/datastore/xpath_multi.py -s \
                     /VM_POOL/VM/ID \
                     /VM_POOL/VM/NAME \
                     /VM_POOL/VM/DEPLOY_ID \

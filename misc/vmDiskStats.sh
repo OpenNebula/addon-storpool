@@ -59,9 +59,9 @@ oneVmVolumes()
     fi
 
     unset XPATH_ELEMENTS i
-    while read element; do
+    while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${ONE_PATH}/datastore/xpath_multi.py -s \
         /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
         /VM/TEMPLATE/CONTEXT/DISK_ID \

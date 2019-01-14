@@ -253,9 +253,9 @@ if [ $ret -ne 0 ]; then
 fi
 
 unset i XPATH_ELEMENTS
-while IFS= read element; do
+while IFS= read -u 5 element; do
 	XPATH_ELEMENTS[i++]="$element"
-done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
+done 5< <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
         /DATASTORE_POOL/DATASTORE/ID \
         /DATASTORE_POOL/DATASTORE/STATE \
         /DATASTORE_POOL/DATASTORE/CLUSTER_ID \
@@ -351,9 +351,9 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	if [ ${#CLUSTER_IDS[@]} -eq 0 ]; then
 		#new style
 		unset j
-		while IFS= read element; do
+		while IFS= read -u 5 element; do
 			CLUSTER_IDS[j++]="$element"
-		done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
+		done 5< <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
 			        %m%/DATASTORE_POOL/DATASTORE[ID=$DS_ID]/CLUSTERS/ID)
 	fi
 #	if [ -n "$DEBUG_MOINTOR_HELPER_SYNC" ]; then
@@ -367,9 +367,9 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	ret=$?
 	if [ -z "$tmp" ]; then
 		if [ $ret -ne 0 ] && [ -s "$tmpDir/error.log" ]; then
-			cat "$tmpDir/error.log" | while read line; do
+			while read -u 5 line; do
 				splog "($ret) Error:$line"
-			done
+			done 5< <(cat "$tmpDir/error.log")
 		fi
 		splog "Missing StorPool template '$template_name' for datastore $DS_ID"
 		reload_template=1
@@ -566,9 +566,9 @@ if [ $ret -ne 0 ]; then
 fi
 
 unset i XPATH_ELEMENTS
-while IFS= read element; do
+while IFS= read -u 5 element; do
 	XPATH_ELEMENTS[i++]="$element"
-done < <(cat "$tmpXML" | $XPATH -s \
+done 5< <(cat "$tmpXML" | $XPATH -s \
   /HOST_POOL/HOST/ID \
   /HOST_POOL/HOST/NAME \
   /HOST_POOL/HOST/STATE \

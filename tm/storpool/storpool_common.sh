@@ -293,9 +293,9 @@ function oneHostInfo()
     fi
 
     unset XPATH_ELEMENTS i
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
+    done 5< <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /HOST/ID \
                             /HOST/NAME \
                             /HOST/STATE \
@@ -646,9 +646,10 @@ function storpoolVolumeCreate()
 function storpoolVolumeStartswith()
 {
     local _SP_VOL="$1" vName
-    while read vName; do
+    while read -u 5 vName; do
         echo "${vName//\"/}"
-    done < <(storpoolRetry -j volume list | jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv")
+    done 5< <(storpoolRetry -j volume list | \
+                  jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv")
 }
 
 function storpoolVolumeSnapshotsDelete()
@@ -771,7 +772,7 @@ function storpoolVolumeDetach()
     if [ "$_DETACH_ALL" = "all" ]; then
         _SP_CLIENT="all"
     fi
-    while IFS=',' read volume client snapshot; do
+    while IFS=',' read -u 5 volume client snapshot; do
         if boolTrue "_SOFT_FAIL" "_SOFT_FAIL"; then
             _FORCE=
         fi
@@ -797,7 +798,7 @@ function storpoolVolumeDetach()
                 fi
                 ;;
         esac
-    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv")
+    done 5< <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv")
 }
 
 function storpoolVolumeTemplate()
@@ -1101,9 +1102,9 @@ function oneVmInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
+        done 5< <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /VM/DEPLOY_ID \
                             /VM/STATE \
                             /VM/PREV_STATE \
@@ -1242,9 +1243,9 @@ function oneDatastoreInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
+        done 5< <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
@@ -1353,9 +1354,9 @@ function oneTemplateInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <($_XPATH "$_TEMPLATE" \
+        done 5< <($_XPATH "$_TEMPLATE" \
                     /VM/ID \
                     /VM/STATE \
                     /VM/LCM_STATE \
@@ -1380,9 +1381,9 @@ function oneTemplateInfo()
         _XPATH="$_XPATH -b"
     fi
     unset i XPATH_ELEMENTS
-    while read -r element; do
+    while read -u 5 -r element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <($_XPATH "$_TEMPLATE" \
+    done 5< <($_XPATH "$_TEMPLATE" \
                     /VM/TEMPLATE/DISK/TM_MAD \
                     /VM/TEMPLATE/DISK/DATASTORE_ID \
                     /VM/TEMPLATE/DISK/DISK_ID \
@@ -1434,9 +1435,9 @@ function oneDsDriverAction()
 
     unset i XPATH_ELEMENTS
 
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
+    done 5< <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/STATE \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/UID \
@@ -1482,7 +1483,6 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/UID \
                     /DS_DRIVER_ACTION_DATA/IMAGE/GID \
                     /DS_DRIVER_ACTION_DATA/MONITOR_VM_DISKS)
-
 
     unset i
     BASE_PATH="${XPATH_ELEMENTS[i++]}"
@@ -1594,9 +1594,9 @@ function oneMarketDriverAction()
 
     unset i XPATH_ELEMENTS
 
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <($_XPATH     /MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE \
+    done 5< <($_XPATH     /MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE \
                     /MARKET_DRIVER_ACTION_DATA/FORMAT \
                     /MARKET_DRIVER_ACTION_DATA/DISPOSE \
                     /MARKET_DRIVER_ACTION_DATA/SIZE \
@@ -1673,9 +1673,9 @@ oneVmVolumes()
     fi
 
     unset XPATH_ELEMENTS i
-    while read element; do
+    while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath_multi.py -s \
         /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
         /VM/TEMPLATE/CONTEXT/DISK_ID \
@@ -1801,9 +1801,9 @@ oneVmDiskSnapshots()
     fi
 
     unset XPATH_ELEMENTS i
-    while read element; do
+    while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath.rb \
         %m%/VM/SNAPSHOTS[DISK_ID="$DISK_ID"]/SNAPSHOT/ID)
     rm -f "$tmpXML"
@@ -1863,9 +1863,9 @@ oneVmSnapshots()
         /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/CLONE
         /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/FORMAT"
     unset XPATH_ELEMENTS i
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath.rb $query)
     rm -f "$tmpXML"
     unset i

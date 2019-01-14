@@ -83,7 +83,7 @@ if boolTrue "DDEBUG_DS_MONITOR"; then
 	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 fi
 
-while IFS=',' read name storedCapacity storedFree u2 u3; do
+while IFS=',' read -u 5 name storedCapacity storedFree u2 u3; do
 	if [ "${name//\"/}" = "$DS_NAME" ]; then
 		if boolTrue "ALT_STATS"; then
 			storedFree=$(( storedFree + u2 + u3 ))
@@ -105,4 +105,4 @@ while IFS=',' read name storedCapacity storedFree u2 u3; do
 		fi
 		break
 	fi
-done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
+done 5< <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
