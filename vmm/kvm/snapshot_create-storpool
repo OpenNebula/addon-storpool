@@ -82,16 +82,16 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     #echo "$DOMAIN"
     [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
     trap 'virsh --connect '\$LIBVIRT_URI' qemu-agent-command "'$DOMAIN'" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null ;\
-    logger -t vmm_sp_snapshot_create_r "fsthaw '$DOMAIN' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
+    logger -t "vmm_sp_snapshot_create_r[\$\$]" "fsthaw '$DOMAIN' ret:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM INT HUP
     virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null
-    logger -t vmm_sp_snapshot_create_r "fsfreeze $DOMAIN ret:\$? \$(date +%s.%N)"
+    logger -t "vmm_sp_snapshot_create_r[\$\$]" "fsfreeze $DOMAIN ret:\$? \$(date +%s.%N)"
     while [ -d /proc/\$PPID ]; do
-        logger -t vmm_sp_snapshot_create_r \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
+        logger -t "vmm_sp_snapshot_create_r[\$\$]" "$DOMAIN \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)"
         sleep .1
     done
     virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null
-    logger -t vmm_sp_snapshot_create_r "fsthaw $DOMAIN ret:\$? \$(date +%s.%N)"
-    logger -t vmm_sp_snapshot_create_r \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
+    logger -t "vmm_sp_snapshot_create_r[\$\$]" "fsthaw $DOMAIN ret:\$? \$(date +%s.%N)"
+    logger -t "vmm_sp_snapshot_create_r[\$\$]" \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$DOMAIN" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
     #trap - TERM INT QUIT HUP
 EOF
 )
@@ -114,13 +114,16 @@ EOF
         storpoolRetry groupSnapshot ${list[@]}
     fi
     if boolTrue "$VMSNAPSHOT_FSFREEZE"; then
-        pids=$(jobs -p)
+        pids="$(jobs -p)"
         if [ -n "$pids" ]; then
             kill $pids 2>/dev/null >/dev/null
             ret=$?
-            splog "kill $pids ($?)"
+            splog "kill $pids ($ret)"
             if [ $ret -eq 0 ]; then
                 splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN is thawed"
+                trap - TERM INT QUIT HUP EXIT
+            else
+                splog "Unable to kill the process holding the VM with freezed filesystem VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN"
             fi
         fi
     fi
