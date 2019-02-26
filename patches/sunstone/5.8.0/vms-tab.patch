@@ -1,0 +1,13 @@
+--- app/tabs/vms-tab/panels/snapshots.js-orig	2019-02-25 16:45:29.000000000 +0000
++++ app/tabs/vms-tab/panels/snapshots.js	2019-02-26 19:37:04.889118241 +0000
+@@ -131,6 +131,10 @@
+             if (Config.isTabActionEnabled("vms-tab", "VM.snapshot_delete")) {
+               actions += '<a href="VM.snapshot_delete" class="snapshot_delete" ><i class="fas fa-times"/>' + Locale.tr("Delete") + '</a>'
+             }
++          } else if (that.element.STATE == OpenNebulaVM.STATES.POWEROFF && that.element.HISTORY_RECORDS.HISTORY[that.element.HISTORY_RECORDS.HISTORY.length - 1].TM_MAD == "storpool"){
++            if (Config.isTabActionEnabled("vms-tab", "VM.snapshot_delete")) {
++              actions += '<a href="VM.snapshot_delete" class="snapshot_delete" ><i class="fas fa-times"/>' + Locale.tr("Delete") + '</a>'
++            }
+           }
+         }
+ 
