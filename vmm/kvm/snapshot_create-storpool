@@ -34,7 +34,6 @@ VMHOST="$4"
 DRIVER_PATH="$(dirname $0)"
 VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
-VMSNAPSHOT_ATOMIC=1
 
 [ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
 source "${DRIVER_PATH}/../../scripts_common.sh"
@@ -102,17 +101,9 @@ EOF
     fi
     for volume in $vmVolumes; do
         snap="${volume}-${res}"
-        if boolTrue "$VMSNAPSHOT_ATOMIC"; then
-            list+=($volume $snap)
-        else
-            storpoolRetry -j volume "$volume" snapshot "$snap" ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} 2>&1 >/dev/null
-            ret=$?
-            splog "storpool volume $volume snapshot $snap ${DELETE_AFTER:+deleteAfter $DELETE_AFTER} ($ret)"
-        fi
+        list+=($volume $snap)
     done
-    if boolTrue "$VMSNAPSHOT_ATOMIC"; then
-        storpoolRetry groupSnapshot ${list[@]}
-    fi
+    storpoolRetry groupSnapshot ${list[@]}
     if boolTrue "$VMSNAPSHOT_FSFREEZE"; then
         pids="$(jobs -p)"
         if [ -n "$pids" ]; then

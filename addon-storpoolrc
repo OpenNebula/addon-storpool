@@ -54,11 +54,6 @@ VMSNAPSHOT_FSFREEZE=0
 #
 VMSNAPSHOT_FSFREEZE_MULTIDISKS=0
 
-# Do atomic VM (disk) snapshots
-# Rquire StorPool revision 16.01.877+
-# Set to 0 to disable
-VMSNAPSHOT_ATOMIC=1
-
 # Delete VM snapshots on VM terminate
 # Snampshots should be manually deleted when disabled
 #

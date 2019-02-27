@@ -119,12 +119,9 @@ To enable the feature do the following changes.
 
 ##### /var/lib/one/remotes/addon-storpoolrc
 
-###### Add `VMSNAPSHOT_OVERRIDE` and `VMSNAPSHOT_ATOMIC` configuration variables
+###### Add `VMSNAPSHOT_OVERRIDE` configuration variable
 
 ```VMSNAPSHOT_OVERRIDE=1```
-
-```VMSNAPSHOT_ATOMIC=1```
-
 
 ###### (optional) do fsfreeze/fsthaw only when there are more than one attached VM disk
 The following require working communication with the qemu-guest-agent process running inside the VM!!!

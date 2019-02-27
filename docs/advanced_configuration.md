@@ -130,12 +130,6 @@ When there are more than one disk per VM it is possible to do fsfreese/fsthaw wh
 ONE_LOCATION=/var/lib/one
 echo "VMSNAPSHOT_FSFREEZE_MULTIDISKS=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
 ```
-There is alternative option which require the StorPool feature to do atomic grouped snapshots available in **StorPool revision 16.01.877+**. In this case it is acceptable to do snapshots without fsfreeze/fsthaw. To enable the feature set in addon-storpoolrc:
-```
-ONE_LOCATION=/var/lib/one
-echo "VMSNAPSHOT_ATOMIC=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
-VMSNAPSHOT_ATOMIC=1
-```
 
 #### VM snapshot limits
 
