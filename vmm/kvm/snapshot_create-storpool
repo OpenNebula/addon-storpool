@@ -36,7 +36,7 @@ VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
 VMSNAPSHOT_ATOMIC=1
 
-[ -f "${DRIVER_PATH}../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
+[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
 source "${DRIVER_PATH}/../../scripts_common.sh"
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
