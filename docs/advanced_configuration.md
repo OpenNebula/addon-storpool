@@ -117,7 +117,7 @@ DISKSNAPSHOT_LIMIT=15
 -l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool
 ```
 
-* Edit `/etc/one/oned.conf` and change KEEP_SNAPSHOTS=YES in the VM_MAD section
+* Edit `/etc/one/oned.conf` and set KEEP_SNAPSHOTS=YES in the VM_MAD section
 ```
 VM_MAD = [
     ...
@@ -125,10 +125,10 @@ VM_MAD = [
     ...
 ]
 ```
-When there are more than one disk per VM it is possible to do fsfreese/fsthaw while the disks are snapshotted.
+It is possible to do fsfreeze/fsthaw while the VM disks are snapshotted.
 ```
 ONE_LOCATION=/var/lib/one
-echo "VMSNAPSHOT_FSFREEZE_MULTIDISKS=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
+echo "VMSNAPSHOT_FSFREEZE=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
 ```
 
 #### VM snapshot limits

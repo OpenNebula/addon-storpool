@@ -49,11 +49,6 @@ MKSWAP="sudo /sbin/mkswap"
 #
 VMSNAPSHOT_FSFREEZE=0
 
-# Do fsfreeze/fsthaw during VM snapshot
-# only when there are more than 1 VM disks
-#
-VMSNAPSHOT_FSFREEZE_MULTIDISKS=0
-
 # Delete VM snapshots on VM terminate
 # Snampshots should be manually deleted when disabled
 #

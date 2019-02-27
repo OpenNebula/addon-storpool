@@ -99,7 +99,7 @@ Uncomment and set to _native_
 
 *The feature is working only with recent version of StorPool. Please contact StorPool Support for details.*
 
-The StorPool addon can re purpose the OpenNebula's interface for VM snapshots to do atomic snapshots on all VM disks at once. In addition there is an option to enable FSFREEZE before snapshotting and FSTHAW after the snapshots are taken always or when there are more than one VM disk image available(besides the contextualization iso).
+The StorPool addon can re purpose the OpenNebula's interface for VM snapshots to do atomic snapshots on all VM disks at once. In addition there is an option to enable FSFREEZE before snapshotting and FSTHAW after the snapshots are taken.
 
 To enable the feature do the following changes.
 
@@ -123,14 +123,7 @@ To enable the feature do the following changes.
 
 ```VMSNAPSHOT_OVERRIDE=1```
 
-###### (optional) do fsfreeze/fsthaw only when there are more than one attached VM disk
-The following require working communication with the qemu-guest-agent process running inside the VM!!!
-
-```
-VMSNAPSHOT_FSFREEZE_MULTIDISKS=1
-```
-
-###### (optional) or to always do fsfreeze/fsthaw set
+###### To enable the optional fsfreeze/fsthaw
 
 ```
 VMSNAPSHOT_FSFREEZE=1

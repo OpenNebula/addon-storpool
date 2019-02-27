@@ -69,13 +69,6 @@ if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
     ts=$(date +%s)
     res="${VMSNAPSHOT_TAG}-${SNAP_ID}-${ts}"
 
-    if boolTrue "$VMSNAPSHOT_FSFREEZE_MULTIDISKS"; then
-        if [ ${vmDisks:-1} -gt 1 ]; then
-            VMSNAPSHOT_FSFREEZE=1
-        else
-            VMSNAPSHOT_FSFREEZE="${VMSNAPSHOT_FSFREEZE:-}"
-        fi
-    fi
     if boolTrue "$VMSNAPSHOT_FSFREEZE"; then
         rCMD=$(cat <<EOF
     #echo "$DOMAIN"

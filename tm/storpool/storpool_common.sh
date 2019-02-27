@@ -65,8 +65,6 @@ VMSNAPSHOT_OVERRIDE=1
 VMSNAPSHOT_TAG="ONESNAP"
 # (obsolete) used for the alternate VM snapshot interface before atomic snapshotting was implemented
 VMSNAPSHOT_FSFREEZE=0
-# do fsfreeze only if there are more than one disk attached to a VM
-VMSNAPSHOT_FSFREEZE_MULTIDISKS=0
 # Delete VM snapshots when terminating a VM
 VMSNAPSHOT_DELETE_ON_TERMINATE=1
 # block creating new VM Snapshots when the limit is reached
