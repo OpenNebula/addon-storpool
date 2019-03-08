@@ -1,0 +1,106 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2019, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+LOG_PREFIX="vmm"
+TMPDIR="$(mktemp -t -d deploy-tweaks-XXXXXXXX)"
+trap 'rm -rf "$TMPDIR"' EXIT QUIT TERM HUP INT
+ERR_FILE="$TMPDIR/error"
+
+if [ -f ./config ]; then
+    eval "$(egrep 'DATASTORE_LOCATION|SCRIPTS_REMOTE_DIR' ./config)"
+fi
+
+SCRIPT_PATH="$(dirname $0)"
+source "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc"
+source "$SCRIPT_PATH/../../scripts_common.sh"
+
+function splog()
+{
+    logger -t "vmm_sp_${0##*/}[$$]" "${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
+}
+
+DEP_FILE="$1"
+HOST="$2"
+VM_ID="$3"
+DEP_NAME="$(basename "$DEP_FILE")"
+DEP_XML="$DEP_FILE-sp"
+VM_XML="$TMPDIR/vm.xml"
+
+cp -f "$DEP_FILE" "$DEP_XML"
+
+onevm show "$VM_ID" -x >"$VM_XML" 2>"$ERR_FILE"
+
+unset i XPATH_ELEMENTS
+while IFS= read -r -d '' element; do
+    XPATH_ELEMENTS[i++]="$element"
+done < <(cat "$TMPDIR/vm.xml" | sed '/\/>$/d' | remotes/datastore/xpath.rb --stdin \
+             /VM/DEPLOY_ID \
+             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/TM_MAD \
+             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID)
+unset i
+DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
+TM_MAD="${XPATH_ELEMENTS[i++]}"
+DS_ID="${XPATH_ELEMENTS[i++]}"
+
+if [ -z "$DS_ID" ]; then
+    error_message "[deploy-tweaks] Can't get SYSTEM datastore ID for one-$VM_ID"
+    cat "$ERR_FILE" >&2
+    exit -1
+fi
+
+if [ -d "${0}.d" ]; then
+    for hook in $(ls -A "${0}.d" 2>"$ERR_FILE"); do
+        [ -x  "${0}.d/$hook" ] || continue
+        cp -f "$DEP_XML" "$TMPDIR/deployment.xml"
+        splog "cp -f $DEP_XML $TMPDIR/deployment.xml ($?)"
+        splog "Calling $hook $TMPDIR/deployment.xml $TMPDIR/vm.xml ..."
+        "${0}.d/$hook" "$TMPDIR/deployment.xml" "$TMPDIR/vm.xml" 2>"$ERR_FILE"
+        ret=$?
+        splog "$hook ($ret)"
+        if [ $ret -eq 0 ]; then
+            xmllint --noout "$TMPDIR/deployment.xml" 2>"$ERR_FILE"
+            ret=$?
+            if [ $ret -eq 0 ]; then
+                mv -f "$TMPDIR/deployment.xml" "$DEP_XML"
+                continue
+            else
+                splog "Error: $hook succeeded but xmllint failed with exit code $ret"
+            fi
+        else
+            splog "$hook failed with exit code $ret"
+        fi
+        while read -u 4 l; do
+            splog "stderr:$l"
+        done 4< <(cat "$ERR_FILE")
+    done
+else
+    splog "Directory ${0}.d not found!"
+fi
+
+splog "Sending $DEP_XML to $HOST for ${DATASTORE_LOCATION:-/var/lib/one/datastores}/$DS_ID/$VM_ID/$DEP_NAME ..."
+DOMAIN_ID="$(cat "$DEP_XML" | ssh "$HOST" "${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm/deploy ${DATASTORE_LOCATION:-/var/lib/one/datastores}/$DS_ID/$VM_ID/$DEP_NAME" 2>>"$ERR_FILE")"
+ret=$?
+splog "deploy on $HOST returned ($ret) DOMAIN_ID=$DOMAIN_ID"
+
+if [ $ret -eq 0 ]; then
+    echo "$DOMAIN_ID"
+else
+    error_message "[deploy-tweaks] Could not create domain from $DEP_FILE"
+    cat "$ERR_FILE" >&2
+    exit -1
+fi
