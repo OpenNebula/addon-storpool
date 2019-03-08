@@ -49,11 +49,10 @@ A working StorPool cluster is mandatory.
 ## Features
 Support standard OpenNebula datastore operations:
 * datstore configuration via CLI and sunstone
-* all Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality
+* essencial Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality (see limitations)
 * SYSTEM datastore on shared filesystem or ssh when TM_MAD=storpool is used
 * SYSTEM datastore volatile disk and context images as StorPool block devices
 * support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
-* TRIM/discard in the VM when virtio-scsi driver is in use (require `DEVICE_PREFIX=sd`)
 
 ### Extras
 * all disk images are thin provisioned RAW block devices
@@ -79,12 +78,12 @@ Support standard OpenNebula datastore operations:
 
 ## Installation
 
-The installation instructions are for OpenNebula 5.6+.
+The installation instructions are for OpenNebula 5.8+.
 
+For OpenNebula 5.6.x please use the following [installation instructions](docs/install-5.6.0.md)
 For OpenNebula 5.4.x please use the following [installation instructions](docs/install-5.4.0.md)
 
 If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) first!
-
 
 ### Pre-install
 
@@ -248,8 +247,11 @@ DATASTORE_MAD = [
 
 * Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool
 ```
-TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes" ]
+TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "ssh,shared", LN_TARGET_SSH = "NONE", CLONE_TARGET_SSH = "SELF", DISK_TYPE_SSH = "BLOCK", LN_TARGET_SHARED = "NONE", CLONE_TARGET_SHARED = "SELF", DISK_TYPE_SHARED = "BLOCK" ]
 ```
+
+With OpenNebula 5.8+ The IMAGE datastore backed by StorPool must have TM_MAD for the SYSTEM datastore whitelisted. `storpool`, `ssh` and `shared` are white listed by default.
+
 
 * Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool
 ```
@@ -432,6 +434,9 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
     3. Upgrade the addon (checkout/clone latest from github and run install.sh)
     4. Follow the addon configuration chapter in README.md to (re)configure the extras
     5. Continue (re)configuring OpenNebula following the upstream docs
+
+* With OpenNebula 5.8+ The IMAGE datastore backed by StorPool must have TM_MAD for the SYSTEM datastore whitelisted.
+
 
 Please follow the upgrade notes for the OpenNebula version you are using.
 
