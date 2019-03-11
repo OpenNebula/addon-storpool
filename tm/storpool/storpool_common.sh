@@ -1490,6 +1490,8 @@ oneVmVolumes()
         if [ -n "$IMAGE_ID" ]; then
             if boolTrue "$CLONE"; then
                 IMG+="-$VM_ID-$DISK_ID"
+            elif [ "$TYPE" = "CDROM" ]; then
+                IMG+="-$VM_ID-$DISK_ID"
             fi
         else
             case "$TYPE" in
