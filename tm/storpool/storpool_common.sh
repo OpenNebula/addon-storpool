@@ -462,7 +462,7 @@ function storpoolRetry() {
         if storpoolWrapper "$@"; then
             break
         fi
-        if boolTrue "$_SOFT_FAIL" ]; then
+        if boolTrue "$_SOFT_FAIL" "_SOFT_FAIL"; then
             splog "storpool $* SOFT_FAIL"
             break
         fi
