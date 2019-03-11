@@ -75,7 +75,6 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 SP_TEMPLATE="${SOURCE%%/*}"
-SP_LINK="/dev/storpool/$SP_VOL"
 splog "SP_VOL=$SP_VOL"
 
 #-------------------------------------------------------------------------------
@@ -97,14 +96,19 @@ if boolTrue "${READONLY}"; then
 fi
 
 if [ "$TYPE" = "CDROM" ]; then
-    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+    CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+    if ! storpoolVolumeExists "$SP_VOL"; then
+        storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE"
+    fi
+    SP_VOL="$CDROM_VOL"
 else
     storpoolVolumeDetach "$SP_VOL" "force" "" "all"
-
-    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
-
-    storpoolVolumeTag "$SP_VOL" "$VM_ID"
 fi
+
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+
+storpoolVolumeTag "$SP_VOL" "$VM_ID"
+
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information
 #-------------------------------------------------------------------------------
@@ -119,7 +123,7 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
     MONITOR_TM_MAD="$DS_TM_MAD"
 fi
 
-oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+oneSymlink "$DST_HOST" "/dev/storpool/$SP_VOL" "$DST_PATH"
 
 splog "END $VM_ID"
 exit 0

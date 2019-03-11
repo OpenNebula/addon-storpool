@@ -321,6 +321,11 @@ else
         if boolTrue "$MIGRATE_UNKNOWN" "MIGRATE_UNKNOWN"; then
             oneVmVolumes "$VM_ID"
         fi
+        if [ "$TYPE" = "CDROM" ]; then
+            # backward compatibility ...
+            storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "" "$READONLY"
+            SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+        fi
         storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL" "$READONLY" "$vmVolumes"
     fi
 fi
@@ -341,11 +346,18 @@ fi
 SP_VOL="${SOURCE##*/}"
 if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
+elif [ "$TYPE" = "CDROM" ]; then
+    CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+    if ! storpoolVolumeExists "$CDROM_VOL"; then
+        storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE"
+    fi
+    SP_MODE="ro"
+    SP_VOL="$CDROM_VOL"
 fi
 
 SP_LINK="/dev/storpool/$SP_VOL"
 
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 

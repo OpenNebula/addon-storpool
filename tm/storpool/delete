@@ -123,21 +123,24 @@ if boolTrue "$CLONE"; then
     log "Deleting $DST_PATH ($SP_VOL)"
 
     storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+elif [ "$TYPE" = "CDROM" ]; then
+    # backward compatibility
+    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "" "$READONLY"
+    storpoolVolumeTag "$SP_VOL" ""
+
+    SP_VOL+="-${VM_ID}-${DISK_ID}"
+    storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
 else
     log "Not CLONE $DST_PATH. Only detaching $SP_VOL"
     splog "Not CLONE $DST_PATH. Only detaching $SP_VOL"
 
-    if [ "$TYPE" = "CDROM" ]; then
-        storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST" "" "$READONLY"
-    else
-        storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
-    fi
+    storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 
     storpoolVolumeTag "$SP_VOL" ""
-fi
 
-if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
-    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+    if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
+        storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+    fi
 fi
 
 splog "END $VM_ID"
