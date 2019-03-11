@@ -127,7 +127,11 @@ else
     log "Not CLONE $DST_PATH. Only detaching $SP_VOL"
     splog "Not CLONE $DST_PATH. Only detaching $SP_VOL"
 
-    storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
+    if [ "$TYPE" = "CDROM" ]; then
+        storpoolVolumeDetach "$SP_VOL" "" "$DST_HOST" "" "$READONLY"
+    else
+        storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
+    fi
 
     storpoolVolumeTag "$SP_VOL" ""
 fi

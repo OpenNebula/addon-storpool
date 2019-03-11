@@ -96,12 +96,15 @@ if boolTrue "${READONLY}"; then
     SP_MODE="ro"
 fi
 
-storpoolVolumeDetach "$SP_VOL" "force" "" "all"
+if [ "$TYPE" = "CDROM" ]; then
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+else
+    storpoolVolumeDetach "$SP_VOL" "force" "" "all"
 
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
-storpoolVolumeTag "$SP_VOL" "$VM_ID"
-
+    storpoolVolumeTag "$SP_VOL" "$VM_ID"
+fi
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information
 #-------------------------------------------------------------------------------
