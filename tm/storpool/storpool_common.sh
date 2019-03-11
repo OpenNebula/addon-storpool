@@ -515,11 +515,12 @@ function storpoolVolumeInfo()
 
 function storpoolVolumeExists()
 {
-    local _SP_VOL="$1"
+    local _SP_VOL="$1" _RET=1
     if [ -n "$(storpoolRetry -j volume list | jq -r ".data[]|select(.name == \"$_SP_VOL\")")" ]; then #"
-        return 0
+        _RET=0
     fi
-    return 1
+    #splog "storpoolVolumeExists($_SP_VOL): $_RET"
+    return ${_RET}
 }
 
 function storpoolVolumeCreate()

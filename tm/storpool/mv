@@ -299,9 +299,9 @@ EOF
                     splog "$DETACH_ONLY"
                 else
                     storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-                    
+
                     storpoolVolumeTag "$SP_VOL" "$VM_ID"
-                    
+
                     if boolTrue "$DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
                     fi
