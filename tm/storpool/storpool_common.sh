@@ -604,7 +604,9 @@ function storpoolVolumeDetach()
 {
     local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _VOLUMES_GROUP="$6"
     local _SP_CLIENT volume client
-#    splog "storpoolVolumeDetach($*)"
+    if boolTrue "$DEBUG_storpoolVolumeDetach" "DEBUG_storpoolVolumeDetach"; then
+        splog "storpoolVolumeDetach(_SP_VOL=$1 _FORCE=$2 _SP_HOST=$3 _DETACH_ALL=$4 _SOFT_FAIL=$5 _VOLUMES_GROUP=$6)"
+    fi
     if [ "$_DETACH_ALL" = "all" ] && [ -z "$_VOLUMES_GROUP" ] ; then
         _SP_CLIENT="all"
     else
