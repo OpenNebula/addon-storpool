@@ -27,6 +27,13 @@ The non-persistent images are clones of a image registered in the IMAGE datastor
 one-img-${IMAGE_ID}-${VM_ID}-${VMDISK_ID}
 ```
 
+#### CDROM images
+
+The images of type CDROM are created like non-persistent images - cloned volumes with additional StorPool tag `type=CDROM`
+```bash
+one-img-${IMAGE_ID}-${VM_ID}-${VMDISK_ID}
+```
+
 #### VOLATILE images
 
 The volatile images are registered in the StorPool backed SYSTEM datastore as a StorPool volume

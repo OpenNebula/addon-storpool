@@ -445,3 +445,7 @@ Please follow the upgrade notes for the OpenNebula version you are using.
 ## StorPool naming convention
 
 Please follow the [naming convention](docs/naming_convention.md) for details the OpenNebula's datastores and images are mapped to StorPool.
+
+## Known issues
+
+In relase 19.03.2 the the naming of the attached CDROM images is changed. A separate volume with unique name is created for each attachment. This could lead to errors when using restore with the alternate VM snapshot interface enabled. The workaround is to manually create/or rename/ a snapshot of the desired CDROM volume following the new naming convention. The migration to the new CDROM's volume naming convention is integrated so there is no manual operations needed.
