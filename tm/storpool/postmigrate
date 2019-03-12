@@ -70,11 +70,15 @@ for i in ${!DISK_ID_ARRAY[@]}; do
         DISK_ID="${DISK_ID_ARRAY[i]}"
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         if [ -n "$DISK_SOURCE" ]; then
+            DST_PATH="$VM_PATH/disk.${DISK_ID}"
             SP_VOL="${DISK_SOURCE##*/}"
             if boolTrue "${DISK_CLONE_ARRAY[i]}"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
+            elif [ "${DISK_TYPE_ARRAY[i]}" = "CDROM" ]; then
+                # backward compatibility /clean up/
+                storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
+                SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
-            DST_PATH="$VM_PATH/disk.${DISK_ID}"
             storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
         else
             if boolTrue "$DEBUG_MIGRATE_LIVE"; then

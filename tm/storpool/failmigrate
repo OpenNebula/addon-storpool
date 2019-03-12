@@ -88,6 +88,8 @@ for i in ${!DISK_ID_ARRAY[@]}; do
             SP_VOL="${DISK_SOURCE##*/}"
             if boolTrue "${DISK_CLONE_ARRAY[i]}"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
+            elif [ "${DISK_TYPE_ARRAY[i]}" = "CDROM" ]; then
+                SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
             storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
