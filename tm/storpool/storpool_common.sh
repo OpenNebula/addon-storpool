@@ -502,15 +502,20 @@ function storpoolTemplate()
 
 function storpoolVolumeInfo()
 {
-	local _SP_VOL="$1"
-	local _i _ELEMENTS _e
-	while read _e; do
-		_ELEMENTS[_i++]="${_e}"
-	done < <(storpoolRetry -j volume "$_SP_VOL" info|jq -r ".data|[.size,.parentName,.templateName][]")
-	unset _i
-	V_SIZE="${_ELEMENTS[_i++]}"
-	V_PARENT_NAME="${_ELEMENTS[_i++]//\"/}"
-	V_TEMPLATE_NAME="${_ELEMENTS[_i++]//\"/}"
+    local _SP_VOL="$1"
+    V_SIZE=
+    V_PARENT_NAME=
+    V_TEMPLATE_NAME=
+    V_TYPE=
+    while IFS=, read -u 5 V_SIZE V_PARENT_NAME V_TEMPLATE_NAME V_TYPE; do
+        V_PARENT_NAME="${V_PARENT_NAME//\"/}"
+        V_TEMPLATE_NAME="${V_TEMPLATE_NAME//\"/}"
+        V_TYPE="${V_TYPE//\"/}"
+        break
+    done 5< <(storpoolRetry -j volume "$_SP_VOL" info|jq -r ".data|[.size,.parentName,.templateName,.tags.type]|@csv")
+    if boolTrue "$DEBUG_storpoolVolumeInfo" "DEBUG_storpoolVolumeInfo"; then
+        splog "storpoolVolumeInfo($_SP_VOL) size:$V_SIZE parentName:$V_PARENT_NAME templateName:$V_TEMPLATE_NAME tags.type:$V_TYPE"
+    fi
 }
 
 function storpoolVolumeExists()
@@ -711,9 +716,9 @@ function storpoolSnapshotRevert()
 
 function storpoolVolumeTag()
 {
-    local _SP_VOL="$1" _SP_VM_ID="$2"
-    if [ -n "$VM_TAG" ]; then
-        storpoolRetry volume "$_SP_VOL" tag "$VM_TAG"="$_SP_VM_ID" >/dev/null
+    local _SP_VOL="$1" _TAG_VAL="$2" _VM_TAG="${3:-$VM_TAG}"
+    if [ -n "${_VM_TAG}" ]; then
+        storpoolRetry volume "$_SP_VOL" tag "${_VM_TAG}"="$_TAG_VAL" >/dev/null
     fi
 }
 

@@ -99,6 +99,7 @@ if [ "$TYPE" = "CDROM" ]; then
     CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
     if ! storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE"
+        storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
     fi
     SP_VOL="$CDROM_VOL"
 else
