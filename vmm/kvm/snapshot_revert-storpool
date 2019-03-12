@@ -98,6 +98,9 @@ EOF
 #        trapAdd APPEND "storpoolVolumeAttach \"$volume\" \"$VMHOST\" \"$mode\""
         storpoolVolumeInfo "$volume"
         OLD_SIZE_M=$((V_SIZE/1024/1024))
+        if [ "$V_TYPE" = "CDROM"  ]; then
+            mode="ro"
+        fi
         tmpVolume="${volume}-${SP_TMP}"
         storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null
 #       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
