@@ -143,5 +143,10 @@ else
     fi
 fi
 
+RM_CMD="rm -rf '$DST_PATH'*"
+splog "run RM_CMD on $DST_HOST ($DST_PATH)"
+ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+          "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+
 splog "END $VM_ID"
 exit 0
