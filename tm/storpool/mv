@@ -184,7 +184,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
         fi
     else
-       ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
+       if boolTrue "$IS_DISK" "IS_DISK"; then
+           ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
+       else
+           ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
+       fi
     fi
     TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
