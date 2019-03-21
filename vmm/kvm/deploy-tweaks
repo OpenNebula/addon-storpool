@@ -38,7 +38,7 @@ DEP_FILE="$1"
 HOST="$2"
 VM_ID="$3"
 DEP_NAME="$(basename "$DEP_FILE")"
-DEP_XML="$DEP_FILE-sp"
+DEP_XML="$DEP_FILE-tweaks"
 VM_XML="$TMPDIR/vm.xml"
 
 cp -f "$DEP_FILE" "$DEP_XML"
