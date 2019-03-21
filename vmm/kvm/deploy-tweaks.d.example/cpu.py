@@ -151,10 +151,12 @@ if cpu_model is not None:
 
 cpu_vendor = vm.find('.//USER_TEMPLATE/CPU_VENDOR')
 if cpu_vendor is not None:
-    vendor = cpu.find('.//vendor')
-    if vendor is None:
-        vendor = ET.SubElement(cpu, 'vendor')
-    vendor.text = cpu_vendor.text
+    model = cpu.find('./model')
+    if model is not None:
+        vendor = cpu.find('.//vendor')
+        if vendor is None:
+            vendor = ET.SubElement(cpu, 'vendor')
+        vendor.text = cpu_vendor.text
 
 cpu_check = vm.find('.//USER_TEMPLATE/CPU_CHECK')
 if cpu_check is not None:
