@@ -323,7 +323,11 @@ else
         splog "$ATTACH_ONLY"
     else
         if boolTrue "$MIGRATE_UNKNOWN" "MIGRATE_UNKNOWN"; then
-            oneVmVolumes "$VM_ID"
+            if boolTrue "$MV_DETACH_ALL" "MV_DETACH_ALL"; then
+                oneVmVolumes "$VM_ID"
+            else
+                vmVolumes=
+            fi
         fi
         if [ "$TYPE" = "CDROM" ]; then
             # backward compatibility ...
