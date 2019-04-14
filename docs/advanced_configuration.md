@@ -212,59 +212,180 @@ For each OpenNebula instance set a different string in the `ONE_PX` variable.
 
 It is possible to change the default volume tagging by setting `VM_TAG` variable.
 
-#### Enable iothreads and Windows performance optimisation
 
-There is a helper script that add separate iothread for VM disks IO processing. In addition it is enabling some Hyperv enlightments on Windows VMs
+## VM's domain XML tweaking
 
-Edit _~oneadmin/remotes/vmm/kvm/deploy_ and add _"$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"_ just after _cat >$domain_ line. The edited file should look like this:
+OpenNebula is providing generic domain XML configuration that have a room for a lot of improvements.
+
+The following configuration will change OpenNebula's KVM VM_MAD to use local deployment script instead of the default.
+
+Note:
+> This configuration replaces VM tweaking on the host that was done with `vmTweak*` scripts included in `kvm/deploy`.
+> The original `kvm/deploy` file must be recovered to its original state.
+
+To enable the alternative deployment script edit _/etc/one/oned.conf_ and configure the KVM's VM_MAD as follow:
 
 ```bash
-mkdir -p `dirname $domain`
-cat > $domain
-
-"$(dirname $0)/vmTweakHypervEnlightenments.py" "$domain"
-
-data=`virsh --connect $LIBVIRT_URI create $domain`
+    ...
+    ARGUMENTS      = "-t 15 -r 0 kvm -p -l deploy=deploy-tweaks",
+    ...
 ```
 
-The scripts add a iothread and assign all virtio-blk disks and virio-scsi controllers to the thread:
+On each VM deploy the deploy-tweaks script will pass the VM's domain XML and the VM's metadata XML (collected from OpenNebula) to all executable files located in _/var/lib/one/remotes/vmm/kvm/deploy-tweaks.d_.
+The VM's metadata is used by some of the scripts to look for configuration variables in the _USER_TEMPLATE_.
+
+There are example scripts located in _/var/lib/one/remotes/vmm/kvm/deploy-tweaks.d.example_ that do the following changes
+
+### iothreads.py
+
+The script will define an [iothread](https://libvirt.org/formatdomain.html#elementsIOThreadsAllocation) and assign it to all virtio-blk disks and vitio-scsi controllers.
 
 ```xml
 <domain>
-  ...
-  <devices>
-    ...
-    <disk type="block" device="disk">
-      <source dev="/var/lib/one//datastores/103/68/disk.1"/>
-      <target dev="vda"/>
-      <driver name="qemu" type="raw" cache="none" io="native" discard="unmap" iothread="1"/>
-    </disk>
-    ...
-    <controller model="virtio-scsi" type="scsi">
-      <driver iothread="1"/>
-    </controller>
-    ...
-  </devices>
-  ...
   <iothreads>1</iothreads>
-  ...
-<</domain>>
-
+  <devices>
+    <disk device="disk" type="block">
+      <source dev="/var/lib/one//datastores/0/42/disk.2" />
+      <target dev="vda" />
+      <driver cache="none" discard="unmap" io="native" iothread="1" name="qemu" type="raw" />
+    </disk>
+    <controller index="0" model="virtio-scsi" type="scsi">
+      <driver iothread="1" />
+    </controller>
+  </devices>
+</domain>
 ```
 
-When the _HYPERV_ feature is enabled in the _OS & CPU_ / _Features_ entry the tweaking tool will add a _clock_ entry in the domain XML
+### scsi-queues.py
+
+The script set the virtio-scsi nqueues number to match the cont of VM's VCPUs
 
 ```xml
 <domain>
-...
+  <vcpu>4</vcpu>
+  <devices>
+    <controller index="0" model="virtio-scsi" type="scsi">
+      <driver queues="4" />
+    </controller>
+  </devices>
+</domain>
+```
+
+### vfhostdev2interface.py
+
+OpenNebula provides generic PCI passthrough definition using _hostdev_. But
+when it is used for NIC VF passthrough it leave the VM's kernel to assign
+random MAC address (on each boot). Replacing the definition with _interface_ it is possible to define the MAC addresses via configuration variable in USER_TEMPLATE.
+The VF_MACS configuration variable accept comma separated list of MAC addresses to be asigned to VF passthrough NICs. For example to set MACs on two PCI passthrough VF interfaces, define the addresses in the VF_MACS variable and (re)start the VM.
+
+```
+VF_MACS=02:00:11:ab:cd:01,02:00:11:ab:cd:02
+```
+
+The following section of the domain XML
+
+```xml
+  <hostdev mode='subsystem' type='pci' managed='yes'>
+    <source>
+      <address  domain='0x0000' bus='0xd8' slot='0x00' function='0x5'/>
+    </source>
+    <address type='pci' domain='0x0000' bus='0x01' slot='0x01' function='0'/>
+  </hostdev>
+  <hostdev mode='subsystem' type='pci' managed='yes'>
+    <source>
+      <address  domain='0x0000' bus='0xd8' slot='0x00' function='0x6'/>
+    </source>
+    <address type='pci' domain='0x0000' bus='0x01' slot='0x02' function='0'/>
+  </hostdev>
+```
+
+will be converted to
+
+```xml
+  <interface managed="yes" type="hostdev">
+    <driver name="vfio" />
+    <mac address="02:00:11:ab:cd:01" />
+    <source>
+      <address bus="0xd8" domain="0x0000" function="0x5" slot="0x00" type="pci" />
+    </source>
+    <address bus="0x01" domain="0x0000" function="0" slot="0x01" type="pci" />
+  </interface>
+  <interface managed="yes" type="hostdev">
+    <driver name="vfio" />
+    <mac address="02:00:11:ab:cd:02" />
+    <source>
+      <address bus="0xd8" domain="0x0000" function="0x6" slot="0x00" type="pci" />
+    </source>
+    <address bus="0x01" domain="0x0000" function="0" slot="0x02" type="pci" />
+  </interface>
+```
+
+### hyperv-clock.py
+
+The script add additional tunes to the _clock_ entry when the _hyperv_ feature is enabled in the domain XML.
+
+> Sunstone -> Templates -> VMs -> Update -> OS Booting -> Features -> HYPERV = YES
+
+```xml
+<domain>
   <clock offset="utc">
     <timer name="hypervclock" present="yes"/>
     <timer name="rtc" tickpolicy="catchup"/>
     <timer name="pit" tickpolicy="delay"/>
     <timer name="hpet" present="no"/>
-    <timer name="hypervclock" present="yes"/>
   </clock>
 </domain>
 ```
 
-In Sunstone -> Templates -> VMs -> Update -> OS Booting -> Features -> HYPERV = YES
+### cpu.py
+
+The script create/tweak the _cpu_ element of the domain XML. The following variables are commonly used
+
+
+#### CPU_THREADS
+
+Set the number of threads in the CPU topology.
+#### CPU_SOCKETS
+
+Set the number of sockets in the CPU topology.
+
+#### Other
+
+The following variables were made available for use in some corner cases
+
+CPU_FEATURES
+
+CPU_MODEL
+
+CPU_VENDOR
+
+CPU_CHECK
+
+CPU_MATCH
+
+CPU_MODE
+
+### volatile2dev.py
+
+The script will reconfigure the volatile disks from file to device when the disk's TM_MAD is _storpool_
+
+```xml
+    <disk type='file' device='disk'>
+        <source file='/var/lib/one//datastores/0/4/disk.2'/>
+        <target dev='sdb'/>
+        <driver name='qemu' type='raw' cache='none' io='native' discard='unmap'/>
+        <address type='drive' controller='0' bus='0' target='1' unit='0'/>
+    </disk>
+```
+to
+
+```xml
+    <disk device="disk" type="block">
+        <source dev="/var/lib/one//datastores/0/4/disk.2" />
+        <target dev="sdb" />
+        <driver cache="none" discard="unmap" io="native" name="qemu" type="raw" />
+        <address bus="0" controller="0" target="1" type="drive" unit="0" />
+    </disk>
+```
+
+
