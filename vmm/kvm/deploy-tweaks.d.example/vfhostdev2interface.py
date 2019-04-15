@@ -16,7 +16,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-# with VF_MACS=1e:68:63:c5:ba:be
+# with T_VF_MACS=1e:68:63:c5:ba:be
 # From
 # ---
 #<devices>

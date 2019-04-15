@@ -275,8 +275,12 @@ The script set the virtio-scsi nqueues number to match the cont of VM's VCPUs
 
 OpenNebula provides generic PCI passthrough definition using _hostdev_. But
 when it is used for NIC VF passthrough it leave the VM's kernel to assign
-random MAC address (on each boot). Replacing the definition with _interface_ it is possible to define the MAC addresses via configuration variable in USER_TEMPLATE.
-The T_VF_MACS configuration variable accept comma separated list of MAC addresses to be asigned to VF passthrough NICs. For example to set MACs on two PCI passthrough VF interfaces, define the addresses in the T_VF_MACS variable and (re)start the VM.
+random MAC address (on each boot). Replacing the definition with _interface_ it
+is possible to define the MAC addresses via configuration variable in
+_USER_TEMPLATE_. The T_VF_MACS configuration variable accept comma separated
+list of MAC addresses to be asigned to the VF pass-through NICs. For example to
+set MACs on two PCI passthrough VF interfaces, define the addresses in the
+T_VF_MACS variable and (re)start the VM:
 
 ```
 T_VF_MACS=02:00:11:ab:cd:01,02:00:11:ab:cd:02
@@ -342,16 +346,31 @@ The script add additional tunes to the _clock_ entry when the _hyperv_ feature i
 The script create/tweak the _cpu_ element of the domain XML. The following variables are commonly used
 
 
-#### T_CPU_THREADS
+#### T_CPU_SOCKETS and T_CPU_THREADS
 
-Set the number of threads in the CPU topology.
-#### T_CPU_SOCKETS
+Set the number of sockets and vCPU threads of the CPU topology.
+For example the following configuration represent VM with 8 VCPUs, in single socket with 2 threads:
 
-Set the number of sockets in the CPU topology.
+```
+VCPU = 8
+USER_TEMPLATE/T_CPU_SOCKETS = 1
+USER_TEMPLATE/T_CPU_THREADS = 2
+```
+
+```xml
+  <cpu mode='host-passthrough' check='none'>
+    <topology sockets='1' cores='4' threads='2'/>
+    <numa>
+      <cell id='0' cpus='0-7' memory='33554432' unit='KiB'/>
+    </numa>
+  </cpu>
+```
 
 #### Other
 
-The following variables were made available for use in some corner cases
+The following variables were made available for use in some corner cases.
+
+> For advanced use only! A special care should be taken when mixing the variables as some of the options are not compatible when combined.
 
 T_CPU_FEATURES
 
@@ -367,7 +386,7 @@ T_CPU_MODE
 
 ### volatile2dev.py
 
-The script will reconfigure the volatile disks from file to device when the disk's TM_MAD is _storpool_
+The script will reconfigure the volatile disks from file to device when the VM disk's TM_MAD is _storpool_
 
 ```xml
     <disk type='file' device='disk'>
@@ -388,7 +407,7 @@ to
     </disk>
 ```
 
-To do the changes when hot-attaching a volatile disk the original attach_disk script must be patched `/var/lib/one/remotes/vmm/kvm/attach_disk`:
+To do the changes when hot-attaching a volatile disk the original attach_disk script (`/var/lib/one/remotes/vmm/kvm/attach_disk`) should be pathed too:
 
 ```bash
 cd /var/lib/one/remotes/vmm/kvm
