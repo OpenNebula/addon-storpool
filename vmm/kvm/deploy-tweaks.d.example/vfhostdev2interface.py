@@ -77,7 +77,7 @@ root = doc.getroot()
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-vf_macs = vm.find('.//USER_TEMPLATE/VF_MACS')
+vf_macs = vm.find('.//USER_TEMPLATE/T_VF_MACS')
 if vf_macs is not None:
     i = 0
     changed = 0

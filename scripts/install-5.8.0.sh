@@ -158,19 +158,16 @@ DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY
 _EOF_
 fi
 
-if grep -q -i DISKSNAPSHOT_LIMIT /etc/one/oned.conf >/dev/null 2>&1; then
-    echo "*** DISKSNAPSHOT_LIMIT found in /etc/one/oned.conf"
-else
-    echo "*** Appending VM_RESTRICTED_ATTR = DISKSNAPSHOT_LIMIT in /etc/one/oned.conf"
-    echo 'VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"' >> /etc/one/oned.conf
-fi
-
-if grep -q -i VMSNAPSHOT_LIMIT /etc/one/oned.conf >/dev/null 2>&1; then
-    echo "*** VMSNAPSHOT_LIMIT found in /etc/one/oned.conf"
-else
-    echo "*** Appending VM_RESTRICTED_ATTR = VMSNAPSHOT_LIMIT in /etc/one/oned.conf"
-    echo 'VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"' >> /etc/one/oned.conf
-fi
+for e in DISKSNAPSHOT_LIMIT VMSNAPSHOT_LIMIT T_CPU_THREADS T_CPU_SOCKETS T_CPU_FEATURES \
+         T_CPU_MODEL T_CPU_VENDOR T_CPU_CHECK T_CPU_MATCH T_CPU_MODE \
+         T_VF_MACS; do
+    if grep -q -i "$e" /etc/one/oned.conf >/dev/null 2>&1; then
+        echo "*** $e found in /etc/one/oned.conf"
+    else
+        echo "*** Appending VM_RESTRICTED_ATTR = $e in /etc/one/oned.conf"
+        echo "VM_RESTRICTED_ATTR = \"$e\"" >> /etc/one/oned.conf
+    fi
+done
 
 # Enable snap_create_live in vmm_exec/vmm_execrc
 LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' /etc/one/vmm_exec/vmm_execrc | tail -n 1)

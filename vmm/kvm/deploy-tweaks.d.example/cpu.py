@@ -76,7 +76,7 @@ if cpu is None:
         })
 
 threads = 1
-cpu_threads = vm.find('.//USER_TEMPLATE/CPU_THREADS')
+cpu_threads = vm.find('.//USER_TEMPLATE/T_CPU_THREADS')
 if cpu_threads is not None:
     try:
         threads = int(cpu_threads.text)
@@ -87,7 +87,7 @@ if cpu_threads is not None:
         exit(1)
 
 sockets = 0
-cpu_sockets = vm.find('.//USER_TEMPLATE/CPU_SOCKETS')
+cpu_sockets = vm.find('.//USER_TEMPLATE/T_CPU_SOCKETS')
 if cpu_sockets is not None:
     try:
         sockets = int(cpu_sockets.text)
@@ -115,7 +115,7 @@ if sockets > 0:
             'memory' : '{0}'.format(cpuMem),
             })
 
-cpu_features = vm.find('.//USER_TEMPLATE/CPU_FEATURES')
+cpu_features = vm.find('.//USER_TEMPLATE/T_CPU_FEATURES')
 if cpu_features is not None:
     features = cpu_features.text
     for f in features.split(','):
@@ -129,7 +129,7 @@ if cpu_features is not None:
                 'name' : name
             })
 
-cpu_model = vm.find('.//USER_TEMPLATE/CPU_MODEL')
+cpu_model = vm.find('.//USER_TEMPLATE/T_CPU_MODEL')
 if cpu_model is not None:
     model = cpu.find('./model')
     if cpu_model.text is not None:
@@ -149,7 +149,7 @@ if cpu_model is not None:
     else:
         cpu.remove(model)
 
-cpu_vendor = vm.find('.//USER_TEMPLATE/CPU_VENDOR')
+cpu_vendor = vm.find('.//USER_TEMPLATE/T_CPU_VENDOR')
 if cpu_vendor is not None:
     model = cpu.find('./model')
     if model is not None:
@@ -158,7 +158,7 @@ if cpu_vendor is not None:
             vendor = ET.SubElement(cpu, 'vendor')
         vendor.text = cpu_vendor.text
 
-cpu_check = vm.find('.//USER_TEMPLATE/CPU_CHECK')
+cpu_check = vm.find('.//USER_TEMPLATE/T_CPU_CHECK')
 if cpu_check is not None:
     check = cpu_check.text
     if check in [ '', None ]:
@@ -167,7 +167,7 @@ if cpu_check is not None:
     else:
         cpu.set('check', check)
 
-cpu_match = vm.find('.//USER_TEMPLATE/CPU_MATCH')
+cpu_match = vm.find('.//USER_TEMPLATE/T_CPU_MATCH')
 if cpu_match is not None:
     match = cpu_match.text
     if match in [ '', None ]:
@@ -176,7 +176,7 @@ if cpu_match is not None:
     else:
         cpu.set('match', match)
 
-cpu_mode = vm.find('.//USER_TEMPLATE/CPU_MODE')
+cpu_mode = vm.find('.//USER_TEMPLATE/T_CPU_MODE')
 if cpu_mode is not None:
     mode = cpu_mode.text
     if mode in [ '', None]:

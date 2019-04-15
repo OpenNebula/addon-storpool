@@ -276,10 +276,10 @@ The script set the virtio-scsi nqueues number to match the cont of VM's VCPUs
 OpenNebula provides generic PCI passthrough definition using _hostdev_. But
 when it is used for NIC VF passthrough it leave the VM's kernel to assign
 random MAC address (on each boot). Replacing the definition with _interface_ it is possible to define the MAC addresses via configuration variable in USER_TEMPLATE.
-The VF_MACS configuration variable accept comma separated list of MAC addresses to be asigned to VF passthrough NICs. For example to set MACs on two PCI passthrough VF interfaces, define the addresses in the VF_MACS variable and (re)start the VM.
+The T_VF_MACS configuration variable accept comma separated list of MAC addresses to be asigned to VF passthrough NICs. For example to set MACs on two PCI passthrough VF interfaces, define the addresses in the T_VF_MACS variable and (re)start the VM.
 
 ```
-VF_MACS=02:00:11:ab:cd:01,02:00:11:ab:cd:02
+T_VF_MACS=02:00:11:ab:cd:01,02:00:11:ab:cd:02
 ```
 
 The following section of the domain XML
@@ -342,10 +342,10 @@ The script add additional tunes to the _clock_ entry when the _hyperv_ feature i
 The script create/tweak the _cpu_ element of the domain XML. The following variables are commonly used
 
 
-#### CPU_THREADS
+#### T_CPU_THREADS
 
 Set the number of threads in the CPU topology.
-#### CPU_SOCKETS
+#### T_CPU_SOCKETS
 
 Set the number of sockets in the CPU topology.
 
@@ -353,17 +353,17 @@ Set the number of sockets in the CPU topology.
 
 The following variables were made available for use in some corner cases
 
-CPU_FEATURES
+T_CPU_FEATURES
 
-CPU_MODEL
+T_CPU_MODEL
 
-CPU_VENDOR
+T_CPU_VENDOR
 
-CPU_CHECK
+T_CPU_CHECK
 
-CPU_MATCH
+T_CPU_MATCH
 
-CPU_MODE
+T_CPU_MODE
 
 ### volatile2dev.py
 
@@ -387,5 +387,3 @@ to
         <address bus="0" controller="0" target="1" type="drive" unit="0" />
     </disk>
 ```
-
-
