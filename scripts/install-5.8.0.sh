@@ -188,9 +188,11 @@ else
     echo "*** StorPool is already enabled for LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
 fi
 
-echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp $CP_ARG "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
-chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
+if [ -n "$OLD_TWEAKS" ]; then
+    echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+    cp $CP_ARG "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
+    chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
+fi
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
