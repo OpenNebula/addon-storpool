@@ -159,7 +159,7 @@ _EOF_
 fi
 
 for e in DISKSNAPSHOT_LIMIT VMSNAPSHOT_LIMIT T_CPU_THREADS T_CPU_SOCKETS T_CPU_FEATURES \
-         T_CPU_MODEL T_CPU_VENDOR T_CPU_CHECK T_CPU_MATCH T_CPU_MODE \
+         T_CPU_MODE T_CPU_MODEL T_CPU_VENDOR T_CPU_CHECK T_CPU_MATCH \
          T_VF_MACS; do
     if grep -q -i "$e" /etc/one/oned.conf >/dev/null 2>&1; then
         echo "*** $e found in /etc/one/oned.conf"

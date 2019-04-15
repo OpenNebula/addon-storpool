@@ -220,7 +220,7 @@ OpenNebula is providing generic domain XML configuration that have a room for a 
 The following configuration will change OpenNebula's KVM VM_MAD to use local deployment script instead of the default.
 
 Note:
-> This configuration replaces VM tweaking on the host that was done with `vmTweak*` scripts included in `kvm/deploy`.
+> This configuration replaces the VM tweaking scripts on the host that was done with `vmTweak*` scripts included in `kvm/deploy`.
 > The original `kvm/deploy` file must be recovered to its original state.
 
 To enable the alternative deployment script edit _/etc/one/oned.conf_ and configure the KVM's VM_MAD as follow:
@@ -234,7 +234,7 @@ To enable the alternative deployment script edit _/etc/one/oned.conf_ and config
 On each VM deploy the deploy-tweaks script will pass the VM's domain XML and the VM's metadata XML (collected from OpenNebula) to all executable files located in _/var/lib/one/remotes/vmm/kvm/deploy-tweaks.d_.
 The VM's metadata is used by some of the scripts to look for configuration variables in the _USER_TEMPLATE_.
 
-There are example scripts located in _/var/lib/one/remotes/vmm/kvm/deploy-tweaks.d.example_ that do the following changes
+There are example scripts located in _/var/lib/one/remotes/vmm/kvm/deploy-tweaks.d.example_ that alter the domain XML as follow.
 
 ### iothreads.py
 
@@ -387,3 +387,12 @@ to
         <address bus="0" controller="0" target="1" type="drive" unit="0" />
     </disk>
 ```
+
+To do the changes when hot-attaching a volatile disk the original attach_disk script must be patched `/var/lib/one/remotes/vmm/kvm/attach_disk`:
+
+```bash
+cd /var/lib/one/remotes/vmm/kvm
+patch -p1 < ~/addon-storpool/patches/vmm/5.8.0/attach_disk.patch
+```
+
+> The installation script should apply the patch too
