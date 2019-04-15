@@ -192,6 +192,10 @@ echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
 
+echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
+cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
+chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
+
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
@@ -204,6 +208,7 @@ echo "*** VMM checkpoint to block device patch ..."
 pushd "$ONE_VAR"
     do_patch "$CWD/patches/vmm/${ONE_VER}/save.patch" "backup"
     do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
+    do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
 popd
 
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
