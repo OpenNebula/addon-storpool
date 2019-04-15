@@ -207,6 +207,7 @@ echo "*** VMM checkpoint to block device patch ..."
 pushd "$ONE_VAR"
     do_patch "$CWD/patches/vmm/${ONE_VER}/save.patch" "backup"
     do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
+    do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
 popd
 
 echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
