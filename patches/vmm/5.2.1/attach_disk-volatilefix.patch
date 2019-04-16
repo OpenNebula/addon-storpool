@@ -1,0 +1,19 @@
+--- remotes.orig/vmm/kvm/attach_disk.orig	2019-04-16 21:57:11.426012930 +0300
++++ remotes/vmm/kvm/attach_disk	2019-04-16 21:59:10.158431501 +0300
+@@ -31,6 +31,16 @@
+ 
+ get_disk_information "ATTACH='YES'"
+ 
++# BEGIN StorPool patch
++if [ "$DEVICE" = "disk" ] && [ "$TYPE_XML" = "file" ] && [ "$TYPE_SOURCE" = "file" ]; then
++    sDev="$(readlink -f "$SOURCE")"
++    if [ "${sDev:0:8}" = "/dev/sp-" ]; then
++        TYPE_XML=block
++        TYPE_SOURCE=dev
++    fi
++fi
++# END StorPool patch
++
+ [ -z "$CACHE" ] && [ -n "$DEFAULT_ATTACH_CACHE" ] && \
+     CACHE="$DEFAULT_ATTACH_CACHE"
+ [ -n "$CACHE" ] && CACHE="cache='$CACHE'"

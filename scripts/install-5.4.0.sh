@@ -163,6 +163,10 @@ else
 
     sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' /etc/one/oned.conf
 
+    if [ -n "$VOLATILEFIX" ]; then
+        sed -i -e 's|"-t 15 -r 0 kvm"|"-t 15 -r 0 kvm -l deploy=deploy-tweaks"|g' /etc/one/oned.conf
+    fi
+
     cat <<_EOF_ >>/etc/one/oned.conf
 # StorPool related config
 TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes" ]
@@ -204,6 +208,14 @@ echo "*** Copy VM tweaks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"vmTweak* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"vmTweak*
 
+if [ -n "$VOLATILEFIX" ]; then
+    echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
+    cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
+    chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
+    mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
+    cp $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks.d.example/volatile2dev.py "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"/
+fi
+
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
@@ -222,6 +234,9 @@ echo "*** VMM attach_disk patch (IO) ..."
 pushd "$ONE_VAR"
     do_patch "$CWD/patches/remotes/${ONE_VER}/scripts_common.sh.patch" "backup"
     do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
+    if [ -n "$VOLATILEFIX" ]; then
+        do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk-volatilefix.patch" "backup"
+    fi
     do_patch "$CWD/patches/vmm/${ONE_VER}/kvmrc.patch" "backup"
 popd
 
