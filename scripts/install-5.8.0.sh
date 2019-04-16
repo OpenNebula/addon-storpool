@@ -194,6 +194,8 @@ fi
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
+mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
+cp $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks.d.example/volatile2dev.py "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"/
 
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
@@ -236,6 +238,11 @@ grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/
 
 echo "*** copying misc/reserved.sh to .../remotes"
 cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
+
+echo "*** Checking for deploy-tweaks in /etc/one/oned.conf ..."
+if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
+    echo "!!! Please enable deploy-tweaks in the VM_MAD configuration for proper working of volatile disks"
+fi
 
 echo "*** Please sync hosts (onehost sync --force)"
 

@@ -51,15 +51,16 @@ Support standard OpenNebula datastore operations:
 * datstore configuration via CLI and sunstone
 * essencial Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality (see limitations)
 * SYSTEM datastore on shared filesystem or ssh when TM_MAD=storpool is used
-* SYSTEM datastore volatile disk and context images as StorPool block devices
+* SYSTEM datastore volatile disks as StorPool block devices (see limitations)
+* SYSTEM datastore context image as a StorPool block device
 * support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
 
 ### Extras
 * all disk images are thin provisioned RAW block devices
 * support different StorPool clusters as separate datastores
-* migrate-live when TM_MAD='ssh' is used for SYSTEM datastore(native StorPool driver is recommended)
 * import of VmWare (VMDK) images
 * import of Hyper-V (VHDX) images
+* alternate kvm/deploy script that alows tweaks to the domain XML of the VMs
 * (optional) replace "VM snapshot" interface to do atomic disk snapshots on StorPool (see limitations)
 * (optional) set limit on the number of "VM snaphots"
 * (optional) set limit on the number of disk snapshots (per disk)
@@ -73,6 +74,7 @@ Support standard OpenNebula datastore operations:
 1. No support for VM snapshot because it is handled internally by libvirt. There is an option to use the 'VM snapshot' interface to do disk snapshots when only StorPool backed datastores are used.
 1. Image export is disabled until issue OpenNebula/one#1159 is resolved
 1. When SYSTEM datastore integration is enabled the reported free/used/total space is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space)
+1. OpenNebula define the volatile disks as files in the domain XML. Latest libvirt do check and forbid live migrate without the `--unsafe` flag set. The workaround is to replace the deploy script with a tweaked one.
 1. The option to use VM checkpoint file directly on a StorPool backed block device requires `qemu-kvm-ev` and StorPool CLI with access to the StorPool's management API installed on the hypervisor nodes.
 1. The extra features are tested/confirmed working on CentOS.
 
@@ -151,6 +153,18 @@ cp -a ~/addon-storpool/vmm/kvm/snapshot_* /var/lib/one/remotes/vmm/kvm/
 
 # fix ownership
 chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
+```
+
+* Prepare the fix for the volatile disks (needs to be enabled in _/etc/one/oned.conf_)
+```bash
+# copy the helper for deploy-local
+cp -a ~/addon-storpool/vmm/kvm/deploy-tweaks* /var/lib/one/remotes/vmm/kvm/
+mkdir -p /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
+cp -v /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d{.example,}/volatile2dev.py
+
+# patch attach_disk
+cd /var/lib/one/remotes/vmm/kvm
+patch -p1 < ~/addon-storpool/patches/vmm/5.6.0/attach_disk.patch
 ```
 
 * Patch IM_MAD/kvm-probes.d/monitor_ds.sh
@@ -243,6 +257,17 @@ DATASTORE_MAD = [
     executable = "one_datastore",
     arguments  = "-t 15 -d dummy,fs,vmfs,lvm,ceph,dev,storpool  -s shared,ssh,ceph,fs_lvm,qcow2,storpool"
 ]
+```
+
+* Edit `/etc/one/oned.conf` and update the ARGUMENTS of the `VM_MAD` for `KVM` to enable the deploy-tweaks script
+
+```
+VM_MAD = [
+    NAME           = "kvm",
+    SUNSTONE_NAME  = "KVM",
+    EXECUTABLE     = "one_vmm_exec",
+    ARGUMENTS      = "-t 15 -r 0 kvm -l deploy=deploy-tweaks",
+    ...
 ```
 
 * Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool
