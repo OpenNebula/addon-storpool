@@ -151,6 +151,8 @@ else
 
     sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' /etc/one/oned.conf
 
+    sed -i -e 's|"-t 15 -r 0 kvm"|"-t 15 -r 0 kvm -l deploy=deploy-tweaks"|g' /etc/one/oned.conf
+
     cat <<_EOF_ >>/etc/one/oned.conf
 # StorPool related config
 TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes" ]
