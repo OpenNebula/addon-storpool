@@ -151,6 +151,8 @@ else
 
     sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' /etc/one/oned.conf
 
+    sed -i -e 's|"-t 15 -r 0 kvm"|"-t 15 -r 0 kvm -l deploy=deploy-tweaks"|g' /etc/one/oned.conf
+
     cat <<_EOF_ >>/etc/one/oned.conf
 # StorPool related config
 TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "ssh,shared", LN_TARGET_SSH = "NONE", CLONE_TARGET_SSH = "SELF", DISK_TYPE_SSH = "BLOCK", LN_TARGET_SHARED = "NONE", CLONE_TARGET_SHARED = "SELF", DISK_TYPE_SHARED = "BLOCK"  ]
@@ -194,6 +196,8 @@ fi
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
+mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
+cp $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks.d.example/volatile2dev.py "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"/
 
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
@@ -236,6 +240,11 @@ grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/
 
 echo "*** copying misc/reserved.sh to .../remotes"
 cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
+
+echo "*** Checking for deploy-tweaks in /etc/one/oned.conf ..."
+if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
+    echo "!!! Please enable deploy-tweaks in the VM_MAD configuration for proper working of volatile disks"
+fi
 
 echo "*** Please sync hosts (onehost sync --force)"
 
