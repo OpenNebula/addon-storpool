@@ -343,7 +343,9 @@ The script add additional tunes to the _clock_ entry when the _hyperv_ feature i
 
 ### cpu.py
 
-The script create/tweak the _cpu_ element of the domain XML. The following variables are commonly used
+The script create/tweak the _cpu_ element of the domain XML.
+
+> Default values could be exported via the `kvmrc` file.
 
 
 #### T_CPU_SOCKETS and T_CPU_THREADS
@@ -366,27 +368,45 @@ USER_TEMPLATE/T_CPU_THREADS = 2
   </cpu>
 ```
 
-#### Other
+#### Advanced
 
 The following variables were made available for use in some corner cases.
 
 > For advanced use only! A special care should be taken when mixing the variables as some of the options are not compatible when combined.
 
-T_CPU_FEATURES
+##### T_CPU_MODE
 
-T_CPU_MODEL
+Possible options: _custom_, _host-model_, _host-passthrough_.
 
-T_CPU_VENDOR
+Special keyword _delete_ will instruct the helper to delete the element.
 
-T_CPU_CHECK
+##### T_CPU_FEATURES
 
-T_CPU_MATCH
+Comma separated list of supported features. The policy could be added using a colon (':') as separator.
 
-T_CPU_MODE
+##### T_CPU_MODEL
+
+The optional _fallback_ attribute could be set after the model, separated with a colon (':').
+The special keyword _delete_ will instruct the helper to delete the element.
+
+##### T_CPU_VENDOR
+
+Could be set only when a `model` is defined.
+
+##### T_CPU_CHECK
+
+Possible options: _none_, _partial_, _full_.
+The special keyword _delete_ will instruct the helper to delete the element.
+
+##### T_CPU_MATCH
+
+Possible options: _minimum_, _exact_, _strict_.
+The special keyword _delete_ will instruct the helper to delete the element.
+
 
 ### volatile2dev.py
 
-The script will reconfigure the volatile disks from file to device when the VM disk's TM_MAD is _storpool_
+The script will reconfigure the volatile disks from file to device when the VM disk's TM_MAD is _storpool_.
 
 ```xml
     <disk type='file' device='disk'>
@@ -407,7 +427,7 @@ to
     </disk>
 ```
 
-To do the changes when hot-attaching a volatile disk the original attach_disk script (`/var/lib/one/remotes/vmm/kvm/attach_disk`) should be pathed too:
+To do the changes when hot-attaching a volatile disk the original attach_disk script (`/var/lib/one/remotes/vmm/kvm/attach_disk`) should be patched too:
 
 ```bash
 cd /var/lib/one/remotes/vmm/kvm
@@ -415,3 +435,4 @@ patch -p1 < ~/addon-storpool/patches/vmm/5.8.0/attach_disk.patch
 ```
 
 > The installation script should apply the patch too
+

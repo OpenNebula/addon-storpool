@@ -26,7 +26,11 @@ if [ -f ./config ]; then
 fi
 
 SCRIPT_PATH="$(dirname $0)"
-source "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc"
+if [ -f "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc" ]; then
+    source "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc"
+elif [ -f "$SCRIPT_PATH/kvmrc"]; then
+    source "$SCRIPT_PATH/kvmrc"
+fi
 source "$SCRIPT_PATH/../../scripts_common.sh"
 
 function splog()
