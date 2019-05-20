@@ -129,7 +129,7 @@ EOF
         splog "END snapshot $snap ($te dt:$((te-tb)))"
     done
     finish=1
-    pids=$(jobs -p)
+    pids="$(jobs -p)"
     if [ -n "$pids" ]; then
          kill $pids
          ret=$?
@@ -138,6 +138,7 @@ EOF
          fi
          if [ $ret -eq 0 ]; then
              splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN created $(date +%s%N)"
+             trapDel "trap - SIGTERM && kill -- -$$"
          else
              finish=0
          fi
