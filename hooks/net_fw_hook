@@ -29,6 +29,7 @@
 #    arguments = "$TEMPLATE" ]
 #
 
+#DEBUG=1
 
 me=${0##*/}
 CWD="$(dirname "$0")"
@@ -92,7 +93,9 @@ A_IDX="${A_NAME#*ALIAS}"
 
 attach=
 for idx in ${NIC_ALIAS_IDS//,/ }; do
-    logger -t "$me" -- "idx:$idx A_IDX:$A_IDX"
+    if [ -n "$DEBUG" ]; then
+        logger -t "$me" -- "idx:$idx A_IDX:$A_IDX"
+    fi
     if [ "$idx" = "$A_IDX" ]; then
         attach=1
     fi
