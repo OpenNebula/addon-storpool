@@ -34,7 +34,6 @@ VMHOST="$4"
 DRIVER_PATH="$(dirname $0)"
 VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
-VMSNAPSHOT_REVERT_TIMEOUT=180
 DS_PATH="/var/lib/one/datastores"
 
 [ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
@@ -53,35 +52,17 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     for disk in $vmDisksMap; do
         vmVolumesMap["${disk%:*}"]="${disk##*:}"
     done
-
-        rCMD=$(cat <<EOF
-    #echo "$DOMAIN"
+    rCMD=$(cat <<EOF
     [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-    deployment=\$(ls "${DS_PATH}/${VM_DS_ID}/${VM_ID}/deployment."* | tail -n 1)
-    trap 'virsh --connect '\$LIBVIRT_URI' create "'\$deployment'" 2>&1 >/dev/null ;\
-          logger -t vmm_sp_snapshot_revert_r "create '\$deployment' ret:$?:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM KILL INT HUP
-    virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1 >/dev/null
-    logger -t vmm_sp_snapshot_revert_r "destroy $DOMAIN ret:\$? \$(date +%s.%N)"
-    ts=\$(date +%s)
-    while [ -d /proc/\$PPID ]; do
-        logger -t vmm_sp_snapshot_revert_r "\$(virsh --connect \$LIBVIRT_URI dominfo "'$DOMAIN'") \$(date +%s.%N)"
-        sleep .1
-        tt=\$(date +%s)
-        if [ \$((tt - ts)) -gt ${VMSNAPSHOT_REVERT_TIMEOUT} ]; then
-            logger -t vmm_sp_snapshot_revert_r "VMSNAPSHOT_REVERT_TIMEOUT=${VMSNAPSHOT_REVERT_TIMEOUT} seconds reached!"
-            break
-        fi
-    done
-    virsh --connect \$LIBVIRT_URI create "\$deployment" 2>&1 >/dev/null
-    logger -t vmm_sp_snapshot_revert_r "create "\$deployment" ret:\$? \$(date +%s.%N)"
-    logger -t vmm_sp_snapshot_revert_r \$(virsh --connect \$LIBVIRT_URI dominfo "$DOMAIN") \$(date +%s.%N)
-    #trap - EXIT QUIT TERM KILL INT HUP
+	while read -u 4 out; do
+        logger -t vmm_sp_snapshot_revert_r "virsh: \$out"
+    done 4< <(virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1)
+    logger -t vmm_sp_snapshot_revert_r "virsh destroy $DOMAIN ret:\$?"
 EOF
 )
-        trapAdd "trap - SIGTERM && kill -- -$$"
-        ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null &
-        splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed $(date +%s%N)"
-        sleep .5
+    ssh "$VMHOST" "$rCMD" 2>/dev/null >/dev/null
+    splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed"
+    sleep .5
 
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
@@ -89,6 +70,7 @@ EOF
         snapList+=("$snap")
     done < <(storpoolRetry -j snapshot list | jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
     splog "snapList: ${snapList[@]}"
+    finish=1
     for snap in ${snapList[@]}; do
         tb=$(date +%s%N)
         splog "BEGIN snapshot $snap ($tb)"
@@ -102,9 +84,9 @@ EOF
             mode="ro"
         fi
         tmpVolume="${volume}-${SP_TMP}"
-        storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null
+        storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null || finish=0
 #       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
-        storpoolSnapshotClone "$snap" "$volume" "$V_TEMPLATE_NAME"
+        storpoolSnapshotClone "$snap" "$volume" "$V_TEMPLATE_NAME" || finish=0
         storpoolVolumeInfo "$volume"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
         if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
@@ -128,21 +110,6 @@ EOF
         te=$(date +%s%N)
         splog "END snapshot $snap ($te dt:$((te-tb)))"
     done
-    finish=1
-    pids="$(jobs -p)"
-    if [ -n "$pids" ]; then
-         kill $pids
-         ret=$?
-         if boolTrue "DEBUG_VMSNAPSHOT"; then
-             splog "kill $pids ($?)"
-         fi
-         if [ $ret -eq 0 ]; then
-             splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN created $(date +%s%N)"
-             trapDel "trap - SIGTERM && kill -- -$$"
-         else
-             finish=0
-         fi
-    fi
     if boolTrue "finish"; then
         for volume in ${tmpVolumes[@]}; do
             storpoolVolumeDelete "$volume" "force" "snaps"
