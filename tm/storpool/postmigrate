@@ -48,7 +48,7 @@ if [ ! -t 0 ]; then
     cat > "$tmpxml"
     SYSTEM_MAD="$6"
     TEMPLATE="$tmpxml"
-    trapAdd "rm -rf '$tmpxml'"
+    trapAdd "rm -rf \"$tmpxml\""
 fi
 
 if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then

@@ -1136,7 +1136,7 @@ function oneTemplateInfo()
     local _XPATH="$(lookup_file "datastore/xpath-sp.rb" "${TM_PATH}")"
     if [ -z "$_TEMPLATE" ]; then
         _TEMPLATE="$(mktemp -t oneTemplateInfo-XXXXXXXXXX)"
-        trapAdd 'rm -f "$_TEMPLATE"'
+        trapAdd "rm -f \"$_TEMPLATE\""
         onevm show -x "$VM_ID" |base64 -w0 >"$_TEMPLATE"
     fi
     if [ -f "$_TEMPLATE" ]; then
@@ -1433,7 +1433,7 @@ oneVmVolumes()
         splog "$errmsg"
         exit $ret
     fi
-    trapAdd "rm -f '$tmpXML'"
+    trapAdd "rm -f \"$tmpXML\""
     onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
