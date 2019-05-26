@@ -1133,12 +1133,22 @@ function oneTemplateInfo()
 {
     local _TEMPLATE="$1"
 #    dumpTemplate "$_TEMPLATE"
-    local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
+    local _XPATH="$(lookup_file "datastore/xpath-sp.rb" "${TM_PATH}")"
+    if [ -z "$_TEMPLATE" ]; then
+        _TEMPLATE="$(mktemp -t oneTemplateInfo-XXXXXXXXXX)"
+        trapAdd 'rm -f "$_TEMPLATE"'
+        onevm show -x "$VM_ID" |base64 -w0 >"$_TEMPLATE"
+    fi
+    if [ -f "$_TEMPLATE" ]; then
+        _XPATH="$_XPATH -b yes -f"
+    else
+        _XPATH="$_XPATH -b"
+    fi
 
     unset i XPATH_ELEMENTS
     while IFS= read -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <("$_XPATH" -b "$_TEMPLATE" \
+        done < <($_XPATH "$_TEMPLATE" \
                     /VM/ID \
                     /VM/STATE \
                     /VM/LCM_STATE \
@@ -1155,10 +1165,15 @@ function oneTemplateInfo()
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
+    if [ -f "$_TEMPLATE" ]; then
+        _XPATH="$_XPATH -b -f"
+    else
+        _XPATH="$_XPATH -b"
+    fi
     unset i XPATH_ELEMENTS
     while read -r element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <("$_XPATH" -b "$_TEMPLATE" \
+    done < <($_XPATH "$_TEMPLATE" \
                     /VM/TEMPLATE/DISK/TM_MAD \
                     /VM/TEMPLATE/DISK/DATASTORE_ID \
                     /VM/TEMPLATE/DISK/DISK_ID \
