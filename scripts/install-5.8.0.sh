@@ -244,6 +244,9 @@ cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
 echo "*** copying hooks/net_fw_hook .../remotes/hooks"
 cp -vf hooks/net_fw_hook "${ONE_VAR}/remotes/hooks/"
 
+echo "*** set ownership of ${ONE_VAR}/remotes to $ONE_USER"
+chown -R "$ONE_USER" "${ONE_VAR}/remotes"
+
 echo "*** Checking for deploy-tweaks in /etc/one/oned.conf ..."
 if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
     echo "!!! Please enable deploy-tweaks in the VM_MAD configuration for proper working of volatile disks"
