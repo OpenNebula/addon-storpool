@@ -79,6 +79,8 @@ if [ -f "${driverPath}/../../${0##*/}rc" ]; then
 	source "${driverPath}/../../${0##*/}rc"
 fi
 
+umask -S u=rwx,g=rwx,o= >/dev/null
+
 ONE_PX="${ONE_PX:-one}"
 
 function boolTrue()
