@@ -404,6 +404,23 @@ Possible options: _minimum_, _exact_, _strict_.
 The special keyword _delete_ will instruct the helper to delete the element.
 
 
+### cpuShares.py
+
+The script will reconfigure _/domain/cputune/shares_ using the folloing formula
+
+`( VCPU * multiplier ) * 1024`
+
+Default for the _multiplier_ is _0.1_ and could be overrided per VM with _USER_TEMPLATE/T_CPU_MUL_
+
+#### T_CPUTUNE_MUL
+
+Override _multiplier_ for the given VM
+
+#### T_CPUTUNE_SHARES
+
+Used t override the above calculations and use the value for _/domain/cputune/shares/_ for the given VM.
+
+
 ### volatile2dev.py
 
 The script will reconfigure the volatile disks from file to device when the VM disk's TM_MAD is _storpool_.
