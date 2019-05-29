@@ -59,7 +59,6 @@ if t_cputune_mul_e is not None:
     #print( "T_CPUTUNE_MUL={s}".format(s=t_cputune_mul_e.text),file=stderr)
     cputune_mul = float(t_cputune_mul_e.text)
 
-cpu_e = vm.find('./TEMPLATE/CPU')
 vcpu_e = vm.find('./TEMPLATE/VCPU')
 set_cputune_shares = ceil((float(vcpu_e.text) * cputune_mul) * 1024.0)
 
