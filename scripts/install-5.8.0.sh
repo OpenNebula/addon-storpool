@@ -141,19 +141,19 @@ _EOF_
 fi
 
 # Enable StorPool in oned.conf
-if grep -q -i storpool /etc/one/oned.conf >/dev/null 2>&1; then
-    echo "*** StorPool is already enabled in /etc/one/oned.conf"
+if grep -q -i storpool ${ONE_ETC}/oned.conf >/dev/null 2>&1; then
+    echo "*** StorPool is already enabled in ${ONE_ETC}/oned.conf"
 else
-    echo "*** enabling StorPool plugin in /etc/one/oned.conf"
-    cp $CP_ARG /etc/one/oned.conf /etc/one/oned.conf.bak;
+    echo "*** enabling StorPool plugin in ${ONE_ETC}/oned.conf"
+    cp $CP_ARG ${ONE_ETC}/oned.conf ${ONE_ETC}/oned.conf.bak;
 
-    sed -i -e 's|ceph,dev|ceph,dev,storpool|g' /etc/one/oned.conf
+    sed -i -e 's|ceph,dev|ceph,dev,storpool|g' ${ONE_ETC}/oned.conf
 
-    sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' /etc/one/oned.conf
+    sed -i -e 's|shared,ssh,ceph,|shared,ssh,ceph,storpool,|g' ${ONE_ETC}/oned.conf
 
-    sed -i -e 's|"-t 15 -r 0 kvm"|"-t 15 -r 0 kvm -l deploy=deploy-tweaks"|g' /etc/one/oned.conf
+    sed -i -e 's|"-t 15 -r 0 kvm"|"-t 15 -r 0 kvm -l deploy=deploy-tweaks"|g' ${ONE_ETC}/oned.conf
 
-    cat <<_EOF_ >>/etc/one/oned.conf
+    cat <<_EOF_ >>${ONE_ETC}/oned.conf
 # StorPool related config
 TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "ssh,shared", LN_TARGET_SSH = "NONE", CLONE_TARGET_SSH = "SELF", DISK_TYPE_SSH = "BLOCK", LN_TARGET_SHARED = "NONE", CLONE_TARGET_SHARED = "SELF", DISK_TYPE_SHARED = "BLOCK"  ]
 DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "" ]
@@ -163,28 +163,28 @@ fi
 for e in DISKSNAPSHOT_LIMIT VMSNAPSHOT_LIMIT T_CPU_THREADS T_CPU_SOCKETS T_CPU_FEATURES \
          T_CPU_MODE T_CPU_MODEL T_CPU_VENDOR T_CPU_CHECK T_CPU_MATCH \
          T_VF_MACS T_CPUTUNE_SHARES T_CPUTUNE_MUL; do
-    if grep -q -i "$e" /etc/one/oned.conf >/dev/null 2>&1; then
-        echo "*** $e found in /etc/one/oned.conf"
+    if grep -q -i "$e" ${ONE_ETC}/oned.conf >/dev/null 2>&1; then
+        echo "*** $e found in ${ONE_ETC}/oned.conf"
     else
-        echo "*** Appending VM_RESTRICTED_ATTR = $e in /etc/one/oned.conf"
-        echo "VM_RESTRICTED_ATTR = \"$e\"" >> /etc/one/oned.conf
+        echo "*** Appending VM_RESTRICTED_ATTR = $e in ${ONE_ETC}/oned.conf"
+        echo "VM_RESTRICTED_ATTR = \"$e\"" >> ${ONE_ETC}/oned.conf
     fi
 done
 
 # Enable snap_create_live in vmm_exec/vmm_execrc
-LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' /etc/one/vmm_exec/vmm_execrc | tail -n 1)
+LIVE_DISK_SNAPSHOTS_LINE=$(grep -e '^LIVE_DISK_SNAPSHOTS' ${ONE_ETC}/vmm_exec/vmm_execrc | tail -n 1)
 if [ "x${LIVE_DISK_SNAPSHOTS_LINE/kvm-storpool/}" = "x$LIVE_DISK_SNAPSHOTS_LINE" ]; then
     if [ -n "$LIVE_DISK_SNAPSHOTS_LINE" ]; then
-        echo "*** adding StorPool to LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
+        echo "*** adding StorPool to LIVE_DISK_SNAPSHOTS in ${ONE_ETC}/vmm_exec/vmm_execrc"
 #        eval $LIVE_DISK_SNAPSHOTS_LINE
-        sed -i -e 's|kvm-qcow2|kvm-qcow2 kvm-storpool|g' /etc/one/vmm_exec/vmm_execrc
+        sed -i -e 's|kvm-qcow2|kvm-qcow2 kvm-storpool|g' ${ONE_ETC}/vmm_exec/vmm_execrc
     else
-        echo "*** LIVE_DISK_SNAPSHOTS not defined in /etc/one/vmm_exec/vmm_execrc"
-        echo "*** to enable StorPool add the following line to /etc/one/vmm_exec/vmm_execrc"
+        echo "*** LIVE_DISK_SNAPSHOTS not defined in ${ONE_ETC}/vmm_exec/vmm_execrc"
+        echo "*** to enable StorPool add the following line to ${ONE_ETC}/vmm_exec/vmm_execrc"
         echo "LIVE_DISK_SNAPSHOTS=\"kvm-storpool\""
     fi
 else
-    echo "*** StorPool is already enabled for LIVE_DISK_SNAPSHOTS in /etc/one/vmm_exec/vmm_execrc"
+    echo "*** StorPool is already enabled for LIVE_DISK_SNAPSHOTS in ${ONE_ETC}/vmm_exec/vmm_execrc"
 fi
 
 if [ -n "$OLD_TWEAKS" ]; then
@@ -247,8 +247,8 @@ cp -vf hooks/net_fw_hook "${ONE_VAR}/remotes/hooks/"
 echo "*** set ownership of ${ONE_VAR}/remotes to $ONE_USER"
 chown -R "$ONE_USER" "${ONE_VAR}/remotes"
 
-echo "*** Checking for deploy-tweaks in /etc/one/oned.conf ..."
-if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
+echo "*** Checking for deploy-tweaks in ${ONE_ETC}/oned.conf ..."
+if ! grep -q 'deploy=deploy-tweaks' ${ONE_ETC}/oned.conf; then
     echo "!!! Please enable deploy-tweaks in the VM_MAD configuration for proper working of volatile disks"
 fi
 

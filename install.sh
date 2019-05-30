@@ -22,12 +22,14 @@ PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
 
 CP_ARG=${CP_ARG:--uv}
 
+ONE_ETC=${ONE_ETC:-/etc/one}
 ONE_USER=${ONE_USER:-oneadmin}
 ONE_VAR=${ONE_VAR:-/var/lib/one}
 ONE_LIB=${ONE_LIB:-/usr/lib/one}
 ONE_DS=${ONE_DS:-/var/lib/one/datastores}
 
 if [ -n "$ONE_LOCATION" ]; then
+    ONE_ETC="$ONE_LOCATION/etc"
     ONE_VAR="$ONE_LOCATION/var"
     ONE_LIB="$ONE_LOCATION/lib"
     ONE_DS="$ONE_LOCATION/var/datastores"
