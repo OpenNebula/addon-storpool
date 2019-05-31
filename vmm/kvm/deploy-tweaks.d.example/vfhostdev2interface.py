@@ -78,6 +78,21 @@ for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 vf_macs = vm.find('.//USER_TEMPLATE/T_VF_MACS')
+
+hit = 0
+if vf_macs is None:
+    macs = []
+    for pci in vm.findall('.//TEMPLATE/PCI'):
+        mac_e = pci.find('./MAC')
+        if mac_e is not None:
+            macs.append(mac_e.text)
+            hit = 1
+        else:
+            macs.append('')
+    if hit:
+        vf_macs = ET.Element('T_VF_MACS')
+        vf_macs.text = ','.join(macs)
+
 if vf_macs is not None:
     i = 0
     changed = 0
