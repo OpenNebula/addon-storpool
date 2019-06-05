@@ -38,7 +38,8 @@ tmpb64="$(mktemp -t net_hook_XXXXXX)"
 trap 'rm -f "$tmpb64"' EXIT QUIT TERM HUP
 if [ ! -t 0 ]; then
     cat > "$tmpb64"
-else
+fi
+if [ ! -s "$tmpxml" ]; then
     echo "$1" > "$tmpb64"
 fi
 

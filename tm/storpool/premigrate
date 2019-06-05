@@ -45,10 +45,12 @@ done
 
 if [ ! -t 0 ]; then
     tmpxml="$(mktemp -t premigrate-${VM_ID}-XXXXXXXX)"
-    cat > "$tmpxml"
-    SYSTEM_MAD="$6"
-    TEMPLATE="$tmpxml"
     trapAdd "rm -rf \"$tmpxml\""
+    cat > "$tmpxml"
+    if [ -s "$tmpxml" ]; then
+        SYSTEM_MAD="$6"
+        TEMPLATE="$tmpxml"
+    fi
 fi
 
 if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
