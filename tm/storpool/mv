@@ -190,7 +190,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
            ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
        fi
     fi
-    TEMPLATE=`onevm show -x "$VM_ID" | base64 -w0`
+    TEMPLATE= #`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
         # checkpoint

@@ -26,7 +26,7 @@
 #    lcm_state = "HOTPLUG_NIC",
 #    command   = "net_fw_hook",
 #    remote    = "YES",
-#    arguments = "$TEMPLATE" ]
+#    arguments = "-i $TEMPLATE" ]
 #
 
 #DEBUG=1
@@ -34,14 +34,20 @@
 me=${0##*/}
 CWD="$(dirname "$0")"
 
-TEMPLATE="$1"
-#logger -t "$me" -- "$1::$2::$3::$4"
+tmpb64="$(mktemp -t net_hook_XXXXXX)"
+trap 'rm -f "$tmpb64"' EXIT QUIT TERM HUP
+if [ ! -t 0 ]; then
+    cat > "$tmpb64"
+fi
+if [ ! -s "$tmpxml" ]; then
+    echo "$1" > "$tmpb64"
+fi
 
 XPATH="$CWD/../datastore/xpath.rb"
 ts="$(date +%s)"
 
 if [ -n "$DEBUG" ]; then
-    echo "$TEMPLATE" | base64 -d |xmllint --format - >"/tmp/${me}-${ts}.xml"
+    base64 -d "$tmpb64" | xmllint --format - >"/tmp/${me}-${ts}.xml"
     sudo ipset save >"/tmp/${me}-${ts}.ipset"
 fi
 
@@ -49,7 +55,7 @@ ALIAS_XPATH="/VM/TEMPLATE/NIC_ALIAS[ATTACH=\"YES\"]"
 unset i XE
 while IFS= read -r -d '' element;do
     XE[i++]="$element"
-done < <($XPATH -b "$TEMPLATE" \
+done < <(base64 -d "$tmpb64" | $XPATH --stdin \
    /VM/ID \
    $ALIAS_XPATH/ALIAS_ID \
    $ALIAS_XPATH/IP \
@@ -73,7 +79,7 @@ unset i XE
 NIC_XPATH="/VM/TEMPLATE/NIC[NIC_ID=\"$A_PARENT_ID\"]"
 while IFS= read -r -d '' element;do
     XE[i++]="$element"
-done < <($XPATH -b "$TEMPLATE" \
+done < <(base64 -d "$tmpb64" | $XPATH --stdin \
    $NIC_XPATH/IP \
    $NIC_XPATH/VN_MAD \
    $NIC_XPATH/ALIAS_IDS \

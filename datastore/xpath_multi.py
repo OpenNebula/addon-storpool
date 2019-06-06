@@ -34,19 +34,27 @@ from getopt import getopt
 
 b64 = False
 stdIn = False
+fileIn = False
 
-opts, args = getopt( argv[1:], "bs", ["--base64", "--stdin"] )
+opts, args = getopt( argv[1:], "bsf", ["--base64", "--stdin", "--file"] )
 
 for k, v in opts:
     if k in ( "-b", "--base64" ):
         b64 = True
     elif k in ( "-s", "--stdin" ):
         stdIn = True
+    elif k in ( "-f", "--file" ):
+        fileIn = True
 
 if stdIn:
     xmlData = stdin.read()
 else:
     xmlData = args.pop( 0 )
+
+if fileIn:
+    f = open(xmlData, "r")
+    xmlData = f.read()
+    f.close()
 
 if b64:
     xmlData = b64decode( xmlData )
