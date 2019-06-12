@@ -112,7 +112,7 @@ for f in xpath_multi.py xpath-sp.rb; do
     echo "*** Installing $f ..."
     cp $CP_ARG "datastore/$f" "$XPATH_MULTI"
     chown "$ONE_USER" "$XPATH_MULTI"
-   chmod a+x "$XPATH_MULTI"
+    chmod a+x "$XPATH_MULTI"
 done
 
 echo "*** Clean up old style crontab jobs"
