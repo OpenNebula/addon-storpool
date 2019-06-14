@@ -125,6 +125,8 @@ case "$LCM_STATE" in
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_SAVE="yes"
         fi
+        # apply Undeploy logic on Suspend -> Stop
+        IS_UNDEPLOY=1
     ;;
     30)
         #-----------------------------------------------------------------------
@@ -165,7 +167,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     if ! boolTrue "$DS_SHARED" "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
         REMOTE_MONITOR="storpool"
     fi
-    if [ $LCM_STATE -eq 30 ] && boolTrue "$SKIP_UNDEPLOY_SSH"; then
+    if [ $LCM_STATE -eq 30 ] && boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
         splog "Skip ssh_make_path $DST_HOST $DST_DIR $REMOTE_MONITOR (front-end)"
         if [ "$DST_HOST" = "$HOSTNAME" ]; then
             [ -d "$DST_DIR" ] || mkdir -p "$DST_DIR"
@@ -184,11 +186,15 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
         fi
     else
-       if boolTrue "$IS_DISK" "IS_DISK"; then
-           ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
-       else
-           ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
-       fi
+        if [ $LCM_STATE -eq 10 ] && boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+            splog "Skip ssh_make_path $DST_HOST $DST_DIR $REMOTE_MONITOR // EPILOG_STOP (front-end)"
+        else
+            if boolTrue "$IS_DISK" "IS_DISK"; then
+                ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
+            else
+                ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
+            fi
+        fi
     fi
     TEMPLATE= #`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
