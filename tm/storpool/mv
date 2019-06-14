@@ -116,6 +116,9 @@ case "$LCM_STATE" in
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_RESTORE="yes"
         fi
+        if boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+            IS_UNDEPLOY=1
+        fi
     ;;
     10)
         #-----------------------------------------------------------------------
@@ -126,7 +129,9 @@ case "$LCM_STATE" in
             CHECKPOINT_SAVE="yes"
         fi
         # apply Undeploy logic on Suspend -> Stop
-        IS_UNDEPLOY=1
+        if boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+            IS_UNDEPLOY=1
+        fi
     ;;
     30)
         #-----------------------------------------------------------------------
