@@ -30,8 +30,8 @@
              if !ipv6s.empty?
                  set = "#{vars[:chain]}-ip6-spoofing"
  
---- remotes/lib/vm.rb.orig
-+++ remotes/lib/vm.rb
+--- remotes/vnm/vm.rb.orig
++++ remotes/vnm/vm.rb
 @@ -50,6 +50,15 @@ module VNMMAD
                          nic.get_tap(self)
                      end

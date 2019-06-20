@@ -252,6 +252,12 @@ if [ -n "$EXTRA" ]; then
         do_patch "$CWD/patches/mads/${ONE_VER}/one_hm.rb.patch" "backup"
         do_patch "$CWD/patches/mads/${ONE_VER}/one_tm.rb.patch" "backup"
     popd
+    echo "*** EXTRA: patch vnm_mad ..."
+    pushd "$ONE_VAR"
+        while read -u 4 pfile; do
+            do_patch "$pfile" "backup"
+        done 4< <(find "$CWD/patches/vnm/${ONE_VER}" -name '*.patch' 2>/dev/null)
+    popd
 fi
 
 echo "*** Checking for deploy-tweaks in /etc/one/oned.conf ..."
