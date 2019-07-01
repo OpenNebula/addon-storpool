@@ -119,6 +119,7 @@ case "$LCM_STATE" in
         if boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
             IS_UNDEPLOY=1
         fi
+        DO_SYMLINK="yes"
     ;;
     10)
         #-----------------------------------------------------------------------
