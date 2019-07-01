@@ -72,10 +72,14 @@ oneDatastoreInfo "$DS_ID"
 
 oneVmInfo "$VM_ID" "$DISK_ID"
 
-
 SP_VOL="${SOURCE##*/}"
-SP_TEMPLATE="${SOURCE%%/*}"
-splog "SP_VOL=$SP_VOL"
+if boolTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+    SP_TEMPLATE=
+else
+    SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
+fi
+
+splog "SP_VOL=$SP_VOL SP_TEMPLATE=$SP_TEMPLATE"
 
 #-------------------------------------------------------------------------------
 # Enable the destination device

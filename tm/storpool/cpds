@@ -62,14 +62,17 @@ SP_SRC=${SRC_PATH##*/}
 SP_DST="${SP_SRC}-${VM_ID}-${DISK_ID}"
 splog "DISK_ID=$DISK_ID SP_DST=$SP_DST"
 
-SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
 if boolTrue "$CLONE"; then
     SP_PARENT+="-${VM_ID}-${DISK_ID}"
 fi
 
-boolTrue "$NO_VOLUME_TEMPLATE" && SP_TEMPLATE=
+if boolTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+	SP_TEMPLATE=
+else
+	SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
+fi
 
 #-------------------------------------------------------------------------------
 # Take snapshot of the image

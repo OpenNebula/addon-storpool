@@ -62,10 +62,13 @@ SRC_PATH=`arg_path $SRC`
 SP_PARENT=${SRC_PATH##*/}
 SP_SNAP="${SRC_PATH##*/}-${DISK_ID}"
 SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
-SP_TEMPLATE="${SRC_PATH%%/*}"
 SP_LINK="/dev/storpool/$SP_VOL"
 
-boolTrue "$NO_VOLUME_TEMPLATE" && SP_TEMPLATE=
+if boolTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+    SP_TEMPLATE=
+else
+    SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
+fi
 
 #-------------------------------------------------------------------------------
 # Action
