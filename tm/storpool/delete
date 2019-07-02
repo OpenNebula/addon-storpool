@@ -125,9 +125,10 @@ if boolTrue "$CLONE"; then
     storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 elif [ "$TYPE" = "CDROM" ]; then
     # backward compatibility
-    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "" "$READONLY"
-    storpoolVolumeTag "$SP_VOL" ""
-
+	if storpoolVolumeExists "$SP_VOL"; then
+	    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "" "$READONLY"
+	    storpoolVolumeTag "$SP_VOL" ""
+	fi
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
 else
