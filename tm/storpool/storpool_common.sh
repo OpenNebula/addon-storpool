@@ -534,12 +534,12 @@ function storpoolVolumeCreate()
     storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
 }
 
-function storpoolVolumeContains()
+function storpoolVolumeStartswith()
 {
     local _SP_VOL="$1" vName
     while read vName; do
         echo "${vName//\"/}"
-    done < <(storpoolRetry -j volume list | jq -r ".data|map(select(.name|contains(\"${_SP_VOL}\")))|.[]|[.name]|@csv")
+    done < <(storpoolRetry -j volume list | jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv")
 }
 
 function storpoolVolumeSnapshotsDelete()

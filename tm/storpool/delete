@@ -83,7 +83,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     if boolTrue "$IS_DISK"; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 #        splog "[SYSTEM_DS] delete volatile $SP_VOL"
-        for SP_VOL in `storpoolVolumeContains "$SP_VOL"`; do
+        for SP_VOL in `storpoolVolumeStartswith "$SP_VOL"`; do
             storpoolVolumeDelete "$SP_VOL" "force"
             if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
