@@ -39,7 +39,7 @@ trap 'rm -f "$tmpb64"' EXIT QUIT TERM HUP
 if [ ! -t 0 ]; then
     cat > "$tmpb64"
 fi
-if [ ! -s "$tmpxml" ]; then
+if [ ! -s "$tmpb64" ]; then
     echo "$1" > "$tmpb64"
 fi
 
