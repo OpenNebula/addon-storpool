@@ -83,17 +83,21 @@ done < <(base64 -d "$tmpb64" | $XPATH --stdin \
    $NIC_XPATH/IP \
    $NIC_XPATH/VN_MAD \
    $NIC_XPATH/ALIAS_IDS \
+   $NIC_XPATH/FILTER_IP_SPOOFING \
 )
 unset i
 NIC_IP="${XE[i++]}"
 NIC_VN_MAD="${XE[i++]}"
 NIC_ALIAS_IDS="${XE[i++]}"
+NIC_FILTER_IP_SPOOFING="${XE[i++]}"
 
-if [ -n "${NIC_VN_MAD/fw/}" ]; then
-    logger -t "$me" -- "NIC VN_MAD not 'fw' but '$NIC_VN_MAD'. exit 0"
+if [ "${NIC_FILTER_IP_SPOOFING^^}" != "YES"  ]; then
+    logger -t "$me" -- "NIC FILTER_IP_SPOOFING not 'YES' but '$NIC_FILTER_IP_SPOOFING'. Exit 0"
     exit 0
 fi
-#logger -t nic_sp_hook -- "NIC [IP=$NIC_IP, VN_MAD=$NIC_VN_MAD, ALIAS_IDS='$NIC_ALIAS_IDS']"
+if [ -n "$DEBUG" ]; then
+    logger -t "$me" -- "NIC [IP=$NIC_IP, VN_MAD=$NIC_VN_MAD, ALIAS_IDS='$NIC_ALIAS_IDS', FILTER_IP_SPOOFING='$NIC_FILTER_IP_SPOOFING']"
+fi
 
 A_IDX="${A_NAME#*ALIAS}"
 
