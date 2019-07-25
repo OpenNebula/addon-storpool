@@ -24,6 +24,8 @@
 # The oned log could be regularly parsed and nics stats pushed to an external db
 # for further processing
 
+PATH=/bin:/sbin/:/usr/bin:/usr/sbin:$PATH
+
 #27: one-135-0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master onebr.616 state UNKNOWN mode DEFAULT group default qlen 1000\    link/ether fe:00:70:30:4a:06 brd ff:ff:ff:ff:ff:ff\    RX: bytes  packets  errors  dropped overrun mcast   \    179604395  177435   0       0       0       0       \    TX: bytes  packets  errors  dropped carrier collsns \    135264059  1235572  0       0       0       0       
 poll=
 while read -u 4 l; do
