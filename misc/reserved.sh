@@ -16,6 +16,8 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH
+
 cgroup="${1:-machine.slice}"
 
 function count_cpus()
@@ -39,3 +41,4 @@ root_cpus=`count_cpus "${root_arr[1]}"`
 
 echo "RESERVED_CPU=$(((root_cpus-cg_cpus)*100))"
 echo "RESERVED_MEM=$(((mem[1]-cg_arr[0])/1024))"
+storpool_confshow SP_OURID 2>/dev/null
