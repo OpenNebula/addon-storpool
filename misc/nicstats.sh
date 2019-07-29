@@ -42,7 +42,7 @@ while read -u 4 l; do
 	fi
 	vidold="$vid"
 	[ -n "$poll" ] && poll+=" "
-	poll+="NIC_STATS=[ID=${nid},RX=${a[28]},TX=${a[41]}]"
+	poll+="NIC_STATS=[ID=${nid},RX=${a[41]},TX=${a[28]}]"
 done 4< <(ip -o -s link | grep one-)
 
 if [ -n "$poll" ]; then
