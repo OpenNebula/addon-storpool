@@ -355,8 +355,8 @@ For example the following configuration represent VM with 8 VCPUs, in single soc
 
 ```
 VCPU = 8
-USER_TEMPLATE/T_CPU_SOCKETS = 1
-USER_TEMPLATE/T_CPU_THREADS = 2
+T_CPU_SOCKETS = 1
+T_CPU_THREADS = 2
 ```
 
 ```xml
