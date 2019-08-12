@@ -555,12 +555,22 @@ function storpoolVolumeSnapshotsDelete()
 
 function storpoolVolumeDelete()
 {
-    local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3"
+    local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE_LOCATION="$4"
     if storpoolVolumeExists "$_SP_VOL"; then
 
         storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all"
 
-        storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+        if [ -n "${_REMOTE_LOCATION}" ]; then
+			local _REMOTE_LOCATION_ARGS="${_REMOTE_LOCATION#*:}"
+			_REMOTE_LOCATION="${_REMOTE_LOCATION%:*}"
+			storpoolRetry volume "$_SP_VOL" backup "$_REMOTE_LOCATION" ${_REMOTE_LOCATION_ARGS} >/dev/null
+			local RET=$?
+			if [ $RET -ne 0 ]; then
+				storpoolVolumeRename "${_SP_VOL}" "${_SP_VOL}-"$(date +%s) "tag del=y" >/dev/null
+				return $?
+			fi
+		fi
+		storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
     else
         splog "volume $_SP_VOL not found "
     fi
@@ -571,7 +581,7 @@ function storpoolVolumeDelete()
 
 function storpoolVolumeRename()
 {
-    local _SP_OLD="$1" _SP_NEW="$2" _SP_TEMPLATE="$3"
+    local _SP_OLD="$1" _SP_NEW="$2" _SP_TEMPLATE="$3" _SP_TAG="$4"
     storpoolRetry volume "$_SP_OLD" rename "$_SP_NEW" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
 }
 
@@ -1069,7 +1079,8 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                             /DATASTORE/TEMPLATE/SP_CLONE_GW \
                             /DATASTORE/TEMPLATE/VMSNAPSHOT_LIMIT \
-                            /DATASTORE/TEMPLATE/DISKSNAPSHOT_LIMIT)
+                            /DATASTORE/TEMPLATE/DISKSNAPSHOT_LIMIT \
+                            /DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE)
     rm -f "$tmpXML"
     unset i
     DS_NAME="${XPATH_ELEMENTS[i++]}"
@@ -1104,6 +1115,7 @@ function oneDatastoreInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
+    REMOTE_BACKUP_DELETE="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -1120,6 +1132,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT} ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT }"
     _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
     _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }"
+    _MSG+="${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }"
     splog "$_MSG"
 }
 
@@ -1250,6 +1263,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER \
@@ -1298,6 +1312,7 @@ function oneDsDriverAction()
     NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
+    REMOTE_BACKUP_DELETE="${XPATH_ELEMENTS[i++]}"
     MD5="${XPATH_ELEMENTS[i++]}"
     SHA1="${XPATH_ELEMENTS[i++]}"
     DRIVER="${XPATH_ELEMENTS[i++]}"
@@ -1359,6 +1374,7 @@ ${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }\
 ${SP_IOPS:+SP_IOPS=$SP_IOPS }\
 ${SP_BW:+SP_BW=$SP_BW }\
 ${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }\
+${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }\
 "
     splog "$_MSG"
 }
