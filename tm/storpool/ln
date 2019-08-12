@@ -73,7 +73,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if boolTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+if boolTrue "NO_VOLUME_TEMPLATE"; then
     SP_TEMPLATE=
 else
     SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
@@ -87,7 +87,7 @@ splog "SP_VOL=$SP_VOL SP_TEMPLATE=$SP_TEMPLATE"
 
 if [ -n "$SIZE" ]; then
     if [ $SIZE -gt ${ORIGINAL_SIZE:-0} ]; then
-        if boolTrue "$CLONE"; then
+        if boolTrue "CLONE"; then
             storpoolVolumeResize "$SP_VOL" "$SIZE"M
         else
             splog "not resizing Non-CLONED $SP_VOL SIZE=$SIZE ORIGINAL_SIZE=$ORIGINAL_SIZE"
@@ -95,7 +95,7 @@ if [ -n "$SIZE" ]; then
     fi
 fi
 
-if boolTrue "${READONLY}"; then
+if boolTrue "READONLY"; then
     SP_MODE="ro"
 fi
 
@@ -121,7 +121,7 @@ storpoolVolumeTag "$SP_VOL" "$VM_ID"
 oneDatastoreInfo "$VM_DS_ID"
 
 MONITOR_TM_MAD=
-if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
+if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="$DS_TM_MAD"
 fi
 if [ "${DS_TM_MAD:0:8}" = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then

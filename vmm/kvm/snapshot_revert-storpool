@@ -43,11 +43,11 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 LOG_PREFIX="vmm"
 
-if boolTrue "$DEBUG_VMSNAPSHOT"; then
+if boolTrue "DEBUG_VMSNAPSHOT"; then
     splog "$0 $*"
 fi
 
-if boolTrue "$VMSNAPSHOT_OVERRIDE"; then
+if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
     declare -A vmVolumesMap
     for disk in $vmDisksMap; do
@@ -108,7 +108,7 @@ EOF
         storpoolVolumeInfo "$volume"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
         if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
-            if boolTrue "$UPDATE_ONE_DISK_SIZE"; then
+            if boolTrue "UPDATE_ONE_DISK_SIZE"; then
                 if [ -n "${vmVolumesMap["$volume"]}" ]; then
                     DISK_ID="${vmVolumesMap[$volume]}"
                     onedb change-body vm --id $VM_ID "/VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SIZE" $NEW_SIZE_M
@@ -133,7 +133,7 @@ EOF
     if [ -n "$pids" ]; then
          kill $pids
          ret=$?
-         if boolTrue "$DEBUG_VMSNAPSHOT"; then
+         if boolTrue "DEBUG_VMSNAPSHOT"; then
              splog "kill $pids ($?)"
          fi
          if [ $ret -eq 0 ]; then
@@ -143,7 +143,7 @@ EOF
              finish=0
          fi
     fi
-    if boolTrue "$finish"; then
+    if boolTrue "finish"; then
         for volume in ${tmpVolumes[@]}; do
             storpoolVolumeDelete "$volume" "force" "snaps"
         done

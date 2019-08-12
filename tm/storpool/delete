@@ -68,7 +68,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
-            if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
+            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
             fi
             RM_CMD="rm -rf '${DST_PATH}/disk.${DISK_ID_ARRAY[i]}'"
@@ -80,12 +80,12 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         fi
     done
 
-    if boolTrue "$IS_DISK"; then
+    if boolTrue "IS_DISK"; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 #        splog "[SYSTEM_DS] delete volatile $SP_VOL"
         for SP_VOL in `storpoolVolumeStartswith "$SP_VOL"`; do
             storpoolVolumeDelete "$SP_VOL" "force" "" "$REMOTE_BACKUP_DELETE"
-            if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
             fi
         done
@@ -93,10 +93,10 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
 #        splog "[SYSTEM_DS] delete context iso"
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "$SP_VOL" "force" "snaps"
-        if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
+        if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
             storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
         fi
-        if boolTrue "$SP_CHECKPOINT_BD"; then
+        if boolTrue "SP_CHECKPOINT_BD"; then
             storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
             splog "Delete ${ONE_PX}-sys-${VM_ID}-rawcheckpoint ($?)"
         fi
@@ -118,7 +118,7 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
 
-if boolTrue "$CLONE"; then
+if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     log "Deleting $DST_PATH ($SP_VOL)"
 
@@ -139,7 +139,7 @@ else
 
     storpoolVolumeTag "$SP_VOL" ""
 
-    if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
+    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
         storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
     fi
 fi

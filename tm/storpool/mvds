@@ -61,7 +61,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if boolTrue "$CLONE"; then
+if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
@@ -70,7 +70,7 @@ if [ "$SP_VOL" != "$SP_NEW" ]; then
     DEFERRED=1
 fi
 
-if boolTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+if boolTrue "NO_VOLUME_TEMPLATE"; then
     SP_TEMPLATE=
 else
     SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
@@ -90,11 +90,11 @@ splog "deleting $SRC_PATH on $SRC_HOST"
 ssh_exec_and_log "$SRC_HOST" "rm -vf ${SRC_PATH}*" \
                 "Error deleting $SRC_PATH on $SRC_HOST"
 
-if boolTrue "$DEFERRED"; then
+if boolTrue "DEFERRED"; then
     storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
 fi
 
-if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
 fi
 

@@ -47,7 +47,7 @@ fi
 
 function boolTrue()
 {
-   case "${1^^}" in
+   case "${!1^^}" in
        1|Y|YES|TRUE|ON)
            return 0
            ;;
@@ -62,14 +62,14 @@ if [ -f "$SP_MONITOR_DS" ]; then
 #        splog "[DBG]$PWD $0 $* (ds:$ds)"
 #    fi
     if [ -d "$SP_DS_TMP" ]; then
-        if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+        if boolTrue "IM_MONITOR_DS_DEBUG_VERBOSE"; then
             splog "found SP_DS_TMP:$SP_DS_TMP"
         fi
     else
         SP_DS_TMP="$(mktemp --tmpdir -d sp-tmp-XXXXXXXX)"
         _ret=$?
         export SP_DS_TMP
-        if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+        if boolTrue "IM_MONITOR_DS_DEBUG"; then
             START_TIME="$(date +%s)"
             export START_TIME
             splog "mktemp $SP_DS_TMP returned $_ret, START_TIME=$START_TIME"
@@ -82,7 +82,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             fi
             if [ -d "$SP_DS_TMP" ]; then
                 rm -rf "$SP_DS_TMP"
-                if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+                if boolTrue "IM_MONITOR_DS_DEBUG_VERBOSE"; then
                     splog "rm -rf $SP_DS_TMP"
                 fi
             fi
@@ -90,7 +90,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                 local end_time="$(date +%s)"
                 splog "'$0' runtime:$((end_time - START_TIME))sec"
             fi
-            if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+            if boolTrue "IM_MONITOR_DS_DEBUG_VERBOSE"; then
                 splog "$0 do exit $_ret"
             fi
             exit $_ret
@@ -98,7 +98,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
         trap sp_trap TERM INT QUIT HUP EXIT
 
         if [ $_ret -eq 0 ]; then
-            if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+            if boolTrue "IM_MONITOR_DS_DEBUG"; then
                 splog "generating disk space data cache $SP_DS_TMP/sizes"
             fi
             SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
@@ -121,7 +121,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
     SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds 2>/dev/null)"
 
     if [ -n "$SP_DS_SIZES" ]; then
-        if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+        if boolTrue "IM_MONITOR_DS_DEBUG"; then
             splog "SP_DS_SIZES=$SP_DS_SIZES"
         fi
 
@@ -132,8 +132,8 @@ if [ -f "$SP_MONITOR_DS" ]; then
 
         if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
 
-            if boolTrue "$IM_MONITOR_DS_DEBUG"; then
-                if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+            if boolTrue "IM_MONITOR_DS_DEBUG"; then
+                if boolTrue "IM_MONITOR_DS_DEBUG_VERBOSE"; then
                     splog "DS_ID $ds (StorPool) SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB $dir"
                 else
                     splog "DS ID=$ds USED_MB=$SP_USED_MB TOTAL_MB=$SP_TOTAL_MB FREE_MB=$SP_FREE_MB"
@@ -158,7 +158,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                 # default tm DRIVER is ssh
                 SCRIPT_PATH="${REMOTES_DIR}/tm/${DRIVER:-ssh}/monitor_ds"
                 if [ -e "$SCRIPT_PATH" ]; then
-                    if boolTrue "$IM_MONITOR_DS_DEBUG"; then
+                    if boolTrue "IM_MONITOR_DS_DEBUG"; then
                         splog "run $SCRIPT_PATH $dir (set DEBUG_TM_MONITOR_DS=1)"
                         export DEBUG_TM_MONITOR_DS=1
                     fi
@@ -167,7 +167,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
                     splog "$SCRIPT_PATH Not found!"
                 fi
             else
-                if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+                if boolTrue "IM_MONITOR_DS_DEBUG_VERBOSE"; then
                     splog "${dir}/.monitor not found. Shared filesystem?"
                 fi
             fi
@@ -175,7 +175,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
             continue
         fi
     else
-        if boolTrue "$IM_MONITOR_DS_DEBUG_VERBOSE"; then
+        if boolTrue "IM_MONITOR_DS_DEBUG_VERBOSE"; then
             splog "Datastore $ds is not on StorPool"
         fi
     fi

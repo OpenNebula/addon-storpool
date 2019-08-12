@@ -58,7 +58,7 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 #-------------------------------------------------------------------------------
 
 SP_VOL=${SOURCE##*/}
-if boolTrue "$CLONE"; then
+if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
@@ -85,7 +85,7 @@ storpoolVolumeInfo "$SP_VOL"
 NEW_SIZE_M=$((V_SIZE/1024/1024))
 
 if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
-    if boolTrue "$UPDATE_ONE_DISK_SIZE"; then
+    if boolTrue "UPDATE_ONE_DISK_SIZE"; then
         oneVmVolumes "$VM_ID"
         declare -A vmVolumesMap
         for disk in $vmDisksMap; do
