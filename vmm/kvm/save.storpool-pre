@@ -35,7 +35,7 @@ LOG_PREFIX=vmm
 
 splog "$*"
 
-if boolTrue "$SP_CHECKPOINT_BD"; then
+if boolTrue "SP_CHECKPOINT_BD"; then
 
     DRV_MESSAGE="$(cat)"
 

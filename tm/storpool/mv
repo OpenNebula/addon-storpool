@@ -67,7 +67,7 @@ oneDatastoreInfo "$DS_ID"
 oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_VOL="${SOURCE##*/}"
-if boolTrue "$CLONE"; then
+if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
@@ -82,7 +82,7 @@ case "$SP_CHECKPOINT" in
         SP_CHECKPOINT="yes"
     ;;
     *)
-        if boolTrue "$SP_CHECKPOINT"; then
+        if boolTrue "SP_CHECKPOINT"; then
             SP_CHECKPOINT="migrate"
         else
             SP_CHECKPOINT=
@@ -116,7 +116,7 @@ case "$LCM_STATE" in
         if [ -n "$SP_CHECKPOINT" ]; then
             CHECKPOINT_RESTORE="yes"
         fi
-        if boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+        if boolTrue "SKIP_UNDEPLOY_SSH"; then
             IS_UNDEPLOY=1
         fi
         DO_SYMLINK="yes"
@@ -130,7 +130,7 @@ case "$LCM_STATE" in
             CHECKPOINT_SAVE="yes"
         fi
         # apply Undeploy logic on Suspend -> Stop
-        if boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+        if boolTrue "SKIP_UNDEPLOY_SSH"; then
             IS_UNDEPLOY=1
         fi
     ;;
@@ -170,10 +170,10 @@ esac
 #-------------------------------------------------------------------------------
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     REMOTE_MONITOR=
-    if ! boolTrue "$DS_SHARED" "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
+    if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
         REMOTE_MONITOR="storpool"
     fi
-    if [ $LCM_STATE -eq 30 ] && boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+    if [ $LCM_STATE -eq 30 ] && boolTrue "SKIP_UNDEPLOY_SSH"; then
         splog "Skip ssh_make_path $DST_HOST $DST_DIR $REMOTE_MONITOR (front-end)"
         if [ "$DST_HOST" = "$HOSTNAME" ]; then
             [ -d "$DST_DIR" ] || mkdir -p "$DST_DIR"
@@ -192,10 +192,10 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
         fi
     else
-        if [ $LCM_STATE -eq 10 ] && boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+        if [ $LCM_STATE -eq 10 ] && boolTrue "SKIP_UNDEPLOY_SSH"; then
             splog "Skip ssh_make_path $DST_HOST $DST_DIR $REMOTE_MONITOR // EPILOG_STOP (front-end)"
         else
-            if boolTrue "$IS_DISK" "IS_DISK"; then
+            if boolTrue "IS_DISK"; then
                 ssh_make_path "$DST_HOST" "$DST_DIR" "$REMOTE_MONITOR"
             else
                 ssh_make_path "$DST_HOST" "$DST_PATH" "$REMOTE_MONITOR"
@@ -213,7 +213,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             oneCheckpointRestore "$DST"
         fi
         # context ISO. Do detach/attach only when hosts differ
-        if boolTrue "$DO_CONTEXT"; then
+        if boolTrue "DO_CONTEXT"; then
             if [ -n "$_CONTEXT_DISK_ID" ]; then
                 SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
                 if [ "$SRC_HOST" != "$DST_HOST" ]; then
@@ -228,7 +228,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                         splog "$DETACH_ONLY"
                     else
                         storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
-                        if boolTrue "$DO_SYMLINK"; then
+                        if boolTrue "DO_SYMLINK"; then
                             oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH"
                         fi
                     fi
@@ -247,8 +247,8 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 SYSTEM_DS_TRANSFER=1
             fi
         fi
-        if ! boolTrue "$DS_SHARED" "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ] || [ -n "$SYSTEM_DS_TRANSFER" ]; then
-            if [ "$SRC_HOST" = "$DST_HOST" ] || boolTrue "$MIGRATE_UNKNOWN" "MIGRATE_UNKNOWN"; then
+        if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ] || [ -n "$SYSTEM_DS_TRANSFER" ]; then
+            if [ "$SRC_HOST" = "$DST_HOST" ] || boolTrue "MIGRATE_UNKNOWN"; then
                 if [ "$SRC_PATH" = "$DST_PATH" ]; then
                     splog "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
                 else
@@ -257,9 +257,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                         "Failed moving $SRC_PATH/* to $DST_PATH"
                 fi
             else
-                if boolTrue "$IS_UNDEPLOY" "IS_UNDEPLOY" && boolTrue "$SKIP_UNDEPLOY_SSH" "SKIP_UNDEPLOY_SSH"; then
+                if boolTrue "IS_UNDEPLOY" && boolTrue "SKIP_UNDEPLOY_SSH"; then
                     splog "Transfer from $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR SKIPPED"
-                    if [ $LCM_STATE -eq 30 ] && boolTrue "$CLEAN_SRC_ON_UNDEPLOY" "CLEAN_SRC_ON_UNDEPLOY"; then
+                    if [ $LCM_STATE -eq 30 ] && boolTrue "CLEAN_SRC_ON_UNDEPLOY"; then
                         splog "Claenup $SRC_HOST:$SRC_PATH"
                         ssh_exec_and_log "$SRC_HOST" "rm -rf \"$SRC_PATH\"" "Error deleting $SRC_PATH from $SRC_HOST!"
                     fi
@@ -297,7 +297,7 @@ EOF
                 if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
                     FORMAT="swap"
                 fi
-                if boolTrue "$IS_DISK"; then
+                if boolTrue "IS_DISK"; then
                     if [ "${DISK_ID_ARRAY[i]}" != "$DISK_ID" ] ; then
                         continue
                     fi
@@ -318,7 +318,7 @@ EOF
 
                     storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
-                    if boolTrue "$DO_SYMLINK"; then
+                    if boolTrue "DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
                     fi
                 fi
@@ -334,8 +334,8 @@ else
     if [ -n "$ATTACH_ONLY" ]; then
         splog "$ATTACH_ONLY"
     else
-        if boolTrue "$MIGRATE_UNKNOWN" "MIGRATE_UNKNOWN"; then
-            if boolTrue "$MV_DETACH_ALL" "MV_DETACH_ALL"; then
+        if boolTrue "MIGRATE_UNKNOWN"; then
+            if boolTrue "MV_DETACH_ALL"; then
                 oneVmVolumes "$VM_ID"
             else
                 vmVolumes=
@@ -364,7 +364,7 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${SOURCE##*/}"
-if boolTrue "$CLONE"; then
+if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 elif [ "$TYPE" = "CDROM" ]; then
     CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
@@ -387,11 +387,11 @@ storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
-if boolTrue "$DO_SYMLINK"; then
+if boolTrue "DO_SYMLINK"; then
     # Get SYSTEM datastore info
     oneDatastoreInfo "$VM_DS_ID"
     MONITOR_TM_MAD=
-    if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
+    if ! boolTrue "DS_SHARED"; then
         MONITOR_TM_MAD="$VM_TM_MAD"
     fi
     if [ "${VM_TM_MAD:0:8}" = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then

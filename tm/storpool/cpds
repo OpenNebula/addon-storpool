@@ -64,11 +64,11 @@ splog "DISK_ID=$DISK_ID SP_DST=$SP_DST"
 
 SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
-if boolTrue "$CLONE"; then
+if boolTrue "CLONE"; then
     SP_PARENT+="-${VM_ID}-${DISK_ID}"
 fi
 
-if boolTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+if boolTrue "NO_VOLUME_TEMPLATE"; then
 	SP_TEMPLATE=
 else
 	SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"

@@ -141,7 +141,7 @@ LcmState=(LCM_INIT PROLOG BOOT RUNNING MIGRATE SAVE_STOP SAVE_SUSPEND SAVE_MIGRA
 
 function boolTrue()
 {
-   case "${1^^}" in
+   case "${!1^^}" in
        1|Y|YES|TRUE|ON)
            return 0
            ;;
@@ -160,7 +160,7 @@ function getFromConf()
         response="$(grep "^$varName" "$cfgFile" | tail -n 1)"
     fi
     response="${response#*=}"
-    if boolTrue "$DEBUG_COMMON"; then
+    if boolTrue "DEBUG_COMMON"; then
         splog "getFromConf($cfgFile,$varName,$first): $response"
     fi
     echo "${response//\"/}"
@@ -172,7 +172,7 @@ function getFromConf()
 function trapReset()
 {
     TRAP_CMD="-"
-    if boolTrue "$DEBUG_TRAPS"; then
+    if boolTrue "DEBUG_TRAPS"; then
         splog "trapReset"
     fi
 
@@ -181,7 +181,7 @@ function trapReset()
 function trapAdd()
 {
     local _trap_cmd="$1"
-    if boolTrue "$DEBUG_TRAPS"; then
+    if boolTrue "DEBUG_TRAPS"; then
         splog "trapAdd:$*"
     fi
 
@@ -204,12 +204,12 @@ function trapAdd()
 function trapDel()
 {
     local _trap_cmd="$1"
-    if boolTrue "$DEBUG_TRAPS"; then
+    if boolTrue "DEBUG_TRAPS"; then
         splog "trapDel:$*"
     fi
     TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
     if [ -n "$TRAP_CMD" ]; then
-        if boolTrue "$DEBUG_TRAPS"; then
+        if boolTrue "DEBUG_TRAPS"; then
             splog "trapDel:$TRAP_CMD"
         fi
         trap "$TRAP_CMD" TERM INT QUIT HUP EXIT
@@ -271,7 +271,7 @@ function oneHostInfo()
     HOST_SP_OURID="${XPATH_ELEMENTS[i++]}"
     HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
 
-    boolTrue "$DEBUG_oneHostInfo" || return
+    boolTrue "DEBUG_oneHostInfo" || return
     splog "oneHostInfo($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:${HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
 }
 
@@ -283,11 +283,11 @@ function storpoolGetId()
         if [ "$result" = "" ]; then
             if [ -n "$COMMON_DOMAIN" ]; then
                 result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
-                if [ -n "$result" ] && boolTrue "$DEBUG_SP_OURID"; then
+                if [ -n "$result" ] && boolTrue "DEBUG_SP_OURID"; then
                     splog "storpoolGetId(${hst}.${COMMON_DOMAIN}) SP_OURID=$result"
                 fi
             fi
-        elif boolTrue "$DEBUG_SP_OURID"; then
+        elif boolTrue "DEBUG_SP_OURID"; then
             splog "storpoolGetId($hst) SP_OURID=$result (local storpool.conf)"
         fi
     fi
@@ -295,7 +295,7 @@ function storpoolGetId()
         for bridge in $BRIDGE_LIST; do
             result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
             if [ -n "$result" ]; then
-                if boolTrue "$DEBUG_SP_OURID"; then
+                if boolTrue "DEBUG_SP_OURID"; then
                     splog "storpoolGetId($hst) SP_OURID=$result via $bridge"
                 fi
                 break
@@ -303,7 +303,7 @@ function storpoolGetId()
             if [ -n "$COMMON_DOMAIN" ]; then
                 result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
                 if [ -n "$result" ]; then
-                    if boolTrue "$DEBUG_SP_OURID"; then
+                    if boolTrue "DEBUG_SP_OURID"; then
                         splog "storpoolGetId(${hst}.${COMMON_DOMAIN}) SP_OURID=$result via $bridge"
                     fi
                     break
@@ -317,7 +317,7 @@ function storpoolGetId()
         if [ "$result" = "" ]; then
             result=$(ssh "$hst" /usr/sbin/storpool_confget | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
             if [ -n "$result" ]; then
-                if boolTrue "$DEBUG_SP_OURID"; then
+                if boolTrue "DEBUG_SP_OURID"; then
                     splog "storpoolGetId($hst) SP_OURID=$result (remote storpool.conf)"
                 fi
             fi
@@ -333,7 +333,7 @@ function storpoolClientId()
     if [ "$result" = "" ]; then
         oneHostInfo "$hst"
         if [ -n "$HOST_HOSTNAME" ]; then
-            if [ "$hst" != "$HOST_HOSTNAME" ] || boolTrue "$DEBUG_COMMON"; then
+            if [ "$hst" != "$HOST_HOSTNAME" ] || boolTrue "DEBUG_COMMON"; then
                 splog "storpoolClientId($hst): Found '$HOST_HOSTNAME'"
             fi
             hst="$HOST_HOSTNAME"
@@ -348,7 +348,7 @@ function storpoolClientId()
         fi
         storpoolGetId "$hst"
     fi
-    if boolTrue "$DEBUG_SP_OURID"; then
+    if boolTrue "DEBUG_SP_OURID"; then
         splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}${HOST_HOSTNAME:+ HOST_HOSTNAME=$HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
     fi
     echo $result
@@ -365,10 +365,10 @@ function storpoolApi()
             return 1
         fi
     fi
-    if boolTrue "$NO_PROXY_API";then
+    if boolTrue "NO_PROXY_API";then
         export NO_PROXY="${NO_PROXY:+${NO_PROXY},}$SP_API_HTTP_HOST"
     fi
-    if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+    if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}}"
     fi
     curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
@@ -398,7 +398,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
 							splog "API response:$res"
 						fi
 					else
@@ -427,7 +427,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
 							splog "API response:$res"
 						fi
 					else
@@ -447,8 +447,8 @@ function storpoolWrapper()
 }
 
 function storpoolRetry() {
-    if boolTrue "$DEBUG_SP_RUN_CMD"; then
-        if boolTrue "$DEBUG_SP_RUN_CMD_VERBOSE"; then
+    if boolTrue "DEBUG_SP_RUN_CMD"; then
+        if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
             splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
         else
             for _last_cmd;do :;done
@@ -462,7 +462,7 @@ function storpoolRetry() {
         if storpoolWrapper "$@"; then
             break
         fi
-        if boolTrue "$_SOFT_FAIL" "_SOFT_FAIL"; then
+        if boolTrue "_SOFT_FAIL"; then
             splog "storpool $* SOFT_FAIL"
             break
         fi
@@ -479,7 +479,7 @@ function storpoolRetry() {
 function storpoolTemplate()
 {
     local _SP_TEMPLATE="$1"
-    if ! boolTrue "$AUTO_TEMPLATE"; then
+    if ! boolTrue "AUTO_TEMPLATE"; then
         return 0
     fi
     if [ "$SP_PLACEALL" = "" ]; then
@@ -513,7 +513,7 @@ function storpoolVolumeInfo()
         V_TYPE="${V_TYPE//\"/}"
         break
     done 5< <(storpoolRetry -j volume "$_SP_VOL" info|jq -r ".data|[.size,.parentName,.templateName,.tags.type]|@csv")
-    if boolTrue "$DEBUG_storpoolVolumeInfo" "DEBUG_storpoolVolumeInfo"; then
+    if boolTrue "DEBUG_storpoolVolumeInfo"; then
         splog "storpoolVolumeInfo($_SP_VOL) size:$V_SIZE parentName:$V_PARENT_NAME templateName:$V_TEMPLATE_NAME tags.type:$V_TYPE"
     fi
 }
@@ -619,7 +619,7 @@ function storpoolVolumeDetach()
 {
     local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _VOLUMES_GROUP="$6"
     local _SP_CLIENT volume client
-    if boolTrue "$DEBUG_storpoolVolumeDetach" "DEBUG_storpoolVolumeDetach"; then
+    if boolTrue "DEBUG_storpoolVolumeDetach"; then
         splog "storpoolVolumeDetach(_SP_VOL=$1 _FORCE=$2 _SP_HOST=$3 _DETACH_ALL=$4 _SOFT_FAIL=$5 _VOLUMES_GROUP=$6)"
     fi
     if [ "$_DETACH_ALL" = "all" ] && [ -z "$_VOLUMES_GROUP" ] ; then
@@ -645,7 +645,7 @@ function storpoolVolumeDetach()
         _SP_CLIENT="all"
     fi
     while IFS=',' read volume client snapshot; do
-        if boolTrue "$_SOFT_FAIL" "_SOFT_FAIL"; then
+        if boolTrue "_SOFT_FAIL" "_SOFT_FAIL"; then
             _FORCE=
         fi
         if [ $snapshot = "true" ]; then
@@ -682,7 +682,7 @@ function storpoolVolumeTemplate()
 function storpoolSnapshotInfo()
 {
     SNAPSHOT_INFO=($(storpoolRetry -j snapshot "$1" info | jq -r '.data|[.size,.templateName]|@csv' | tr '[,"]' ' '  ))
-    if boolTrue "$DEBUG_storpoolSnapshotInfo"; then
+    if boolTrue "DEBUG_storpoolSnapshotInfo"; then
         splog "storpoolSnapshotInfo($1):${SNAPSHOT_INFO[@]}"
     fi
 }
@@ -1002,7 +1002,7 @@ function oneVmInfo()
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
 
-    boolTrue "$DEBUG_oneVmInfo" || return
+    boolTrue "DEBUG_oneVmInfo" || return
 
     splog "[oneVmInfo]\
 ${VMSTATE:+VMSTATE=$VM_STATE(${VmState[$VMSTATE]}) }\
@@ -1121,7 +1121,7 @@ function oneDatastoreInfo()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    boolTrue "$DEBUG_oneDatastoreInfo" || return
+    boolTrue "DEBUG_oneDatastoreInfo" || return
 
     _MSG="[oneDatastoreInfo]${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
     _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+DS_TM_MAD=$DS_TM_MAD }"
@@ -1173,7 +1173,7 @@ function oneTemplateInfo()
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
-    if boolTrue "$DEBUG_oneTemplateInfo"; then
+    if boolTrue "DEBUG_oneTemplateInfo"; then
         splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
     fi
 
@@ -1223,7 +1223,7 @@ function oneTemplateInfo()
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
-    boolTrue "$DEBUG_oneTemplateInfo" || return
+    boolTrue "DEBUG_oneTemplateInfo" || return
 
     splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
 #    echo $_TEMPLATE | base64 -d >/tmp/${ONE_PX}-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
@@ -1337,7 +1337,7 @@ function oneDsDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    boolTrue "$DEBUG_oneDsDriverAction" || return
+    boolTrue "DEBUG_oneDsDriverAction" || return
 
     _MSG="[oneDsDriverAction]\
 ${ID:+ID=$ID }\
@@ -1417,7 +1417,7 @@ function oneMarketDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    boolTrue "$DEBUG_oneMarketDriverAction" || return
+    boolTrue "DEBUG_oneMarketDriverAction" || return
 
     splog "\
 ${IMPORT_SOURCE:+IMPORT_SOURCE=$IMPORT_SOURCE }\
@@ -1437,7 +1437,7 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 oneVmVolumes()
 {
     local VM_ID="$1"
-    if boolTrue "$DEBUG_oneVmVolumes"; then
+    if boolTrue "DEBUG_oneVmVolumes"; then
         splog "oneVmVolumes() VM_ID:$VM_ID"
     fi
 
@@ -1524,7 +1524,7 @@ oneVmVolumes()
         fi
         IMG="${ONE_PX}-img-$IMAGE_ID"
         if [ -n "$IMAGE_ID" ]; then
-            if boolTrue "$CLONE"; then
+            if boolTrue "CLONE"; then
                 IMG+="-$VM_ID-$DISK_ID"
             elif [ "$TYPE" = "CDROM" ]; then
                 IMG+="-$VM_ID-$DISK_ID"
@@ -1539,7 +1539,7 @@ oneVmVolumes()
             esac
         fi
         vmVolumes+="$IMG "
-        if boolTrue "$DEBUG_oneVmVolumes"; then
+        if boolTrue "DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
         vmDisks=$((vmDisks+1))
@@ -1549,11 +1549,11 @@ oneVmVolumes()
     if [ -n "$DISK_ID" ]; then
         IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
         vmVolumes+="$IMG "
-        if boolTrue "$DEBUG_oneVmVolumes"; then
+        if boolTrue "DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
     fi
-    if boolTrue "$DEBUG_oneVmVolumes"; then
+    if boolTrue "DEBUG_oneVmVolumes"; then
         splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT} ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}"
     fi
 }
@@ -1561,7 +1561,7 @@ oneVmVolumes()
 oneVmDiskSnapshots()
 {
     local VM_ID="$1" DISK_ID="$2"
-    if boolTrue "$DEBUG_oneVmDiskSnapshots_VERBOSE"; then
+    if boolTrue "DEBUG_oneVmDiskSnapshots_VERBOSE"; then
         splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID"
     fi
 
@@ -1592,7 +1592,7 @@ oneVmDiskSnapshots()
     unset i
     local _DISK_SNAPSHOTS="${XPATH_ELEMENTS[i++]}"
     DISK_SNAPSHOTS=(${_DISK_SNAPSHOTS})
-    if boolTrue "$DEBUG_oneVmDiskSnapshots"; then
+    if boolTrue "DEBUG_oneVmDiskSnapshots"; then
         splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID SNAPSHOTS:${#DISK_SNAPSHOTS[@]} SNAPSHOT_IDs:$_DISK_SNAPSHOTS "
     fi
 }
@@ -1600,7 +1600,7 @@ oneVmDiskSnapshots()
 oneVmSnapshots()
 {
     local VM_ID="$1" snapshot_id="$2" disk_id="$3"
-    if boolTrue "$DEBUG_oneVmSnapshots_VERBOSE"; then
+    if boolTrue "DEBUG_oneVmSnapshots_VERBOSE"; then
         splog "oneVmSnapshots() VM_ID:$VM_ID"
     fi
 
@@ -1661,7 +1661,7 @@ oneVmSnapshots()
         DISK_E="${XPATH_ELEMENTS[i++]}"
         DISK_F="${XPATH_ELEMENTS[i++]}"
     fi
-    if boolTrue "$DEBUG_oneVmSnapshots"; then
+    if boolTrue "DEBUG_oneVmSnapshots"; then
         splog "oneVmSnapshots() VM_ID:$VM_ID (U:$VM_UID/G:$VM_GID) vmsnap=$snapshot_id disk:$disk_id SNAPSHOT_IDs:${SNAPSHOT_IDS[@]} HYPERVISOR_IDs:${HYPERVISOR_IDS[@]}"
         splog "$CONTEXT_DISK_ID A:$DISK_A B:$DISK_B C:$DISK_C D:$DISK_D E:$DISK_E F:$DISK_F"
     fi
@@ -1708,7 +1708,7 @@ oneSnapshotLookup()
 
 # disable sp checkpoint transfer from file to block device
 # when the new code is enabled
-if boolTrue "$SP_CHECKPOINT_BD"; then
+if boolTrue "SP_CHECKPOINT_BD"; then
     SP_CHECKPOINT=
 fi
 

@@ -249,7 +249,7 @@ fi
 #-------------------------------------------------------------------------------
 
 if [ "$DRIVER" != "raw" ]; then
-    if boolTrue "$UPDATE_IMAGE_ON_IMPORT"; then
+    if boolTrue "UPDATE_IMAGE_ON_IMPORT"; then
         splog "Image template DRIVER=$DRIVER updating to DRIVER=raw"
         TMP_LOC="$(mktemp --directory --tmpdir cp-sp-XXXXXXXX)"
         TMP_XML="${TMP_LOC}/image-template"

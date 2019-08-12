@@ -54,7 +54,7 @@ if [ ! -t 0 ]; then
 fi
 
 if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
-    if boolTrue "$DEBUG_MIGRATE_LIVE"; then
+    if boolTrue "DEBUG_MIGRATE_LIVE"; then
         splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD (exit)"
     fi
     exit 0
@@ -82,7 +82,7 @@ for i in ${!DISK_ID_ARRAY[@]}; do
         if [ -n "$DISK_SOURCE" ]; then
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
             SP_VOL="${DISK_SOURCE##*/}"
-            if boolTrue "${DISK_CLONE_ARRAY[i]}"; then
+            if boolTrue "DISK_CLONE_ARRAY[i]"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             elif [ "${DISK_TYPE_ARRAY[i]}" = "CDROM" ]; then
                 # backward compatibility /clean up/
@@ -91,7 +91,7 @@ for i in ${!DISK_ID_ARRAY[@]}; do
             fi
             storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
         else
-            if boolTrue "$DEBUG_MIGRATE_LIVE"; then
+            if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
             fi
         fi
@@ -131,7 +131,7 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
 fi
 
 MONITOR_TM_MAD=
-if ! boolTrue "$DS_SHARED" "DS_SHARED"; then
+if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="$DS_TM_MAD"
 fi
 if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then

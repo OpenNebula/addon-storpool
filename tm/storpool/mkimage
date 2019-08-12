@@ -55,7 +55,7 @@ fi
 
 oneDatastoreInfo "$DS_ID"
 
-if boolTrue "$AUTO_TEMPLATE"; then
+if boolTrue "AUTO_TEMPLATE"; then
     if [ "$SP_PLACEALL" = "" ]; then
         error_message "The template of the datastore with ID $DS_ID is missing 'SP_PLACEALL' attribute."
         exit -1
@@ -135,7 +135,7 @@ storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
 MONITOR_TM_MAD=
-if ! boolTrue "$DS_SHARED" "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
+if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
     MONITOR_TM_MAD="storpool"
 fi
 
