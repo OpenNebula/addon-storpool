@@ -56,7 +56,7 @@ oneDsDriverAction "$DRIVER_PATH"
 
 SP_VOL="${ONE_PX}-img-$ID"
 
-storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
 
 if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"

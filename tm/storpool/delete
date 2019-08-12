@@ -67,7 +67,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 FORMAT="swap"
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
-            storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+            storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
             if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
             fi
@@ -84,7 +84,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 #        splog "[SYSTEM_DS] delete volatile $SP_VOL"
         for SP_VOL in `storpoolVolumeStartswith "$SP_VOL"`; do
-            storpoolVolumeDelete "$SP_VOL" "force"
+            storpoolVolumeDelete "$SP_VOL" "force" "" "$REMOTE_BACKUP_DELETE"
             if boolTrue "$VMSNAPSHOT_DELETE_ON_TERMINATE"; then
                 storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
             fi
@@ -122,7 +122,7 @@ if boolTrue "$CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     log "Deleting $DST_PATH ($SP_VOL)"
 
-    storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+    storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
 elif [ "$TYPE" = "CDROM" ]; then
     # backward compatibility
 	if storpoolVolumeExists "$SP_VOL"; then
