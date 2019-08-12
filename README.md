@@ -67,6 +67,7 @@ Support standard OpenNebula datastore operations:
 * (optional) support VM checkpoint file directly on StorPool backed block device (see limitations)
 * (optional) helper tool to enable iothreads, ioeventfd, fix nqueues to match the number of VCPUs, set cpu-model by altering libvirt's domain XML
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
+* (optional) on image delete send volume snapshot to a remote StorPool cluster
 
 ## Limitations
 

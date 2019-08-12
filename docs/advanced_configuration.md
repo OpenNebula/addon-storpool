@@ -2,7 +2,11 @@
 
 #### StorPool template management
 
-##### StorPool template management via datastore variables
+##### StorPool volume template management
+
+Set `NO_VOLUME_TEMPLATE=1` in storpool-addonrc to not enforce the datastore template on the StorPool volumes. The newly created images and the contextualization ISO images still will have datastore template enforced.
+
+##### StorPool template management via datastore variables (obsolete)
 
 The template management is disabled by default (recommended). To enable set `AUTO_TEMPLATE=1` in storpool-addonrc file.
 ```
@@ -28,10 +32,6 @@ The following variables should be set on all StorPool backed datastores:
 When adding a new datastore the reported size will appear after a refresh cycle of the cached StorPool data. Default is every 4th minute set in `/etc/cron.d/addon-storpoolrc`.
 
 > :exclamation: The implemented management of StorPool templates is not deleting StorPool templates! After deleting a datastore in OpenNebula the corresponding template in StorPool should be deleted manually.
-
-##### StorPool volume template management
-
-Set `NO_VOLUME_TEMPLATE=1` in storpool-addonrc to not enforce the datastore template on the StorPool volumes. The newly created images and the contextualization ISO images still will have datastore template enforced.
 
 #### StorPool backed SYSTEM datastore on shared filesystem
 
@@ -154,6 +154,21 @@ EOF
 
 # restart oned to refresh the configuration
 systemctl restart opennebula
+```
+
+### Send volume snapshot to a remote StorPool cluster when deleting a volume
+
+```
+REMOTE_BACKUP_DELETE=<remote_location>:<optional_argumets>
+```
+There is an option to send last snapshot to a remote StorPool cluster when deleting a disk image. The configuration is as follow:
+ * `remote_location` - the name of the remote StorPool cluster to send volume snapshot to
+ * `optional_argumets` - extra arguments
+
+For example, to send volume snapshot to a remote cluster with name _clusterB_ and tag the volumes with tag _del=y_ set 
+
+```
+REMOTE_BACKUP_DELETE="clusterB:tag del=y"
 ```
 
 ### space usage monitoring configuration
