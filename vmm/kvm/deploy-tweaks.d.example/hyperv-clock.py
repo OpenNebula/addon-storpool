@@ -53,7 +53,6 @@ if root.find("./features/hyperv") is not None:
         clock = ET.SubElement(root, 'clock', {
             'offset' : 'utc',
             })
-        clock = ET.Element("clock", offset = 'utc')
 
     # improve clock settings for windows based hosts
     clock.append(ET.Element("timer", name = 'hypervclock', present = "yes"))
