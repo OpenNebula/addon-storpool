@@ -95,6 +95,9 @@ VM_TAG=nvm
 # common opennebula tools args
 ONE_ARGS=
 
+declare -A SYSTEM_COMPATIBLE_DS
+SYSTEM_COMPATIBLE_DS["ceph"]=1
+
 function lookup_file()
 {
     local _FILE="$1" _CWD="${2:-$PWD}"
@@ -1519,8 +1522,10 @@ oneVmVolumes()
         DISK_ID="${DISK_ID_A[$ID]}"
         if [ "${TM_MAD:0:8}" != "storpool" ]; then
             splog "DISK_ID:$DISK_ID TYPE:$TYPE TM_MAD:$TM_MAD "
-            oneVmVolumesNotStorPool="$TM_MAD:disk.$DISK_ID"
-            continue
+            if ! boolTrue "SYSTEM_COMPATIBLE_DS[$TM_MAD]"; then
+                oneVmVolumesNotStorPool="$TM_MAD:disk.$DISK_ID"
+                continue
+            fi
         fi
         IMG="${ONE_PX}-img-$IMAGE_ID"
         if [ -n "$IMAGE_ID" ]; then
