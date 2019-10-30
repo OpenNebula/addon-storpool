@@ -26,10 +26,10 @@
 #    lcm_state = "HOTPLUG_NIC",
 #    command   = "net_fw_hook",
 #    remote    = "YES",
-#    arguments = "-i $TEMPLATE" ]
+#    arguments = "$TEMPLATE" ]
 #
 
-#DEBUG=1
+DEBUG=0
 
 me=${0##*/}
 CWD="$(dirname "$0")"
@@ -59,6 +59,8 @@ done < <(base64 -d "$tmpb64" | $XPATH --stdin \
    /VM/ID \
    $ALIAS_XPATH/ALIAS_ID \
    $ALIAS_XPATH/IP \
+   $ALIAS_XPATH/IP6_GLOBAL \
+   $ALIAS_XPATH/IP6_LINK \
    $ALIAS_XPATH/NAME \
    $ALIAS_XPATH/PARENT_ID \
 )
@@ -66,10 +68,12 @@ unset i
 VM_ID="${XE[i++]}"
 A_ID="${XE[i++]}"
 A_IP="${XE[i++]}"
+A_IP6_GLOBAL="${XE[i++]}"
+A_IP6_LINK="${XE[i++]}"
 A_NAME="${XE[i++]}"
 A_PARENT_ID="${XE[i++]}"
 
-if [ -z "$A_IP" ]; then
+if [ -z "$A_IP" ] && [ -z "$A_IP6_GLOBAL" ]; then
     logger -t "$me" -- "No alias IP. exit 0"
     exit 0
 fi
@@ -112,26 +116,57 @@ for idx in ${NIC_ALIAS_IDS//,/ }; do
 done
 
 chain="one-${VM_ID}-${A_PARENT_ID}-ip-spoofing"
+chain6="one-${VM_ID}-${A_PARENT_ID}-ip6-spoofing"
 
 if [ -n "$attach" ]; then
-    # alias add - ADD ipset
-    sudo ipset -exist add "$chain" "$A_IP"
-    ret=$?
-    if [ $ret -ne 0 ]; then
-        logger -t "$me" -- "VM $VM_ID NIC_ALIAS[ID=$A_ID, IP=$A_IP, PARENT=$A_PARENT_ID] ipset ADD failed ($ret)"
-        sudo ipset save | grep "$chain" >"/tmp/${me}-${ts}-${chain}.ADD"
-    elif [ -n "$DEBUG" ]; then
-        logger -t "$me" -- "VM $VM_ID add $chain $A_IP ($ret)"
+    # alias add - ADD ipset IPv4
+    if [ -n "$A_IP" ]; then
+        sudo ipset -exist add "$chain" "$A_IP"
+        ret=$?
+        if [ $ret -ne 0 ]; then
+            logger -t "$me" -- "VM $VM_ID NIC_ALIAS[ID=$A_ID, IP=$A_IP, PARENT=$A_PARENT_ID] ipset ADD failed ($ret)"
+            sudo ipset save | grep "$chain" >"/tmp/${me}-${ts}-${chain}.ADD"
+        elif [ -n "$DEBUG" ]; then
+            logger -t "$me" -- "VM $VM_ID add $chain $A_IP ($ret)"
+        fi
+    fi
+
+    # alias add - ADD ipset IPv6
+    if [ -n "$A_IP6_GLOBAL" ]; then
+        sudo ipset -exist add "$chain6" "$A_IP6_GLOBAL"
+        ret=$?
+        if [ $ret -ne 0 ]; then
+            logger -t "$me" -- "VM $VM_ID NIC_ALIAS[ID=$A_ID, IP=$A_IP6_GLOBAL, PARENT=$A_PARENT_ID] ipset ADD failed ($ret)"
+            sudo ipset save | grep "$chain6" >"/tmp/${me}-${ts}-${chain6}.ADD"
+        elif [ -n "$DEBUG" ]; then
+            logger -t "$me" -- "VM $VM_ID add $chain6 $A_IP6_GLOBAL ($ret)"
+        fi
+        sudo ipset -exist add "$chain6" "$A_IP6_LINK"
     fi
 else
-    # alias deleted - DEL ipset
-    sudo ipset -exist del "$chain" "$A_IP"
-    ret=$?
-    if [ $ret -ne 0 ]; then
-        logger -t "$me" -- "VM $VM_ID NIC_ALIAS[ID=$A_ID, IP=$A_IP, PARENT_ID=$A_PARENT_ID] ipset DEL failed ($ret)"
-        sudo ipset save |grep "$chain" >"/tmp/${me}-${ts}-${chain}.DEL"
-    elif [ -n "$DEBUG" ]; then
-        logger -t "$me" -- "VM $VM_ID del $chain $A_IP ($ret)"
+    # alias deleted - DEL ipset IPv4
+    if [ -n "$A_IP" ]; then
+        sudo ipset -exist del "$chain" "$A_IP"
+        ret=$?
+        if [ $ret -ne 0 ]; then
+            logger -t "$me" -- "VM $VM_ID NIC_ALIAS[ID=$A_ID, IP=$A_IP, PARENT_ID=$A_PARENT_ID] ipset DEL failed ($ret)"
+            sudo ipset save |grep "$chain" >"/tmp/${me}-${ts}-${chain}.DEL"
+        elif [ -n "$DEBUG" ]; then
+            logger -t "$me" -- "VM $VM_ID del $chain $A_IP ($ret)"
+        fi
+    fi
+
+    # alias deleted - DEL ipset IPv6
+    if [ -n "$A_IP6_GLOBAL" ]; then
+        sudo ipset -exist del "$chain6" "$A_IP6_GLOBAL"
+        ret=$?
+        if [ $ret -ne 0 ]; then
+            logger -t "$me" -- "VM $VM_ID NIC_ALIAS[ID=$A_ID, IP=$A_IP6_GLOBAL, PARENT_ID=$A_PARENT_ID] ipset DEL failed ($ret)"
+            sudo ipset save |grep "$chain6" >"/tmp/${me}-${ts}-${chain6}.DEL"
+        elif [ -n "$DEBUG" ]; then
+            logger -t "$me" -- "VM $VM_ID del $chain6 $A_IP6_GLOBAL ($ret)"
+        fi
+        sudo ipset -exist del "$chain6" "$A_IP6_LINK"
     fi
 fi
 exit 0
