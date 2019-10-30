@@ -18,7 +18,7 @@
 #
 
 # configure in /etc/one/oned.conf
-#
+#```
 #VM_HOOK = [
 #    name      = "net_fw_hook",
 #    on        = "CUSTOM",
@@ -26,10 +26,14 @@
 #    lcm_state = "HOTPLUG_NIC",
 #    command   = "net_fw_hook",
 #    remote    = "YES",
-#    arguments = "$TEMPLATE" ]
-#
+#    arguments = "-i $TEMPLATE" ]
+#```
+# Note that the example is using a patched HM_MAD.
+# The patch could be found in _patches/mads/5.8.1/one_hm_rb.patch_
+# To use with the upstream HM_MAD pass $TEMPLATE without '-i' argument.
 
-DEBUG=0
+# Any non-empty string will trigger the debug logging
+#DEBUG=1
 
 me=${0##*/}
 CWD="$(dirname "$0")"
