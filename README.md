@@ -21,7 +21,7 @@ More info:
 
 ## Compatibility
 
-This add-on is compatible with OpenNebula 5.4 - 5.8 and StorPool 18.02 - 19.01.
+This add-on is compatible with OpenNebula 5.4 - 5.10 and StorPool 18.02 - 19.01.
 The additional extras requires latest stable versions of OpenNebula and StorPool.
 
 ## Requirements
