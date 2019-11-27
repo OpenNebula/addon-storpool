@@ -2,23 +2,6 @@
 
 ### Recommended configuration
 
-#### /etc/one/oned.conf
-
-##### DEFAULT_DEVICE_PREFIX
-
-*virtio-scsi* is slightly slower than *virtio-blk* but is preferred because of it's support of TRIM/discard.
-
-This variable could be overridden by the IMAGE or VM template definition! Please take attention when defining the VM templates!
-
-(default)
-
-```DEFAULT_DEVICE_PREFIX = "hd"```
-
-(suggested)
-
-```DEFAULT_DEVICE_PREFIX = "sd"```
-
-
 #### /etc/one/vmm_exec/vmm_exec_kvm.conf
 
 Note that these are the default values and could be overridden in the IMAGE and VM templates!
