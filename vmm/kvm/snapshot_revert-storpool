@@ -77,7 +77,6 @@ EOF
         volume="${snap%-$SNAP_ID}"
         [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="ro"
         storpoolVolumeDetach "$volume" "force" "$VMHOST" "all"
-#        trapAdd APPEND "storpoolVolumeAttach \"$volume\" \"$VMHOST\" \"$mode\""
         storpoolVolumeInfo "$volume"
         OLD_SIZE_M=$((V_SIZE/1024/1024))
         if [ "$V_TYPE" = "CDROM"  ]; then
@@ -85,7 +84,6 @@ EOF
         fi
         tmpVolume="${volume}-${SP_TMP}"
         storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null || finish=0
-#       trapAdd APPEND "storpoolRetry volume \"$tmpVolume\" rename \"$volume\""
         storpoolSnapshotClone "$snap" "$volume" "$V_TEMPLATE_NAME" || finish=0
         storpoolVolumeInfo "$volume"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
