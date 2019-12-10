@@ -129,9 +129,11 @@ if boolTrue "CLONE"; then
     storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
 elif [ "$TYPE" = "CDROM" ]; then
     # backward compatibility
-	if storpoolVolumeExists "$SP_VOL"; then
-	    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "" "$READONLY"
-	    storpoolVolumeTag "$SP_VOL" ""
+	if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then
+        if storpoolVolumeExists "$SP_VOL"; then
+            storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "" "$READONLY"
+            storpoolVolumeTag "$SP_VOL" ""
+        fi
 	fi
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
