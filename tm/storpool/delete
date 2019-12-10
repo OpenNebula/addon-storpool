@@ -102,9 +102,13 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         fi
     fi
     RM_CMD="rm -rf '$DST_PATH'"
-    splog "run RM_CMD on $DST_HOST ($DST_PATH)"
-    ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
-             "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+    if hostReachable "$DST_HOST"; then
+        splog "run RM_CMD on $DST_HOST ($DST_PATH)"
+        ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+              "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+    else
+        splog "Host unreachable: $DS_HOST, skipping $RM_CMD"
+    fi
 
     splog "END $VM_ID [SYSTEM_DS]"
     exit 0
@@ -145,9 +149,13 @@ else
 fi
 
 RM_CMD="rm -rf '$DST_PATH'*"
-splog "run RM_CMD on $DST_HOST ($DST_PATH)"
-ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
-          "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+if hostReachable "$DST_HOST"; then
+    splog "run RM_CMD on $DST_HOST ($DST_PATH)"
+    ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
+              "Error deleting $SP_VOL in $DST_HOST($DST_PATH)"
+else
+    splog "Host unreachable: $DS_HOST, skipping $RM_CMD"
+fi
 
 splog "END $VM_ID"
 exit 0

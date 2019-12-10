@@ -1743,3 +1743,8 @@ EOF`
         exit $SSH_EXEC_RC
     fi
 }
+
+hostReachable()
+{
+	ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
+}
