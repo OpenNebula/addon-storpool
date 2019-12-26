@@ -58,6 +58,9 @@ DEBUG_oneDsDriverAction=
 
 # Manage StorPool templates from the DATASTORE variables (not recommended)
 AUTO_TEMPLATE=0
+# Propagate the changes to the template to the volumes in the template
+# Require AUTO_TEMPLATE=1
+SP_TEMPLATE_PROPAGATE=1
 
 # enable the alternate VM Snapshot function to do atomic snapshots
 VMSNAPSHOT_OVERRIDE=1
@@ -481,7 +484,7 @@ function storpoolRetry() {
 
 function storpoolTemplate()
 {
-    local _SP_TEMPLATE="$1"
+    local _SP_TEMPLATE="$1" _SP_PROPAGATE=
     if ! boolTrue "AUTO_TEMPLATE"; then
         return 0
     fi
@@ -497,9 +500,15 @@ function storpoolTemplate()
         splog "Datastore template $_SP_TEMPLATE with unknown value for SP_REPLICATION attribute=${SP_REPLICATION}"
         exit -1
     fi
-
+    if boolTrue "SP_TEMPLATE_PROPAGATE"; then
+        _SP_PROPAGATE=1
+	fi
     if [ -n "$_SP_TEMPLATE" ] && [ -n "$SP_REPLICATION" ] && [ -n "$SP_PLACEALL" ] && [ -n "$SP_PLACETAIL" ]; then
-        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" ${SP_PLACEHEAD:+ placeHead $SP_PLACEHEAD} ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} >/dev/null
+        storpoolRetry template "$_SP_TEMPLATE" replication "$SP_REPLICATION" \
+		              placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" \
+					  ${SP_PLACEHEAD:+ placeHead $SP_PLACEHEAD} \
+					  ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} \
+					  ${_SP_PROPAGATE:+propagate} >/dev/null
     fi
 }
 
@@ -1077,6 +1086,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/SP_IOPS \
                             /DATASTORE/TEMPLATE/SP_BW \
                             /DATASTORE/TEMPLATE/SP_SYSTEM \
+                            /DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
                             /DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
                             /DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
                             /DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
@@ -1105,6 +1115,10 @@ function oneDatastoreInfo()
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] ; then
         SP_SYSTEM="${_TMP}"
+    fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] ; then
+        SP_TEMPLATE_PROPAGATE="${_TMP}"
     fi
     SP_API_HTTP_HOST="${XPATH_ELEMENTS[i++]}"
     SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
@@ -1263,6 +1277,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_CLONE_GW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_SYSTEM \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE \
@@ -1311,6 +1326,10 @@ function oneDsDriverAction()
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] ; then
         SP_SYSTEM="${_TMP}"
+    fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] ; then
+        SP_TEMPLATE_PROPAGATE="${_TMP}"
     fi
     NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
@@ -1377,6 +1396,7 @@ ${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }\
 ${SP_IOPS:+SP_IOPS=$SP_IOPS }\
 ${SP_BW:+SP_BW=$SP_BW }\
 ${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }\
+${SP_TEMPLATE_PROPAGATE:+SP_TEMPLATE_PROPAGATE=$SP_TEMPLATE_PROPAGATE }\
 ${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }\
 "
     splog "$_MSG"
