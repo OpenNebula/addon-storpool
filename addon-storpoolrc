@@ -17,6 +17,12 @@ MKSWAP="sudo /sbin/mkswap"
 # Default: 0 (disabled)
 #AUTO_TEMPLATE=0
 
+# (obsolete)
+# Global option to manage template propagate
+#
+# Default: 1 (enabled)
+#SP_TEMPLATE_PROPAGATE=1
+
 # Run stats collecting only on the LEADER instance
 # If autodetction fails set the leader IP manually
 # Or to administratively disable set to 'disabled'
