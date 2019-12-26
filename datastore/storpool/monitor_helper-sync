@@ -314,7 +314,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 	[ -n "$sp_host" ] && export SP_API_HTTP_HOST="$sp_host" || unset SP_API_HTTP_HOST
 	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
 	[ -n "$sp_port" ] && export SP_API_HTTP_PORT="$sp_port" || unset SP_API_HTTP_PORT
-	SP_TEMPLATE_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
+	SP_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
 	if boolTrue "MONITOR_SYNC_DEBUG"; then
 		if [ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]; then
 			splog "API_TOKEN:${SP_AUTH_TOKEN:+DEFINED} API_HOST:${SP_API_HTTP_HOST} API_PORT:${SP_API_HTTP_PORT}"
@@ -462,7 +462,7 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		if [ -n "$cmd" ]; then
 			storpool -B template "$template_name" $cmd
 			splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
-			if boolTrue "SP_TEMPLATE_PROPAGATE"; then
+			if boolTrue "SP_PROPAGATE"; then
 				storpool -B template "$template_name" propagate 2>&1 >/dev/null
 				splog "($?) template $template_name propagate"
 			fi
