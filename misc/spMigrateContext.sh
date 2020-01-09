@@ -2,7 +2,7 @@
 #
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015-2018, StorPool (storpool.com)                               #
+# Copyright 2015-2020, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
 #                                                                            #
