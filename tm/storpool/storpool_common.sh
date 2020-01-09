@@ -97,6 +97,8 @@ UPDATE_IMAGE_ON_IMPORT=1
 VM_TAG=nvm
 # common opennebula tools args
 ONE_ARGS=
+#
+PROPAGATE_YES=1
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -508,7 +510,7 @@ function storpoolTemplate()
 		              placeAll "$SP_PLACEALL" placeTail "$SP_PLACETAIL" \
 					  ${SP_PLACEHEAD:+ placeHead $SP_PLACEHEAD} \
 					  ${SP_IOPS:+iops "$SP_IOPS"} ${SP_BW:+bw "$SP_BW"} \
-					  ${_SP_PROPAGATE:+propagate} >/dev/null
+					  ${_SP_PROPAGATE:+propagate ${PROPAGATE_YES:+yes}} >/dev/null
     fi
 }
 

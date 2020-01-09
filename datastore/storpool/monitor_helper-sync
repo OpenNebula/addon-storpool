@@ -70,6 +70,8 @@ ONEDATASTORE_XML="ds.xml"
 
 AUTO_TEMPLATE=0
 
+PROPAGATE_YES=1
+
 # load config
 driverPath="${0%/*}"
 if [ -f "${driverPath}/../../addon-storpoolrc" ]; then
@@ -463,8 +465,8 @@ for i in ${!DS_ID_ARRAY[@]}; do
 			storpool -B template "$template_name" $cmd
 			splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
 			if boolTrue "SP_PROPAGATE"; then
-				storpool -B template "$template_name" propagate 2>&1 >/dev/null
-				splog "($?) template $template_name propagate"
+				storpool -B template "$template_name" propagate ${PROPAGATE_YES:+yes} 2>&1 >/dev/null
+				splog "($?) template $template_name propagate ${PROPAGATE_YES:+yes}"
 			fi
 		fi
 	fi
