@@ -1,0 +1,106 @@
+#!/bin/bash
+#
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2020, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+
+set -e
+
+VMID="$1"
+VC_POLICY="$2"
+
+LOG_PREFIX="vc"
+ONE_HOME="${ONE_HOME:-/var/lib/one}"
+DRIVER_PATH="${ONE_HOME}/remotes/hooks/volumecare/"
+cd "$DRIVER_PATH"
+
+source /var/lib/one/remotes/tm/storpool/storpool_common.sh
+
+function alterVcPolicy()
+{
+    local vmId="$1" vcPolicy="$2"
+    oneVmVolumes "$vmId"
+
+    declare -A vols
+
+    for disk in $vmDisksMap; do
+        volume="${disk%:*}"
+        vols[$volume]="$volume"
+    done
+
+    if boolTrue "DEBUG_alterVcPolicy"; then
+        splog "VC_POLICY:$VC_POLICY $vmDisksMap"
+    fi
+
+    if [ -z "$volumeListXml" ]; then
+        volumeListXml="$(mktemp -t)"
+        trapAdd "rm -f $volumeListXml"
+        storpool -B -j volume list >"$volumeListXml"
+    fi
+
+    while read -u 7 l; do
+        v="${l%%\;*}"
+        v="${v//\"/}"
+        vcp="${l##*\;}"
+        vcp="${vcp//\"/}"
+        if [ -n "${vols[$v]}" ]; then
+            if [ "$VC_POLICY" != "$vcp" ]; then
+                splog "volume:$v vc-policy=$vcp"
+                storpool -B volume "$v" tag "vc-policy"="$VC_POLICY"
+                splog "($?) storpool -B volume $v tag vc-policy=$VC_POLICY"
+            fi
+        fi
+    done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListXml")
+    unset vmDisksMap
+}
+
+if [ -n "$VMID" ]; then
+    alterVcPolicy "$VMID"
+else
+    # try detecting RAFT_LEADER_IP from opennebula's config
+    if [ -z "$RAFT_LEADER_IP" ] && [ -f "${ONE_HOME}/config" ]; then
+        #RAFT_LEADER_HOOK=ARGUMENTS=leader vlan11 10.163.1.250,COMMAND=raft/vip.sh
+        RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "${ONE_HOME}/config" | tail -n 1)"
+        if [ -n "$RAFT_IP" ]; then
+            RAFT_LEADER_IP="${RAFT_IP%%/*}"
+            RAFT_LEADER_IP="${RAFT_IP%%,*}"
+        fi
+    fi
+    if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
+        tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
+        if [ "${tmp:0:5}" == "local" ]; then
+            if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+                splog "Found leader IP ($RAFT_LEADER_IP)."
+            fi
+        else
+            if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+                splog "There is no leader IP found ($RAFT_LEADER_IP). Exit."
+            fi
+            exit 0
+        fi
+    fi
+
+    XPATH="$ONE_HOME/remotes/datastore/xpath.rb --stdin"
+    while read -u 4 -d' ' VMID; do
+        alterVcPolicy "$VMID"
+    done 4< <(onevm list -x | $XPATH %m%/VM_POOL/VM/ID)
+fi
+
+if [ -n "$volumeListXml" ]; then
+    rm -f "$volumeListXml"
+    trapDel "rm -f $volumeListXml"
+fi
+

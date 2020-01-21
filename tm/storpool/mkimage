@@ -134,6 +134,10 @@ storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
 storpoolVolumeTag "$SP_VOL" "$VM_ID"
 
+if [ -n "$VC_POLICY" ]; then
+    storpoolVolumeTag "$SP_VOL" "$VC_POLICY" "vc-policy"
+fi
+
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
     MONITOR_TM_MAD="storpool"

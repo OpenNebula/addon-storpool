@@ -145,6 +145,8 @@ else
 
     storpoolVolumeTag "$SP_VOL" ""
 
+    storpoolVolumeTag "$SP_VOL" "" "vc-policy"
+
     if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
         storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
     fi

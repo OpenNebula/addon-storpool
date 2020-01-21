@@ -1,0 +1,7 @@
+NAME = "vc-policy"
+TYPE = "api"
+CALL = "one.vm.update"
+ARGUMENTS = "$API"
+ARGUMENTS_STDIN="YES"
+COMMAND="volumecare/vc-policy.sh"
+
