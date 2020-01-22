@@ -740,9 +740,19 @@ function storpoolSnapshotRevert()
 
 function storpoolVolumeTag()
 {
-    local _SP_VOL="$1" _TAG_VAL="$2" _VM_TAG="${3:-$VM_TAG}"
-    if [ -n "${_VM_TAG}" ]; then
-        storpoolRetry volume "$_SP_VOL" tag "${_VM_TAG}"="$_TAG_VAL" >/dev/null
+    local _SP_VOL="$1" _TAG_VAL="$2" _TAG_KEY="${3:-$VM_TAG}"
+    local _OFS=$IFS tagCmd=
+    IFS=\;
+    tagVals=(${_TAG_VAL})
+    tagKeys=(${_TAG_KEY})
+    IFS=$_OFS
+    local tagCmd=
+    for i in ${!tagKeys[*]}; do
+        [ -n "${tagKeys[i]}" ] || continue
+		tagCmd+="tag ${tagKeys[i]}=${tagVals[i]} "
+    done
+    if [ -n "$tagCmd" ]; then
+        storpoolRetry volume "$_SP_VOL" $tagCmd >/dev/null
     fi
 }
 
@@ -982,7 +992,8 @@ function oneVmInfo()
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/TM_MAD \
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
-                            /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
+                            /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
+                            /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
@@ -1015,6 +1026,7 @@ function oneVmInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
+    VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "DEBUG_oneVmInfo" || return
 
@@ -1039,6 +1051,7 @@ ${VM_TM_MAD:+VM_TM_MAD=$VM_TM_MAD }\
 ${VM_DS_ID:+VM_DS_ID=$VM_DS_ID }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
+${VC_POLICY:+VC_POLICY='$VC_POLICY' }\
 "
     _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
     [ -n "$_MSG" ] && splog "$_MSG"
@@ -1046,7 +1059,7 @@ ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
 
 function oneDatastoreInfo()
 {
-    local _DS_ID="$1"
+    local _DS_ID="$1" local _DS_POOL_FILE="$2"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
 
     local tmpXML="$(mktemp -t oneDatastoreInfo-${_DS_ID}-XXXXXX)"
@@ -1058,7 +1071,27 @@ function oneDatastoreInfo()
         exit $ret
     fi
     trapAdd "rm -f '$tmpXML'"
-    onedatastore show $ONE_ARGS -x "$_DS_ID" >"$tmpXML"
+
+    if [ -n "$_DS_POOL_FILE" ]; then
+        if [ ! -f "$_DS_POOL_FILE" ]; then
+            onedatastore list $ONE_ARGS -x >"$_DS_POOL_FILE"
+            ret=$?
+            if boolTrue "DEBUG_oneDatastoreInfo"; then
+                splog "($?) onedatastore list $ONE_ARGS -x >$_DS_POOL_FILE" 
+            fi
+            if [ $ret -ne 0 ]; then
+                errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
+                splog "$errmsg"
+                exit $ret
+            fi
+        fi
+        xmllint -xpath "/DATASTORE_POOL/DATASTORE[ID=$_DS_ID]" "$_DS_POOL_FILE" >"$tmpXML"
+        ret=$?
+    else
+        onedatastore show $ONE_ARGS -x "$_DS_ID" >"$tmpXML"
+        ret=$?
+    fi
+
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -1097,6 +1130,7 @@ function oneDatastoreInfo()
                             /DATASTORE/TEMPLATE/DISKSNAPSHOT_LIMIT \
                             /DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE)
     rm -f "$tmpXML"
+    trapDel "rm -f '$tmpXML'"
     unset i
     DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -1185,15 +1219,17 @@ function oneTemplateInfo()
                     /VM/STATE \
                     /VM/LCM_STATE \
                     /VM/PREV_STATE \
-                    /VM/TEMPLATE/CONTEXT/DISK_ID)
+                    /VM/TEMPLATE/CONTEXT/DISK_ID \
+					/VM/USER_TEMPLATE/VC_POLICY)
     unset i
     _VM_ID=${XPATH_ELEMENTS[i++]}
     _VM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
+    VC_POLICY="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
-        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID"
+        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
@@ -1461,9 +1497,9 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 
 oneVmVolumes()
 {
-    local VM_ID="$1"
+    local VM_ID="$1" VM_POOL_FILE="$2"
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID"
+        splog "oneVmVolumes() VM_ID:$VM_ID $VM_POOL_FILE"
     fi
 
     local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
@@ -1475,8 +1511,13 @@ oneVmVolumes()
         exit $ret
     fi
     trapAdd "rm -f \"$tmpXML\""
-    onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
-    ret=$?
+    if [ -f "$VM_POOL_FILE" ]; then
+        xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$VM_POOL_FILE" >"$tmpXML"
+        ret=$?
+    else
+        onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
+        ret=$?
+    fi
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmVolumes) Error: Can't get VM info! $(head -n 1 "$tmpXML") (ret:$ret)"
         log_error "$errmsg"
@@ -1500,8 +1541,10 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/IMAGE_ID \
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
-        /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT)
+        /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
+        /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
+    trapDel "rm -f \"$tmpXML\""
     unset i
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
@@ -1522,6 +1565,7 @@ oneVmVolumes()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
+    VC_POLICY="${XPATH_ELEMENTS[i++]}"
     local IMG=
     _OFS=$IFS
     IFS=';'
@@ -1581,7 +1625,7 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT} ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${VC_POLICY:+ VC_POLICY=$VC_POLICY}"
     fi
 }
 

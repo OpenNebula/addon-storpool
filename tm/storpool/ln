@@ -112,7 +112,7 @@ fi
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
-storpoolVolumeTag "$SP_VOL" "$VM_ID"
+storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
 
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information
