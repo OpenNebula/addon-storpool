@@ -1466,9 +1466,9 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 
 oneVmVolumes()
 {
-    local VM_ID="$1"
+    local VM_ID="$1" VM_POOL_FILE="$2"
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID"
+        splog "oneVmVolumes() VM_ID:$VM_ID $VM_POOL_FILE"
     fi
 
     local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
@@ -1480,8 +1480,13 @@ oneVmVolumes()
         exit $ret
     fi
     trapAdd "rm -f \"$tmpXML\""
-    onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
-    ret=$?
+    if [ -f "$VM_POOL_FILE" ]; then
+        xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$VM_POOL_FILE" >"$tmpXML"
+        ret=$?
+    else
+        onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
+        ret=$?
+    fi
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmVolumes) Error: Can't get VM info! $(head -n 1 "$tmpXML") (ret:$ret)"
         log_error "$errmsg"

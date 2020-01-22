@@ -29,10 +29,36 @@ cd "$DRIVER_PATH"
 
 source /var/lib/one/remotes/tm/storpool/storpool_common.sh
 
+TEMP_DIR="$(mktemp -d)"
+trapAdd "rm -rf '$TEMP_DIR'"
+
 function alterVcPolicy()
 {
-    local vmId="$1" vcPolicy="$2"
-    oneVmVolumes "$vmId"
+    local vmId="$1" vmPool="$2"
+
+    if [ -z "$vmId" ]; then
+        if [ -n "$vmPool" ]; then
+            splog "Error! Something wen't wrong!"
+            exit 1
+        fi
+        vmPool="${TEMP_DIR}/vm_pool.xml"
+        onevm list -x --extended >"$vmPool"
+        ret=$?
+        if boolTrue "DEBUG_alterVcPolicy"; then
+            splog "($ret) onevm list $vmPool"
+        fi
+        if [ $ret -ne 0 ]; then
+            splog "Error! Can't get VM list!"
+            return 1
+        fi
+        while read -u 4 -d' ' VMID; do
+            alterVcPolicy "$VMID" "$vmPool"
+        done 4< <(cat "$vmPool" | \
+            "${ONE_HOME}/remotes/datastore/xpath.rb" --stdin %m%/VM_POOL/VM/ID)
+        return 0
+    fi
+
+    oneVmVolumes "$vmId" "$vmPool"
 
     declare -A vols
 
@@ -42,23 +68,24 @@ function alterVcPolicy()
     done
 
     if boolTrue "DEBUG_alterVcPolicy"; then
-        splog "VC_POLICY:$VC_POLICY $vmDisksMap"
+        splog "VM $vmId VC_POLICY:$VC_POLICY $vmDisksMap"
     fi
 
     if [ -z "$volumeListXml" ]; then
-        volumeListXml="$(mktemp -t)"
-        trapAdd "rm -f $volumeListXml"
+        volumeListXml="${TEMP_DIR}/volumeList.json"
         storpool -B -j volume list >"$volumeListXml"
+        ret=$?
+        if boolTrue "DEBUG_alterVcPolicy"; then
+            splog "($ret) volume list $volumeListXml"
+        fi
     fi
 
     while read -u 7 l; do
         v="${l%%\;*}"
-        v="${v//\"/}"
         vcp="${l##*\;}"
-        vcp="${vcp//\"/}"
         if [ -n "${vols[$v]}" ]; then
             if [ "$VC_POLICY" != "$vcp" ]; then
-                splog "volume:$v vc-policy=$vcp"
+                splog "volume:$v current vc-policy=$vcp"
                 storpool -B volume "$v" tag "vc-policy"="$VC_POLICY"
                 splog "($?) storpool -B volume $v tag vc-policy=$VC_POLICY"
             fi
@@ -92,15 +119,9 @@ else
             exit 0
         fi
     fi
-
-    XPATH="$ONE_HOME/remotes/datastore/xpath.rb --stdin"
-    while read -u 4 -d' ' VMID; do
-        alterVcPolicy "$VMID"
-    done 4< <(onevm list -x | $XPATH %m%/VM_POOL/VM/ID)
+    alterVcPolicy
 fi
 
-if [ -n "$volumeListXml" ]; then
-    rm -f "$volumeListXml"
-    trapDel "rm -f $volumeListXml"
-fi
+rm -rf "$TEMP_DIR"
+trapDel "rm -f '$TEMP_DIR'"
 
