@@ -84,9 +84,7 @@ splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLAT
 
 storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
-storpoolVolumeTag "$SP_VOL" ""
-
-storpoolVolumeTag "$SP_VOL" "" "vc-policy"
+storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
 
 splog "deleting $SRC_PATH on $SRC_HOST"
 ssh_exec_and_log "$SRC_HOST" "rm -vf ${SRC_PATH}*" \

@@ -86,11 +86,7 @@ fi
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
-storpoolVolumeTag "$SP_VOL" "$VM_ID"
-
-if [ -n "$VC_POLICY" ]; then
-    storpoolVolumeTag "$SP_VOL" "$VC_POLICY" "vc-policy"
-fi
+storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
 
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information

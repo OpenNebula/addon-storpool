@@ -740,9 +740,19 @@ function storpoolSnapshotRevert()
 
 function storpoolVolumeTag()
 {
-    local _SP_VOL="$1" _TAG_VAL="$2" _VM_TAG="${3:-$VM_TAG}"
-    if [ -n "${_VM_TAG}" ]; then
-        storpoolRetry volume "$_SP_VOL" tag "${_VM_TAG}"="$_TAG_VAL" >/dev/null
+    local _SP_VOL="$1" _TAG_VAL="$2" _TAG_KEY="${3:-$VM_TAG}"
+    local _OFS=$IFS tagCmd=
+    IFS=\;
+    tagVals=(${_TAG_VAL})
+    tagKeys=(${_TAG_KEY})
+    IFS=$_OFS
+    local tagCmd=
+    for i in ${!tagKeys[*]}; do
+        [ -n "${tagKeys[i]}" ] || continue
+		tagCmd+="tag ${tagKeys[i]}=${tagVals[i]} "
+    done
+    if [ -n "$tagCmd" ]; then
+        storpoolRetry volume "$_SP_VOL" $tagCmd >/dev/null
     fi
 }
 
