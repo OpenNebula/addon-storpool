@@ -29,6 +29,8 @@ cd "$DRIVER_PATH"
 
 source /var/lib/one/remotes/tm/storpool/storpool_common.sh
 
+umask -S u=rwx,g=rwx,o= >/dev/null
+
 TEMP_DIR="$(mktemp -d)"
 trapAdd "rm -rf '$TEMP_DIR'"
 
@@ -60,6 +62,8 @@ function alterVcPolicy()
 
     oneVmVolumes "$vmId" "$vmPool"
 
+    oneDatastoreInfo "$VM_DS_ID" "${TEMP_DIR}/datastorePool.xml"
+
     declare -A vols
 
     for disk in $vmDisksMap; do
@@ -73,11 +77,7 @@ function alterVcPolicy()
 
     if [ -z "$volumeListXml" ]; then
         volumeListXml="${TEMP_DIR}/volumeList.json"
-        storpool -B -j volume list >"$volumeListXml"
-        ret=$?
-        if boolTrue "DEBUG_alterVcPolicy"; then
-            splog "($ret) volume list $volumeListXml"
-        fi
+        storpoolRetry -j volume list >"$volumeListXml"
     fi
 
     while read -u 7 l; do
@@ -85,9 +85,8 @@ function alterVcPolicy()
         vcp="${l##*\;}"
         if [ -n "${vols[$v]}" ]; then
             if [ "$VC_POLICY" != "$vcp" ]; then
-                splog "volume:$v current vc-policy=$vcp"
-                storpool -B volume "$v" tag "vc-policy"="$VC_POLICY"
-                splog "($?) storpool -B volume $v tag vc-policy=$VC_POLICY"
+                splog "volume:$v current vc-policy:$vcp new:$VC_POLICY"
+                storpoolRetry volume "$v" tag "vc-policy"="$VC_POLICY"
             fi
         fi
     done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListXml")
