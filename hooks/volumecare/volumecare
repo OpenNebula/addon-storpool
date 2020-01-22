@@ -122,5 +122,5 @@ else
 fi
 
 rm -rf "$TEMP_DIR"
-trapDel "rm -f '$TEMP_DIR'"
+trapDel "rm -rf '$TEMP_DIR'"
 
