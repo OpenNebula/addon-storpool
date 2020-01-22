@@ -2,7 +2,7 @@
 
 ## Installation
 
-The following commands should be applyed on all frontend controllers.
+The following commands should be applied on all frontend controllers.
 
 ```bash
 # copy the hook files
@@ -27,7 +27,7 @@ EOF
 ## Configuration
 
 ```bash
-# prestrinct the VC_POLICY variable to the 'oneadmin' group
+# restrict the VC_POLICY variable to the 'oneadmin' group only
 echo 'VM_RESTRICTED_ATTR = "VC_POLICY"' >>/etc/one/oned.conf
 
 # restart the opennebula service
