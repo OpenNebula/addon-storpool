@@ -748,8 +748,9 @@ function storpoolVolumeTag()
     IFS=$_OFS
     local tagCmd=
     for i in ${!tagKeys[*]}; do
-        [ -n "${tagKeys[i]}" ] || continue
-		tagCmd+="tag ${tagKeys[i]}=${tagVals[i]} "
+        tagKey="${tagKeys[i]//[[:space:]]/}"
+        [ -n "$tagKey" ] || continue
+        tagCmd+="tag ${tagKey}=${tagVals[i]//[[:space:]]/} "
     done
     if [ -n "$tagCmd" ]; then
         storpoolRetry volume "$_SP_VOL" $tagCmd >/dev/null

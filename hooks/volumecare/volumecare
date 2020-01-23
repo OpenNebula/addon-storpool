@@ -84,9 +84,10 @@ function alterVcPolicy()
         v="${l%%\;*}"
         vcp="${l##*\;}"
         if [ -n "${vols[$v]}" ]; then
-            if [ "$VC_POLICY" != "$vcp" ]; then
-                splog "volume:$v current vc-policy:$vcp new:$VC_POLICY"
-                storpoolRetry volume "$v" tag "vc-policy"="$VC_POLICY"
+            vcpNew="${VC_POLICY//[[:space:]]/}"
+            if [ "$vcpNew" != "$vcp" ]; then
+                splog "volume:$v current vc-policy:$vcp new:$vcpNew"
+                storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
             fi
         fi
     done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListXml")
