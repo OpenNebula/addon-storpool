@@ -1,0 +1,19 @@
+--- remotes/vmm/kvm/attach_disk.orig	2019-04-14 15:17:35.942892283 +0300
++++ remotes/vmm/kvm/attach_disk	2019-04-14 15:30:13.085353878 +0300
+@@ -77,6 +77,16 @@
+ WRITE_IOPS_SEC_MAX_LENGTH=${WRITE_IOPS_SEC_MAX_LENGTH:-${DEFAULT_ATTACH_WRITE_IOPS_SEC_MAX_LENGTH}}
+ WRITE_IOPS_SEC_MAX=${WRITE_IOPS_SEC_MAX:-${DEFAULT_ATTACH_WRITE_IOPS_SEC_MAX}}
+ 
++# BEGIN StorPool patch
++if [ "$DEVICE" = "disk" ] && [ "$TYPE_XML" = "file" ] && [ "$TYPE_SOURCE" = "file" ]; then
++    sDev="$(readlink -f "$SOURCE")"
++    if [ "${sDev:0:8}" = "/dev/sp-" ]; then
++        TYPE_XML=block
++        TYPE_SOURCE=dev
++    fi
++fi
++# END StorPool patch
++
+ # disk XML
+ XML=''
+ 
