@@ -36,7 +36,7 @@ trapAdd "rm -rf '$TEMP_DIR'"
 
 function alterVcPolicy()
 {
-    local vmId="$1" vmPool="$2"
+    local vmId="$1" vmPool="$2" VMID= 
 
     if [ -z "$vmId" ]; then
         if [ -n "$vmPool" ]; then
