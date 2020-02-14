@@ -60,6 +60,10 @@ function alterVcPolicy()
         return 0
     fi
 
+    if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+        splog "alterVcPolicy($vmId,$vmPool)"
+    fi
+
     oneVmVolumes "$vmId" "$vmPool"
 
     oneDatastoreInfo "$VM_DS_ID" "${TEMP_DIR}/datastorePool.xml"
@@ -88,6 +92,8 @@ function alterVcPolicy()
             if [ "$vcpNew" != "$vcp" ]; then
                 splog "volume:$v current vc-policy:$vcp new:$vcpNew"
                 storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
+            elif boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+                splog "volume $v current vc-policy:$vcp"
             fi
         fi
     done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListXml")
