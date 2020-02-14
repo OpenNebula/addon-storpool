@@ -154,7 +154,9 @@ fi
 #-------------------------------------------------------------------------------
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
 
-storpoolVolumeTag "$SP_VOL" "$VM_ID"
+if boolTrue "TAG_CONTEXT_ISO"; then
+    storpoolVolumeTag "$SP_VOL" "$VM_ID"
+fi
 
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
