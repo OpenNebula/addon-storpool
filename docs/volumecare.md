@@ -23,7 +23,7 @@ cat >/etc/cron.d/vc-policy <<EOF
 SHELL=/bin/bash
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO=oneadmin
-* */2 * * * oneadmin /var/lib/one/remotes/hooks/volumecare/volumecare 2>&1 >/tmp/volumecare_cron.err
+0 */2 * * * oneadmin /var/lib/one/remotes/hooks/volumecare/volumecare 2>&1 >/tmp/volumecare_cron.err
 EOF
 ```
 
