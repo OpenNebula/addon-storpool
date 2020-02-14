@@ -279,7 +279,7 @@ function oneHostInfo()
     HOST_SP_OURID="${XPATH_ELEMENTS[i++]}"
     HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
 
-    boolTrue "DEBUG_oneHostInfo" || return
+    boolTrue "DEBUG_oneHostInfo" || return 0
     splog "oneHostInfo($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:${HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
 }
 
@@ -1029,7 +1029,7 @@ function oneVmInfo()
     fi
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
-    boolTrue "DEBUG_oneVmInfo" || return
+    boolTrue "DEBUG_oneVmInfo" || return 0
 
     splog "[oneVmInfo]\
 ${VMSTATE:+VMSTATE=$VM_STATE(${VmState[$VMSTATE]}) }\
@@ -1175,7 +1175,7 @@ function oneDatastoreInfo()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    boolTrue "DEBUG_oneDatastoreInfo" || return
+    boolTrue "DEBUG_oneDatastoreInfo" || return 0
 
     _MSG="[oneDatastoreInfo]${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
     _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+DS_TM_MAD=$DS_TM_MAD }"
@@ -1279,7 +1279,7 @@ function oneTemplateInfo()
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
-    boolTrue "DEBUG_oneTemplateInfo" || return
+    boolTrue "DEBUG_oneTemplateInfo" || return 0
 
     splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
 #    echo $_TEMPLATE | base64 -d >/tmp/${ONE_PX}-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
@@ -1398,7 +1398,7 @@ function oneDsDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    boolTrue "DEBUG_oneDsDriverAction" || return
+    boolTrue "DEBUG_oneDsDriverAction" || return 0
 
     _MSG="[oneDsDriverAction]\
 ${ID:+ID=$ID }\
@@ -1479,7 +1479,7 @@ function oneMarketDriverAction()
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
     [ -n "$SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
 
-    boolTrue "DEBUG_oneMarketDriverAction" || return
+    boolTrue "DEBUG_oneMarketDriverAction" || return 0
 
     splog "\
 ${IMPORT_SOURCE:+IMPORT_SOURCE=$IMPORT_SOURCE }\
