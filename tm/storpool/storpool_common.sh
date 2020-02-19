@@ -1778,6 +1778,36 @@ oneSnapshotLookup()
     return 1
 }
 
+
+forceDetachOther()
+{
+    local VM_ID="$1" DST_HOST="$2" VOLUME="$3"
+    local SP_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+    if [ -z "$SP_CLIENT" ]; then
+        splog "Error: SP_CLIENT is empty!"
+        return 1
+    fi
+    if [ -n "$VOLUME" ]; then
+        vmVolumes="$VOLUME"
+    else
+        oneVmVolumes "$VM_ID"
+    fi
+    if [ -z "$vmVolumes" ]; then
+        splog "Error: vmVolumes is empty!"
+        return 1
+    fi
+    local jqStr=
+    for vol in $vmVolumes; do
+        [ -z "$jqStr" ] || jqStr+=" or "
+        jqStr+=".volume==\"$vol\""
+    done
+    while read -u 6 client volume; do
+        if [ $client -ne $SP_CLIENT ]; then
+            storpoolRetry detach volume "$volume" client "$client" force yes >/dev/null
+        fi
+    done 6< <(storpoolRetry -j attach list|jq -r ".data[]|select($jqStr)|(.client|tostring) + \" \" + .volume")
+}
+
 # disable sp checkpoint transfer from file to block device
 # when the new code is enabled
 if boolTrue "SP_CHECKPOINT_BD"; then
