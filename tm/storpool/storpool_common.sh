@@ -99,6 +99,12 @@ VM_TAG=nvm
 ONE_ARGS=
 #
 PROPAGATE_YES=1
+#
+FORCE_DETACH_BY_TAG=1
+#
+FORCE_DETACH_OTHER_MV=1
+#
+FORCE_DETACH_OTHER_CONTEXT=1
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -1778,6 +1784,17 @@ oneSnapshotLookup()
     return 1
 }
 
+storpoolVmVolumes()
+{
+    vmVolumes=
+    while read -u 7 vol; do
+        vmVolumes+="$vol "
+    done 7< <(storpoolRetry -j volume list |\
+        jq -r --arg t "$1" --arg v "$2" '.data[]|select(.tags[$t]==$v)|.name'
+    )
+    splog "storpoolVmVolumes($1,$2) $vmVolumes"
+}
+
 
 forceDetachOther()
 {
@@ -1790,11 +1807,18 @@ forceDetachOther()
     if [ -n "$VOLUME" ]; then
         vmVolumes="$VOLUME"
     else
-        oneVmVolumes "$VM_ID"
+        if boolTrue "FORCE_DETACH_BY_TAG"; then
+            storpoolVmVolumes "$VM_TAG" "$VM_ID"
+        else
+            oneVmVolumes "$VM_ID"
+        fi
     fi
     if [ -z "$vmVolumes" ]; then
         splog "Error: vmVolumes is empty!"
         return 1
+    fi
+    if boolTrue "DEBUG_forceDetachOther"; then
+        splog "forceDetachOther($1,$2${3:+,$3}) $vmVolumes"
     fi
     local jqStr=
     for vol in $vmVolumes; do
@@ -1805,7 +1829,8 @@ forceDetachOther()
         if [ $client -ne $SP_CLIENT ]; then
             storpoolRetry detach volume "$volume" client "$client" force yes >/dev/null
         fi
-    done 6< <(storpoolRetry -j attach list|jq -r ".data[]|select($jqStr)|(.client|tostring) + \" \" + .volume")
+    done 6< <(storpoolRetry -j attach list |\
+        jq -r ".data[]|select($jqStr)|(.client|tostring) + \" \" + .volume")
 }
 
 # disable sp checkpoint transfer from file to block device

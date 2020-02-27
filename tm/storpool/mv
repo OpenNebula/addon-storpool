@@ -321,6 +321,10 @@ EOF
                     if boolTrue "DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
                     fi
+
+                    if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
+                        forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"
+                    fi
                 fi
                 if [ "$SRC_PATH" != "$DST_PATH" ]; then
                     storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
@@ -397,6 +401,10 @@ if boolTrue "DO_SYMLINK"; then
         MONITOR_TM_MAD="$VM_TM_MAD"
     fi
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+fi
+
+if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
+    forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"
 fi
 
 splog "END $VM_ID [IMAGE_DS]"
