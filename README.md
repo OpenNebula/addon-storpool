@@ -38,9 +38,9 @@ The additional extras requires latest stable versions of OpenNebula and StorPool
 * StorPool initiator driver (storpool_block)
 * StorPool CLI installed, authorization token and access to the StorPool API network
 * If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
-* If it is only Bridge Node - it must be configured as Host in open nebula but configured to not run VMs.
+* If it is only Bridge Node - it must be configured as host in OpenNebula but configured to not run VMs.
 * The Bridge node must have qemu-img available - used by the addon during imports to convert various source image formats to StorPool backed RAW images.
-* (Recommended) Installed `qemu-kvm-ev` package from `centos-release-qemu-ev` reposytory
+* (Recommended) Installed `qemu-kvm-ev` package from `centos-release-qemu-ev` repository
 
 ### StorPool cluster
 
