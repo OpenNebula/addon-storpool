@@ -335,10 +335,9 @@ else
         splog "$ATTACH_ONLY"
     else
         if boolTrue "MIGRATE_UNKNOWN"; then
+            vmVolumes=
             if boolTrue "MV_DETACH_ALL"; then
                 oneVmVolumes "$VM_ID"
-            else
-                vmVolumes=
             fi
         fi
         if [ "$TYPE" = "CDROM" ]; then
