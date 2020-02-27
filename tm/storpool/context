@@ -172,7 +172,9 @@ oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
 rm -rf "$ISO_FILE" > /dev/null 2>&1
 rm -rf "$ISO_DIR" > /dev/null 2>&1
 
-forceDetachOther "$VM_ID" "$DST_HOST"
+if boolTrue "FORCE_DETACH_OTHER_CONTEXT"; then
+    forceDetachOther "$VM_ID" "$DST_HOST"
+fi
 
 splog "END $VM_ID"
 exit 0
