@@ -40,7 +40,7 @@ function patch_hook()
     fi
 }
 
-if fgrep -qR "storpool" -- "$SUNSTONE_PUBLIC"; then
+if fgrep -qR "storpool" -- "${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}"; then
     SKIP_SUNSTONE=1
 fi
 
