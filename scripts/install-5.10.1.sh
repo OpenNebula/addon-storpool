@@ -40,6 +40,10 @@ function patch_hook()
     fi
 }
 
+if fgrep -qR "storpool" -- "$SUNSTONE_PUBLIC"; then
+    SKIP_SUNSTONE=1
+fi
+
 end_msg=
 if [ "$SKIP_SUNSTONE" = "1" ]; then
     echo "*** Skipping opennebula-sunstone integration patch"
