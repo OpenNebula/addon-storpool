@@ -192,6 +192,9 @@ else
     fi
 
     if [ "$FORMAT" = "raw" ]; then
+
+        storpoolVolumeDetach "$SP_TEMP_VOL" "force" "$DST_HOST"
+
         storpoolVolumeRename "$SP_TEMP_VOL" "$SP_VOL" "$SP_TEMPLATE"
 
         trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
@@ -237,10 +240,8 @@ EOF
 
         storpoolVolumeDelete "$SP_TEMP_VOL" "force" "snaps"
 
+        storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
     fi
-
-    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
-
 fi
 
 
