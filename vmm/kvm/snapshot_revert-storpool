@@ -104,6 +104,7 @@ EOF
             splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
         fi
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
+        storpoolVolumeTag "$volume" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)
         splog "END snapshot $snap ($te dt:$((te-tb)))"
