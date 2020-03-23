@@ -43,7 +43,7 @@ while read -u 4 -d' ' VM_ID; do
     echo "# VM_ID=$VM_ID vmVolumes=$vmVolumes"
     for vol in $vmVolumes; do
         if [ "${vol%iso}" = "$vol" ]; then
-            echo "storpool volume '$vol' tag $VM_TAG=$VM_ID"
+            storpoolVolumeTag "$vol" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
         else
             echo "# skipping $vol"
         fi
