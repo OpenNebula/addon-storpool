@@ -16,6 +16,33 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+###############################################################################
+# Usage
+#
+# cp hookmux.sh /var/lib/one/remotes/hooks/
+#
+# cd /var/lib/one/remotes/hooks
+#
+# ln -s hookmux.sh active-hotplug_nic
+#
+# mkdir /var/lib/one/remotes/hooks/active-hotplug_nic.d
+#
+# cp calledlocally /var/lib/one/remotes/hooks/active-hotplug_nic.d/calledlocally
+#
+## The script that should be called remotely should have name anding '*.remote'
+# cp calledremote /var/lib/one/remotes/hooks/active-hotplug_nic.d/calledremote.remote
+#
+# su - oneadmin -c 'onehost sync --force --rsync'
+#
+## Define a hook in the hook manager that is executed locally and have the VM template passed to stdin
+#...
+#COMMAND="active-hotplug_nic"
+#ARGUMENTS="$TEMPLATE"
+#ARGUMENTS_STDIN="YES"
+#REMOTE="NO"
+#...
+###############################################################################
+
 #set -e -o pipefail
 
 me="$(basename "$0")"
