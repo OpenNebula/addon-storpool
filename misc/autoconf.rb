@@ -486,7 +486,7 @@ default_config.each do |conf_file, cfg|
     end
     begin
         stat = File.stat(conf_file)
-        mode = stat.mode.to_s(8)[3..5]
+        mode = stat.mode & 0xFFF
     rescue Errno::ENOENT => err
         log "#WRN# File doesn't exist #{conf_file}"
         next
@@ -535,7 +535,9 @@ default_config.each do |conf_file, cfg|
             FileUtils.cp(conf_file, conf_file_bak)
             puts "#MOV# mv #{temp_file} #{conf_file}"
             FileUtils.mv(temp_file, conf_file)
+            puts "#MSG# chmod #{mode} #{conf_file}"
             FileUtils.chmod(mode, conf_file)
+            puts "#MSG# chown #{stat.uid}.#{stat.gid} #{conf_file}"
             FileUtils.chown(stat.uid, stat.gid, conf_file)
         end
     end
