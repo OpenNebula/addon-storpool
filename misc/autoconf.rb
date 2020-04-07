@@ -535,7 +535,7 @@ default_config.each do |conf_file, cfg|
             FileUtils.cp(conf_file, conf_file_bak)
             puts "#MOV# mv #{temp_file} #{conf_file}"
             FileUtils.mv(temp_file, conf_file)
-            puts "#MSG# chmod #{mode} #{conf_file}"
+            puts "#MSG# chmod #{mode.to_s(8)} #{conf_file}"
             FileUtils.chmod(mode, conf_file)
             puts "#MSG# chown #{stat.uid}.#{stat.gid} #{conf_file}"
             FileUtils.chown(stat.uid, stat.gid, conf_file)
