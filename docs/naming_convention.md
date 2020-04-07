@@ -72,7 +72,7 @@ one-img-IMAGE_ID-${MD5SUM}
 #### Disk snapshot
 
 ```bash
-${VOLUME_NAME}-ONESNAP-snap${SNAP_ID}
+${VOLUME_NAME}-snap${SNAP_ID}
 ```
 
 #### VM snapshot
