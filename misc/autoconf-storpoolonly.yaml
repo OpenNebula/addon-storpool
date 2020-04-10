@@ -27,7 +27,7 @@
   :lens: Oned.lns
   :apply:
     live_rescheds:
-      :method: shell_file_conf
+      :method: simple_conf
       :arguments:
         LIVE_RESCHEDS: "1"
 
@@ -48,7 +48,7 @@
   :lens: Shellvars.lns
   :apply:
     extra_config:
-      :method: shell_file_conf
+      :method: simple_conf
       :arguments:
         SP_CHECKPOINT_BD: "1"
         SKIP_UNDEPLOY_SSH: "1"

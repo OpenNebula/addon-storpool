@@ -163,7 +163,7 @@ default_config = {
         :lens => "Shellvars.lns",
         :apply => {
             "default_attach_disk" => {
-                :method => "shell_file_conf",
+                :method => "simple_conf",
                 :arguments => {
                     'DEFAULT_ATTACH_CACHE' => "none",
                     'DEFAULT_ATTACH_DISCARD' => "unmap",
@@ -176,7 +176,7 @@ default_config = {
         :lens => "Shellvars.lns",
         :apply => {
             "live_disk_snapshots" => {
-                :method => "shell_file_conf",
+                :method => "simple_conf",
                 :match => " ",
                 :delete => nil,
                 :arguments => {
@@ -333,7 +333,7 @@ def oned_conf_vector(aug, c, name = nil)
     log "#OK# #{name.upcase}",0 if !changed and !name.nil?
 end
 
-def shell_file_conf(aug, c, name=nil)
+def simple_conf(aug, c, name=nil)
     if c[:arguments].nil?
         log "#ERR# No 'arguments'. Skipped."
         return
@@ -411,7 +411,7 @@ end
     "oned_conf_arguments" => method(:oned_conf_arguments),
     "oned_conf_array" => method(:oned_conf_array),
     "oned_conf_vector" => method(:oned_conf_vector),
-    "shell_file_conf" => method(:shell_file_conf),
+    "simple_conf" => method(:simple_conf),
 }
 
 merge = []
