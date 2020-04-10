@@ -14,35 +14,21 @@ module Oneserver =
 (* Group: helpers *)
 let colon = Sep.colon
 let space = Sep.space
-let val = store (Rx.word|Rx.integer|Rx.fspath)
+let dashspace = del /-[ \t]*/ "- "
 let eol = Util.eol
-let emptyold = Util.empty
+let el = del /\n/ "\n"
+let indent = del /[ \t]+/ "  "
+let value = store (Rx.word|Rx.integer|Rx.fspath)
+
 let empty = [ label "#empty" . eol ]
+
 let comment = [ label "#comment" . del /#[ \t]*/ "# " .  store /([^ \t\n][^\n]*)?/ . del /\n/ "\n" ]
 
+let entry = [ colon . key Rx.word . colon . (space . value)?  . el ] 
 
-let entry = [ colon . key Rx.word . colon . space . val . eol ]
+let option = [ label "#option" . indent . dashspace . value . el ]
 
-let eol_only = del "\n" "\n"
-let indent = del /[ \t]+/ "  "
-let dash = del /-[ \t]*/ "- "
-let indented_list_suffix = [label "-" . eol . (
-                              [ label "value" . indent . dash  . val] . eol
-                              )+
-                           ]
-(*
-let indented_entry =  eol . [ 
-                           label ( indent . val ) . eol. (
-                                [indent . entry])+
-                              ]
-*)
-let nested_entry = [ colon . key Rx.word . colon . (
-                                indented_list_suffix
-                                (* | indented_entry*)
-                              )
-                   ]
-
-let lns =  (comment | empty | entry | nested_entry)*
+let lns =  (comment | empty | entry | option)*
 
 let filter = incl "/etc/one/sunstone-server.conf"
              . incl "/etc/one/onevnc-server.conf"
