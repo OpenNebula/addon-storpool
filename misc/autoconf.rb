@@ -310,6 +310,8 @@ def oned_conf_vector(aug, c, name = nil)
                     log "#SET# #{aug_qk} = #{v} (old #{val})"
                     aug.set(aug_qk, v)
                     changed = true
+                else
+                    log "#OK# #{aug_qk} = #{val}"
                 end
             else
                 log "#SET# #{aug_qk} = #{v}"
@@ -330,7 +332,6 @@ def oned_conf_vector(aug, c, name = nil)
         end
         changed = true
     end
-    log "#OK# #{name.upcase}",0 if !changed and !name.nil?
 end
 
 def simple_conf(aug, c, name=nil)
