@@ -281,7 +281,7 @@ def oned_conf_array(aug, c, name=nil)
 #TBD                aug.rename("#{element}[#{i}]", "#comment[LAST()+1]")
                 next
             end
-            log "#OK# #{element}[#{attrib[k]}] = #{k}",1
+            log "#OK# #{element}[#{attrib[k]}] = #{k}"
         else
             if !v.nil?
                 log "#SET# #{element}[#{i}] = \"#{k}\" "
