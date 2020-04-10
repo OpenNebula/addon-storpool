@@ -27,7 +27,7 @@
   :lens: Oned.lns
   :apply:
     live_rescheds:
-      :method: shell_file_conf
+      :method: simple_conf
       :arguments:
         LIVE_RESCHEDS: "1"
 
@@ -48,11 +48,23 @@
   :lens: Shellvars.lns
   :apply:
     extra_config:
-      :method: shell_file_conf
+      :method: simple_conf
       :arguments:
         SP_CHECKPOINT_BD: "1"
         SKIP_UNDEPLOY_SSH: "1"
         CLEAN_SRC_ON_UNDEPLOY: "1"
         UPDATE_ONE_DISK_SIZE: "1"
         UPDATE_IMAGE_ON_IMPORT: "1"
+        ONE_PX: "\"one\""
+        VMSNAPSHOT_FSFREEZE: "0"
+        VMSNAPSHOT_FSFREEZE_MULTIDISKS: "0"
+        VMSNAPSHOT_ATOMIC: "1"
+        VMSNAPSHOT_DELETE_ON_TERMINATE: "1"
+        VMSNAPSHOT_ENABLE_LIMIT: "1"
+        SKIP_UNDEPLOY_SSH: "1"
+        CLEAN_SRC_ON_UNDEPLOY: "1"
+        NO_VOLUME_TEMPLATE: "0"
+        SP_TEMPLATE_STATUS_MINUTES: "60"
+        SP_VOLUME_SPACE_MINUTES: "60"
+        SP_SNAPSHOT_SPACE_MINUTES: "65"
 

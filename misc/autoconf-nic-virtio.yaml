@@ -29,7 +29,7 @@
   :lens: Shellvars.lns
   :apply:
     default_nic:
-      :method: shell_file_conf
+      :method: simple_conf
       :arguments:
         DEFAULT_ATTACH_NIC_MODEL: "virtio"
 

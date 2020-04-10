@@ -163,7 +163,7 @@ default_config = {
         :lens => "Shellvars.lns",
         :apply => {
             "default_attach_disk" => {
-                :method => "shell_file_conf",
+                :method => "simple_conf",
                 :arguments => {
                     'DEFAULT_ATTACH_CACHE' => "none",
                     'DEFAULT_ATTACH_DISCARD' => "unmap",
@@ -176,7 +176,7 @@ default_config = {
         :lens => "Shellvars.lns",
         :apply => {
             "live_disk_snapshots" => {
-                :method => "shell_file_conf",
+                :method => "simple_conf",
                 :match => " ",
                 :delete => nil,
                 :arguments => {
@@ -281,7 +281,7 @@ def oned_conf_array(aug, c, name=nil)
 #TBD                aug.rename("#{element}[#{i}]", "#comment[LAST()+1]")
                 next
             end
-            log "#OK# #{element}[#{attrib[k]}] = #{k}",1
+            log "#OK# #{element}[#{attrib[k]}] = #{k}"
         else
             if !v.nil?
                 log "#SET# #{element}[#{i}] = \"#{k}\" "
@@ -310,6 +310,8 @@ def oned_conf_vector(aug, c, name = nil)
                     log "#SET# #{aug_qk} = #{v} (old #{val})"
                     aug.set(aug_qk, v)
                     changed = true
+                else
+                    log "#OK# #{aug_qk} = #{val}"
                 end
             else
                 log "#SET# #{aug_qk} = #{v}"
@@ -330,10 +332,9 @@ def oned_conf_vector(aug, c, name = nil)
         end
         changed = true
     end
-    log "#OK# #{name.upcase}",0 if !changed and !name.nil?
 end
 
-def shell_file_conf(aug, c, name=nil)
+def simple_conf(aug, c, name=nil)
     if c[:arguments].nil?
         log "#ERR# No 'arguments'. Skipped."
         return
@@ -345,7 +346,7 @@ def shell_file_conf(aug, c, name=nil)
                  if v == val
                      log "#OK# #{k}=#{v}",0
                  else
-                     log "#SET# #{k}='#{v}' (was '#{val}')",0
+                     log "#SET# #{k}='#{v}' (was '#{val}') #exist+match",0
                      aug.set(k, v)
                  end
              else
@@ -367,7 +368,7 @@ def shell_file_conf(aug, c, name=nil)
                  end
                  if change
                      v = "\"#{val_a.join(c[:match])}\""
-                     log "#SET# #{k}=#{v} (was #{val})",0
+                     log "#SET# #{k}=#{v} (was #{val}) #exist",0
                      aug.set(k, v)
                  else
                      log "#OK# #{k}=#{val}",0
@@ -386,11 +387,11 @@ def shell_file_conf(aug, c, name=nil)
                 end
                 i = i + 1
             end
-            if !comment_idx.nil?
+            if comment_idx.nil?
+                log "#SET# #{k} = '#{v}' #new line"
+            else
                 aug.rename("#comment[#{comment_idx}]", k)
                 log "#SET# #{k} = '#{v}' #replace comment[#{comment_idx}]:#{comment_val}"
-            else
-                log "#SET# #{k} = '#{v}' #{comment_idx}"
             end
             aug.set(k, v)
         end
@@ -411,7 +412,7 @@ end
     "oned_conf_arguments" => method(:oned_conf_arguments),
     "oned_conf_array" => method(:oned_conf_array),
     "oned_conf_vector" => method(:oned_conf_vector),
-    "shell_file_conf" => method(:shell_file_conf),
+    "simple_conf" => method(:simple_conf),
 }
 
 merge = []
@@ -462,7 +463,11 @@ opts.each { |option,v|
 
 merge.each do |yamlfile|
     yamldata = loadYaml(yamlfile)
-    default_config = default_config.deep_merge(yamldata)
+    if yamldata.nil?
+        log "#WRN# empty yaml #{yamlfile}"
+    else
+        default_config = default_config.deep_merge(yamldata)
+    end
 end
 
 if $yamldump
@@ -499,7 +504,7 @@ default_config.each do |conf_file, cfg|
     end
     tmp_file = Tempfile.new("#{conf_file}-tmp")
     temp_file = tmp_file.path
-    log "##### (mode #{mode}) temp:#{temp_file} lens:#{cfg[:lens]}",3
+    log "##### (mode #{mode.to_s(8)}) temp:#{temp_file} lens:#{cfg[:lens]}",3
     FileUtils.cp(conf_file, temp_file)
     aug.clear_transforms
     aug.transform(:lens => cfg[:lens], :incl => temp_file)
@@ -521,10 +526,20 @@ default_config.each do |conf_file, cfg|
             puts "#ERR# #{err}"
             err = aug.get("/augeas//error")
             puts "#ERR#  [error]:#{err}"
-            err = aug.get("/augeas//error/path")
-            puts "#ERR#  [path]:#{err}"
             err = aug.get("/augeas//error/lens")
             puts "#ERR#  [lens]:#{err}"
+            err = aug.get("/augeas//error/last_matched")
+            puts "#ERR#  [last_matched]:#{err}"
+            err = aug.get("/augeas//error/next_not_matched")
+            puts "#ERR#  [next_not_matched]:#{err}"
+            err = aug.get("/augeas//error/path")
+            puts "#ERR#  [path]:#{err}"
+            err = aug.get("/augeas//error/pos")
+            puts "#ERR#  [pos]:#{err}"
+            err = aug.get("/augeas//error/line")
+            puts "#ERR#  [line]:#{err}"
+            err = aug.get("/augeas//error/char")
+            puts "#ERR#  [char]:#{err}"
             err = aug.get("/augeas//error/message")
             puts "#ERR#  [message]:#{err}"
             next

@@ -1,0 +1,24 @@
+---
+/etc/one/sunstone-server.conf:
+  :lens: Oneserver.lns
+  :apply:
+    host_port:
+      :method: simple_conf
+      :arguments:
+        host: "127.0.0.1"
+        port: "9869"
+    vnc_proxy:
+      :method: simple_conf
+      :arguments:
+        vnc_proxy_port: "127.0.0.1:29876"
+        vnc_proxy_support_wss: "yes"
+        vnc_proxy_cert: "/etc/pki/tls/frontend.crt"
+        vnc_proxy_key: "/etc/pki/tls/frontend.key"
+        vnc_proxy_ipv6: "false"
+        vnc_request_password: "false"
+        vnc_client_port: "443"
+    env:
+      :method: simple_conf
+      :arguments:
+        env: "'prod'"
+
