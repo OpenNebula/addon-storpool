@@ -462,7 +462,11 @@ opts.each { |option,v|
 
 merge.each do |yamlfile|
     yamldata = loadYaml(yamlfile)
-    default_config = default_config.deep_merge(yamldata)
+    if yamldata.nil?
+        log "#WRN# empty yaml #{yamlfile}"
+    else
+        default_config = default_config.deep_merge(yamldata)
+    end
 end
 
 if $yamldump
