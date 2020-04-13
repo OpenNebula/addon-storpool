@@ -203,12 +203,9 @@ if [ -f "${AUGEAS_LENSES}/oned.aug" ];then
     AUTOCONF=
     for yaml in ${DEFAULT_AUTOCONF:-/etc/one/autoconf.yaml}; do
         if [ -f "$yaml" ]; then
-            AUTOCONF+="-m '$yaml' "
+            AUTOCONF+="-m $yaml "
         fi
     done
-    if [ -f /etc/one/autoconf.yaml ]; then
-        DEFAULT_AUTOCONF="${DEFAULT_AUTOCONF:--m /etc/one/autoconf.yaml}"
-    fi
     $CWD/misc/autoconf.rb -v -w $AUTOCONF
 else
     # Enable StorPool in oned.conf
