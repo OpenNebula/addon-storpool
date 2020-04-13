@@ -400,10 +400,10 @@ end
 
 def loadYaml(yamlfile)
     begin
-        log "Loading #{yamlfile}",1
+        log "#INF# Loading #{yamlfile}",1
         YAML.load_file(yamlfile)
     rescue Exception => err
-        log "Load YAML (#{yamlfile}) errorr: #{err}"
+        log "#ERR# Load YAML (#{yamlfile}) errorr: #{err}"
         exit 1
     end
 end
@@ -504,7 +504,7 @@ default_config.each do |conf_file, cfg|
     end
     tmp_file = Tempfile.new("#{conf_file}-tmp")
     temp_file = tmp_file.path
-    log "##### (mode #{mode.to_s(8)}) temp:#{temp_file} lens:#{cfg[:lens]}",3
+    log "#INF# (mode #{mode.to_s(8)}) temp:#{temp_file} lens:#{cfg[:lens]}",3
     FileUtils.cp(conf_file, temp_file)
     aug.clear_transforms
     aug.transform(:lens => cfg[:lens], :incl => temp_file)
@@ -520,7 +520,7 @@ default_config.each do |conf_file, cfg|
             end
         end
         begin
-            log "##### saving #{temp_file}",1
+            log "#SAV# saving #{temp_file}",1
             aug.save
         rescue Augeas::CommandExecutionError => err
             puts "#ERR# #{err}"
