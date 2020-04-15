@@ -68,8 +68,12 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
-            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
-                storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+                if [ $LCM_STATE -ne 15 ]; then
+                    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+                else
+                    splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
+                fi
             fi
             RM_CMD="rm -rf '${DST_PATH}/disk.${DISK_ID_ARRAY[i]}'"
             splog "run RM_CMD on $DST_HOST (${DST_PATH}/disk.${DISK_ID_ARRAY[i]})"
@@ -86,15 +90,23 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         for SP_VOL in `storpoolVolumeStartswith "$SP_VOL"`; do
             storpoolVolumeDelete "$SP_VOL" "force" "" "$REMOTE_BACKUP_DELETE"
             if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+                if [ $LCM_STATE -ne 15 ]; then
+                    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+                else
+                    splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
+                fi
             fi
         done
     else
 #        splog "[SYSTEM_DS] delete context iso"
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "$SP_VOL" "force" "snaps"
-        if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
-            storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+        if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+            if [ $LCM_STATE -ne 15 ]; then
+                storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+            else
+                splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
+            fi
         fi
         if boolTrue "SP_CHECKPOINT_BD"; then
             storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
@@ -145,8 +157,12 @@ else
 
 	storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
 
-    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE" && [ $LCM_STATE -ne 15 ]; then
-        storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+        if [ $LCM_STATE -ne 15 ]; then
+            storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+        else
+            splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
+        fi
     fi
 fi
 
