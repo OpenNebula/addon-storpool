@@ -165,22 +165,22 @@ oneVmVolumes()
 TMP_DIR="$(mktemp -d)"
 trapAdd 'rm -rf "$TMP_DIR"'
 
-echo -n "*** StorPool Volume list" >&2
+echo -n "*** StorPool Volumes JSON " >&2
 spVols="$TMP_DIR/spVols.json"
 $SUDO storpool -Bj volume list >"$spVols"
 echo "($?)" >&2
 
-echo -n "*** StorPool Snapshot list" >&2
+echo -n "*** StorPool Snapshots JSON " >&2
 spSnaps="$TMP_DIR/spSnaps.json"
 $SUDO storpool -Bj snapshot list >"$spSnaps"
 echo "($?)" >&2
 
-echo -n "*** OpenNebula VM list (extended)" >&2
+echo -n "*** OpenNebula VM extended XML " >&2
 vmPool="$TMP_DIR/vmPool.xml"
 $SUDO onevm list -x --extended >"$vmPool"
 echo "($?)" >&2
 
-echo -n "*** OpenNebula Image list" >&2
+echo -n "*** OpenNebula Images XML " >&2
 imagePool="$TMP_DIR/imagePool.xml"
 $SUDO oneimage list -x >"$imagePool"
 echo "($?)" >&2
@@ -201,6 +201,7 @@ done 4< <( jq -r '.data[]|
            + " " + (.parentName|tostring)
            ' "$spVols" )
 
+echo "*** Processing Image Pool ..." >&2
 unset i x
 while read -u 4 -r e; do
     x[i++]="$e"
@@ -219,6 +220,7 @@ IMAGE_SIZE_A=($_IMAGE_SIZE)
 IMAGE_TYPE_A=($_IMAGE_TYPE)
 IFS=$_OLDIFS
 
+echo "*** Processing Image Pool data ..." >&2
 for i in ${!IMAGE_ID_A[*]}; do
     ID=${IMAGE_ID_A[i]}
     SIZE=${IMAGE_SIZE_A[i]}
@@ -232,6 +234,7 @@ for i in ${!IMAGE_ID_A[*]}; do
     oneImg["$VOLUME"]="$SIZE"
 done
 
+echo "*** Processing VM disks ..." >&2
 diskSum=0
 while read -u 4 -d' ' VM_ID; do
     vmVolumes=
@@ -298,12 +301,15 @@ done 4< <( jq -r --arg p "$ONE_PX" '.data[]|
            + " " + (.parentName|tostring)
            ' "$spSnaps" )
 
+echo "*** Processing VM Snapshots ..." >&2
 declare -A vmSnaps
-
 while read -u 4 -d' ' e; do
-    vmSnaps["$e"]="$e"
+    if [ -n "$e" ]; then
+        vmSnaps["$e"]="$e"
+    fi
 done 4< <(cat "$vmPool"|$ONE_PATH/datastore/xpath.rb --stdin %m%/VM_POOL/VM/TEMPLATE/SNAPSHOT/HYPERVISOR_ID;echo " ")
 
+echo "*** Processing StorPool Snapshots ..." >&2
 snapSum=0
 while read -u 4 NAME SIZE PARENT; do
     if [ -n "${spParent["$NAME"]}" ]; then
