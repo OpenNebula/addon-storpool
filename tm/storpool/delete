@@ -156,13 +156,12 @@ else
     storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 
 	storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
-
-    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-        if [ $LCM_STATE -ne 15 ]; then
-            storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
-        else
-            splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
-        fi
+fi
+if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+    if [ $LCM_STATE -ne 15 ]; then
+        storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+    else
+        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
     fi
 fi
 

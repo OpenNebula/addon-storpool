@@ -565,8 +565,11 @@ function storpoolVolumeStartswith()
 function storpoolVolumeSnapshotsDelete()
 {
     local _SP_VOL_SNAPSHOTS="$1"
+    if boolTrue "DEBUG_storpoolVolumeSnapshotsDelete"; then
+        splog "storpoolVolumeSnapshotsDelete $_SP_VOL_SNAPSHOTS"
+    fi
     storpoolRetry -j snapshot list | \
-        jq -r ".data|map(select(.name|contains(\"${_SP_VOL_SNAPSHOTS}\")))|.[]|[.name]|@csv" | \
+        jq -r --arg n "$_SP_VOL_SNAPSHOTS" '.data|map(select(.name|contains($n)))|.[]|[.name]|@csv' | \
         while read name; do
             name="${name//\"/}"
             storpoolSnapshotDelete "$name"
