@@ -159,19 +159,6 @@ default_config = {
             },
         },
     },
-    "/var/lib/one/remotes/etc/vmm/kvm/kvmrc" => {
-        :lens => "Shellvars.lns",
-        :apply => {
-            "default_attach_disk" => {
-                :method => "simple_conf",
-                :arguments => {
-                    'DEFAULT_ATTACH_CACHE' => "none",
-                    'DEFAULT_ATTACH_DISCARD' => "unmap",
-                    'DEFAULT_ATTACH_IO' => "native",
-                },
-            },
-        },
-    },
     "/etc/one/vmm_exec/vmm_execrc" => {
         :lens => "Shellvars.lns",
         :apply => {
