@@ -117,6 +117,7 @@ oneTemplateInfo "$TEMPLATE"
 #-------------------------------------------------------------------------------
 # Attach storpool volumes
 #-------------------------------------------------------------------------------
+json=
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
@@ -140,7 +141,9 @@ for i in ${!DISK_ID_ARRAY[@]}; do
             fi
             SP_LINK="/dev/storpool/$SP_VOL"
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
-            storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+            [ -z "$json" ] || json+=","
+            [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "$SP_MODE")"
 #           oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
@@ -164,7 +167,9 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT}"
             SP_LINK="/dev/storpool/$SP_VOL"
             DST_PATH="${VM_PATH}/disk.${DISK_ID}"
-            storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+            [ -z "$json" ] || json+=","
+            [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT")"
 #            oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
         fi
     done
@@ -176,7 +181,9 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         SP_LINK="/dev/storpool/$SP_VOL"
         DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
-        storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+        [ -z "$json" ] || json+=","
+        [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+        json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "ro")"
 #        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
     fi
 
@@ -186,6 +193,11 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     if declare -f migrate_other >/dev/null; then
         migrate_other "$@"
     fi
+fi
+
+if [ -n "$json" ]; then
+    storpoolRetry groupAttach "$json"
+    splog "syml:$syml"
 fi
 
 splog "END $VM_ID"

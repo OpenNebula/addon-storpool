@@ -75,6 +75,7 @@ oneTemplateInfo "$TEMPLATE"
 #-------------------------------------------------------------------------------
 # Detach storpool volumes
 #-------------------------------------------------------------------------------
+json=
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
@@ -89,7 +90,9 @@ for i in ${!DISK_ID_ARRAY[@]}; do
                 storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
-            storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
+            [ -z "$json" ] || json+=","
+            [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
+            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
@@ -110,7 +113,9 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
-            storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+            [ -z "$json" ] || json+=","
+            [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
+            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force")"
          fi
     done
 
@@ -119,7 +124,9 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     if [ -n "$_CONTEXT_DISK_ID" ]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST"
+        [ -z "$json" ] || json+=","
+        [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
+        json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force")"
     fi
 
     #-------------------------------------------------------------------------------
@@ -129,6 +136,8 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
         migrate_other "$@"
     fi
 fi
+
+storpoolRetry groupDetach "$json"
 
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED"; then

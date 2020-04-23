@@ -90,6 +90,7 @@ oneTemplateInfo "$TEMPLATE"
 #-------------------------------------------------------------------------------
 # Detach storpool volumes from DST_HOST
 #-------------------------------------------------------------------------------
+json=
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
@@ -102,7 +103,9 @@ for i in ${!DISK_ID_ARRAY[@]}; do
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
             DST_PATH="$VM_PATH/disk.${DISK_ID}"
-            storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
+            [ -z "$json" ] || json+=","
+            [ -n "$DST_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
@@ -123,7 +126,9 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
-            storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
+            [ -z "$json" ] || json+=","
+            [ -n "$DST_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force")"
         fi
     done
 
@@ -132,7 +137,9 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     #-------------------------------------------------------------------------------
     SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
-    storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"
+    [ -z "$json" ] || json+=","
+    [ -n "$DST_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+    json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force")"
 
     #-------------------------------------------------------------------------------
     # Call the other storage drivers
@@ -140,6 +147,10 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     if declare -f migrate_other >/dev/null; then
         migrate_other "$@"
     fi
+fi
+
+if [ -n "$json" ]; then 
+    storpoolRetry groupDetach "$json"
 fi
 
 splog "END $VM_ID"
