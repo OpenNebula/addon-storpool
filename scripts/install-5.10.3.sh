@@ -201,7 +201,7 @@ if [ -f "${AUGEAS_LENSES}/oned.aug" ];then
     mkdir -p "${AUGEAS_LENSES}/tests"
     cp -vf "$CWD/misc/augeas/tests"/*.aug "${AUGEAS_LENSES}/tests"/
     AUTOCONF=
-    for yaml in ${DEFAULT_AUTOCONF:-/etc/one/autoconf.yaml}; do
+    for yaml in ${DEFAULT_AUTOCONF:-/etc/one/addon-storpool.autoconf}; do
         if [ -f "$yaml" ]; then
             AUTOCONF+="-m $yaml "
         fi
