@@ -207,6 +207,8 @@ if [ -f "${AUGEAS_LENSES}/oned.aug" ];then
         fi
     done
     $CWD/misc/autoconf.rb -v -w $AUTOCONF
+
+    chown -R "$ONE_USER" "${ONE_VAR}/remotes"
 else
     # Enable StorPool in oned.conf
     if grep -q -i storpool /etc/one/oned.conf >/dev/null 2>&1; then
