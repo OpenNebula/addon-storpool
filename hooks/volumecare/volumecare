@@ -27,7 +27,7 @@ ONE_HOME="${ONE_HOME:-/var/lib/one}"
 DRIVER_PATH="${ONE_HOME}/remotes/hooks/volumecare/"
 cd "$DRIVER_PATH"
 
-source /var/lib/one/remotes/tm/storpool/storpool_common.sh
+source "${ONE_HOME}"/remotes/tm/storpool/storpool_common.sh
 
 umask -S u=rwx,g=rwx,o= >/dev/null
 
