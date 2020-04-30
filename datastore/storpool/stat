@@ -50,8 +50,17 @@ ID="$2"
 
 oneDsDriverAction "$DRIVER_PATH"
 
+SIZE=0
+
 #-------------------------------------------------------------------------------
-# Compute the size
+# Test file 
+#-------------------------------------------------------------------------------
+[ -r "$IMAGE_PATH" ] || splog "Not readable file: $IMAGE_PATH"
+[ -w "$IMAGE_PATH" ] || splog "Not writable file: $IMAGE_PATH"
+[ -s "$IMAGE_PATH" ] || splog "Zero size file: $IMAGE_PATH"
+
+#-------------------------------------------------------------------------------
+# Compute the size 
 #-------------------------------------------------------------------------------
 
 case "${IMAGE_PATH,,}" in
