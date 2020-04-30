@@ -1682,7 +1682,12 @@ oneVmSnapshots()
 {
     local VM_ID="$1" snapshot_id="$2" disk_id="$3"
     if boolTrue "DEBUG_oneVmSnapshots_VERBOSE"; then
-        splog "oneVmSnapshots() VM_ID:$VM_ID"
+        splog "oneVmSnapshots() VM_ID:$VM_ID snapshot_id=$snapshot_id disk_id=$disk_id"
+    fi
+    
+    if [ -z "$VM_ID" ]; then
+        splog "oneVmSnapshots: No VM_ID! VM_ID:$VM_ID snapshot_id=$snapshot_id disk_id=$disk_id"
+        return 1
     fi
 
     local tmpXML="$(mktemp -t oneVmSnapshots-${VM_ID}-XXXXXX)"
