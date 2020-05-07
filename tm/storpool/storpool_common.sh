@@ -425,15 +425,34 @@ function storpoolWrapper()
 				return 1
 			fi
 			;;
+		groupAttach)
+			shift
+			if [ -n "$1" ]; then
+				res="$(storpoolApi "VolumesReassignWait" "{\"reassign\":[$1]}")"
+				ret=$?
+				if [ $ret -ne 0 ]; then
+					splog "API communication error:$res ($ret)"
+					return $ret
+				else
+					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
+					if [ "$ok" = "true" ]; then
+						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+							splog "API response:$res"
+						fi
+					else
+						splog "API Error:$res info:$ok"
+						return 1
+					fi
+				fi
+			else
+				splog "storpoolWrapper: Error: Empty json!"
+				return 1
+			fi
+			;;
 		groupDetach)
 			shift
-			while [ -n "$2" ]; do
-				[ -z "$json" ] || json+=","
-				json+="{\"volume\":\"$1\",\"detach\":[$2],\"force\":true}"
-				shift 2
-			done
-			if [ -n "$json" ]; then
-				res="$(storpoolApi "VolumesReassignWait" "{\"reassign\":[$json]}")"
+			if [ -n "$1" ]; then
+				res="$(storpoolApi "VolumesReassignWait" "{\"reassign\":[$1]}")"
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "API communication error:$res ($ret)"
@@ -638,6 +657,19 @@ function storpoolVolumeAttach()
     storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
 }
 
+function storpoolVolumeJsonHelper()
+{
+    local _SP_VOL="$1" _SP_CLIENT="$2" _SP_MODE="${3:-rw}" _FORCE="$4" _SOFT_FAIL="$5"
+    if [ -z "$_SP_CLIENT" ]; then
+        splog "Error: Unknown CLIENT_ID"
+        exit 1
+    fi
+    if boolTrue "_SOFT_FAIL"; then
+        _FORCE=
+    fi
+    echo "{\"volume\":\"$_SP_VOL\",\"$_SP_MODE\":[\"$_SP_CLIENT\"]${_FORCE:+,\"force\":true}}"
+}
+
 function storpoolVolumeDetach()
 {
     local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _VOLUMES_GROUP="$6"
@@ -657,12 +689,13 @@ function storpoolVolumeDetach()
         fi
     fi
     if [ -n "$_VOLUMES_GROUP" ] && [ -n "$_SP_CLIENT" ]; then
-        local vList=
+        local _JSON=
         for volume in $_VOLUMES_GROUP; do
-            vList+="$volume $_SP_CLIENT "
+            [ -z "$_JSON" ] || _JSON+=","
+            _JSON+="$(storpoolVolumeJsonHelper "$volume" "$_SP_CLIENT" "detach" "force")"
         done
-        storpoolRetry groupDetach $vList
-        splog "detachGroup $_VOLUMES_GROUP client:$_SP_CLIENT ($?)"
+        storpoolRetry groupDetach "${_JSON}"
+        splog "detachGroup '$_JSON' ($?)"
     fi
     if [ "$_DETACH_ALL" = "all" ]; then
         _SP_CLIENT="all"
