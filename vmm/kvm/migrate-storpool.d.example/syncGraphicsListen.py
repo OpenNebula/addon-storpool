@@ -17,6 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 from sys import argv
+from os import environ
 from xml.etree import ElementTree as ET
 
 ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
@@ -49,11 +50,17 @@ vm = vm_element.getroot()
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
+vmListen = None
+if 'GRAPHICS_LISTEN' in environ:
+    vmListen = environ.get('GRAPHICS_LISTEN')
+else:
+    vmListen_e = vm.find('./TEMPLATE/GRAPHICS/LISTEN')
+    if vmListen_e is not None:
+        vmListen = vmListen_e.text
+
 changed = 0
 
-vmListen_e = vm.find('./TEMPLATE/GRAPHICS/LISTEN')
-if vmListen_e is not None:
-    vmListen = vmListen_e.text
+if vmListen is not None:
     #<graphics type="vnc" port="6122" autoport="no" listen="vnc.localdomain">
     #    <listen type="address" address="vnc.localdomain"/>
     #</graphics>
