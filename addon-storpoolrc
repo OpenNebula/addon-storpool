@@ -1,5 +1,4 @@
-MKFS="sudo /sbin/mkfs"
-MKSWAP="sudo /sbin/mkswap"
+MKSWAP="/sbin/mkswap"
 
 # Prefix for the OpenNebula instance in StorPool
 # Set to a different name to avoid naming collision when multiple OpenNebula
@@ -90,6 +89,15 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 # Default: 1 (enabled)
 #
 UPDATE_IMAGE_ON_IMPORT=1
+
+
+# OpenNebula 5.12+ changed the monitoring data format
+# Set to "POLL" for OpenNebula 5.10 and below
+#
+# Default: MONITOR
+# 
+#MONITOR_TAG=MONITOR
+
 
 #
 # variables enabling various Debuging
