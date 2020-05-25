@@ -92,11 +92,10 @@ UPDATE_IMAGE_ON_IMPORT=1
 
 
 # OpenNebula 5.12+ changed the monitoring data format
-# Set to "POLL" for OpenNebula 5.10 and below
-#
-# Default: MONITOR
+# Set to 1 for OpenNebula 5.10 and below
+# Default: 0
 # 
-#MONITOR_TAG=MONITOR
+#LEGACY_DS_MONITORING=0
 
 
 #

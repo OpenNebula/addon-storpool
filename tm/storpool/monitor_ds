@@ -22,6 +22,12 @@ function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
 DS_DIR="$1"
 
 DRIVER_PATH="${0%/*}"
+MONITOR_TAG="MONITOR"
+
+parent=$PPID
+splog "ZDBG $PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+splog "ZDBG DRIVER_PATH=${0%/*}"
+
 
 if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
     source "$DRIVER_PATH/../../addon-storpoolrc"
@@ -59,6 +65,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 #	splog "VM_ID=$VM_ID VM_DIR=$VM_DIR"
 	test -d "$VM_DIR" || continue
 	
+    vm_data=
 	DRIVER_RUN=
 	for DISK in `ls $VM_DIR/disk.[[:digit:]]* 2>/dev/null | grep '/disk\.[0-9]\+$'`; do
 #		splog "DISK=$DISK"
@@ -66,7 +73,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 			[ -e "$DISK" ] || continue
 		fi
 		
-		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,POLL=\""
+		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,${MONITOR_TAG}=\""
 		
 		if [ -f "${DISK}.monitor" ]; then
 			DRIVER="$(<"${DISK}.monitor")"
@@ -81,8 +88,14 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 		if boolTrue "DEBUG_TM_MONITOR_DS_VERBOSE"; then
 			splog "run $DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER"
 		fi
-		"$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER"
+		vm_data+="$("$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER")"
 	done
-	
+    if [ -n "${vm_data:0:1}" ]; then
+        if [ "${MONITOR_TAG^^}" = "MONITOR" ]; then
+            echo "${vm_data// /\\n}" | base64 -w 0 -
+        else
+            echo "$vm_data"
+        fi
+    fi
 	[ -z "$DRIVER_RUN" ] || echo "\"]"
 done

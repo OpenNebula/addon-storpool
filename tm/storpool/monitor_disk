@@ -116,7 +116,7 @@ if [ -f "$SP_DS_TMP/sizes" ]; then
 				if boolTrue "DEBUG_TM_MONITOR_DISK"; then
 					splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($((other/1024/1024))) snapshot:$name"
 				fi
-				echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+				echo -n " SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
 			else
 				if boolTrue "DEBUG_TM_MONITOR_DISK_VERBOSE"; then
 					splog "skipping $name looking for <volume>-snap<N>"
@@ -132,7 +132,7 @@ if [ -f "$SP_DS_TMP/sizes" ]; then
 				if boolTrue "DEBUG_TM_MONITOR_DISK"; then
 					splog "$DISK ID:$DISK_ID SIZE:$disk_size ($((other/1024/1024))) volume:$name"
 				fi
-				echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+				echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 			else
 				splog "skip '$name' looking for '$spVolume'"
 			fi
@@ -172,7 +172,7 @@ fi
 if boolTrue "DEBUG_TM_MONITOR_DISK"; then
 	splog "$DISK ID:$DISK_ID SIZE:$disk_size ($used)"
 fi
-echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 
 while IFS=',' read name spaceUsed storedSize; do
 	name=${name//\"/}
@@ -188,5 +188,5 @@ while IFS=',' read name spaceUsed storedSize; do
 	if boolTrue "DEBUG_TM_MONITOR_DISK"; then
 		splog "$DISK ID:$DISK_ID SNAP:$snap_id ($name) SIZE:$snap_size ($used) spaceUsed:$spaceUsed storedSize:$storedSize"
 	fi
-	echo -n "SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+	echo -n " SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
 done < <(eval $SP_CMD_SNAPSHOT_SPACE 2>/dev/null | jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" | sort)

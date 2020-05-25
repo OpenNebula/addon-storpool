@@ -22,14 +22,26 @@ function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
 DRV_ACTION="$1"
 DS_ID="$2"
 
+parent=$PPID
+splog "ZDBG $PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+splog "ZDBG DRIVER_PATH=${0%/*}"
+echo "echo \"$DRV_ACTION\"|base64 -d|xmllint -format -" >"/tmp/DRV_$DS_ID.sh"
+
 DRIVER_PATH="${0%/*}"
 SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/tmp/monitor"
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
 SP_CMD_TEMPLATE_STATUS="cat _SP_JSON_PATH_/_SP_TEMPLATE_STATUS_JSON_"
 SP_CMD_TEMPLATE_STATUS_IMAGE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_TEMPLATE_STATUS_JSON_"
+SP_VOLUME_SPACEUSED_JSON="storpool_volume_usedSpace.json"
+SP_CMD_VOLUME_SPACE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_VOLUME_SPACEUSED_JSON_"
+SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
+SP_CMD_SNAPSHOT_SPACE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_SNAPSHOT_SPACE_JSON_"
 # alternate calculation of the Free space
 ALT_STATS=
+LEGACY_DS_MONITORING=0
+MONITOR_ADDRESS=127.0.0.1
+MONITOR_PORT=4124
 
 if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
     source "${DRIVER_PATH}/../../addon-storpoolrc"
@@ -98,22 +110,22 @@ while IFS=',' read n t f u2 u3; do
 		case "${DRV_ACTION:0:6}" in
 			system)
 				echo $((u/1024/1024)) $((t/1024/1024)) $((f/1024/1024))
-				DS_TYPE="SYSTEM"
+				DS_TYPE="SYSTEM_DS"
 				;;
 			*)
 				echo "USED_MB=$((u/1024/1024))"
 				echo "TOTAL_MB=$((t/1024/1024))"
 				echo "FREE_MB=$((f/1024/1024))"
-				DS_TYPE="IMAGE"
 				;;
 		esac
 		if boolTrue "DEBUG_TM_MONITOR"; then
-			splog "${DS_TYPE}_DS ID:$DS_ID u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
+			splog "${DS_TYPE} ID:$DS_ID u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
 		fi
 		break
 	fi
 done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
 
+# VM disks monitoring
 if [ -d "$(readlink -f $BASE_PATH)" ]; then
 	if [ -f "$BASE_PATH/.monitor" ]; then
 		if boolTrue "DEBUG_TM_MONITOR"; then
@@ -123,9 +135,138 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 		exit 0
 	fi
 	if boolTrue "DEBUG_TM_MONITOR"; then
-		splog "run $DRIVER_PATH/monitor_ds $BASE_PATH"
+		splog "$BASE_PATH processing VM disks..."
 	fi
-	"$DRIVER_PATH/monitor_ds" "$BASE_PATH"
+    ########	"$DRIVER_PATH/monitor_ds" "$BASE_PATH"
+    # expand SP_CMD_VOLUME_SPACE macro variables
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACEUSED_JSON_/$SP_VOLUME_SPACEUSED_JSON}"
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+    SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
+        
+    # expand SP_CMD_SNAPSHOT_SPACE macro variables
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_DATASTORE_ID_/$DS_ID}"
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+    SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
+
+    ONE_VM_POOL_XML="${ONE_VM_POOL_XML:-/tmp/monitor/one.pool}"
+    if [ -f "$ONE_VM_POOL_XML" ]; then
+        onevm_ts="$(stat -c %Y "$ONE_VM_POOL_XML")"
+        splog "$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
+    else
+        if onevm list -x >"${ONE_VM_POOL_XML}.new" 2>/dev/null; then
+            mv "${ONE_VM_POOL_XML}.new" "${ONE_VM_POOL_XML}"
+            splog "($?) mv ${ONE_VM_POOL_XML}.new ${ONE_VM_POOL_XML}"
+        else
+            splog "($?) onevm list -x >$ONE_VM_POOL_XML"
+        fi
+    fi
+
+    if boolTrue "SP_SPACE_USED_LVMWAY"; then
+        # storedSize
+        size_idx=1
+    else
+        # spaceUsed
+        size_idx=2
+    fi
+    size_descr=(none storedSize spaceUsed)
+    if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+        splog "SP_CMD_VOLUME_SPACE=$SP_CMD_VOLUME_SPACE ${size_descr[$size_idx]}"
+        splog "SP_CMD_SNAPSHOT_SPACE=$SP_CMD_SNAPSHOT_SPACE"
+        splog "ONE_VM_POOL_XML=$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
+    fi
+
+    monitor=
+    while read -u 4 -d' ' VM_ID; do
+        unset disk_datastore_id disk_clone disk_type disk_image
+        declare -A disk_datastore disk_clone disk_type disk_image
+        vm_xml="$(xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$ONE_VM_POOL_XML")"
+        while read -u 5 -d' ' DISK_ID; do
+            unset i xp
+            while IFS= read -r -d '' element; do
+                xp[i++]="$element"
+            done < <(echo "$vm_xml" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin \
+                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/DATASTORE_ID" \
+                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/TYPE" \
+                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/CLONE" \
+                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE_ID")
+            unset i
+            disk_datastore[$DISK_ID]="${xp[i++]}" 
+            disk_type[$DISK_ID]="${xp[i++]}" 
+            disk_clone[$DISK_ID]="${xp[i++]}"
+            disk_image[$DISK_ID]="${xp[i++]}"
+        done 5< <(echo "$vm_xml" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin %m%//TEMPLATE/DISK/DISK_ID;echo " ")
+        vm_monitor=""
+        for DISK_ID in ${!disk_datastore[*]}; do
+            volume="${ONE_PX:-one}"
+            if [ -n "${disk_clone[$DISK_ID]}" ]; then
+                volume+="-img-${disk_image[$DISK_ID]}"
+                if [ "${disk_clone[$DISK_ID],,}" = "yes" ]; then
+                    volume+="-${VM_ID}-${DISK_ID}"
+                fi
+            else
+                [ "${disk_type[$DISK_ID],,}" = "swap" ] && TYPE=swap || TYPE=raw
+                volume+="-sys-${VM_ID}-${DISK_ID}-${TYPE}"
+            fi
+            sp_data=($(eval $SP_CMD_VOLUME_SPACE | \
+                ${JQ_BIN:-jq} -r --arg name "$volume" '.data[]|select(.name==$name)|
+                (.name)+" "+
+                (.storedSize|tostring)+" "+
+                (.spaceUsed|tostring)'))
+            disk_size="${sp_data[$size_idx]}"
+            if [ -n "$disk_size" ] && [ -z ${disk_size//[0-9]/} ]; then
+                vm_monitor+=" DISK_SIZE=[ID=${DISK_ID},SIZE=$((disk_size/1024/1024))]"
+            else
+                continue
+            fi
+            while read -u 5 data; do
+                sp_data=($data)
+                snapshot="${sp_data[0]}"
+                SNAP_ID="${snapshot#*-snap}"
+                if [ -n "$SNAP_ID" ]; then
+                    if [ -z "${SNAP_ID//[0-9]/}" ]; then
+                        snap_size="${sp_data[$size_idx]}"
+                        if [ -n "$snap_size" ] && [ -z "${snap_size//[0-9]/}"]; then
+                            vm_monitor+=" SNAPSHOT_SIZE=[ID=${SNAP_ID},DISK_ID=${DISK_ID},SIZE=$((snap_size/1024/1024))]"
+                        fi
+                    fi
+                fi
+            done 5< <(eval $SP_CMD_SNAPSHOT_SPACE | \
+                ${JQ_BIN:-jq} -r --arg name "${volume}-snap" '.data[]|
+                select(.name|startswith($name))|
+                (.name)+" "+
+                (.storedSize|tostring)+" "+
+                (.spaceUsed|tostring)')
+        done
+        if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+            splog "ZDBG $VM_ID POLL$vm_monitor"
+        fi
+        if boolTrue "LEGACY_DS_MONITORING"; then
+            echo -n "VM=[ID=\"$VM_ID\", POLL=\""
+            echo "$vm_monitor"
+            echo "\"]"
+        else
+            vm_monitor_b64="$(echo "${vm_monitor// /\\n}" | base64 -w 0)"
+            monitor+="VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
+        fi
+    done 4< <(cat "$ONE_VM_POOL_XML" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin "%m%/VM_POOL/VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID]/ID";echo " ")
+    if ! boolTrue "LEGACY_DS_MONITORING"; then
+        monitor_b64="$(echo $monitor | \
+            ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
+            base64 -w 0)"
+        echo MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w1 $MONITOR_ADDRESS $MONITOR_PORT
+        ret=$?
+        if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+            splog "($ret) MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w1 $MONITOR_ADDRESS $MONITOR_PORT"
+        fi
+    fi
 else
 	if [ -n "$BASE_PATH" ]; then
 		if [ ! -L "$BASE_PATH" ]; then

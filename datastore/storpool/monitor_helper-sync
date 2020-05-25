@@ -60,6 +60,10 @@ SP_SNAPSHOT_LIST_JSON="storpool_snapshot_list.json"
 #SP_SNAPSHOT_LIST_RUN="storpool -j snapshot list"
 SP_SNAPSHOT_LIST_MINUTES=1
 
+ONE_VM_POOL_RUN="onevm list -x"
+ONE_VM_POOL_XML="one.pool"
+ONE_VM_POOL_MINUTES=5
+
 # Do sync to remote hosts
 MONITOR_SYNC_REMOTE="YES"
 
@@ -172,7 +176,7 @@ function doExpand()
 
 function run_task()
 {
-	local _run="$1" _jsonFile="$2" _cacheTime="$3" _reloadCache="$4"
+	local _run="$1" _jsonFile="$2" _cacheTime="$3" _reloadCache="$4" _runonly="$5"
 	local sp_api_http_host=${SP_API_HTTP_HOST:-0.0.0.0}
 	local cached=0 ret=1
 	
@@ -212,6 +216,9 @@ function run_task()
 				splog "Can't move ${_jsonFile}New to ${_jsonFile}"
 				return $ret
 			fi
+            if [ -n "$_runonly" ]; then
+                return 0
+            fi
 			cp -f "${_jsonFile}" "${_jsonFile}${sp_api_http_host}"
 			_ret=$?
 			if boolTrue "MONITOR_SYNC_DEBUG" || [ $_ret -ne 0 ]; then
@@ -517,6 +524,11 @@ for i in ${!DS_ID_ARRAY[@]}; do
 				rFile="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}"
 				doExpand "rFile"
 				run_task "$SP_SNAPSHOT_LIST_RUN" "${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}" "$SP_SNAPSHOT_LIST_MINUTES"
+			fi
+			if [ -n "$ONE_VM_POOL_RUN" ]; then
+				rFile="${SP_FE_JSON_PATH}/${ONE_VM_POOL_XML##*/}"
+				doExpand "rFile"
+				run_task "$ONE_VM_POOL_RUN" "$rFile" "$ONE_VM_POOL_MINUTES" "" "runonly"
 			fi
 		fi
 	done

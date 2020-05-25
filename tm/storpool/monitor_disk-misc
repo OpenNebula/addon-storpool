@@ -65,7 +65,7 @@ if [ -b "$DISK_DEV" ]; then
 		fi
 		disk_size="$((disk_size/1024/1024))"
 		
-		echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+		echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 	fi
 elif [ -f "$DISK_DEV" ]; then
 	# borrowed from ../shared/monitor
@@ -75,7 +75,7 @@ elif [ -f "$DISK_DEV" ]; then
 	if boolTrue "DEBUG_TM_MONITOR_DISK_MISC_VERBOSE"; then
 		splog "$DISK ID:$DISK_ID SIZE:$disk_size"
 	fi
-	echo -n "DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}] "
+	echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 	
 	disk="${DISK##*/}"
 	snap_dir="${vmdir}/${disk}.snap"
@@ -90,7 +90,7 @@ elif [ -f "$DISK_DEV" ]; then
 				splog "$DISK SNAP_ID:$snap ID:$DISK_ID SIZE:$disk_size"
 			fi
 			
-			echo -n "SNAPSHOT_SIZE=[ID=${snap},DISK_ID=${DISK_ID},SIZE=${snap_size}] "
+			echo -n " SNAPSHOT_SIZE=[ID=${snap},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
 		done
 	fi
 fi
