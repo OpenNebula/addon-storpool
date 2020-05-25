@@ -806,6 +806,25 @@ function storpoolVolumeTag()
     fi
 }
 
+function storpoolSnapshotTag()
+{
+    local _SP_SNAP="$1" _TAG_VAL="$2" _TAG_KEY="${3:-$VM_TAG}"
+    local _OFS=$IFS tagCmd=
+    IFS=\;
+    tagVals=(${_TAG_VAL})
+    tagKeys=(${_TAG_KEY})
+    IFS=$_OFS
+    local tagCmd=
+    for i in ${!tagKeys[*]}; do
+        tagKey="${tagKeys[i]//[[:space:]]/}"
+        [ -n "$tagKey" ] || continue
+        tagCmd+="tag ${tagKey}=${tagVals[i]//[[:space:]]/} "
+    done
+    if [ -n "$tagCmd" ]; then
+        storpoolRetry snapshot "$_SP_SNAP" $tagCmd >/dev/null
+    fi
+}
+
 function oneSymlink()
 {
     local _host="$1" _src="$2"

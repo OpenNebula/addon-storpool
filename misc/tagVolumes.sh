@@ -37,6 +37,9 @@ vmPool="$TMP_DIR/vmPool.xml"
 
 $SUDO onevm list -x --extended >"$vmPool"
 
+snapshots_json="$TMP_DIR/snapshots.json"
+$SUDO storpool -B -j snapshot list >"$snapshots.json"
+
 while read -u 4 -d' ' VM_ID; do
     vmVolumes=
     oneVmVolumes "$VM_ID" "$vmPool"
@@ -44,6 +47,9 @@ while read -u 4 -d' ' VM_ID; do
     for vol in $vmVolumes; do
         if [ "${vol%iso}" = "$vol" ]; then
             storpoolVolumeTag "$vol" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
+            while read -u 5 snap; do
+                storpoolSnapshotTag "$snap" "$VM_ID" "$VM_TAG"
+            done 5< <( jq -r --arg n "${vol}ONESNAP" ".data[]|select(.name|startswith(\$n))|.name" "$snapshots_json")
         else
             echo "# skipping $vol"
         fi
