@@ -96,7 +96,7 @@ EOF
         snap="${volume}-${res}"
         list+=($volume $snap)
     done
-    storpoolRetry groupSnapshot ${list[@]}
+    storpoolRetry groupSnapshot "tag:$VM_TAG=$VM_ID" ${list[@]}
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
         pids="$(jobs -p)"
         if [ -n "$pids" ]; then

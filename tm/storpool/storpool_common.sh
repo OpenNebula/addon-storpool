@@ -398,13 +398,20 @@ function storpoolWrapper()
 	case "$1" in
 		groupSnapshot)
 			shift
+            tags=
+            while [ ${1:0:4} = "tag:" ]; do
+                tg="${1#tag:}"
+                [ -z "$tags" ] || tags+=","
+                tags+="\"${tg%%=*}\":\"${tg#*=}\""
+                shift
+            done
 			while [ -n "$2" ]; do
 				[ -z "$json" ] || json+=","
 				json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
 				shift 2
 			done
 			if [ -n "$json" ]; then
-				res="$(storpoolApi "VolumesGroupSnapshot" "{\"volumes\":[$json]}")"
+				res="$(storpoolApi "VolumesGroupSnapshot" "{\"volumes\":[$json]${tags:+,\"tags\":{$tags}}}")"
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "API communication error:$res ($ret)"
