@@ -205,6 +205,18 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     TEMPLATE= #`onevm show -x "$VM_ID" | base64 -w0`
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
+        # check DISK_TM_MADS
+        if boolTrue "IS_UNDEPLOY"; then
+            STORPOOL_ONLY=1
+            for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
+                if [ "x${tm_mad/storpool/}" = "x$tm_mad" ]; then
+                    STORPOOL_ONLY=0
+                fi
+            done
+            if boolTrue "STORPOOL_ONLY"; then
+                SKIP_UNDEPLOY_SSH=1
+            fi
+        fi
         # checkpoint
         if [ -n "$CHECKPOINT_SAVE" ]; then
             oneCheckpointSave "$SRC"
