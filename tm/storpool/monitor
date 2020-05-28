@@ -34,7 +34,7 @@ SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_CMD_SNAPSHOT_SPACE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_SNAPSHOT_SPACE_JSON_"
 # alternate calculation of the Free space
 ALT_STATS=
-LEGACY_DS_MONITORING=0
+LEGACY_MONITORING=0
 MONITOR_ADDRESS=127.0.0.1
 MONITOR_PORT=4124
 
@@ -248,10 +248,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 
            splog "ZDBG $VM_ID $DISK_ID vm_monitor:${#vm_monitor}"
         done
-        if boolTrue "DDEBUG_TM_MONITOR"; then
-            splog "ZDBG $VM_ID vm_monitor:${#vm_monitor}"
-        fi
-        if boolTrue "LEGACY_DS_MONITORING"; then
+        if boolTrue "LEGACY_MONITORING"; then
             echo -n "VM=[ID=\"$VM_ID\", POLL=\""
             echo "$vm_monitor"
             echo "\"]"
@@ -260,7 +257,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             monitor+=" VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
         fi
     done 4< <(cat "$ONE_VM_POOL_XML" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin "%m%/VM_POOL/VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID]/ID";echo " ")
-    if ! boolTrue "LEGACY_DS_MONITORING"; then
+    if ! boolTrue "LEGACY_MONITORING"; then
         monitor_b64="$(echo $monitor | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
             base64 -w 0)"

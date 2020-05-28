@@ -47,7 +47,7 @@ if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
     splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
 fi
 
-if ! boolTrue "MONITOR_DS_LEGACY"; then
+if ! boolTrue "LEGACY_MONITORING"; then
     if boolTrue "DDEBUG_TM_MONITOR_DS"; then
         splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
     fi

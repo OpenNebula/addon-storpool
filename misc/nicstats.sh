@@ -48,7 +48,7 @@ function splog()
 
 function report()
 {
-    if boolTrue "LEGACY_DS_MONITORING"; then
+    if boolTrue "LEGACY_MONITORING"; then
         echo "VM=[ID=${1},POLL=\"$2\"]"
         if boolTrue "DEBUG_NIC_STATS"; then
             splog "VM=[ID=${1},POLL=\"$2\"]"
