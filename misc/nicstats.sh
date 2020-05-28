@@ -26,6 +26,42 @@
 
 PATH=/bin:/sbin/:/usr/bin:/usr/sbin:$PATH
 
+if [ -f "../../addon-storpoolrc" ]; then
+    source "../../addon-storpoolrc"
+fi
+
+function boolTrue()
+{
+   case "${!1^^}" in
+       1|Y|YES|TRUE|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
+function splog()
+{
+   logger -t "${nic_sp_0##*/}" -- "$*"
+}
+
+function report()
+{
+    if boolTrue "LEGACY_DS_MONITORING"; then
+        echo "VM=[ID=${1},POLL=\"$2\"]"
+        if boolTrue "DEBUG_NIC_STATS"; then
+            splog "VM=[ID=${1},POLL=\"$2\"]"
+        fi
+    else
+        echo "VM=[ID=${1},MONITOR=\"$(echo "$2"|tr ' ' '\n'|base64 -w 0)\"]"
+        if boolTrue "DEBUG_NIC_STATS"; then
+            splog "VM=[ID=${1},MONITOR=\"$(echo "$2"|tr ' ' '\n'|base64 -w 0)\"]"
+        fi
+    fi
+}
+
+
 #27: one-135-0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master onebr.616 state UNKNOWN mode DEFAULT group default qlen 1000\    link/ether fe:00:70:30:4a:06 brd ff:ff:ff:ff:ff:ff\    RX: bytes  packets  errors  dropped overrun mcast   \    179604395  177435   0       0       0       0       \    TX: bytes  packets  errors  dropped carrier collsns \    135264059  1235572  0       0       0       0       
 poll=
 while read -u 4 l; do
@@ -36,15 +72,15 @@ while read -u 4 l; do
 	nid="${nica[2]}"
 	if [ "$vid" != "$vidold" ]; then
 		if [ -n "$poll" ]; then
-			echo "VM=[ID=${vidold},POLL=\"$poll\"]"
+            report "$vidold" "$poll"
 		fi
 		poll=
 	fi
 	vidold="$vid"
 	[ -n "$poll" ] && poll+=" "
 	poll+="NIC_STATS=[ID=${nid},RX=${a[41]},TX=${a[28]}]"
-done 4< <(ip -o -s link | grep one-)
+done 4< <(ip -o -s link | grep one- | sort -k 2)
 
 if [ -n "$poll" ]; then
-	echo "VM=[ID=${vidold},POLL=\"$poll\"]"
+    report "$vidold" "$poll"
 fi

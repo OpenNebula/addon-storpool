@@ -17,7 +17,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
+function splog() { logger -t "tm_sp_${0##*/}[$$]" " $(date +%s.%N) $*"; }
 
 DRV_ACTION="$1"
 DS_ID="$2"
@@ -25,7 +25,7 @@ DS_ID="$2"
 parent=$PPID
 splog "ZDBG $PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
 splog "ZDBG DRIVER_PATH=${0%/*}"
-echo "echo \"$DRV_ACTION\"|base64 -d|xmllint -format -" >"/tmp/DRV_$DS_ID.sh"
+echo "cd $PWD && $0 $*" >"/tmp/DRV_$DS_ID.sh"
 
 DRIVER_PATH="${0%/*}"
 SP_JSON_PATH="/tmp"
@@ -100,7 +100,7 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_
 #if boolTrue "DEBUG_TM_MONITOR"; then
 #	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 #fi
-
+splog "ZDBG DS Stats..."
 while IFS=',' read n t f u2 u3; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
 		if boolTrue "ALT_STATS"; then
@@ -127,6 +127,7 @@ done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.nam
 
 # VM disks monitoring
 if [ -d "$(readlink -f $BASE_PATH)" ]; then
+    splog "ZDBG VM disk stats..."
 	if [ -f "$BASE_PATH/.monitor" ]; then
 		if boolTrue "DEBUG_TM_MONITOR"; then
 			test -f "$BASE_PATH/.monitor" && DS_DRIVER="$(<"$BASE_PATH/.monitor")" || DS_DRIVER="storpool"
@@ -137,7 +138,6 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 	if boolTrue "DEBUG_TM_MONITOR"; then
 		splog "$BASE_PATH processing VM disks..."
 	fi
-    ########	"$DRIVER_PATH/monitor_ds" "$BASE_PATH"
     # expand SP_CMD_VOLUME_SPACE macro variables
     SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACEUSED_JSON_/$SP_VOLUME_SPACEUSED_JSON}"
     SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
@@ -169,6 +169,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         fi
     fi
 
+    splog "ZDBG $ONE_VM_POOL_XML"
     if boolTrue "SP_SPACE_USED_LVMWAY"; then
         # storedSize
         size_idx=1
@@ -244,27 +245,30 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 (.name)+" "+
                 (.storedSize|tostring)+" "+
                 (.spaceUsed|tostring)')
+
+           splog "ZDBG $VM_ID $DISK_ID vm_monitor:${#vm_monitor}"
         done
         if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
-            splog "ZDBG $VM_ID POLL$vm_monitor"
+            splog "ZDBG $VM_ID vm_monitor:${#vm_monitor}"
         fi
         if boolTrue "LEGACY_DS_MONITORING"; then
             echo -n "VM=[ID=\"$VM_ID\", POLL=\""
             echo "$vm_monitor"
             echo "\"]"
         else
-            vm_monitor_b64="$(echo "${vm_monitor// /\\n}" | base64 -w 0)"
-            monitor+="VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
+            vm_monitor_b64="$(echo "${vm_monitor}" | tr ' ' '\n' | base64 -w 0)"
+            monitor+=" VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
         fi
     done 4< <(cat "$ONE_VM_POOL_XML" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin "%m%/VM_POOL/VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID]/ID";echo " ")
     if ! boolTrue "LEGACY_DS_MONITORING"; then
-        monitor_b64="$(echo $monitor | \
+        monitor_b64="$(echo $monitor | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
             base64 -w 0)"
         echo MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
         ret=$?
         if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
-            splog "($ret) MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w1 ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
+            splog "$DS_ID ($ret) MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w1 ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
+            echo "echo $monitor_b64|base64 -d|pigz -d" >/tmp/ds-$DS_ID
         fi
     fi
 else
@@ -282,4 +286,5 @@ else
 	fi
 fi
 
+splog "ZDBG $DS_ID END"
 exit 0
