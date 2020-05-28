@@ -50,12 +50,12 @@ function report()
 {
     if boolTrue "LEGACY_MONITORING"; then
         echo "VM=[ID=${1},POLL=\"$2\"]"
-        if boolTrue "DEBUG_NIC_STATS"; then
+        if boolTrue "DEBUG_NICSTATS"; then
             splog "VM=[ID=${1},POLL=\"$2\"]"
         fi
     else
         echo "VM=[ID=${1},MONITOR=\"$(echo "$2"|tr ' ' '\n'|base64 -w 0)\"]"
-        if boolTrue "DEBUG_NIC_STATS"; then
+        if boolTrue "DEBUG_NICSTATS"; then
             splog "VM=[ID=${1},MONITOR=\"$(echo "$2"|tr ' ' '\n'|base64 -w 0)\"]"
         fi
     fi

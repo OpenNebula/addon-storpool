@@ -97,10 +97,9 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/$SP_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
 
-#if boolTrue "DEBUG_TM_MONITOR"; then
-#	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
-#fi
-splog "ZDBG DS Stats..."
+if boolTrue "DDDEBUG_TM_MONITOR"; then
+	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
+fi
 while IFS=',' read n t f u2 u3; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
 		if boolTrue "ALT_STATS"; then
@@ -127,7 +126,6 @@ done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.nam
 
 # VM disks monitoring
 if [ -d "$(readlink -f $BASE_PATH)" ]; then
-    splog "ZDBG VM disk stats..."
 	if [ -f "$BASE_PATH/.monitor" ]; then
 		if boolTrue "DEBUG_TM_MONITOR"; then
 			test -f "$BASE_PATH/.monitor" && DS_DRIVER="$(<"$BASE_PATH/.monitor")" || DS_DRIVER="storpool"
@@ -135,7 +133,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 		fi
 		exit 0
 	fi
-	if boolTrue "DEBUG_TM_MONITOR"; then
+	if boolTrue "DDEBUG_TM_MONITOR"; then
 		splog "$BASE_PATH processing VM disks..."
 	fi
     # expand SP_CMD_VOLUME_SPACE macro variables
@@ -169,7 +167,6 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         fi
     fi
 
-    splog "ZDBG $ONE_VM_POOL_XML"
     if boolTrue "SP_SPACE_USED_LVMWAY"; then
         # storedSize
         size_idx=1
@@ -246,7 +243,9 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 (.storedSize|tostring)+" "+
                 (.spaceUsed|tostring)')
 
-           splog "ZDBG $VM_ID $DISK_ID vm_monitor:${#vm_monitor}"
+            if boolTrue "DDEBUG_TM_MONITOR"; then
+                splog "$DS_TYPE $DS_ID VM $VM_ID DISK $DISK_ID vm_monitor:${#vm_monitor}"
+            fi
         done
         if boolTrue "LEGACY_MONITORING"; then
             echo -n "VM=[ID=\"$VM_ID\", POLL=\""
@@ -264,8 +263,10 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         echo MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
         ret=$?
         if boolTrue "DDEBUG_TM_MONITOR"; then
-            splog "$DS_ID ($ret) MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w1 ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
-            echo "echo $monitor_b64|base64 -d|pigz -d" >/tmp/ds-$DS_ID
+            splog "$DS_ID ($ret) MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
+            if boolTrue "DDDEBUG_TM_MONITOR"; then
+                echo "echo $monitor_b64 | base64 -d | pigz -d" >/tmp/ds-$DS_ID
+            fi
         fi
     fi
 else
@@ -283,5 +284,5 @@ else
 	fi
 fi
 
-splog "ZDBG $DS_ID END"
+splog "$DS_TYPE $DS_ID END"
 exit 0

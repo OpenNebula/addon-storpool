@@ -45,6 +45,7 @@ function boolTrue()
 if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
     parent=$PPID
     splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+    echo "su - oneadmin -c 'cd $PWD && $0 $*'" >>"/tmp/tm_monitor_ds-$DS_ID.sh"
 fi
 
 if ! boolTrue "LEGACY_MONITORING"; then
