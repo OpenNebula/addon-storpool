@@ -182,25 +182,21 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
     fi
 
     monitor=
-    while read -u 4 -d' ' VM_ID; do
+    while read -u 4 VM_ID; do
         unset disk_datastore_id disk_clone disk_type disk_image
         declare -A disk_datastore disk_clone disk_type disk_image
-        vm_xml="$(xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$ONE_VM_POOL_XML")"
-        while read -u 5 -d' ' DISK_ID; do
+        vm_disks="<TEMPLATE>$(cat "$ONE_VM_POOL_XML"|xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]/TEMPLATE/DISK" -)</TEMPLATE>"
+        while read -u 5 DISK_ID; do
             unset i xp
-            while IFS= read -r -d '' element; do
-                xp[i++]="$element"
-            done < <(echo "$vm_xml" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin \
-                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/DATASTORE_ID" \
-                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/TYPE" \
-                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/CLONE" \
-                "//TEMPLATE/DISK[DISK_ID=$DISK_ID]/IMAGE_ID")
+            for e in DATASTORE_ID TYPE CLONE IMAGE_ID; do
+                xp[i++]="$(echo "$vm_disks"|xmlstarlet sel -t -m "//DISK[DISK_ID=$DISK_ID]" -v "$e")"
+            done
             unset i
-            disk_datastore[$DISK_ID]="${xp[i++]}" 
-            disk_type[$DISK_ID]="${xp[i++]}" 
+            disk_datastore[$DISK_ID]="${xp[i++]}"
+            disk_type[$DISK_ID]="${xp[i++]}"
             disk_clone[$DISK_ID]="${xp[i++]}"
             disk_image[$DISK_ID]="${xp[i++]}"
-        done 5< <(echo "$vm_xml" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin %m%//TEMPLATE/DISK/DISK_ID;echo " ")
+        done 5< <(echo "$vm_disks" | xmlstarlet sel -t -m "//DISK" -v "DISK_ID" -n)
         vm_monitor=""
         for DISK_ID in ${!disk_datastore[*]}; do
             volume="${ONE_PX:-one}"
@@ -255,7 +251,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             vm_monitor_b64="$(echo "${vm_monitor}" | tr ' ' '\n' | base64 -w 0)"
             monitor+=" VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
         fi
-    done 4< <(cat "$ONE_VM_POOL_XML" | "$DRIVER_PATH"/../../datastore/xpath.rb --stdin "%m%/VM_POOL/VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID][STATE=3]/ID";echo " ")
+    done 4< <(cat "$ONE_VM_POOL_XML" | xmlstarlet select --template --match "//VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID][STATE=3]" -v "ID" -n)
     if ! boolTrue "LEGACY_MONITORING"; then
         monitor_b64="$(echo $monitor | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \

@@ -97,7 +97,7 @@ If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) f
 
 ```bash
 # on the front-end
-yum -y install --enablerepo=epel patch git jq lz4 npm
+yum -y install --enablerepo=epel patch git jq lz4 npm xmlstarlet
 ```
 
 #### node dependencies
@@ -105,7 +105,7 @@ yum -y install --enablerepo=epel patch git jq lz4 npm
  :grey_exclamation:*use when adding new hosts too*:grey_exclamation:
 
 ```bash
-yum -y install --enablerepo=epel jq lz4 python-lxml
+yum -y install --enablerepo=epel jq lz4 python-lxml xmlstarlet
 ```
 
 ### Get the addon from github
