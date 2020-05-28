@@ -203,7 +203,7 @@ MONITOR_SYNC_REMOTE="YES"
 SP_TEMPLATE_PROPAGATE="YES"
 
 # Uncomment to enable debugging
-#MONITOR_SYNC_DEBUG=1
+#DEBUG_MONITOR_SYNC=1
 ```
 
 For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the `SP_JSON_PATH` variable must be altered to point to a shared folder and set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files

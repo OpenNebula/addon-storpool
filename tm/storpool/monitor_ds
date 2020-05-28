@@ -24,11 +24,6 @@ DS_DIR="$1"
 DRIVER_PATH="${0%/*}"
 MONITOR_TAG="MONITOR"
 
-parent=$PPID
-splog "ZDBG $PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
-splog "ZDBG DRIVER_PATH=${0%/*}"
-
-
 if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
     source "$DRIVER_PATH/../../addon-storpoolrc"
 fi
@@ -47,8 +42,13 @@ function boolTrue()
    esac
 }
 
+if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
+    parent=$PPID
+    splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+fi
+
 if ! boolTrue "MONITOR_DS_LEGACY"; then
-    if boolTrue "DEBUG_TM_MONITOR_DS"; then
+    if boolTrue "DDEBUG_TM_MONITOR_DS"; then
         splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
     fi
     exit 0
@@ -62,7 +62,7 @@ if [ -f "$DS_DIR/.monitor" ]; then
 	DS_DRIVER="$(<"$DS_DIR/.monitor")"
 	HAS_DOT_MONITOR=1
 else
-	if boolTrue "DEBUG_TM_MONITOR_DS_VERBOSE"; then
+	if boolTrue "DDEBUG_TM_MONITOR_DS"; then
 		splog "File $DS_DIR/.monitor not found. Using default DS_DERIVER=storpool"
 	fi
 	DS_DRIVER="storpool"
@@ -93,7 +93,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 		else
 			DRIVER_RUN="$DRIVER_PATH/monitor_disk"
 		fi
-		if boolTrue "DEBUG_TM_MONITOR_DS_VERBOSE"; then
+		if boolTrue "DDEBUG_TM_MONITOR_DS"; then
 			splog "run $DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER"
 		fi
 		vm_data+="$("$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER")"

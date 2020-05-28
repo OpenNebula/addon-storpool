@@ -22,11 +22,6 @@ function splog() { logger -t "tm_sp_${0##*/}[$$]" " $(date +%s.%N) $*"; }
 DRV_ACTION="$1"
 DS_ID="$2"
 
-parent=$PPID
-splog "ZDBG $PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
-splog "ZDBG DRIVER_PATH=${0%/*}"
-echo "cd $PWD && $0 $*" >"/tmp/DRV_$DS_ID.sh"
-
 DRIVER_PATH="${0%/*}"
 SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/tmp/monitor"
@@ -66,6 +61,11 @@ function boolTrue()
 if boolTrue "DEBUG_TM_MONITOR"; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 	export DEBUG_TM_MONITOR_DS=1
+    if boolTrue "DDEBUG_TM_MONITOR"; then
+        parent=$PPID
+        splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+        echo "cd $PWD && $0 $*" >"/tmp/DRV_$DS_ID.sh"
+    fi
 fi
 
 if [ "${DRV_ACTION:0:6}" = "system" ]; then
@@ -178,7 +178,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         size_idx=2
     fi
     size_descr=(none storedSize spaceUsed)
-    if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+    if boolTrue "DDEBUG_TM_MONITOR"; then
         splog "SP_CMD_VOLUME_SPACE=$SP_CMD_VOLUME_SPACE ${size_descr[$size_idx]}"
         splog "SP_CMD_SNAPSHOT_SPACE=$SP_CMD_SNAPSHOT_SPACE"
         splog "ONE_VM_POOL_XML=$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
@@ -248,7 +248,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 
            splog "ZDBG $VM_ID $DISK_ID vm_monitor:${#vm_monitor}"
         done
-        if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+        if boolTrue "DDEBUG_TM_MONITOR"; then
             splog "ZDBG $VM_ID vm_monitor:${#vm_monitor}"
         fi
         if boolTrue "LEGACY_DS_MONITORING"; then
@@ -266,7 +266,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             base64 -w 0)"
         echo MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
         ret=$?
-        if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+        if boolTrue "DDEBUG_TM_MONITOR"; then
             splog "$DS_ID ($ret) MONITOR_VM SUCCESS 0 $monitor_b64 | nc -u -w1 ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
             echo "echo $monitor_b64|base64 -d|pigz -d" >/tmp/ds-$DS_ID
         fi
@@ -277,7 +277,7 @@ else
 			mkdir -p "$BASE_PATH"
 			splog "mkdir -p $BASE_PATH ($?)"
 		else
-			if boolTrue "DEBUG_TM_MONITOR_VERBOSE"; then
+			if boolTrue "DDEBUG_TM_MONITOR"; then
 				splog "BASE_PATH:$BASE_PATH is symlink"
 			fi
 		fi

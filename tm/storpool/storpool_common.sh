@@ -50,7 +50,7 @@ fi
 DEBUG_COMMON=
 DEBUG_TRAPS=
 DEBUG_SP_RUN_CMD=1
-DEBUG_SP_RUN_CMD_VERBOSE=
+DDEBUG_SP_RUN_CMD=
 DEBUG_oneVmInfo=
 DEBUG_oneDatastoreInfo=
 DEBUG_oneTemplateInfo=
@@ -382,7 +382,7 @@ function storpoolApi()
     if boolTrue "NO_PROXY_API";then
         export NO_PROXY="${NO_PROXY:+${NO_PROXY},}$SP_API_HTTP_HOST"
     fi
-    if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+    if boolTrue "DDEBUG_SP_RUN_CMD"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}}"
     fi
     curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
@@ -419,7 +419,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DDEBUG_SP_RUN_CMD"; then
 							splog "API response:$res"
 						fi
 					else
@@ -443,7 +443,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DDEBUG_SP_RUN_CMD"; then
 							splog "API response:$res"
 						fi
 					else
@@ -467,7 +467,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DDEBUG_SP_RUN_CMD"; then
 							splog "API response:$res"
 						fi
 					else
@@ -488,7 +488,7 @@ function storpoolWrapper()
 
 function storpoolRetry() {
     if boolTrue "DEBUG_SP_RUN_CMD"; then
-        if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+        if boolTrue "DDEBUG_SP_RUN_CMD"; then
             splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
         else
             for _last_cmd;do :;done
@@ -1704,7 +1704,7 @@ oneVmVolumes()
 oneVmDiskSnapshots()
 {
     local VM_ID="$1" DISK_ID="$2"
-    if boolTrue "DEBUG_oneVmDiskSnapshots_VERBOSE"; then
+    if boolTrue "DDEBUG_oneVmDiskSnapshots"; then
         splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID"
     fi
 
@@ -1743,7 +1743,7 @@ oneVmDiskSnapshots()
 oneVmSnapshots()
 {
     local VM_ID="$1" snapshot_id="$2" disk_id="$3"
-    if boolTrue "DEBUG_oneVmSnapshots_VERBOSE"; then
+    if boolTrue "DDEBUG_oneVmSnapshots"; then
         splog "oneVmSnapshots() VM_ID:$VM_ID snapshot_id=$snapshot_id disk_id=$disk_id"
     fi
     

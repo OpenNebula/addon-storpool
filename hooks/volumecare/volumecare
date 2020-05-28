@@ -60,7 +60,7 @@ function alterVcPolicy()
         return 0
     fi
 
-    if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+    if boolTrue "DDEBUG_alterVcPolicy"; then
         splog "alterVcPolicy($vmId,$vmPool)"
     fi
 
@@ -92,7 +92,7 @@ function alterVcPolicy()
             if [ "$vcpNew" != "$vcp" ]; then
                 splog "volume:$v current vc-policy:$vcp new:$vcpNew"
                 storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
-            elif boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+            elif boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "volume $v current vc-policy:$vcp"
             fi
         fi
@@ -115,11 +115,11 @@ else
     if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
         tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
         if [ "${tmp:0:5}" == "local" ]; then
-            if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+            if boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "Found leader IP ($RAFT_LEADER_IP)."
             fi
         else
-            if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+            if boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "There is no leader IP found ($RAFT_LEADER_IP). Exit."
             fi
             exit 0
