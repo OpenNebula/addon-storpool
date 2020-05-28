@@ -297,7 +297,7 @@ exit \$ret
 EOF
 )
                     splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
-                    ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
+                    ssh_forward ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
                 fi
             fi
         fi

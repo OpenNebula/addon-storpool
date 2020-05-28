@@ -1912,6 +1912,8 @@ fi
 # backward compatibility
 type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
 
+type -t ssh_forward >/dev/null || function ssh_forward(){ "$@"; }
+
 # redefine own version of ssh_make_path()
 function ssh_make_path
 {
