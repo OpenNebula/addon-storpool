@@ -169,13 +169,6 @@ pushd "$ONE_VAR"
     do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
 popd
 
-for p in "$CWD/patches/im/$ONE_VER"/*.patch; do
-    echo "*** $p ..."
-    pushd "$ONE_VAR" >/dev/null
-        do_patch "$p"
-    popd >/dev/null
-done
-
 echo -n "*** addon-storpoolrc "
 if [ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
     echo "(found)"
