@@ -58,14 +58,14 @@ function boolTrue()
    esac
 }
 
+if boolTrue "DDDEBUG_TM_MONITOR"; then
+    parent=$PPID
+    splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+    echo "cd $PWD && $0 $*" >"/tmp/DRV_$DS_ID.sh"
+fi
 if boolTrue "DEBUG_TM_MONITOR"; then
 	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
 	export DEBUG_TM_MONITOR_DS=1
-    if boolTrue "DDEBUG_TM_MONITOR"; then
-        parent=$PPID
-        splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
-        echo "cd $PWD && $0 $*" >"/tmp/DRV_$DS_ID.sh"
-    fi
 fi
 
 if [ "${DRV_ACTION:0:6}" = "system" ]; then
