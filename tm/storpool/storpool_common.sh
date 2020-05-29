@@ -984,7 +984,9 @@ function oneCheckpointRestore()
     else
         mkdir -p "$_path"
 
-        [ -f "$_path/.monitor" ] || echo "storpool" >"$_path/.monitor"
+        if [ -n "$2" ]; then
+            [ -f "$_path/.monitor" ] || echo "storpool" >"$_path/.monitor"
+        fi
 
         if tar --no-seek --use-compress-program="$SP_COMPRESSION" --to-stdout --extract --file="$sp_link" >"$checkpoint"; then
             splog "RESTORED $volume $checkpoint"

@@ -170,7 +170,7 @@ esac
 #-------------------------------------------------------------------------------
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     REMOTE_MONITOR=
-    if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
+    if ! boolTrue "DS_SHARED" ]; then
         REMOTE_MONITOR="storpool"
     fi
     if [ $LCM_STATE -eq 30 ] && boolTrue "SKIP_UNDEPLOY_SSH"; then
@@ -222,7 +222,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             oneCheckpointSave "$SRC"
         fi
         if [ -n "$CHECKPOINT_RESTORE" ]; then
-            oneCheckpointRestore "$DST"
+            oneCheckpointRestore "$DST" "$REMOTE_MONITOR"
         fi
         # context ISO. Do detach/attach only when hosts differ
         if boolTrue "DO_CONTEXT"; then
@@ -407,9 +407,6 @@ if boolTrue "DO_SYMLINK"; then
     oneDatastoreInfo "$VM_DS_ID"
     MONITOR_TM_MAD=
     if ! boolTrue "DS_SHARED"; then
-        MONITOR_TM_MAD="$VM_TM_MAD"
-    fi
-    if [ "${VM_TM_MAD:0:8}" = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
         MONITOR_TM_MAD="$VM_TM_MAD"
     fi
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"

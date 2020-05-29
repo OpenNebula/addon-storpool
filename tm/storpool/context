@@ -159,7 +159,7 @@ if boolTrue "TAG_CONTEXT_ISO"; then
 fi
 
 MONITOR_TM_MAD=
-if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ]; then
+if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="storpool"
 fi
 
