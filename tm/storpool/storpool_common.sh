@@ -1914,8 +1914,17 @@ fi
 # backward compatibility
 type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
 
-type -t ssh_forward >/dev/null || function ssh_forward(){ "$@"; }
-
+if type -t ssh_forward >/dev/null; then
+    export SSH_AUTH_SOCK
+    if boolTrue "DEBUG_COMMON"; then
+        splog "ssh_forward upstream"
+    fi
+else
+    if boolTrue "DEBUG_COMMON"; then
+        splog "ssh_forward wrapper"
+    fi
+    function ssh_forward(){ "$@"; }
+fi
 # redefine own version of ssh_make_path()
 function ssh_make_path
 {
@@ -1942,5 +1951,5 @@ EOF`
 
 hostReachable()
 {
-	ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
+    ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
 }

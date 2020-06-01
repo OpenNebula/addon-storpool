@@ -142,9 +142,12 @@ storpoolRetry groupDetach "$json"
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="$DS_TM_MAD"
-    #-------------------------------------------------------------------------------
-    # Cleanup src VM files from the src host
-    #-------------------------------------------------------------------------------
+fi
+
+#-------------------------------------------------------------------------------
+# Cleanup src VM files from the src host
+#-------------------------------------------------------------------------------
+if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
     CMD="$SSH $SRC_HOST 'rm -rf $VM_PATH'"
     splog "$CMD"
     exec_and_log "eval $CMD" "Error removing $VM_PATH"
