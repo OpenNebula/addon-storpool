@@ -1,0 +1,6 @@
+NAME = "resize"
+TYPE = "api"
+CALL = "one.vm.update"
+ARGUMENTS = "$API"
+ARGUMENTS_STDIN="YES"
+COMMAND="resizeCpuMem.sh"
