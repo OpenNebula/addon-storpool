@@ -215,7 +215,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 (.storedSize|tostring)+" "+
                 (.spaceUsed|tostring)'))
             disk_size="${sp_data[$size_idx]}"
-            if [ -n "$disk_size" ] && [ -z ${disk_size//[0-9]/} ]; then
+            if [ -n "$disk_size" ] && [ -z "${disk_size//[0-9]/}" ]; then
                 vm_monitor+=" DISK_SIZE=[ID=${DISK_ID},SIZE=$((disk_size/1024**2))]"
             else
                 continue
