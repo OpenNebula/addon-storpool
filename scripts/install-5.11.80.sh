@@ -164,12 +164,14 @@ echo "*** Copy VM checkpoint helpers to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"{save,restore}.storpool* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{save,restore}.storpool*
 
-echo "*** VMM checkpoint to block device patch ..."
-pushd "$ONE_VAR"
-    do_patch "$CWD/patches/vmm/${ONE_VER}/save.patch" "backup"
-    do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
-    do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
-popd
+if [ -n "$STORPOOL_EXTRAS" ]; then
+    echo "*** VMM checkpoint to block device patch ..."
+    pushd "$ONE_VAR"
+        do_patch "$CWD/patches/vmm/${ONE_VER}/save.patch" "backup"
+        do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
+        do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
+    popd
+fi
 
 echo -n "*** addon-storpoolrc "
 if [ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
@@ -248,8 +250,10 @@ _EOF_
     grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/mkfs"' >> "${ONE_VAR}/remotes/addon-storpoolrc"
 fi
 
-if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
-    echo "!!! Please enable deploy-tweaks in the VM_MAD configuration for proper working of volatile disks"
+if [ -n "$STORPOOL_EXTRAS" ]; then
+    if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
+        echo "!!! Please enable deploy-tweaks in the VM_MAD configuration"
+    fi
 fi
 
 echo "*** Please sync hosts (onehost sync --force)"

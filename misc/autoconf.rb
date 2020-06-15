@@ -75,14 +75,14 @@ default_config = {
     "/etc/one/oned.conf" => {
         :lens => "Oned.lns",
         :apply => {
-            "vm_mad_kvm_arguments_l" => {
-                :method => "oned_conf_arguments",
-                :element => "VM_MAD[NAME='\"kvm\"']/ARGUMENTS",
-                :match => "-l",
-                :arguments => {
-                        "deploy=deploy-tweaks" => "deploy=deploy-tweaks",
-                },
-            },
+#            "vm_mad_kvm_arguments_l" => {
+#                :method => "oned_conf_arguments",
+#                :element => "VM_MAD[NAME='\"kvm\"']/ARGUMENTS",
+#                :match => "-l",
+#                :arguments => {
+#                        "deploy=deploy-tweaks" => "deploy=deploy-tweaks",
+#                },
+#            },
             "datastore_mad_arguments_d" => {
                 :method => "oned_conf_arguments",
                 :element => "DATASTORE_MAD[EXECUTABLE='\"one_datastore\"']/ARGUMENTS",
@@ -144,16 +144,16 @@ default_config = {
                 :element => "VM_RESTRICTED_ATTR",
                 :arguments => {
                     "DISKSNAPSHOT_LIMIT" => "DISKSNAPSHOT_LIMIT",
-                    "VMSNAPSHOT_LIMIT" => "VMSNAPSHOT_LIMIT",
-                    "T_CPU_THREADS" => "T_CPU_THREADS",
-                    "T_CPU_SOCKETS" => "T_CPU_SOCKETS",
-                    "T_CPU_FEATURES" => "T_CPU_FEATURES",
-                    "T_CPU_MODE" => "T_CPU_MODE",
-                    "T_CPU_MODEL" => "T_CPU_MODEL",
-                    "T_CPU_VENDOR" => "T_CPU_VENDOR",
-                    "T_CPU_CHECK" => "T_CPU_CHECK",
-                    "T_CPU_MATCH" => "T_CPU_MATCH",
-                    "T_VF_MACS" => "T_VF_MACS",
+#                    "VMSNAPSHOT_LIMIT" => "VMSNAPSHOT_LIMIT",
+#                    "T_CPU_THREADS" => "T_CPU_THREADS",
+#                    "T_CPU_SOCKETS" => "T_CPU_SOCKETS",
+#                    "T_CPU_FEATURES" => "T_CPU_FEATURES",
+#                    "T_CPU_MODE" => "T_CPU_MODE",
+#                    "T_CPU_MODEL" => "T_CPU_MODEL",
+#                    "T_CPU_VENDOR" => "T_CPU_VENDOR",
+#                    "T_CPU_CHECK" => "T_CPU_CHECK",
+#                    "T_CPU_MATCH" => "T_CPU_MATCH",
+#                    "T_VF_MACS" => "T_VF_MACS",
                     "VC_POLICY" => "VC_POLICY",
                 },
             },
