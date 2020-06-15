@@ -29,8 +29,6 @@ if [ -z "$VMID" ]; then
     exit 1
 fi
 
-#echo "$XML"|xmllint -format - >"/tmp/vc-policy-${VMID}.xml"
-
 logger -t vc_sp_vc-policy.sh -- "${ONE_HOME}/remotes/hooks/volumecare/volumecare '$VMID'"
 
 "${ONE_HOME}/remotes/hooks/volumecare/volumecare" "$VMID"
