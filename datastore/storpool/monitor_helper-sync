@@ -255,6 +255,7 @@ while IFS= read element; do
 	XPATH_ELEMENTS[i++]="$element"
 done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
         /DATASTORE_POOL/DATASTORE/ID \
+        /DATASTORE_POOL/DATASTORE/STATE \
         /DATASTORE_POOL/DATASTORE/CLUSTER_ID \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/TM_MAD \
         /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_REPLICATION \
@@ -272,6 +273,7 @@ done < <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
 
 unset i
 _DS_ID="${XPATH_ELEMENTS[i++]}"
+_DS_STATE="${XPATH_ELEMENTS[i++]}"
 _DS_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
 _DS_TM_MAD="${XPATH_ELEMENTS[i++]}"
 _SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
@@ -290,6 +292,7 @@ _SP_SKIP_MONITOR="${XPATH_ELEMENTS[i++]}"
 _OLDIFS=$IFS
 IFS=";"
 DS_ID_ARRAY=($_DS_ID)
+DS_STATE_ARRAY=($_DS_STATE)
 DS_CLUSTER_ID_ARRAY=($_DS_CLUSTER_ID)
 DS_TM_MAD_ARRAY=($_DS_TM_MAD)
 SP_REPLICATION_ARRAY=($_SP_REPLICATION)
@@ -334,6 +337,12 @@ for i in ${!DS_ID_ARRAY[@]}; do
 		splog "DS_ID $DS_ID Skipped (SP_SKIP_MONITOR=${SP_SKIP_MONITOR_ARRAY[i]})"
 		continue
 	fi
+    if [ "${DS_STATE_ARRAY[i]}" != "0" ]; then
+	    if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
+            splog "Skipped Datastore $DS_ID STATE=${DS_STATE_ARRAY[i]}"
+        fi
+        continue
+    fi
 	
 	#old style
 	CLUSTER_IDS=( ${DS_CLUSTER_ID_ARRAY[i]} )
