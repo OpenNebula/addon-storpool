@@ -17,7 +17,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
+function splog() { logger -t "tm_sp_${0##*/}[$$]" "$(date +%s.%N) $*"; }
 
 DS_DIR="$1"
 

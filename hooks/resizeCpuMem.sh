@@ -22,7 +22,7 @@ source /var/lib/one/remotes/etc/vmm/kvm/kvmrc
 
 me="${0##*/}"
 
-function splog() { logger -t "hook_sp_$me" -- "$*"; }
+function splog() { logger -t "hook_sp_$me[$$]" -- "$*"; }
 
 function boolTrue()
 {
@@ -75,7 +75,7 @@ state="$(echo "$VMXML"|xmlstarlet sel -t -m "/VM" -v "STATE")"
 if validate "state"; then
     if [ $state -ne "3" ]; then
         lcm_state="$(echo "$VMXML"|xmlstarlet sel -t -m "/VM" -v "LCM_STATE")"
-        splog "VM $VM_ID STATE/LCM_STATE:$state/$lcm_state"
+        splog "VM $VM_ID STATE/LCM_STATE:$state/$lcm_state (Exit 0)"
         exit 0
     fi
 fi

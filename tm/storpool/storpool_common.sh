@@ -1573,7 +1573,7 @@ oneVmVolumes()
 {
     local VM_ID="$1" VM_POOL_FILE="$2"
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID $VM_POOL_FILE"
+        splog "oneVmVolumes() VM_ID:$VM_ID vmPoolFile:$VM_POOL_FILE"
     fi
 
     local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
