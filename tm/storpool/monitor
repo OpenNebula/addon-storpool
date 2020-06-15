@@ -17,7 +17,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "tm_sp_${0##*/}[$$]" "$(date +%s.%N) $*"; }
+function splog() { logger -t "tm_sp_${0##*/}[$$]" "$(date +%s.%N) $DS_ID $*"; }
 
 DRV_ACTION="$1"
 DS_ID="$2"
@@ -64,7 +64,7 @@ if boolTrue "DDDEBUG_TM_MONITOR"; then
     echo "cd $PWD && $0 $*" >"/tmp/DRV_$DS_ID.sh"
 fi
 if boolTrue "DEBUG_TM_MONITOR"; then
-	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
+	splog "$PWD DRV_ACTION:${DRV_ACTION:0:6}"
 	export DEBUG_TM_MONITOR_DS=1
 fi
 
@@ -98,7 +98,7 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_
 SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
 
 if boolTrue "DDDEBUG_TM_MONITOR"; then
-	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
+	splog "$DS_ID SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 fi
 while IFS=',' read n t f u2 u3; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
@@ -118,7 +118,7 @@ while IFS=',' read n t f u2 u3; do
 				;;
 		esac
 		if boolTrue "DEBUG_TM_MONITOR"; then
-			splog "${DS_TYPE} ID:$DS_ID u:$((u/1024/1024)) t:$((t/1024/1024)) f:$((f/1024/1024))"
+			splog "$DS_ID ${DS_TYPE} used:$((u/1024/1024)) total:$((t/1024/1024)) free:$((f/1024/1024))"
 		fi
 		break
 	fi
@@ -134,7 +134,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 		exit 0
 	fi
 	if boolTrue "DDEBUG_TM_MONITOR"; then
-		splog "$BASE_PATH processing VM disks..."
+		splog "$DS_ID $BASE_PATH processing VM disks..."
 	fi
     # expand SP_CMD_VOLUME_SPACE macro variables
     SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACEUSED_JSON_/$SP_VOLUME_SPACEUSED_JSON}"
@@ -157,13 +157,13 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
     ONE_VM_POOL_XML="${ONE_VM_POOL_XML:-/tmp/monitor/one.pool}"
     if [ -f "$ONE_VM_POOL_XML" ]; then
         onevm_ts="$(stat -c %Y "$ONE_VM_POOL_XML")"
-        splog "$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
+        splog "$DS_ID $ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
     else
         if onevm list -x >"${ONE_VM_POOL_XML}.new" 2>/dev/null; then
             mv "${ONE_VM_POOL_XML}.new" "${ONE_VM_POOL_XML}"
-            splog "($?) mv ${ONE_VM_POOL_XML}.new ${ONE_VM_POOL_XML}"
+            splog "$DS_ID ($?) mv ${ONE_VM_POOL_XML}.new ${ONE_VM_POOL_XML}"
         else
-            splog "($?) onevm list -x >$ONE_VM_POOL_XML"
+            splog "$DS_ID ($?) onevm list -x >$ONE_VM_POOL_XML"
         fi
     fi
 
@@ -175,10 +175,10 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         size_idx=2
     fi
     size_descr=(none storedSize spaceUsed)
-    if boolTrue "DDEBUG_TM_MONITOR"; then
-        splog "SP_CMD_VOLUME_SPACE=$SP_CMD_VOLUME_SPACE ${size_descr[$size_idx]}"
-        splog "SP_CMD_SNAPSHOT_SPACE=$SP_CMD_SNAPSHOT_SPACE"
-        splog "ONE_VM_POOL_XML=$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
+    if boolTrue "DDDEBUG_TM_MONITOR"; then
+        splog "$DS_ID SP_CMD_VOLUME_SPACE=$SP_CMD_VOLUME_SPACE ${size_descr[$size_idx]}"
+        splog "$DS_ID SP_CMD_SNAPSHOT_SPACE=$SP_CMD_SNAPSHOT_SPACE"
+        splog "$DS_ID ONE_VM_POOL_XML=$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
     fi
 
     monitor=
@@ -250,7 +250,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 (.spaceUsed|tostring)')
 
             if boolTrue "DDEBUG_TM_MONITOR"; then
-                splog "$DS_TYPE $DS_ID VM $VM_ID DISK $DISK_ID vm_monitor:${#vm_monitor}"
+                splog "$DS_ID $DS_TYPE VM $VM_ID DISK $DISK_ID vm_monitor:${#vm_monitor}"
             fi
         done
         if boolTrue "MONITOR_VMSNAPSHOTS"; then
@@ -289,16 +289,16 @@ else
 	if [ -n "$BASE_PATH" ]; then
 		if [ ! -L "$BASE_PATH" ]; then
 			mkdir -p "$BASE_PATH"
-			splog "mkdir -p $BASE_PATH ($?)"
+			splog "$DS_ID mkdir -p $BASE_PATH ($?)"
 		else
 			if boolTrue "DDEBUG_TM_MONITOR"; then
-				splog "BASE_PATH:$BASE_PATH is symlink"
+				splog "$DS_ID BASE_PATH:$BASE_PATH is symlink"
 			fi
 		fi
 	else
-		splog "BASE_PATH variable is empty!"
+		splog "$DS_ID BASE_PATH variable is empty!"
 	fi
 fi
 
-splog "$DS_TYPE $DS_ID END"
+splog "$DS_ID $DS_TYPE END"
 exit 0
