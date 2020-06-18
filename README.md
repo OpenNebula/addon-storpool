@@ -50,6 +50,7 @@ A working StorPool cluster is mandatory.
 
 Support standard OpenNebula datastore operations:
 
+* all disk images are thin provisioned RAW block devices
 * datstore configuration via CLI and sunstone
 * essencial Datastore MAD(DATASTORE_MAD) and Transfer Manager MAD(TM_MAD) functionality (see limitations)
 * SYSTEM datastore on shared filesystem or ssh when TM_MAD=storpool is used
@@ -57,17 +58,16 @@ Support standard OpenNebula datastore operations:
 * SYSTEM datastore context image as a StorPool block device
 * support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
 
+
 ### Extras
 
-* all disk images are thin provisioned RAW block devices
 * support different StorPool clusters as separate datastores
-* import of VmWare (VMDK) images
 * import of Hyper-V (VHDX) images
 * alternate kvm/deploy script that alows tweaks to the domain XML of the VMs
 * (optional) replace "VM snapshot" interface to do atomic disk snapshots on StorPool (see limitations)
 * (optional) set limit on the number of "VM snaphots"
 * (optional) set limit on the number of disk snapshots (per disk)
-* (optional) support VM checkpoint file directly on StorPool backed block device (see limitations)
+* (optional) support VM checkpoint file directly on StorPool backed block device
 * (optional) helper tool to enable iothreads, ioeventfd, fix nqueues to match the number of VCPUs, set cpu-model by altering libvirt's domain XML
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 * (optional) on image delete send volume snapshot to a remote StorPool cluster
