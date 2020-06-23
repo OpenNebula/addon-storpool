@@ -75,14 +75,16 @@ default_config = {
     "/etc/one/oned.conf" => {
         :lens => "Oned.lns",
         :apply => {
-#            "vm_mad_kvm_arguments_l" => {
-#                :method => "oned_conf_arguments",
-#                :element => "VM_MAD[NAME='\"kvm\"']/ARGUMENTS",
-#                :match => "-l",
-#                :arguments => {
-#                        "deploy=deploy-tweaks" => "deploy=deploy-tweaks",
-#                },
-#            },
+            "vm_mad_kvm_arguments_l" => {
+                :method => "oned_conf_arguments",
+                :element => "VM_MAD[NAME='\"kvm\"']/ARGUMENTS",
+                :match => "-l",
+                :arguments => {
+                        "deploy=deploy-tweaks" => "deploy=deploy-tweaks",
+                        "save=tmsave" => "save=tmsave",
+                        "restore=tmrestore" => "restore=tmrestore",
+                },
+            },
             "datastore_mad_arguments_d" => {
                 :method => "oned_conf_arguments",
                 :element => "DATASTORE_MAD[EXECUTABLE='\"one_datastore\"']/ARGUMENTS",
