@@ -83,6 +83,8 @@ default_config = {
                         "deploy=deploy-tweaks" => "deploy=deploy-tweaks",
                         "save=tmsave" => "save=tmsave",
                         "restore=tmrestore" => "restore=tmrestore",
+                        "attach_disk=attach_disk.storpool" =>
+                            "attach_disk=attach_disk.storpool",
                 },
             },
             "datastore_mad_arguments_d" => {
