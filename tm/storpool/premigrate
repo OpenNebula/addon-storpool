@@ -195,7 +195,6 @@ fi
 
 if [ -n "$json" ]; then
     storpoolRetry groupAttach "$json"
-    splog "syml:$syml"
 fi
 
 splog "END $VM_ID"
