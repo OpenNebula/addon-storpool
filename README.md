@@ -67,17 +67,17 @@ Support standard OpenNebula datastore operations:
 * (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 * (optional) send volume snapshot to a remote StorPool cluster on image delete 
 * (optional) alternate local kvm/deploy script that alows tweaks to the domain XML of the VMs with helper tools to enable iothreads, ioeventfd, fix virtio-scsi _nqueues_ to match the number of VCPUs, set cpu-model, etc, by altering libvirt's domain XML
+* (optional) support VM checkpoint file directly on StorPool backed block device (see [Limitations](#Limitations))
+* (optional) replace "VM snapshot" interface to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations)
 
 Folloing the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-storpool do not patch opennebula files by default. Please contact OpenNebula support if you need any of the folloing items resolved.
 
-* (optional) support VM checkpoint file directly on StorPool backed block device (see [Limitations](#Limitations))
-* (optional) replace "VM snapshot" interface to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations)
 * (optional) patches for Sunstone to integrate addon-storpool to the Datastore Wizard. There is no know resolution beside patching and rebuilding the sunstone interface.
 
 ## Limitations
 
 1. OpenNebula has hard-coded definition of the volatile disks as `FILE` type in the domain XML of the VMs. Latest libvirt do checks and forbid the live migration without the `--unsafe` flag set. Generally enabling the `--unsafe` flag is not recommended so feature request OpenNebula/one#3245 was made to adress the issue upstream.
-1. OpenNebula temporary keep the VM checkpoint file on the Host and then (optionally) transfer it to the storage. Feature request OpenNebula/one#3271 was created and pull request OpenNebula/one#3271 created. There is alternative protposal OpenNebula/one#3272 too.
+1. OpenNebula temporary keep the VM checkpoint file on the Host and then (optionally) transfer it to the storage. An workaround was added on the base of OpenNebula/one#3272.
 1. When SYSTEM datastore integration is enabled the reported free/used/total space of the Datastore is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space).
 1. VM snapshotting is not possible because it is handled internally by libvirt which does not support the RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single transaction when only StorPool backed datastores are used.
 1. Tested only with KVM hypervisor and CentOS. Should work on other Linux OS.
@@ -129,7 +129,7 @@ bash ~/addon-storpool/install.sh
 
 If oned and sunstone services are on different servers it is possible to install only part of the integration:
 
- * set environment variable PATCH_SUNSTONE=1 to enable the integration in the Datastore Wizard Sunstone
+ * set environment variable SKIP_SUNSTONE=0 to enable the integration in the Datastore Wizard (Sunstone)
  * set environment variable SKIP_ONED=1 to skip the oned integration
 
 ### manual installation
@@ -166,6 +166,18 @@ cp -a ~/addon-storpool/vmm/kvm/snapshot_* /var/lib/one/remotes/vmm/kvm/
 
 # fix ownership
 chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
+```
+
+* Prepare the fix for the volatile disks (needs to be enabled in _/etc/one/oned.conf_)
+
+```bash
+# copy the helper for deploy-local
+cp -a ~/addon-storpool/vmm/kvm/deploy-tweaks* /var/lib/one/remotes/vmm/kvm/
+mkdir -p /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
+cp -v /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d{.example,}/volatile2dev.py
+
+# and the local attach_disk script
+cp -a ~/addon-storpool/vmm/kvm/attach_disk.storpool /var/lib/one/remotes/vmm/kvm/
 ```
 
 * Create cron job for stats polling (fix the file paths if needed)
@@ -216,14 +228,14 @@ DATASTORE_MAD = [
 ]
 ```
 
-* (Optional, see limitations) Edit `/etc/one/oned.conf` and update the ARGUMENTS of the `VM_MAD` for `KVM` to enable the deploy-tweaks script
+* (Optional) Edit `/etc/one/oned.conf` and update the ARGUMENTS of the `VM_MAD` for `KVM` to enable the deploy-tweaks script, attach_disk and save/restore
 
 ```
 VM_MAD = [
     NAME           = "kvm",
     SUNSTONE_NAME  = "KVM",
     EXECUTABLE     = "one_vmm_exec",
-    ARGUMENTS      = "-t 15 -r 0 kvm -l deploy=deploy-tweaks",
+    ARGUMENTS      = "-t 15 -r 0 kvm -l deploy=deploy-tweaks,attach_disk=attach_disk.storpool,save=tmsave,restore=tmrestore",
     ...
 ```
 
