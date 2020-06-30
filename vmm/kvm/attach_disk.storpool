@@ -16,10 +16,11 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-workdir=$(dirname "$0")
-source "$workdir/../../etc/vmm/kvm/kvmrc"
-source "$workdir/../../scripts_common.sh"
-source "$workdir/../../tm/storpool/storpool_common.sh"
+LOG_PREFIX="vmm"
+WORKDIR=$(dirname "$0")
+source "$WORKDIR/../../etc/vmm/kvm/kvmrc"
+source "$WORKDIR/../../scripts_common.sh"
+source "$WORKDIR/../../tm/storpool/storpool_common.sh"
 
 DRV_ACTION="$5"
 
@@ -29,12 +30,17 @@ TM_MAD=$(echo $DRV_ACTION | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TM_MAD)
 DISK_TYPE=$(echo $DRV_ACTION | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_TYPE)
+
 if [ "${TM_MAD:0:8}" = "storpool" ]; then
-    splog "Replacing $1 $2 $3 DISK_TYPE '$DISK_TYPE' to BLOCK"
-    DRV_ACTION="$(echo "$DRV_ACTION" | base64 -d | \
+    if [ "$DISK_TYPE" = "BLOCK" ]; then
+        splog "Disk $1 $2 $3 DISK_TYPE '$DISK_TYPE'"
+    else
+        splog "Replacing $1 $2 $3 DISK_TYPE '$DISK_TYPE' to BLOCK"
+        DRV_ACTION="$(echo "$DRV_ACTION" | base64 -d | \
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
                    base64 -w 0)"
+    fi
 fi
 
-$SSH "$KVMHOST" "/var/tmp/one/vmm/kvm/attach_disk $1 $2 $3 $4 $DRV_ACTION"
+$SSH "$KVMHOST" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk $1 $2 $3 $4 $DRV_ACTION"
 
