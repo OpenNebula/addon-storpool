@@ -74,7 +74,7 @@ fi
 # Action
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDelete "$SP_VOL"
+storpoolVolumeCheck "$SP_VOL"
 
 storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
 

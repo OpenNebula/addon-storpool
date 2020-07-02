@@ -549,6 +549,8 @@ function storpoolTemplate()
 function storpoolVolumeInfo()
 {
     local _SP_VOL="$1"
+    STORPOOL_RETRIES_OLD="$STORPOOL_RETRIES"
+    [ -z "$2" ] || STORPOOL_RETRIES="$2"
     V_SIZE=
     V_PARENT_NAME=
     V_TEMPLATE_NAME=
@@ -562,6 +564,7 @@ function storpoolVolumeInfo()
     if boolTrue "DEBUG_storpoolVolumeInfo"; then
         splog "storpoolVolumeInfo($_SP_VOL) size:$V_SIZE parentName:$V_PARENT_NAME templateName:$V_TEMPLATE_NAME tags.type:$V_TYPE"
     fi
+    STORPOOL_RETRIES="$STORPOOL_RETRIES_OLD"
 }
 
 function storpoolVolumeExists()
@@ -572,6 +575,17 @@ function storpoolVolumeExists()
     fi
     #splog "storpoolVolumeExists($_SP_VOL): $_RET"
     return ${_RET}
+}
+
+storpoolVolumeCheck()
+{
+    local SP_VOL="$1"
+    if storpoolVolumeExists "$SP_VOL"; then
+        errmsg="Error: StorPool volume $SP_VOL exists"
+        splog "$errmsg"
+        log_error "$errmsg"
+        exit 1
+    fi
 }
 
 function storpoolVolumeCreate()
@@ -1956,3 +1970,4 @@ hostReachable()
 {
     ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
 }
+

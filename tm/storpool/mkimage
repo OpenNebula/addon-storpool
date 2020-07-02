@@ -98,6 +98,8 @@ SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 
 storpoolTemplate "$SP_TEMPLATE"
 
+storpoolVolumeCheck "$SP_VOL"
+
 storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
 if [ "${FSTYPE,,}" != "raw" ]; then
