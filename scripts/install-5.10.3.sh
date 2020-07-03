@@ -42,6 +42,8 @@ function patch_hook()
 
 AUGEAS_LENSES="${AUGEAS_LENSES:-/usr/share/augeas/lenses}"
 
+SKIP_SUNSTONE="${SKIP_SUNSTONE:-1}"
+
 if fgrep -qR "storpool" -- "${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}"; then
     SKIP_SUNSTONE=1
 fi

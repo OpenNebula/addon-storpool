@@ -28,6 +28,13 @@ DRIVER_PATH="${ONE_HOME}/remotes/hooks/volumecare/"
 cd "$DRIVER_PATH"
 
 source "${ONE_HOME}"/remotes/tm/storpool/storpool_common.sh
+source "${ONE_HOME}"/remotes/addon-storpoolrc
+
+if boolTrue "DDDEBUG_alterVcPolicy"; then
+    parent=$PPID
+    splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+    echo "cd $PWD && $0 $*" >"/tmp/VC_$VMID.sh"
+fi
 
 umask -S u=rwx,g=rwx,o= >/dev/null
 
@@ -36,37 +43,51 @@ trapAdd "rm -rf '$TEMP_DIR'"
 
 function alterVcPolicy()
 {
-    local vmId="$1" vmPool="$2" VMID= 
+    local vmId="$1" vmPoolFile="$2" VMID= 
 
     if [ -z "$vmId" ]; then
-        if [ -n "$vmPool" ]; then
+        if [ -n "$vmPoolFile" ]; then
             splog "Error! Something wen't wrong!"
             exit 1
         fi
-        vmPool="${TEMP_DIR}/vm_pool.xml"
-        onevm list -x --extended >"$vmPool"
+        vmPoolFile="${TEMP_DIR}/vm_pool.xml"
+        onevm list -x --extended >"$vmPoolFile"
         ret=$?
-        if boolTrue "DEBUG_alterVcPolicy"; then
-            splog "($ret) onevm list $vmPool"
+        if boolTrue "DDEBUG_alterVcPolicy"; then
+            splog "($ret) onevm list $vmPoolFile"
         fi
         if [ $ret -ne 0 ]; then
             splog "Error! Can't get VM list!"
             return 1
         fi
-        while read -u 4 -d' ' VMID; do
-            alterVcPolicy "$VMID" "$vmPool"
+        while read -u 4 VMID; do
+            alterVcPolicy "$VMID" "$vmPoolFile"
         done 4< <(cat "$vmPool" | \
-            "${ONE_HOME}/remotes/datastore/xpath.rb" --stdin %m%/VM_POOL/VM/ID)
+            xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n)
         return 0
     fi
 
-    if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
-        splog "alterVcPolicy($vmId,$vmPool)"
+    if boolTrue "DDEBUG_alterVcPolicy"; then
+        splog "alterVcPolicy($vmId,$vmPoolFile)"
     fi
 
-    oneVmVolumes "$vmId" "$vmPool"
+    oneVmVolumes "$vmId" "$vmPoolFile"
 
-    oneDatastoreInfo "$VM_DS_ID" "${TEMP_DIR}/datastorePool.xml"
+    if [ -z "$vmDisksMap" ]; then
+        if boolTrue "DDEBUG_alterVcPolicy"; then
+            splog "alterVcPolicy($vmId,$vmPoolFile) vmDisksMap is empty. Return 0"
+        fi
+        return 0
+    fi
+
+    if [ -n "$VM_DS_ID" ]; then
+        oneDatastoreInfo "$VM_DS_ID" "${TEMP_DIR}/datastorePool.xml"
+    else
+        if boolTrue "DDEBUG_alterVcPolicy"; then
+            splog "alterVcPolicy($vmId,$vmPoolFile) VM_DS_ID is empty. Return 0"
+        fi
+        return 0
+    fi
 
     declare -A vols
 
@@ -79,9 +100,9 @@ function alterVcPolicy()
         splog "VM $vmId VC_POLICY:$VC_POLICY $vmDisksMap"
     fi
 
-    if [ -z "$volumeListXml" ]; then
-        volumeListXml="${TEMP_DIR}/volumeList.json"
-        storpoolRetry -j volume list >"$volumeListXml"
+    if [ -z "$volumeListJson" ]; then
+        volumeListJson="${TEMP_DIR}/volumeList.json"
+        storpoolRetry -j volume list >"$volumeListJson"
     fi
 
     while read -u 7 l; do
@@ -92,11 +113,11 @@ function alterVcPolicy()
             if [ "$vcpNew" != "$vcp" ]; then
                 splog "volume:$v current vc-policy:$vcp new:$vcpNew"
                 storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
-            elif boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+            elif boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "volume $v current vc-policy:$vcp"
             fi
         fi
-    done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListXml")
+    done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListJson")
     unset vmDisksMap
 }
 
@@ -115,11 +136,11 @@ else
     if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
         tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
         if [ "${tmp:0:5}" == "local" ]; then
-            if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+            if boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "Found leader IP ($RAFT_LEADER_IP)."
             fi
         else
-            if boolTrue "DEBUG_alterVcPolicy_VERBOSE"; then
+            if boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "There is no leader IP found ($RAFT_LEADER_IP). Exit."
             fi
             exit 0

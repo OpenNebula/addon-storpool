@@ -96,6 +96,8 @@ SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
 SP_DST="$SP_TEMPLATE/$SP_VOL"
 
+storpoolVolumeCheck "$SP_VOL"
+
 if [ -n "$SNAPSHOT_NAME" ]; then
 
     if [[ $IMAGE_GID -ne 0 ]]; then

@@ -1,0 +1,17 @@
+--- remotes/vmm/kvm/restore-orig	2020-05-18 15:18:53.000000000 +0300
++++ remotes/vmm/kvm/restore	2020-05-18 16:54:19.245040253 +0300
+@@ -118,4 +118,13 @@
+ 	virsh --connect $LIBVIRT_URI snapshot-create $DEPLOY_ID $SNAPSHOT_MD_XML --redefine > /dev/null || true
+ done
+ 
+-exit 0
++if [ -t 0 ]; then
++    exit 0
++fi
++
++# If there is a specific post hook for this TM_MAD call it:
++RESTORE_TM_FILE="${DRIVER_PATH}/restore.${TM_MAD}-post"
++
++if [ -x "$RESTORE_TM_FILE" ]; then
++    echo "$DRV_MESSAGE" | $RESTORE_TM_FILE "$@"
++fi

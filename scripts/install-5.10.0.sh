@@ -40,6 +40,8 @@ function patch_hook()
     fi
 }
 
+SKIP_SUNSTONE="${SKIP_SUNSTONE:-1}"
+
 end_msg=
 if [ "$SKIP_SUNSTONE" = "1" ]; then
     echo "*** Skipping opennebula-sunstone integration patch"

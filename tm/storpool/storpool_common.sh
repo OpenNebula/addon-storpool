@@ -25,7 +25,7 @@ PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 
 function splog()
 {
-    logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}[$$]" "${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
+    logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}[$$]" "$(date +%s.%N) ${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
 }
 
 #-------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ fi
 DEBUG_COMMON=
 DEBUG_TRAPS=
 DEBUG_SP_RUN_CMD=1
-DEBUG_SP_RUN_CMD_VERBOSE=
+DDEBUG_SP_RUN_CMD=
 DEBUG_oneVmInfo=
 DEBUG_oneDatastoreInfo=
 DEBUG_oneTemplateInfo=
@@ -382,7 +382,7 @@ function storpoolApi()
     if boolTrue "NO_PROXY_API";then
         export NO_PROXY="${NO_PROXY:+${NO_PROXY},}$SP_API_HTTP_HOST"
     fi
-    if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+    if boolTrue "DDEBUG_SP_RUN_CMD"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}}"
     fi
     curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
@@ -419,7 +419,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DDEBUG_SP_RUN_CMD"; then
 							splog "API response:$res"
 						fi
 					else
@@ -443,7 +443,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DDEBUG_SP_RUN_CMD"; then
 							splog "API response:$res"
 						fi
 					else
@@ -467,7 +467,7 @@ function storpoolWrapper()
 				else
 					ok="$(echo "$res"|jq -r ".data|.ok" 2>&1)"
 					if [ "$ok" = "true" ]; then
-						if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+						if boolTrue "DDEBUG_SP_RUN_CMD"; then
 							splog "API response:$res"
 						fi
 					else
@@ -488,7 +488,7 @@ function storpoolWrapper()
 
 function storpoolRetry() {
     if boolTrue "DEBUG_SP_RUN_CMD"; then
-        if boolTrue "DEBUG_SP_RUN_CMD_VERBOSE"; then
+        if boolTrue "DDEBUG_SP_RUN_CMD"; then
             splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
         else
             for _last_cmd;do :;done
@@ -549,6 +549,8 @@ function storpoolTemplate()
 function storpoolVolumeInfo()
 {
     local _SP_VOL="$1"
+    STORPOOL_RETRIES_OLD="$STORPOOL_RETRIES"
+    [ -z "$2" ] || STORPOOL_RETRIES="$2"
     V_SIZE=
     V_PARENT_NAME=
     V_TEMPLATE_NAME=
@@ -562,6 +564,7 @@ function storpoolVolumeInfo()
     if boolTrue "DEBUG_storpoolVolumeInfo"; then
         splog "storpoolVolumeInfo($_SP_VOL) size:$V_SIZE parentName:$V_PARENT_NAME templateName:$V_TEMPLATE_NAME tags.type:$V_TYPE"
     fi
+    STORPOOL_RETRIES="$STORPOOL_RETRIES_OLD"
 }
 
 function storpoolVolumeExists()
@@ -572,6 +575,17 @@ function storpoolVolumeExists()
     fi
     #splog "storpoolVolumeExists($_SP_VOL): $_RET"
     return ${_RET}
+}
+
+storpoolVolumeCheck()
+{
+    local SP_VOL="$1"
+    if storpoolVolumeExists "$SP_VOL"; then
+        errmsg="Error: StorPool volume $SP_VOL exists"
+        splog "$errmsg"
+        log_error "$errmsg"
+        exit 1
+    fi
 }
 
 function storpoolVolumeCreate()
@@ -984,7 +998,9 @@ function oneCheckpointRestore()
     else
         mkdir -p "$_path"
 
-        [ -f "$_path/.monitor" ] || echo "storpool" >"$_path/.monitor"
+        if [ -n "$2" ]; then
+            [ -f "$_path/.monitor" ] || echo "storpool" >"$_path/.monitor"
+        fi
 
         if tar --no-seek --use-compress-program="$SP_COMPRESSION" --to-stdout --extract --file="$sp_link" >"$checkpoint"; then
             splog "RESTORED $volume $checkpoint"
@@ -1366,6 +1382,7 @@ function oneDsDriverAction()
         XPATH_ELEMENTS[i++]="$element"
     done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/STATE \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/UID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/GID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/CLUSTER_ID \
@@ -1407,12 +1424,14 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/TARGET_SNAPSHOT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SIZE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/UID \
-                    /DS_DRIVER_ACTION_DATA/IMAGE/GID)
+                    /DS_DRIVER_ACTION_DATA/IMAGE/GID \
+                    /DS_DRIVER_ACTION_DATA/MONITOR_VM_DISKS)
 
 
     unset i
     BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+    DATASTORE_STATE="${XPATH_ELEMENTS[i++]}"
     DATASTORE_UID="${XPATH_ELEMENTS[i++]}"
     DATASTORE_GID="${XPATH_ELEMENTS[i++]}"
     CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
@@ -1461,6 +1480,7 @@ function oneDsDriverAction()
     SIZE="${XPATH_ELEMENTS[i++]}"
     IMAGE_UID="${XPATH_ELEMENTS[i++]}"
     IMAGE_GID="${XPATH_ELEMENTS[i++]}"
+    MONITOR_VM_DISKS="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
     [ -n "$SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
@@ -1473,6 +1493,7 @@ ${ID:+ID=$ID }\
 ${IMAGE_UID:+IMAGE_UID=$IMAGE_UID }\
 ${IMAGE_GID:+IMAGE_GID=$IMAGE_GID }\
 ${DATASTORE_ID:+DATASTORE_ID=$DATASTORE_ID }\
+${DATASTORE_STATE:+DATASTORE_STATE=$DATASTORE_STATE }\
 ${CLUSTER_ID:+CLUSTER_ID=$CLUSTER_ID }\
 ${CLUSTERS_ID:+CLUSTERS_ID=$CLUSTERS_ID }\
 ${STATE:+STATE=$STATE }\
@@ -1505,6 +1526,7 @@ ${SP_BW:+SP_BW=$SP_BW }\
 ${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }\
 ${SP_TEMPLATE_PROPAGATE:+SP_TEMPLATE_PROPAGATE=$SP_TEMPLATE_PROPAGATE }\
 ${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }\
+${MONITOR_VM_DISKS:+MONITOR_VM_DISKS=$MONITOR_VM_DISKS }\
 "
     splog "$_MSG"
 }
@@ -1568,7 +1590,7 @@ oneVmVolumes()
 {
     local VM_ID="$1" VM_POOL_FILE="$2"
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID $VM_POOL_FILE"
+        splog "oneVmVolumes() VM_ID:$VM_ID vmPoolFile:$VM_POOL_FILE"
     fi
 
     local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
@@ -1701,7 +1723,7 @@ oneVmVolumes()
 oneVmDiskSnapshots()
 {
     local VM_ID="$1" DISK_ID="$2"
-    if boolTrue "DEBUG_oneVmDiskSnapshots_VERBOSE"; then
+    if boolTrue "DDEBUG_oneVmDiskSnapshots"; then
         splog "oneVmDiskSnapshots() VM_ID:$VM_ID DISK_ID=$DISK_ID"
     fi
 
@@ -1740,7 +1762,7 @@ oneVmDiskSnapshots()
 oneVmSnapshots()
 {
     local VM_ID="$1" snapshot_id="$2" disk_id="$3"
-    if boolTrue "DEBUG_oneVmSnapshots_VERBOSE"; then
+    if boolTrue "DDEBUG_oneVmSnapshots"; then
         splog "oneVmSnapshots() VM_ID:$VM_ID snapshot_id=$snapshot_id disk_id=$disk_id"
     fi
     
@@ -1909,6 +1931,17 @@ fi
 # backward compatibility
 type -t multiline_exec_and_log >/dev/null || function multiline_exec_and_log(){ exec_and_log "$@"; }
 
+if type -t ssh_forward >/dev/null; then
+    export SSH_AUTH_SOCK
+    if boolTrue "DEBUG_COMMON"; then
+        splog "ssh_forward upstream"
+    fi
+else
+    if boolTrue "DEBUG_COMMON"; then
+        splog "ssh_forward wrapper"
+    fi
+    function ssh_forward(){ "$@"; }
+fi
 # redefine own version of ssh_make_path()
 function ssh_make_path
 {
@@ -1935,5 +1968,6 @@ EOF`
 
 hostReachable()
 {
-	ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
+    ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
 }
+

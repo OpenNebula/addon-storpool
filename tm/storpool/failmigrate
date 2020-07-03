@@ -71,10 +71,8 @@ MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="$DS_TM_MAD"
 fi
+
 if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
-    MONITOR_TM_MAD="$DS_TM_MAD"
-fi
-if [ -n "$MONITOR_TM_MAD" ]; then
     #-------------------------------------------------------------------------------
     # Cleanup $VM_PATH at DST_HOST
     #-------------------------------------------------------------------------------

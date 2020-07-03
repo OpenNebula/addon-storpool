@@ -17,11 +17,12 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
+function splog() { logger -t "tm_sp_${0##*/}[$$]" "$(date +%s.%N) $*"; }
 
 DS_DIR="$1"
 
 DRIVER_PATH="${0%/*}"
+MONITOR_TAG="MONITOR"
 
 if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
     source "$DRIVER_PATH/../../addon-storpoolrc"
@@ -41,14 +42,28 @@ function boolTrue()
    esac
 }
 
+if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
+    parent=$PPID
+    splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
+    echo "su - oneadmin -c 'cd $PWD && $0 $*'" >>"/tmp/tm_monitor_ds-$DS_ID.sh"
+fi
+
+if ! boolTrue "LEGACY_MONITORING"; then
+    if boolTrue "DDEBUG_TM_MONITOR_DS"; then
+        splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
+    fi
+    exit 0
+fi
+
 if boolTrue "DEBUG_TM_MONITOR_DS"; then
 	splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR"
 fi
+
 if [ -f "$DS_DIR/.monitor" ]; then
 	DS_DRIVER="$(<"$DS_DIR/.monitor")"
 	HAS_DOT_MONITOR=1
 else
-	if boolTrue "DEBUG_TM_MONITOR_DS_VERBOSE"; then
+	if boolTrue "DDEBUG_TM_MONITOR_DS"; then
 		splog "File $DS_DIR/.monitor not found. Using default DS_DERIVER=storpool"
 	fi
 	DS_DRIVER="storpool"
@@ -59,6 +74,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 #	splog "VM_ID=$VM_ID VM_DIR=$VM_DIR"
 	test -d "$VM_DIR" || continue
 	
+    vm_data=
 	DRIVER_RUN=
 	for DISK in `ls $VM_DIR/disk.[[:digit:]]* 2>/dev/null | grep '/disk\.[0-9]\+$'`; do
 #		splog "DISK=$DISK"
@@ -66,7 +82,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 			[ -e "$DISK" ] || continue
 		fi
 		
-		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,POLL=\""
+		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,${MONITOR_TAG}=\""
 		
 		if [ -f "${DISK}.monitor" ]; then
 			DRIVER="$(<"${DISK}.monitor")"
@@ -78,11 +94,17 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 		else
 			DRIVER_RUN="$DRIVER_PATH/monitor_disk"
 		fi
-		if boolTrue "DEBUG_TM_MONITOR_DS_VERBOSE"; then
+		if boolTrue "DDEBUG_TM_MONITOR_DS"; then
 			splog "run $DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER"
 		fi
-		"$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER"
+		vm_data+="$("$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER")"
 	done
-	
+    if [ -n "${vm_data:0:1}" ]; then
+        if [ "${MONITOR_TAG^^}" = "MONITOR" ]; then
+            echo "${vm_data// /\\n}" | base64 -w 0 -
+        else
+            echo "$vm_data"
+        fi
+    fi
 	[ -z "$DRIVER_RUN" ] || echo "\"]"
 done

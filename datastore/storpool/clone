@@ -167,6 +167,8 @@ if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
     fi
 fi
 
+storpoolVolumeCheck "$SP_VOL"
+
 storpoolTemplate "$SP_TEMPLATE"
 
 storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
