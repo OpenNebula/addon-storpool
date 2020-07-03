@@ -55,9 +55,9 @@ Support standard OpenNebula datastore operations:
 * SYSTEM datastore context image as a StorPool block device (see limitations)
 * support migration from one to another SYSTEM datastore if both are with `storpool` TM_MAD
 
+
 ### Extras
 
-* all disk images are thin provisioned RAW block devices
 * support different StorPool clusters as separate datastores
 * support multiple OpenNebula instances in single StorPool cluster
 * import of VmWare (VMDK) images
