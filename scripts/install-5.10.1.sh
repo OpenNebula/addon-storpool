@@ -201,6 +201,14 @@ chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
 mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
 cp $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks.d.example/volatile2dev.py "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"/
 
+echo "*** Copy attach_disk.storpool to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+cp -a $CP_ARG "$CWD/vmm/kvm/attach_disk.storpool" "${ONE_VAR}/remotes/vmm/kvm/"
+chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/attach_disk.storpool"
+
+echo "*** Copy tmsaverestore script ant symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+cp -a $CP_ARG "$CWD/vmm/kvm/"tm* "${ONE_VAR}/remotes/vmm/kvm/"
+chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"tm*
+
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
