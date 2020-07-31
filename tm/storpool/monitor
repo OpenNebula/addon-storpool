@@ -157,7 +157,9 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
     ONE_VM_POOL_XML="${ONE_VM_POOL_XML:-/tmp/monitor/one.pool}"
     if [ -f "$ONE_VM_POOL_XML" ]; then
         onevm_ts="$(stat -c %Y "$ONE_VM_POOL_XML")"
-        splog "$DS_ID $ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
+        if boolTrue "DEBUG_TM_MONITOR"; then
+            splog "$DS_ID $ONE_VM_POOL_XML $onevm_ts [$(date --date=@$onevm_ts)]"
+        fi
     else
         if onevm list -x >"${ONE_VM_POOL_XML}.new" 2>/dev/null; then
             mv "${ONE_VM_POOL_XML}.new" "${ONE_VM_POOL_XML}"
@@ -181,11 +183,21 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         splog "$DS_ID ONE_VM_POOL_XML=$ONE_VM_POOL_XML $onevm_ts $(date --date=@$onevm_ts)"
     fi
 
+    #preprocess the jsons
+    TDIR=$(mktemp -d monitor-XXXXXXXX)
+    trap 'rm -rf "$TDIR"' EXIT QUIT HUP
+    TMP_VOLUME_SPACE="$TDIR/volume.space"
+    eval $SP_CMD_VOLUME_SPACE | \
+    ${JQ_BIN:-jq} -r '.data[]|(.name)+" "+(.storedSize|tostring)+" "+(.spaceUsed|tostring)' >"$TMP_VOLUME_SPACE"
+    TMP_SNAPSHOT_SPACE="$TDIR/snapshot.space"
+    eval $SP_CMD_SNAPSHOT_SPACE | \
+    ${JQ_BIN:-jq} -r '.data[]|(.name)+" "+(.storedSize|tostring)+" "+(.spaceUsed|tostring)' >"$TMP_SNAPSHOT_SPACE"
+
     monitor=
     while read -u 4 VM_ID; do
         unset disk_datastore disk_clone disk_type disk_image vm_snapshots
         declare -A disk_datastore disk_clone disk_type disk_image vm_snapshots
-        vm_disks="<TEMPLATE>$(cat "$ONE_VM_POOL_XML"|xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]/TEMPLATE/DISK" -)</TEMPLATE>"
+        vm_disks="<TEMPLATE>$(xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]/TEMPLATE/DISK" "$ONE_VM_POOL_XML")</TEMPLATE>"
         while read -u 5 DISK_ID; do
             unset i xp
             for e in DATASTORE_ID TYPE CLONE IMAGE_ID; do
@@ -209,27 +221,28 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 [ "${disk_type[$DISK_ID],,}" = "swap" ] && TYPE=swap || TYPE=raw
                 volume+="-sys-${VM_ID}-${DISK_ID}-${TYPE}"
             fi
-            sp_data=($(eval $SP_CMD_VOLUME_SPACE | \
-                ${JQ_BIN:-jq} -r --arg name "$volume" '.data[]|select(.name==$name)|
-                (.name)+" "+
-                (.storedSize|tostring)+" "+
-                (.spaceUsed|tostring)'))
-            disk_size="${sp_data[$size_idx]}"
+            v_data=($(grep "^${volume} " "$TMP_VOLUME_SPACE"))
+            disk_size="${v_data[$size_idx]}"
             if [ -n "$disk_size" ] && [ -z "${disk_size//[0-9]/}" ]; then
                 vm_monitor+=" DISK_SIZE=[ID=${DISK_ID},SIZE=$((disk_size/1024**2))]"
             else
+                if boolTrue "DEBUG_TM_MONITOR"; then
+                    splog "$DS_ID $DS_TYPE VM $VM_ID DISK $DISK_ID v_data:${v_data[*]} SKIPPED"
+                fi
                 continue
             fi
+            s_cnt=0
             while read -u 5 data; do
-                sp_data=($data)
-                snapshot="${sp_data[0]}"
+                s_data=($data)
+                snapshot="${s_data[0]}"
                 # mrs-img-150-snap0
                 SNAP_ID="${snapshot#*-snap}"
                 if [ -n "$SNAP_ID" ]; then
                     if [ -z "${SNAP_ID//[0-9]/}" ]; then
-                        snap_size="${sp_data[$size_idx]}"
+                        snap_size="${s_data[$size_idx]}"
                         if [ -n "$snap_size" ] && [ -z "${snap_size//[0-9]/}"]; then
                             vm_monitor+=" SNAPSHOT_SIZE=[ID=${SNAP_ID},DISK_ID=${DISK_ID},SIZE=$((snap_size/1024**2))]"
+                            s_cnt=$((s_cnt+1))
                         fi
                     fi
                 fi
@@ -242,15 +255,10 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                         vm_snapshots[$SNAP_ID]+=" $snap_size"
                     fi
                 fi
-            done 5< <(eval $SP_CMD_SNAPSHOT_SPACE | \
-                ${JQ_BIN:-jq} -r --arg name "${volume}-" '.data[]|
-                select(.name|startswith($name))|
-                (.name)+" "+
-                (.storedSize|tostring)+" "+
-                (.spaceUsed|tostring)')
+             done 5< <(grep "^$volume" $TMP_SNAPSHOT_SPACE)
 
             if boolTrue "DDEBUG_TM_MONITOR"; then
-                splog "$DS_ID $DS_TYPE VM $VM_ID DISK $DISK_ID vm_monitor:${#vm_monitor}"
+                splog "$DS_ID $DS_TYPE VM $VM_ID DISK $DISK_ID v_data:${#v_data[*]} snaps:$s_cnt vm_monitor:${#vm_monitor}"
             fi
         done
         if boolTrue "MONITOR_VMSNAPSHOTS"; then
@@ -265,7 +273,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         fi
         if boolTrue "LEGACY_MONITORING"; then
             echo -n "VM=[ID=\"$VM_ID\", POLL=\""
-            echo "$vm_monitor"
+            echo -n "$vm_monitor"
             echo "\"]"
         else
             vm_monitor_b64="$(echo "${vm_monitor}" | tr ' ' '\n' | base64 -w 0)"
