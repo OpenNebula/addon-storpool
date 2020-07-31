@@ -183,7 +183,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 
     monitor=
     while read -u 4 VM_ID; do
-        unset disk_datastore_id disk_clone disk_type disk_image vm_snapshots
+        unset disk_datastore disk_clone disk_type disk_image vm_snapshots
         declare -A disk_datastore disk_clone disk_type disk_image vm_snapshots
         vm_disks="<TEMPLATE>$(cat "$ONE_VM_POOL_XML"|xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]/TEMPLATE/DISK" -)</TEMPLATE>"
         while read -u 5 DISK_ID; do
