@@ -131,11 +131,21 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
 			test -f "$BASE_PATH/.monitor" && DS_DRIVER="$(<"$BASE_PATH/.monitor")" || DS_DRIVER="storpool"
 			splog "$DS_ID is marked for remote monitoring via IM_MAD using 'tm/$DS_DRIVER/monitor_ds'"
 		fi
+        if boolTrue "DEBUG_TM_MONITOR"; then
+            splog "$DS_ID $DS_TYPE END (VM disks monitored on hosts)"
+        fi
 		exit 0
 	fi
-	if boolTrue "DDEBUG_TM_MONITOR"; then
-		splog "$DS_ID $BASE_PATH processing VM disks..."
-	fi
+    if boolTrue "MONITOR_VM_DISKS"; then
+        if boolTrue "DDEBUG_TM_MONITOR"; then
+		    splog "$DS_ID $BASE_PATH processing VM disks..."
+    	fi
+    else
+        if boolTrue "DEBUG_TM_MONITOR"; then
+            splog "$DS_ID $DS_TYPE END (MONITOR_VM_DISKS=0)"
+        fi
+        exit 0
+    fi
     # expand SP_CMD_VOLUME_SPACE macro variables
     SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACEUSED_JSON_/$SP_VOLUME_SPACEUSED_JSON}"
     SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
