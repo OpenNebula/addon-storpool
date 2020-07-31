@@ -293,18 +293,24 @@ def oned_conf_vector(aug, c, name = nil)
     if aug.exists(aug_q)
         c[:arguments].each do |k, v|
             aug_qk = aug_q + "/" + k
-            log "#DBG# aug_q:#{aug_qk}",4
+            log "#DBG# aug_q:#{aug_qk} new:#{v}",4
             if aug.exists(aug_qk)
                 val = aug.get(aug_qk)
                 log "#DBG# val:#{val}",4
                 if v != val
-                    log "#SET# #{aug_qk} = #{v} (old #{val})"
-                    aug.set(aug_qk, v)
+                    if v.nil?
+                        log "[DEL] #{aug_qk} (was #{val})"
+                        aug.rm(aug_qk)
+                    else
+                        log "#SET# #{aug_qk} = #{v} (old #{val})"
+                        aug.set(aug_qk, v)
+                    end
                     changed = true
                 else
                     log "#OK# #{aug_qk} = #{val}"
                 end
             else
+                next if v.nil?
                 log "#SET# #{aug_qk} = #{v}"
                 aug.set(aug_qk, v)
                 changed = true
@@ -318,6 +324,7 @@ def oned_conf_vector(aug, c, name = nil)
         log "#SET# #{c[:element]}[#{i}]"
         aug.set("#{c[:element]}[#{i}]", nil)
         c[:arguments].each do |k, v|
+            next if v.nil?
             log "#SET# #{c[:element]}[#{i}]/#{k} = #{v}",0
             aug.set("#{c[:element]}[#{i}]/#{k}", v)
         end
