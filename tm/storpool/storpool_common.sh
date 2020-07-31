@@ -127,6 +127,25 @@ function lookup_file()
     done
 }
 
+function get_one_version()
+{
+    local ONE_VERSION_FILE="$(lookup_file "VERSION" "$DRIVER_PATH")"
+    if [ -f "$ONE_VERSION_FILE" ]; then
+        ONE_EDITION="CE"
+        ONE_VERSION="${ONE_VERSION:-$(head -n 1 "$ONE_VERSION_FILE")}"
+        ONE_VERSION_ARR=(${ONE_VERSION//\./ })
+        local ONE_EDITION_FILE="${ONE_VERSION_FILE/VERSION/EDITION}"
+        if [ -f "$ONE_EDITION_FILE" ]; then
+            ONE_EDITION="$(head -n 1 "$ONE_EDITION_FILE")"
+        fi
+        if [ ${#ONE_VERSION_ARR[*]} -gt 3 ]; then
+            ONE_EDITION="CE${ONE_VERSION_ARR[3]}"
+        fi
+        ONE_VERSION_INT=$((ONE_VERSION_ARR[0]*10000 + ONE_VERSION_ARR[1]*100 + ONE_VERSION_ARR[2]))
+        splog "$ONE_VERSION $ONE_EDITION $ONE_VERSION_INT"
+    fi
+}
+
 ONE_PX="${ONE_PX:-one}"
 
 DRIVER_PATH="$(dirname $0)"
