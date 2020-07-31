@@ -170,7 +170,7 @@ esac
 #-------------------------------------------------------------------------------
 if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     REMOTE_MONITOR=
-    if ! boolTrue "DS_SHARED" ]; then
+    if ! boolTrue "DS_SHARED"; then
         REMOTE_MONITOR="storpool"
     fi
     if [ $LCM_STATE -eq 30 ] && boolTrue "SKIP_UNDEPLOY_SSH"; then
