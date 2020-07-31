@@ -16,6 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+AUGEAS_LENSES="${AUGEAS_LENSES:-/usr/share/augeas/lenses}"
+
+AUTOCONF="${AUTOCONF:-0}"
+
+ONED="${ONED:-1}"
+
+SUNSTONE="${SUNSTONE:-0}"
+
 function patch_hook()
 {
     local _hook="$1"
@@ -40,17 +48,14 @@ function patch_hook()
     fi
 }
 
-AUGEAS_LENSES="${AUGEAS_LENSES:-/usr/share/augeas/lenses}"
-
-SKIP_SUNSTONE="${SKIP_SUNSTONE:-1}"
-
 if fgrep -qR "storpool" -- "${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}"; then
-    SKIP_SUNSTONE=1
+    SUNSTONE=0
 fi
 
 end_msg=
-if [ "$SKIP_SUNSTONE" = "1" ]; then
+if ! boolTrue "SUNSTONE"; then
     echo "*** Skipping opennebula-sunstone integration patch"
+    echo "Hint: export SUNSTONE=1; bash install.sh"
 else
     # patch sunstone's datastores-tab.js
     SUNSTONE_PUBLIC=${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}
@@ -98,7 +103,7 @@ else
     set -e
 fi
 
-if [ -n "$SKIP_ONED" ]; then
+if ! boolTrue "ONED"; then
     echo "*** Skipping oned integration"
     [ -n "$end_msg" ] && echo "*** Please restart $end_msg service"
     exit;
@@ -185,7 +190,11 @@ fi
 echo "*** copying misc/reserved.sh to .../remotes"
 cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
 
-if [ -z "$SKIP_CONFIGURATION" ]; then
+if ! boolTrue "AUTOCONF" ; then
+    echo "NOTICE: Configuration skipped!"
+    echo "Hint: export AUTOCONF=1; bash install.sh"
+    echo
+else
     # Prepare and use autoconf.rb
     echo "*** Copy augeas lenses ..."
     cp -vf "$CWD/misc/augeas"/*.aug "${AUGEAS_LENSES}"/
@@ -200,11 +209,9 @@ if [ -z "$SKIP_CONFIGURATION" ]; then
     $CWD/misc/autoconf.rb -v -w $AUTOCONF
 
     chown -R "$ONE_USER" "${ONE_VAR}/remotes"
-else
-    echo "!!! Configuration skipped"
 fi
 
-if [ -n "$STORPOOL_EXTRAS" ]; then
+if boolTrue "STORPOOL_EXTRAS"; then
     if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
         echo "!!! Please enable deploy-tweaks in the VM_MAD configuration"
     fi

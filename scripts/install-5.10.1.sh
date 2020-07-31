@@ -16,6 +16,10 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+ONED="${ONED:-1}"
+
+SUNSTONE="${SUNSTONE:-0}"
+
 function patch_hook()
 {
     local _hook="$1"
@@ -40,15 +44,15 @@ function patch_hook()
     fi
 }
 
-SKIP_SUNSTONE="${SKIP_SUNSTONE:-1}"
 
 if fgrep -qR "storpool" -- "${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}"; then
-    SKIP_SUNSTONE=1
+    SUNSTONE=0
 fi
 
 end_msg=
-if [ "$SKIP_SUNSTONE" = "1" ]; then
+if ! boolTrue "SUNSTONE"; then
     echo "*** Skipping opennebula-sunstone integration patch"
+    echo "Hint: export SUNSTONE=1; bash install.sh"
 else
     # patch sunstone's datastores-tab.js
     SUNSTONE_PUBLIC=${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}
@@ -96,7 +100,7 @@ else
     set -e
 fi
 
-if [ -n "$SKIP_ONED" ]; then
+if ! boolTrue "ONED"; then
     echo "*** Skipping oned integration"
     [ -n "$end_msg" ] && echo "*** Please restart $end_msg service"
     exit;

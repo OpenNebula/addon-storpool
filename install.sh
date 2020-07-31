@@ -42,6 +42,17 @@ fi
 
 CWD=$(pwd)
 
+function boolTrue()
+{
+   case "${!1^^}" in
+       1|Y|YES|TRUE|ON)
+           return 0
+           ;;
+       *)
+           return 1
+   esac
+}
+
 function do_patch()
 {
     local _patch="$1" _backup="$2"
