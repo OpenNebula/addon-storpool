@@ -62,8 +62,7 @@ function alterVcPolicy()
         fi
         while read -u 4 VMID; do
             alterVcPolicy "$VMID" "$vmPoolFile"
-        done 4< <(cat "$vmPool" | \
-            xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n)
+        done 4< <(xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n "$vmPool")
         return 0
     fi
 
