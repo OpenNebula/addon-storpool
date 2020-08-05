@@ -479,7 +479,7 @@ aug = Augeas.create(:no_modl_autoload => true,
                     )
 
 time = Time.now
-timestamp = time.strftime("%Y%m%d_%H%M%S")
+timestamp = time.strftime("%Y%m%dT%H%M%S")
 
 default_config.each do |conf_file, cfg|
     log "##### #{conf_file} #####"
