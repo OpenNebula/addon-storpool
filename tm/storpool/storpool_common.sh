@@ -1100,6 +1100,7 @@ function oneVmInfo()
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
+                            /VM/USER_TEMPLATE/INCLUDE_CONTEXT_PACKAGES \
                             /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     unset i
@@ -1133,6 +1134,10 @@ function oneVmInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
+        INCLUDE_CONTEXT_PACKAGES="${_TMP}"
+    fi
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "DEBUG_oneVmInfo" || return 0
@@ -1159,6 +1164,7 @@ ${VM_DS_ID:+VM_DS_ID=$VM_DS_ID }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
 ${VC_POLICY:+VC_POLICY='$VC_POLICY' }\
+${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES' }\
 "
     _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
     [ -n "$_MSG" ] && splog "$_MSG"
