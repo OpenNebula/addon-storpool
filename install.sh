@@ -163,14 +163,30 @@ function tmResetMigrate()
     esac
 }
 
+oneVersion(){
+    local arr=(${1//\./ })
+    export ONE_MAJOR="${arr[0]}"
+    export ONE_MINOR="${arr[1]}"
+    export ONE_VERSION=$((arr[0]*10000 + arr[1]*100 + arr[2]))
+    if [ ${#arr[*]} -eq 4 ] || [ $ONE_VERSION -lt 51200 ]; then
+        export ONE_EDITION="CE${arr[3]}"
+    else
+        export ONE_EDITION="EE"
+    fi
+}
+
 if [ -f "$ONE_VAR/remotes/VERSION" ]; then
     [ -n "$ONE_VER" ] || ONE_VER="$(< "$ONE_VAR/remotes/VERSION")"
 fi
 
+oneVersion "$ONE_VER"
+
 if [ -f "scripts/install-${ONE_VER}.sh" ]; then
     source "scripts/install-${ONE_VER}.sh"
+elif [ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]; then
+    source "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
 else
     echo "ERROR: Unknown OpenNebula version '$ONE_VER' detected!"
-    echo "Please install manually"
+    echo "Please contact StorPool support for assistance"
     echo
 fi
