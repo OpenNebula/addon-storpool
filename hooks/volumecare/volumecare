@@ -129,7 +129,7 @@ else
         RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "${ONE_HOME}/config" | tail -n 1)"
         if [ -n "$RAFT_IP" ]; then
             RAFT_LEADER_IP="${RAFT_IP%%/*}"
-            RAFT_LEADER_IP="${RAFT_IP%%,*}"
+            RAFT_LEADER_IP="${RAFT_LEADER_IP%%,*}"
         fi
     fi
     if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
