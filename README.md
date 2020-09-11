@@ -121,16 +121,18 @@ git clone https://github.com/OpenNebula/addon-storpool
 
 The automated installation is best suitable for new deployments. The install script will try to do an upgrade if it detects that addon-storpool is already installed but it is possible to have errors due to non expected changes
 
+If oned and sunstone services are on different servers it is possible to install only part of the integration:
+
+ * set environment variable SUNSTONE=1 to enable the integration in the Datastore Wizard (Sunstone)
+ * set environment variable ONED=0 to skip the oned integration
+ * set environment variable AUTOCONF=1 to enable the automatic configuration of addon defaults in oned.conf
+
 * Run the install script as 'root' user and check for any reported errors or warnings
 
 ```bash
 bash ~/addon-storpool/install.sh
 ```
 
-If oned and sunstone services are on different servers it is possible to install only part of the integration:
-
- * set environment variable SKIP_SUNSTONE=0 to enable the integration in the Datastore Wizard (Sunstone)
- * set environment variable SKIP_ONED=1 to skip the oned integration
 
 ### manual installation
 
