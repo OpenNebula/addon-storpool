@@ -430,17 +430,17 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
 
 ## Upgrade notes
 
-* It is highly recommended to install `qemu-kvm-ev` package from `centos-release-kvm-ev` reposytory.
 
 * The suggested upgrade procedure is as follow
 
     1. Stop all opennebula services
     2. Upgrade the opennebula packages. But do not reconfigure anything yet
-    3. Upgrade the addon (checkout/clone latest from github and run install.sh)
+    3. Upgrade the addon (checkout/clone latest from github and run _AUTOCONF=1 bash install.sh_)
     4. Follow the addon configuration chapter in README.md to (re)configure the extras
     5. Continue (re)configuring OpenNebula following the upstream docs
 
 * With OpenNebula 5.8+ The IMAGE datastore backed by StorPool must have TM_MAD for the SYSTEM datastore whitelisted.
+* The monitoring method had changed in OpenNebula 5.12+. If you are using Opennebula 5.10 or below add *LEGACY_MONITORING=1* to addon-storpoolrc file.
 
 Please follow the upgrade notes for the OpenNebula version you are using.
 
