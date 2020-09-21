@@ -24,19 +24,23 @@ ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
        'one': "http://opennebula.org/xmlns/libvirt/1.0"
      }
 
-def indent(elem, level=0):
-    i = "\n" + level*"\t"
-    if elem is not None:
-#        if not elem.text or not elem.text.strip():
-#            elem.text = i + "\t"
+def indent(elem, level=0, ind="  "):
+    i = "\n" + level * ind
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + ind
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
         for elem in elem:
-            indent(elem, level+1)
+            indent(elem, level+1, ind)
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
     else:
-        if level and (not elem.tail or not elem.tail.strip()):
+        if not level:
+            return
+        if not elem.text or not elem.text.strip():
+            elem.text = None
+        if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
 changed = 0
