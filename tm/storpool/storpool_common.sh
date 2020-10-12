@@ -108,6 +108,8 @@ FORCE_DETACH_BY_TAG=1
 FORCE_DETACH_OTHER_MV=1
 #
 FORCE_DETACH_OTHER_CONTEXT=1
+#
+STORPOOL_CLIENT_ID_SOURCES="LOCAL ONEHOST FROMHOST HOSTHOSTNAME BRIDGELIST CLONEGW"
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -311,83 +313,108 @@ function oneHostInfo()
     splog "oneHostInfo($_name): ID:$HOST_ID NAME:$HOST_NAME STATE:$HOST_STATE HOSTNAME:${HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
 }
 
-function storpoolGetId()
+function storpoolGetIdLOCAL()
 {
-    local hst="$1"
-    if [ "$result" = "" ]; then
-        result=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
-        if [ "$result" = "" ]; then
-            if [ -n "$COMMON_DOMAIN" ]; then
-                result=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
-                if [ -n "$result" ] && boolTrue "DEBUG_SP_OURID"; then
-                    splog "storpoolGetId(${hst}.${COMMON_DOMAIN}) SP_OURID=$result"
-                fi
+    local hst="$1" COMMON_DOMAIN="$2"
+    CLIENT_OURID=$(/usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+    if [ "$CLIENT_OURID" = "" ]; then
+        if [ -n "$COMMON_DOMAIN" ]; then
+            CLIENT_OURID=$(/usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            if [ -n "$result" ] && boolTrue "DEBUG_SP_OURID"; then
+                splog "storpoolGetIdLOCAL(${hst}.${COMMON_DOMAIN}) CLIENT_OURID=$CLIENT_OURID"
             fi
-        elif boolTrue "DEBUG_SP_OURID"; then
-            splog "storpoolGetId($hst) SP_OURID=$result (local storpool.conf)"
         fi
+    elif boolTrue "DEBUG_SP_OURID"; then
+        splog "storpoolGetIdLOCAL($hst) CLIENT_OURID=$CLIENT_OURID (local storpool.conf)"
     fi
-    if [ "$result" = "" ]; then
-        for bridge in $BRIDGE_LIST; do
-            result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
-            if [ -n "$result" ]; then
+}
+function storpoolGetIdBRIDGELIST()
+{
+    local hst="$1" COMMON_DOMAIN="$2"
+    for bridge in $BRIDGE_LIST; do
+        CLIENT_OURID=$(ssh "$bridge" /usr/sbin/storpool_confget -s "$hst" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        if [ -n "$CLIENT_OURID" ]; then
+            if boolTrue "DEBUG_SP_OURID"; then
+                splog "storpoolGetIdBRIDGELIST($hst) CLIENT_OURID=$CLIENT_OURID via $bridge"
+            fi
+            break
+        fi
+        if [ -n "$COMMON_DOMAIN" ]; then
+            CLIENT_OURID=$(ssh "$bridge" /usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+            if [ -n "$CLIENT_OURID" ]; then
                 if boolTrue "DEBUG_SP_OURID"; then
-                    splog "storpoolGetId($hst) SP_OURID=$result via $bridge"
+                    splog "storpoolGetIdBRIDGELIST(${hst}.${COMMON_DOMAIN}) CLIENT_OURID=$CLIENT_OURID via $bridge"
                 fi
                 break
             fi
-            if [ -n "$COMMON_DOMAIN" ]; then
-                result=$(ssh "$bridge" /usr/sbin/storpool_confget -s "${hst}.${COMMON_DOMAIN}" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
-                if [ -n "$result" ]; then
-                    if boolTrue "DEBUG_SP_OURID"; then
-                        splog "storpoolGetId(${hst}.${COMMON_DOMAIN}) SP_OURID=$result via $bridge"
-                    fi
-                    break
-                fi
-            fi
-        done
-        if [ "$result" = "" ] && [ -n "$CLONE_GW" ]; then
-            result=$(ssh "$CLONE_GW" /usr/sbin/storpool_confget -s "\$(hostname)" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1) #"
-            splog "storpoolGetId($CLONE_GW) SP_OURID=$result (CLONE_GW)"
         fi
-        if [ "$result" = "" ]; then
-            result=$(ssh "$hst" /usr/sbin/storpool_confget | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
-            if [ -n "$result" ]; then
-                if boolTrue "DEBUG_SP_OURID"; then
-                    splog "storpoolGetId($hst) SP_OURID=$result (remote storpool.conf)"
-                fi
+    done
+}
+function storpoolGetIdCLONEGW()
+{
+    local hst="$1" COMMON_DOMAIN="$2"
+    if [ -n "$CLONE_GW" ]; then
+        CLIENT_OURID=$(ssh "$CLONE_GW" /usr/sbin/storpool_confget -s "\$(hostname)" | grep SP_OURID | cut -d '=' -f 2 | tail -n 1) #"
+        if boolTrue "DEBUG_SP_OURID"; then
+            splog "storpoolGetIdCLONEGW($CLONE_GW) CLIENT_OURID=$CLIENT_OURID (CLONE_GW)"
+        fi
+    fi
+}
+function storpoolGetIdFROMHOST()
+{
+    local hst="$1" COMMON_DOMAIN="$2"
+    if [ "$result" = "" ]; then
+        CLIENT_OURID=$(ssh "$hst" /usr/sbin/storpool_confget | grep SP_OURID | cut -d '=' -f 2 | tail -n 1)
+        if [ -n "$result" ]; then
+            if boolTrue "DEBUG_SP_OURID"; then
+                splog "storpoolGetIdFROMHOST($hst) CLIENT_OURID=$CLIENT_OURID (remote $hst:/etc/storpool.conf)"
             fi
         fi
     fi
 }
-
+function storpoolGetIdONEHOST()
+{
+    local hst="$1" COMMON_DOMAIN="$2"
+    oneHostInfo "$hst"
+    if [ -n "$HOST_SP_OURID" ]; then
+        if [ "${HOST_SP_OURID//[[:digit:]]/}" = "" ]; then
+            SP_OURID="$HOST_SP_OURID"
+            if boolTrue "DEBUG_SP_OURID"; then
+                splog "storpoolGetIdONEHOST($hst) SP_OURID=$SP_OURID"
+            fi
+        else
+            splog "storpoolGetIdONEHOST($hst): Has HOST_SP_OURID but not only digits:'$HOST_SP_OURID'"
+        fi
+    fi
+}
+function storpoolGetIdHOSTHOSTNAME()
+{
+    local hst="$1" COMMON_DOMAIN="$2"
+    [ -n "$HOST_HOSTNAME" ] || oneHostInfo "$hst"
+    storpooGetHost "$HOST_HOSTNAME"
+}
 function storpoolClientId()
 {
-    local hst="$1" COMMON_DOMAIN="${2:-$COMMON_DOMAIN}"
-    local result= bridge=
-    storpoolGetId "$hst"
-    if [ "$result" = "" ]; then
-        oneHostInfo "$hst"
-        if [ -n "$HOST_HOSTNAME" ]; then
-            if [ "$hst" != "$HOST_HOSTNAME" ] || boolTrue "DEBUG_COMMON"; then
-                splog "storpoolClientId($hst): Found '$HOST_HOSTNAME'"
+    local hst="$1" COMMON_DOMAIN="${2:-$COMMON_DOMAIN}" method= default=
+    for default in LOCAL ONEHOST FROMHOST HOSTHOSTNAME; do
+        [ "${STORPOOL_CLIENT_ID_SOURCES/${default}/}" != "$STORPOOL_CLIENT_ID_SOURCES" ] || STORPOOL_CLIENT_ID_SOURCES+=" $default"
+    done
+    for method in $STORPOOL_CLIENT_ID_SOURCES; do
+        if type -t storpoolGetId${method} >/dev/null; then
+            storpoolGetId${method} "$hst" "$COMMON_DOMAIN"
+            if [ -n "$CLIENT_OURID" ]; then
+                if [ "${CLIENT_OURID//[[:digit:]]/}" = "" ]; then
+                    echo "$CLIENT_OURID"
+                    return 0
+                else
+                    splog "storpoolClientId${method}($hst${COMMON_DOMAIN:+,$COMMON_DOMAIN}) CLIENT_OURID has incorrect format '$CLIENT_OURID'"
+                fi
             fi
-            hst="$HOST_HOSTNAME"
+        else
+            splog "storpoolClientId(${hst}${COMMON_DOMAIN:+,$COMMON_DOMAIN}) unknown function storpoolGetId${method}"
         fi
-        if [ -n "$HOST_SP_OURID" ]; then
-            if [ "${HOST_SP_OURID//[[:digit:]]/}" = "" ]; then
-                result="$HOST_SP_OURID"
-                splog "$hst CLIENT_ID=$result"
-            else
-                splog "HOST $hst has HOST_SP_OURID but not only digits:'$HOST_SP_OURID'"
-            fi
-        fi
-        storpoolGetId "$hst"
-    fi
-    if boolTrue "DEBUG_SP_OURID"; then
-        splog "storpoolClientId($1): SP_OURID:${result}${bridge:+ BRIDGE_HOST:$bridge}${COMMON_DOMAIN:+ COMMON_DOMAIN=$COMMON_DOMAIN}${HOST_HOSTNAME:+ HOST_HOSTNAME=$HOST_HOSTNAME}${HOST_SP_OURID:+ HOST_SP_OURID=$HOST_SP_OURID}"
-    fi
-    echo $result
+    done
+    return 1
 }
 
 function storpoolApi()
