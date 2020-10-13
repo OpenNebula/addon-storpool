@@ -263,13 +263,18 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         fi
         if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ] || [ -n "$SYSTEM_DS_TRANSFER" ]; then
             if [ "$SRC_HOST" = "$DST_HOST" ] || boolTrue "MIGRATE_UNKNOWN"; then
-                if [ "$SRC_PATH" = "$DST_PATH" ]; then
-                    splog "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
+                RANDOM_FILE=$($SSH "$DST_HOST" "mktemp -p \"$DST_DIR\"")
+                trapAdd "$SSH $DST_HOST \"rm -f $RANDOM_FILE\""
+                if $SSH "$SRC_HOST" "test -f $RANDOM_FILE"; then
+                    msg "VM $VM_ID on same path($SRC_PATH)${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
+                    log "$msg"
+                    splog "$msg"
                 else
                     splog "datastore change $SRC_PATH -> $DST_PATH"
                     ssh_exec_and_log "$DST_HOST" "mv -n -t $DST_PATH $SRC_PATH/*" \
                         "Failed moving $SRC_PATH/* to $DST_PATH"
                 fi
+                trapReset
             else
                 if boolTrue "IS_UNDEPLOY" && boolTrue "SKIP_UNDEPLOY_SSH"; then
                     splog "Transfer from $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR SKIPPED"
