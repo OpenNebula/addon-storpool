@@ -41,7 +41,7 @@ fi
 
 for f in "$TMCOMMON" /var/tmp/one/tm/tm_common.sh; do
     if [ -f "$f" ]; then
-        source "$TMCOMMON"
+        source "$f"
         break
     fi
 done
