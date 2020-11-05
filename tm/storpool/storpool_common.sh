@@ -1932,6 +1932,7 @@ storpoolVmVolumes()
 {
     vmVolumes=
     while read -u 7 vol; do
+        [ -z "${vol%${ONE_PX}*}" ] || continue
         vmVolumes+="$vol "
     done 7< <(storpoolRetry -j volume list |\
         jq -r --arg t "$1" --arg v "$2" '.data[]|select(.tags[$t]==$v)|.name'
