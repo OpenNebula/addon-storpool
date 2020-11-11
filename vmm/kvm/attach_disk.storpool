@@ -30,14 +30,17 @@ TM_MAD=$(echo $DRV_ACTION | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TM_MAD)
 DISK_TYPE=$(echo $DRV_ACTION | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_TYPE)
+TYPE=$(echo $DRV_ACTION | base64 -d | \
+              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TYPE)
 
 if [ "${TM_MAD:0:8}" = "storpool" ]; then
     if [ "$DISK_TYPE" = "BLOCK" ]; then
         splog "Disk $1 $2 $3 DISK_TYPE '$DISK_TYPE'"
     else
-        splog "Replacing $1 $2 $3 DISK_TYPE '$DISK_TYPE' to BLOCK"
+        splog "Replacing $1 $2 $3 DISK_TYPE '$DISK_TYPE' and TYPE '$TYPE' to BLOCK"
         DRV_ACTION="$(echo "$DRV_ACTION" | base64 -d | \
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
+                   xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v BLOCK |\
                    base64 -w 0)"
     fi
 fi
