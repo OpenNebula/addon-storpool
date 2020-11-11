@@ -661,6 +661,7 @@ function storpoolVolumeSnapshotsDelete()
         jq -r --arg n "$_SP_VOL_SNAPSHOTS" '.data|map(select(.name|contains($n)))|.[]|[.name]|@csv' | \
         while read name; do
             name="${name//\"/}"
+            [ "${name:0:1}" = "*" ] && continue
             storpoolSnapshotDelete "$name"
         done
 }
