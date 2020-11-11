@@ -95,6 +95,62 @@ function ipsetCheck()
     fi
 }
 
+vmSnapshotEnabled()
+{
+    grep -q snapshot_create-storpool ~oneadmin/config
+}
+
+function vmSnapshotCreate()
+{
+    local n="${VM_NAME}-$1"
+    vmSnapshotEnabled || return
+    echo -n "* Creating VM Snapshot '$n'..."
+    onevm snapshot-create "$VM_ID" "$n"
+    waitforvm "$VM_NAME" runn || die "VM Snapshot create timed out"
+    VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml| \
+        tee "${DATA_DIR}/vm-snapshot-create-${n}.XML"| \
+        xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
+    echo " Done, VM Snapshot ID $VM_SNAPSHOT_ID."
+}
+
+function vmSnapshotRevert()
+{
+    local n="${VM_NAME}-$1"
+    vmSnapshotEnabled || return
+    echo -n "* Reverting VM Snapshot ..."
+    local VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml| \
+        tee "${DATA_DIR}/vm-snapshot-revert-{$n}.XML"| \
+        xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
+    onevm snapshot-revert "$VM_ID" "$VM_SNAPSHOT_ID"
+    echo -n " Power-off..."
+    if ! waitforvm "$VM_NAME" poff; then
+        echo -n " Porwer-off (hard)..."
+        onevm poweroff "$VM_ID" --hard
+        waitforvm "$VM_NAME" poff || die "VM Snapshot powerof timed out"
+    fi
+    echo -n " Resume..."
+    onevm resume "$VM_ID"
+    waitforvm "$VM_NAME" runn || die "Resume after VM snapshot revert failed."
+    echo " Done, reverted to VM Snapshot ID $VM_SNAPSHOT_ID."
+}
+
+function vmSnapshotDelete()
+{
+    local n="${VM_NAME}-$1"
+    vmSnapshotEnabled || return
+    echo -n "* Deleting VM Snapshot '$n'..."
+    local VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml| \
+        tee "${DATA_DIR}/vm-snapshot-delete1-{$n}.XML"| \
+        xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
+    onevm snapshot-delete "$VM_ID" "$VM_SNAPSHOT_ID"
+    waitforvm "$VM_NAME" runn || die "VM Snapshot delete timed out"
+    VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml| \
+        tee "${DATA_DIR}/vm-snapshot-delete2-${n}.XML"| \
+        xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID || true)
+    [ -z "$VM_SNAPSHOT_ID" ] || die "VM Snapshot delete failed."
+    echo " Done."
+}
+
 if ! which storpool &>/dev/null; then
 	echo "storpool cli not installed?"
 	exit 2
@@ -172,9 +228,9 @@ else
 #	deltemplate=y
 fi
 
-echo -n "Looking for network $VN_NAME"
+echo -n "* Looking for network '$VN_NAME'..."
 VN_ID="$(onevnet list --xml |tee "${DATA_DIR}/vnet-list.XML"|xmlget "//VNET[NAME=\"$VN_NAME\"]" ID ||true)"
-echo " Donei${VN_ID:+ VNet ID $VN_ID}."
+echo " Done${VN_ID:+ VNet ID $VN_ID}."
 
 echo "* Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME${VN_ID:+ using VNet ID $VN_ID}..."
 onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" ${VN_ID:+--nic "$VN_ID"}
@@ -295,6 +351,8 @@ FS_DISK_ID=$(onevm show "$VM_ID" --xml| tee "${DATA_DIR}/disk-fs.XML"|xmlget "//
 [ -n "$FS_DISK_ID" ] || die "Adding vilatile disk failed."
 echo " Done, Disk ID $FS_DISK_ID."
 
+vmSnapshotCreate A
+
 ###############################################################################
 # add nic alias
 if [ -n "$VN_ID" ]; then
@@ -336,6 +394,8 @@ echo " Done."
 
 ipsetCheck "$NEW_HOST"
 
+vmSnapshotCreate B
+
 HOST_TO_MOVE=$CURRENT_HOST
 
 echo -n "* Migrate live to $HOST_TO_MOVE..."
@@ -370,6 +430,10 @@ echo " Done."
 
 ipsetCheck "$NEW_HOST"
 
+vmSnapshotRevert A
+
+ipsetCheck "$NEW_HOST"
+
 echo -n "* Powering off (hard)..."
 onevm poweroff --hard "$VM_ID"
 waitforvm "$VM_NAME" poff || die "Power off failed."
@@ -390,6 +454,8 @@ waitforvm "$VM_NAME" runn || die "cannot power up"
 echo " Done."
 
 ipsetCheck "$CURRENT_HOST"
+
+vmSnapshotDelete A
 
 ###############################################################################
 # non-persistent detach/destroy
