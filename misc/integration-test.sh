@@ -23,6 +23,8 @@ SLP=1
 # nobody else will create this.
 # hopefuly.
 VM_NAME=SPTEST.fadCarlarr
+VN_NAME=192.168.122-virbr0
+DATA_DIR="$0.DATA"
 
 function xmlget()
 {
@@ -59,6 +61,40 @@ function die() {
 	exit 5
 }
 
+function ipsetTest()
+{
+    local hst=$1 name="one-$2-$3-ip-spoofing"
+    shift 3
+    local ipSet="$(ssh "$hst" "sudo /usr/sbin/ipset list '$name' 2>/dev/null"| tee "${DATA_DIR}/ipset_list-${CURRENT_HOST}.out")"
+    [ -n "$ipSet" ] || return 1
+    local error=0 ipaddr=
+    for ipaddr in $*; do
+        if echo "$ipSet"| grep -q "^$ipaddr\$"; then
+            if [ -n "$DEBUG" ]; then
+                echo "ipsetTest($hst,$name) have $ipaddr"
+            fi
+        else
+            echo "ipsetTest($hst,$name) miss $ipaddr"
+            error=1
+        fi
+    done
+    return $error
+}
+
+function ipsetCheck()
+{
+    local hst="$1"
+    if [ "${FILTER_MAC_SPOOFING^^}" = 'YES' ]; then
+        echo -n "* Check FILTER_MAC_SPOOFING..."
+        if ! ipsetTest "$hst" "$VM_ID" "$NIC_ID" "$NIC_IP" "$ALIAS_NIC_IP"; then
+            echo -n " Retrying after 3s..."
+            sleep 3
+            ipsetTest "$hst" "$VM_ID" "$NIC_ID" "$NIC_IP" "$ALIAS_NIC_IP" || die "Error in ipset"
+        fi
+        echo " Done."
+    fi
+}
+
 if ! which storpool &>/dev/null; then
 	echo "storpool cli not installed?"
 	exit 2
@@ -82,7 +118,6 @@ if [ -z "$2" ]; then
 	exit 2
 fi
 
-DATA_DIR="$0.DATA"
 mkdir -p "$DATA_DIR"
 
 HOST1="$1"
@@ -133,12 +168,16 @@ else
 
 	echo -n "* Waiting for template image '$VM_TEMPLATE_NAME' to become ready..."
 	waitforimg "$VM_TEMPLATE_NAME" rdy 300 || die "VM Tmeplate download timed out."
-	echo "-- Done."
-	deltemplate=y
+	echo " Done."
+#	deltemplate=y
 fi
 
-echo "* Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME ..."
-onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME"
+echo -n "Looking for network $VN_NAME"
+VN_ID="$(onevnet list --xml |tee "${DATA_DIR}/vnet-list.XML"|xmlget "//VNET[NAME=\"$VN_NAME\"]" ID ||true)"
+echo " Donei${VN_ID:+ VNet ID $VN_ID}."
+
+echo "* Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME${VN_ID:+ using VNet ID $VN_ID}..."
+onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" ${VN_ID:+--nic "$VN_ID"}
 waitforvm "$VM_NAME" runn 120 || die "Failed to instantiate VM $VM_NAME!"
 VM_ID=$(onevm show "$VM_NAME" --xml | tee "${DATA_DIR}/vm-${VM_NAME}.XML" |\
     xmlget '//VM' ID)
@@ -146,12 +185,12 @@ if [ -z "$VM_ID" ]; then
     die "Can't get VM ID for $VM_NAME."
 fi
 CURRENT_HOST="$(onevm show "$VM_ID" --xml | xmlget '//HISTORY[last()]' HOSTNAME)"
-echo " VM $VM_ID is runnung on host '$CURRENT_HOST'."
+echo "* VM $VM_ID is runnung on host '$CURRENT_HOST'."
 
 ###############################################################################
 # non-persistent image
 NP_IMAGE_NAME="NP-$VM_NAME"
-NP_IMAGE_ID=$(oneimage list --xml|tee "${DATA_DIR}/image-list1.XML" |xmlget "//IMAGE[NAME=\"$NP_IMAGE_NAME\"]" ID||true)
+NP_IMAGE_ID=$(oneimage list --xml|tee "${DATA_DIR}/image-${NP_IMAGE_NAME}1.XML" |xmlget "//IMAGE[NAME=\"$NP_IMAGE_NAME\"]" ID||true)
 
 if [ -n "$NP_IMAGE_ID" ]; then
 	echo -n "* Image $NP_IMAGE_NAME exists with ID $NP_IMAGE_ID, removing..."
@@ -160,33 +199,133 @@ if [ -n "$NP_IMAGE_ID" ]; then
 	echo " Done."
 fi
 
-echo -n "* Creating non-persistent image '$NP_IMAGE_NAME' ..."
+echo -n "* Creating non-persistent image '$NP_IMAGE_NAME'..."
 oneimage create --name "$NP_IMAGE_NAME" --datastore "$IMAGE_DS_ID" --size 10000 --type datablock --driver raw --prefix sd >/dev/null
 
 waitforimg "$NP_IMAGE_NAME" rdy || die "image creation failed"
 
-NP_IMAGE_ID=$(oneimage list --xml|tee "${DATA_DIR}/image-list2.XML" |xmlget "//IMAGE[NAME=\"$NP_IMAGE_NAME\"]" ID||true)
+NP_IMAGE_ID=$(oneimage list --xml|tee "${DATA_DIR}/image-${NP_IMAGE_NAME}2.XML" |xmlget "//IMAGE[NAME=\"$NP_IMAGE_NAME\"]" ID||true)
 
 echo " Done, Image ID $NP_IMAGE_ID."
 
 echo -n "* Attaching image $NP_IMAGE_ID to VM $VM_ID..."
 onevm disk-attach "$VM_ID" --image "$NP_IMAGE_ID"
 waitforvm "$VM_NAME" runn || die "attach $NP_IMAGE_NAME timed out"
-# check attach
 
 NP_DISK_ID=$(onevm show "$VM_ID" --xml |tee "${DATA_DIR}/disk-${NP_IMAGE_NAME}.XML" |\
     xmlget "//DISK[IMAGE=\"$NP_IMAGE_NAME\"]" DISK_ID)
-if [[ -z "$NP_DISK_ID" ]]; then
+if [ -z "$NP_DISK_ID" ]; then
 	die "Attach ($NP_IMAGE_ID) $NP_IMAGE_NAME failed."
 fi
 echo " Done, Disk ID $NP_DISK_ID."
 
+###############################################################################
+# persistent image
+PE_IMAGE_NAME="PE-$VM_NAME"
+PE_IMAGE_ID=$(oneimage list --xml|tee "${DATA_DIR}/image-${PE_IMAGE_NAME}1.XML" |xmlget "//IMAGE[NAME=\"$PE_IMAGE_NAME\"]" ID||true)
+
+if [ -n "$PE_IMAGE_ID" ]; then
+	echo -n "* Image $PE_IMAGE_NAME exists with ID $PE_IMAGE_ID, removing..."
+	oneimage delete "$PE_IMAGE_ID"
+	waitforimg "$PE_IMAGE_NAME" "" || die "Image $PE_IMAGE_NAME delete timed out."
+	echo " Done."
+fi
+
+echo -n "* Creating persistent image '$PE_IMAGE_NAME'..."
+oneimage create --name "$PE_IMAGE_NAME" --datastore "$IMAGE_DS_ID" --size 10000 --type datablock --driver raw --prefix sd --persistent >/dev/null
+
+waitforimg "$PE_IMAGE_NAME" rdy || die "image creation failed"
+
+PE_IMAGE_ID=$(oneimage list --xml|tee "${DATA_DIR}/image-${PE_IMAGE_NAME}2.XML" |xmlget "//IMAGE[NAME=\"$PE_IMAGE_NAME\"]" ID||true)
+
+echo " Done, Image ID $PE_IMAGE_ID."
+
+echo -n "* Attaching image $PE_IMAGE_ID to VM $VM_ID..."
+onevm disk-attach "$VM_ID" --image "$PE_IMAGE_ID"
+waitforvm "$VM_NAME" runn || die "attach $PE_IMAGE_NAME timed out"
+
+PE_DISK_ID=$(onevm show "$VM_ID" --xml |tee "${DATA_DIR}/disk-${PE_IMAGE_NAME}.XML" |\
+    xmlget "//DISK[IMAGE=\"$PE_IMAGE_NAME\"]" DISK_ID)
+if [ -z "$PE_DISK_ID" ]; then
+	die "Attach ($PE_IMAGE_ID) $PE_IMAGE_NAME failed."
+fi
+echo " Done, Disk ID $PE_DISK_ID."
+
+###############################################################################
+# Volatile disks ...
+echo -n "* Adding disk (volatile swap)..."
+SWAP_TEMPLATE="${DATA_DIR}/volatile-swap.template"
+cat >"$SWAP_TEMPLATE" <<EOF
+DISK=[
+  SIZE="1024",
+  TYPE="swap",
+  FORMAT="raw",
+  DRIVER="raw",
+  CACHE="none",
+  IO="native",
+  DISCARD="unmap",
+  DEV_PREFIX="sd"
+]
+EOF
+
+onevm disk-attach "$VM_ID" --file "$SWAP_TEMPLATE"
+waitforvm "$VM_NAME" runn || die "Disk attach timed out."
+SWAP_DISK_ID=$(onevm show "$VM_ID" --xml| tee "${DATA_DIR}/disk-swap.XML"|xmlget "//DISK[TYPE=\"swap\"]" DISK_ID)
+[ -n "$SWAP_DISK_ID" ] || die "Adding disk failed."
+echo " Done, Disk ID $SWAP_DISK_ID."
+
+echo -n "* Adding disk (volatile fs)..."
+FS_TEMPLATE="${DATA_DIR}/volatile-fs.template"
+cat >"$FS_TEMPLATE" <<EOF
+DISK=[
+  SIZE="1024",
+  TYPE="fs",
+  FORMAT="raw",
+  DRIVER="raw",
+  CACHE="none",
+  IO="native",
+  DISCARD="unmap",
+  DEV_PREFIX="sd"
+]
+EOF
+
+onevm disk-attach "$VM_ID" --file "$FS_TEMPLATE"
+waitforvm "$VM_NAME" runn || die "Volatile disk attach timed out"
+FS_DISK_ID=$(onevm show "$VM_ID" --xml| tee "${DATA_DIR}/disk-fs.XML"|xmlget "//DISK[TYPE=\"fs\"]" DISK_ID)
+[ -n "$FS_DISK_ID" ] || die "Adding vilatile disk failed."
+echo " Done, Disk ID $FS_DISK_ID."
+
+###############################################################################
+# add nic alias
+if [ -n "$VN_ID" ]; then
+    NIC_NAME=$(onevm show $VM_ID --xml|xmlget "//NIC[NETWORK_ID=$VN_ID]" NAME)
+    echo -n "* Add alias IP from VNet ID $VN_ID to '${NIC_NAME}'..."
+    onevm nic-attach "$VM_ID" --network "$VN_ID" --alias "$NIC_NAME"
+    waitforvm "$VM_NAME" runn || die "Alias NIC attach timed out"
+    ALIAS_NIC_ID=$(onevm show "$VM_ID" --xml |tee "${DATA_DIR}/vm+alias.XML"|xmlget "//NIC_ALIAS[NETWORK_ID=$VN_ID]" NIC_ID -n | tail -n 1)
+    if [ -n "$ALIAS_NIC_ID" ]; then
+        ALIAS_NIC_IP=$(cat "${DATA_DIR}/vm+alias.XML" |xmlget "//NIC_ALIAS[NIC_ID=$ALIAS_NIC_ID]" IP)
+        NIC_ID=$(cat "${DATA_DIR}/vm+alias.XML" |xmlget "//NIC[NAME=\"$NIC_NAME\"]" NIC_ID)
+        NIC_IP=$(cat "${DATA_DIR}/vm+alias.XML" |xmlget "//NIC[NIC_ID=$NIC_ID]" IP)
+        FILTER_IP_SPOOFING=$(cat "${DATA_DIR}/vm+alias.XML" |xmlget "//NIC[NIC_ID=$NIC_ID]" FILTER_IP_SPOOFING)
+        FILTER_MAC_SPOOFING=$(cat "${DATA_DIR}/vm+alias.XML" |xmlget "//NIC[NIC_ID=$NIC_ID]" FILTER_MAC_SPOOFING)
+    else
+        die "Can't get NIC_ALIAS/NIC_ID."
+    fi
+    echo " Done." 
+    ipsetCheck "$CURRENT_HOST"
+#    if [ "${FILTER_MAC_SPOOFING^^}" = 'YES' ]; then
+#        ssh "$CURRENT_HOST" sudo /usr/sbin/iptables -L -nvx | tee "${DATA_DIR}/iptables-L-nvx-${CURRENT_HOST}.out"
+#    fi
+fi
+###############################################################################
+# VM migration
 [ "$CURRENT_HOST" = "$HOST1" ] && HOST_TO_MOVE=$HOST2 || HOST_TO_MOVE=$HOST1
 
 FIRST_HOST="$CURRENT_HOST"
 SECOND_HOST="$HOST_TO_MOVE"
 
-echo -n "* Migrate live '$HOST_TO_MOVE'..."
+echo -n "* Migrate live to '$HOST_TO_MOVE'..."
 onevm migrate --live "$VM_ID" "$HOST_TO_MOVE"
 waitforvm "$VM_NAME" runn || die "migration failed"
 NEW_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
@@ -195,9 +334,11 @@ if ! [ "$NEW_HOST" = "$HOST_TO_MOVE" ]; then
 fi
 echo " Done."
 
+ipsetCheck "$NEW_HOST"
+
 HOST_TO_MOVE=$CURRENT_HOST
 
-echo -n "* Migrate live to $HOST_TO_MOVE ..."
+echo -n "* Migrate live to $HOST_TO_MOVE..."
 onevm migrate --live "$VM_ID" "$HOST_TO_MOVE"
 waitforvm "$VM_NAME" runn || die "Migration failed"
 NEW_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
@@ -206,12 +347,14 @@ if ! [ "$NEW_HOST" = "$HOST_TO_MOVE" ]; then
 fi
 echo " Done."
 
-echo -n "* Powering off ..."
+ipsetCheck "$NEW_HOST"
+
+echo -n "* Powering off..."
 onevm poweroff --hard "$VM_ID"
 waitforvm "$VM_NAME" poff || die "Power off failed."
 echo " Done."
 
-echo -n "* Moving to '$SECOND_HOST' ..."
+echo -n "* Moving to '$SECOND_HOST'..."
 onevm migrate "$VM_ID" "$SECOND_HOST"
 waitforvm "$VM_NAME" poff || die "migration broke"
 NEW_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
@@ -220,17 +363,19 @@ if ! [ "$NEW_HOST" = "$SECOND_HOST" ]; then
 fi
 echo " Done."
 
-echo -n "* Powering up..."
+echo -n "* Resuming..."
 onevm resume "$VM_ID"
 waitforvm "$VM_NAME" runn || die "Resume failed."
-echo "-- Done."
+echo " Done."
+
+ipsetCheck "$NEW_HOST"
 
 echo -n "* Powering off (hard)..."
 onevm poweroff --hard "$VM_ID"
 waitforvm "$VM_NAME" poff || die "Power off failed."
 echo " Done."
 
-echo -n "* Moving back to '$FIRST_HOST'..."
+echo -n "* Migrate to '$FIRST_HOST'..."
 onevm migrate "$VM_ID" "$FIRST_HOST"
 waitforvm "$VM_NAME" poff || die "Migration failed"
 CURRENT_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
@@ -239,12 +384,16 @@ if [ "$CURRENT_HOST" != "$FIRST_HOST" ]; then
 fi
 echo " Done."
 
-echo -n "* Powering up ($VM_ID) '$VM_NAME' ..."
+echo -n "* Resuming..."
 onevm resume "$VM_ID"
 waitforvm "$VM_NAME" runn || die "cannot power up"
 echo " Done."
 
-echo -n "* Detaching disk '$NP_DISK_ID' from VM '$VM_ID'..."
+ipsetCheck "$CURRENT_HOST"
+
+###############################################################################
+# non-persistent detach/destroy
+echo -n "* Detaching disk '$NP_DISK_ID' (non-persistent)..."
 onevm disk-detach "$VM_ID" "$NP_DISK_ID"
 # check detach
 waitforvm "$VM_NAME" runn || die "Disk detach timed out"
@@ -261,6 +410,36 @@ oneimage delete "$NP_IMAGE_NAME"
 waitforimg "$NP_IMAGE_NAME" ""  || die "Image delete failed."
 echo " Done."
 
+###############################################################################
+# persistent detach/destroy
+echo -n "* Detaching disk '$PE_DISK_ID' (persistent)..."
+onevm disk-detach "$VM_ID" "$PE_DISK_ID"
+# check detach
+waitforvm "$VM_NAME" runn || die "Disk detach timed out"
+
+PE_DISK_ID=$(onevm show "$VM_ID" --xml | xmlget "//DISK[IMAGE=\"$PE_IMAGE_NAME\"]" DISK_ID || true)
+if [ -n "$PE_DISK_ID" ]; then
+	die "Detachment failed"
+else
+    echo " Done."
+fi
+
+echo -n "* Removing image $PE_IMAGE_ID ($PE_IMAGE_NAME)..."
+oneimage delete "$PE_IMAGE_NAME"
+waitforimg "$PE_IMAGE_NAME" ""  || die "Image delete failed."
+echo " Done."
+
+###############################################################################
+# Volatile destroy
+echo -n "* Detaching disk '$FS_DISK_ID' (volatile)..."
+onevm disk-detach "$VM_ID" "$FS_DISK_ID"
+waitforvm "$VM_NAME" runn || die "Disk detach timed out"
+FS_DISK_ID=$(onevm show "$VM_ID" --xml| tee "${DATA_DIR}/disk-fs-detach.XML"|xmlget "//DISK[TYPE=\"fs\"]" DISK_ID||true)
+[ -z "$FS_DISK_ID" ] || die "Volatile disk detach failed."
+echo " Done."
+
+###############################################################################
+# Cleanup
 echo -n "* Terminating (hard) VM $VM_NAME..."
 onevm terminate --hard "$VM_NAME"
 waitforvm  "$VM_NAME" ""
