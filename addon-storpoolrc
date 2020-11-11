@@ -1,4 +1,4 @@
-MKSWAP="/sbin/mkswap"
+MKSWAP="/usr/sbin/mkswap"
 
 # Prefix for the OpenNebula instance in StorPool
 # Set to a different name to avoid naming collision when multiple OpenNebula
