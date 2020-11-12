@@ -18,7 +18,9 @@
 
 set -e
 
-SLP=1
+SLP=${SLP:-1}
+
+source /var/lib/one/remotes/tm/storpool/storpool_common.sh
 
 # nobody else will create this.
 # hopefuly.
@@ -81,7 +83,33 @@ function ipsetTest()
     return $error
 }
 
-function ipsetCheck()
+function ipPing()
+{
+    local hst=$1 
+    shift
+    echo -n "* Ping $* via '$hst'..."
+    local rcmd=$(cat<<EOF
+    set -e
+    i=0
+    while [ \$i -lt 120 ]; do
+      if ping -q -c 1 $1 >/dev/null; then
+        for ip in $*; do
+          ping -q -c 2 \$ip >/dev/null
+        done
+        exit
+      fi
+      i=\$((i+1))
+      sleep $SLP
+      echo -n '.'
+    done
+    false
+EOF
+)
+   ssh "$hst" "$rcmd" || die "IP ping failed!"
+   echo " Done."
+}
+
+function ipCheck()
 {
     local hst="$1"
     if [ "${FILTER_MAC_SPOOFING^^}" = 'YES' ]; then
@@ -92,10 +120,62 @@ function ipsetCheck()
             ipsetTest "$hst" "$VM_ID" "$NIC_ID" "$NIC_IP" "$ALIAS_NIC_IP" || die "Error in ipset"
         fi
         echo " Done."
+        ipPing "$hst" "$NIC_IP" "$ALIAS_NIC_IP"
     fi
 }
 
-vmSnapshotEnabled()
+function vmResume()
+{
+    echo -n "* Resuming..."
+    onevm resume "$VM_ID"
+    waitforvm "$VM_NAME" runn || die "cannot power up"
+    CURRENT_HOST="$(onevm show "$VM_ID" --xml | xmlget '//HISTORY[last()]' HOSTNAME)"
+    echo " Done, '$CURRENT_HOST'."
+    ipCheck "$CURRENT_HOST"
+}
+
+function vmMigrate()
+{
+    local DST="$1" ARGS="$2" EXPECT="${3:-runn}"
+    echo -n "* Migrating to '$DST'${ARGS:+ $ARGS}..."
+    onevm migrate $ARGS "$VM_ID" "$DST"
+    waitforvm "$VM_NAME" "$EXPECT" || die "Migration failed (expected $EXPECT)"
+    CURRENT_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
+    [ "$CURRENT_HOST" = "$1" ] || die "Migration to '$1' failed"
+    echo " Done."
+    if [ "$EXPECT" = "runn" ]; then
+        ipCheck "$CURRENT_HOST"
+    fi
+}
+
+function vmPoweroff()
+{
+    echo -n "* Powering off${1:+ ($1)}..."
+    onevm poweroff ${1:+--$1} "$VM_ID"
+    waitforvm "$VM_NAME" poff || die "Power off${1:+ --$1} failed."
+    echo " Done."
+}
+
+function vmSuspend()
+{
+    echo -n "* Suspending..."
+    onevm suspend "$VM_ID"
+    waitforvm "$VM_NAME" susp || die "VM suspend timed out"
+    echo " Done."
+}
+
+function vmTerminate()
+{
+    local ID=$(onevm list --xml | xmlget "//VM[NAME=\"$VM_NAME\"]" ID ||true)
+    if [ -n "$ID" ]; then
+        echo -n "* Terminating (hard) VM ($ID) ${VM_NAME}..."
+        onevm terminate --hard "$VM_NAME"
+        waitforvm  "$VM_NAME" ""
+        echo " Done."
+    fi
+}
+
+function vmSnapshotEnabled()
 {
     grep -q snapshot_create-storpool ~oneadmin/config
 }
@@ -122,16 +202,13 @@ function vmSnapshotRevert()
         tee "${DATA_DIR}/vm-snapshot-revert-{$n}.XML"| \
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
     onevm snapshot-revert "$VM_ID" "$VM_SNAPSHOT_ID"
-    echo -n " Power-off..."
+    echo -n " waiting for power-off..."
     if ! waitforvm "$VM_NAME" poff; then
-        echo -n " Porwer-off (hard)..."
-        onevm poweroff "$VM_ID" --hard
-        waitforvm "$VM_NAME" poff || die "VM Snapshot powerof timed out"
+        echo
+        vmPoweroff hard
     fi
-    echo -n " Resume..."
-    onevm resume "$VM_ID"
-    waitforvm "$VM_NAME" runn || die "Resume after VM snapshot revert failed."
-    echo " Done, reverted to VM Snapshot ID $VM_SNAPSHOT_ID."
+    echo
+    vmResume
 }
 
 function vmSnapshotDelete()
@@ -150,6 +227,7 @@ function vmSnapshotDelete()
     [ -z "$VM_SNAPSHOT_ID" ] || die "VM Snapshot delete failed."
     echo " Done."
 }
+
 
 if ! which storpool &>/dev/null; then
 	echo "storpool cli not installed?"
@@ -201,11 +279,7 @@ fi
 IMAGE_DS_NAME="$(onedatastore show "$IMAGE_DS_ID" --xml |\
     xmlget "//DATASTORE" NAME)"
 
-if onevm list --xml | xmlget "//VM[NAME=\"$VM_NAME\"]" ID -n; then
-	echo -n "* Test VM '$VM_NAME' exists, cleaning up..."
-	onevm terminate --hard "$VM_NAME"
-    echo " Done."
-fi
+vmTerminate
 
 echo "* Using IMAGE datastore: $IMAGE_DS_ID ($IMAGE_DS_NAME)"
 
@@ -223,19 +297,23 @@ else
 	fi
 
 	echo -n "* Waiting for template image '$VM_TEMPLATE_NAME' to become ready..."
-	waitforimg "$VM_TEMPLATE_NAME" rdy 300 || die "VM Tmeplate download timed out."
+	waitforimg "$VM_TEMPLATE_NAME" rdy 300 \
+        || die "VM Tmeplate download timed out."
 	echo " Done."
 #	deltemplate=y
 fi
 
 echo -n "* Looking for network '$VN_NAME'..."
-VN_ID="$(onevnet list --xml |tee "${DATA_DIR}/vnet-list.XML"|xmlget "//VNET[NAME=\"$VN_NAME\"]" ID ||true)"
+VN_ID="$(onevnet list --xml | \
+    tee "${DATA_DIR}/vnet-list.XML"| \
+    xmlget "//VNET[NAME=\"$VN_NAME\"]" ID ||true)"
 echo " Done${VN_ID:+ VNet ID $VN_ID}."
 
 echo "* Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME${VN_ID:+ using VNet ID $VN_ID}..."
 onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" ${VN_ID:+--nic "$VN_ID"}
 waitforvm "$VM_NAME" runn 120 || die "Failed to instantiate VM $VM_NAME!"
-VM_ID=$(onevm show "$VM_NAME" --xml | tee "${DATA_DIR}/vm-${VM_NAME}.XML" |\
+VM_ID=$(onevm show "$VM_NAME" --xml | \
+    tee "${DATA_DIR}/vm-${VM_NAME}.XML" |\
     xmlget '//VM' ID)
 if [ -z "$VM_ID" ]; then
     die "Can't get VM ID for $VM_NAME."
@@ -371,89 +449,37 @@ if [ -n "$VN_ID" ]; then
         die "Can't get NIC_ALIAS/NIC_ID."
     fi
     echo " Done." 
-    ipsetCheck "$CURRENT_HOST"
+    ipCheck "$CURRENT_HOST"
 #    if [ "${FILTER_MAC_SPOOFING^^}" = 'YES' ]; then
 #        ssh "$CURRENT_HOST" sudo /usr/sbin/iptables -L -nvx | tee "${DATA_DIR}/iptables-L-nvx-${CURRENT_HOST}.out"
 #    fi
 fi
 ###############################################################################
 # VM migration
-[ "$CURRENT_HOST" = "$HOST1" ] && HOST_TO_MOVE=$HOST2 || HOST_TO_MOVE=$HOST1
+[ "$CURRENT_HOST" = "$HOST1" ] && HOST_TO_MOVE="$HOST2" || HOST_TO_MOVE="$HOST1"
 
 FIRST_HOST="$CURRENT_HOST"
 SECOND_HOST="$HOST_TO_MOVE"
 
-echo -n "* Migrate live to '$HOST_TO_MOVE'..."
-onevm migrate --live "$VM_ID" "$HOST_TO_MOVE"
-waitforvm "$VM_NAME" runn || die "migration failed"
-NEW_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
-if ! [ "$NEW_HOST" = "$HOST_TO_MOVE" ]; then
-    die "migration failed to $HOST_TO_MOVE, BM is on '$NEW_HOST'"
-fi
-echo " Done."
-
-ipsetCheck "$NEW_HOST"
+vmMigrate "$SECOND_HOST" --live
 
 vmSnapshotCreate B
 
-HOST_TO_MOVE=$CURRENT_HOST
+vmMigrate "$FIRST_HOST" --live
 
-echo -n "* Migrate live to $HOST_TO_MOVE..."
-onevm migrate --live "$VM_ID" "$HOST_TO_MOVE"
-waitforvm "$VM_NAME" runn || die "Migration failed"
-NEW_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
-if ! [ "$NEW_HOST" = "$HOST_TO_MOVE" ]; then
-	die "Did not move to '$HOST_TO_MOVE', is on '$NEW_HOST'."
-fi
-echo " Done."
+vmMigrate "$SECOND_HOST"
 
-ipsetCheck "$NEW_HOST"
+vmPoweroff hard
 
-echo -n "* Powering off..."
-onevm poweroff --hard "$VM_ID"
-waitforvm "$VM_NAME" poff || die "Power off failed."
-echo " Done."
+vmMigrate "$FIRST_HOST" "" poff
 
-echo -n "* Moving to '$SECOND_HOST'..."
-onevm migrate "$VM_ID" "$SECOND_HOST"
-waitforvm "$VM_NAME" poff || die "migration broke"
-NEW_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
-if ! [ "$NEW_HOST" = "$SECOND_HOST" ]; then
-	die "Did not move to '$SECOND_HOST', VM is on '$NEW_HOST'"
-fi
-echo " Done."
-
-echo -n "* Resuming..."
-onevm resume "$VM_ID"
-waitforvm "$VM_NAME" runn || die "Resume failed."
-echo " Done."
-
-ipsetCheck "$NEW_HOST"
+vmResume
 
 vmSnapshotRevert A
 
-ipsetCheck "$NEW_HOST"
-
-echo -n "* Powering off (hard)..."
-onevm poweroff --hard "$VM_ID"
-waitforvm "$VM_NAME" poff || die "Power off failed."
-echo " Done."
-
-echo -n "* Migrate to '$FIRST_HOST'..."
-onevm migrate "$VM_ID" "$FIRST_HOST"
-waitforvm "$VM_NAME" poff || die "Migration failed"
-CURRENT_HOST=$(onevm show --xml "$VM_ID" | xmlget '//HISTORY[last()]' HOSTNAME)
-if [ "$CURRENT_HOST" != "$FIRST_HOST" ]; then
-	die "did not move to '$FIRST_HOST', is on '$CURRENT_HOST'"
-fi
-echo " Done."
-
-echo -n "* Resuming..."
-onevm resume "$VM_ID"
-waitforvm "$VM_NAME" runn || die "cannot power up"
-echo " Done."
-
-ipsetCheck "$CURRENT_HOST"
+#vmPoweroff hard
+#
+#vmResume
 
 vmSnapshotDelete A
 
@@ -505,11 +531,14 @@ FS_DISK_ID=$(onevm show "$VM_ID" --xml| tee "${DATA_DIR}/disk-fs-detach.XML"|xml
 echo " Done."
 
 ###############################################################################
+# VM Suspend
+vmSuspend
+
+vmResume
+
+###############################################################################
 # Cleanup
-echo -n "* Terminating (hard) VM $VM_NAME..."
-onevm terminate --hard "$VM_NAME"
-waitforvm  "$VM_NAME" ""
-echo " Done."
+vmTerminate
 
 if [ "$deltemplate" = "y" ]; then
     echo -n "* Deleting VM Template '$VM_TEMPLATE_NAME'..." 
