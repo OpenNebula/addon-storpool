@@ -40,7 +40,7 @@ if boolTrue "SP_CHECKPOINT_BD"; then
         splog "Detach $SP_VOL from $HVHOST ($?)"
     fi
 
-    ssh "$HVHOST" "rm -f \"$FILE\""
-    splog "ssh $HVHOST rm -f $FILE ($?)"
+    $SSH "$HVHOST" "rm -f \"$FILE\""
+    splog "$SSH $HVHOST rm -f '$FILE' ($?)"
 
 fi

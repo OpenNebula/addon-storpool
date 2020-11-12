@@ -37,8 +37,8 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     if storpoolVolumeExists "$SP_VOL"; then
         storpoolVolumeAttach "$SP_VOL" "${HVHOST}"
-        ssh "$HVHOST" "ln -sf \"/dev/storpool/$SP_VOL\" \"$FILE\""
-        splog "ssh $HVHOST ln -sf /dev/storpool/$SP_VOL $FILE ($?)"
+        $SSH "$HVHOST" "ln -sf \"/dev/storpool/$SP_VOL\" \"$FILE\""
+        splog "$SSH $HVHOST ln -sf '/dev/storpool/$SP_VOL' '$FILE' ($?)"
     fi
 
 fi
