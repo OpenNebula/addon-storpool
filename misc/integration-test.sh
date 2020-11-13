@@ -27,6 +27,8 @@ source /var/lib/one/remotes/tm/storpool/storpool_common.sh
 VM_NAME=SPTEST.fadCarlarr
 VN_NAME=192.168.122-virbr0
 DATA_DIR="$0.DATA"
+#KEEP_DATA_DIR=
+#KEEP_TEST_TEMPLATE=
 
 function xmlget()
 {
@@ -540,10 +542,13 @@ vmResume
 # Cleanup
 vmTerminate
 
-if [ "$deltemplate" = "y" ]; then
+if [ "$deltemplate" = "y" ] && [ -z "$KEEP_TEST_TEMPLATE" ]; then
     echo -n "* Deleting VM Template '$VM_TEMPLATE_NAME'..." 
 	onetemplate delete "$VM_TEMPLATE_NAME" --recursive
     echo " Done."
+fi
+if [ -z "$KEEP_DATA_DIR" ]; then
+    rm -rf "$DATA_DIR"
 fi
 
 echo "Validation passed."
