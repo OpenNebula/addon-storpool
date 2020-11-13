@@ -146,7 +146,7 @@ function vmResume()
     waitforvm "$VM_NAME" runn || die "Cannot power up"
     CURRENT_HOST="$(onevm show "$VM_ID" --xml | \
         xmlget '//HISTORY[last()]' HOSTNAME)"
-    msg "Running on '$CURRENT_HOST'."
+    msg "on '$CURRENT_HOST'."
     ipCheck "$CURRENT_HOST"
 }
 
@@ -203,7 +203,6 @@ function vmSnapshotCreate()
     onevm snapshot-create "$VM_ID" "$n"
     waitforvm "$VM_NAME" runn || die "VM Snapshot create timed out"
     VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml |\
-        tee "${DATA_DIR}/vm-snapshot-create-${n}.XML" |\
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
     msg "VM Snapshot ID '$VM_SNAPSHOT_ID'"
 }
@@ -214,7 +213,6 @@ function vmSnapshotRevert()
     vmSnapshotEnabled || return
     hdr "Reverting VM Snapshot '$n'"
     local VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml |\
-        tee "${DATA_DIR}/vm-snapshot-revert-{$n}.XML" |\
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
     onevm snapshot-revert "$VM_ID" "$VM_SNAPSHOT_ID"
     msg "waiting for power-off"
@@ -230,14 +228,60 @@ function vmSnapshotDelete()
     vmSnapshotEnabled || return
     hdr "Deleting VM Snapshot '$n'"
     local VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml |\
-        tee "${DATA_DIR}/vm-snapshot-delete1-{$n}.XML" |\
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
     onevm snapshot-delete "$VM_ID" "$VM_SNAPSHOT_ID"
     waitforvm "$VM_NAME" runn || die "VM Snapshot delete timed out"
     VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml| \
-        tee "${DATA_DIR}/vm-snapshot-delete2-${n}.XML" |\
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID || true)
     [ -z "$VM_SNAPSHOT_ID" ] || die "VM Snapshot delete failed"
+}
+
+diskCreate()
+{
+    hdr "Adding disk (volatile $1)"
+    local VOLATILE_TEMPLATE="${DATA_DIR}/volatile-${1}.template"
+    cat >"$VOLATILE_TEMPLATE" <<EOF
+DISK=[
+  SIZE="1024",
+  TYPE="$1",
+  FORMAT="raw",
+  DRIVER="raw",
+  CACHE="none",
+  IO="native",
+  DISCARD="unmap",
+  DEV_PREFIX="sd"
+]
+EOF
+    onevm disk-attach "$VM_ID" --file "$VOLATILE_TEMPLATE"
+    waitforvm "$VM_NAME" runn || die "Disk add timed out"
+    DISK_ID=$(onevm show "$VM_ID" --xml |\
+        xmlget "//DISK[TYPE=\"swap\"]" DISK_ID)
+    [ -n "$DISK_ID" ] || die "Adding disk failed"
+    msg "Disk $1 ID '$DISK_ID'"
+}
+
+function diskAttach()
+{
+    hdr "Attaching $1 to VM $VM_ID"
+    onevm disk-attach "$VM_ID" --image "$1"
+    waitforvm "$VM_NAME" runn || die "Attach $1 timed out"
+    DISK_ID=$(onevm show "$VM_ID" --xml |\
+        xmlget "//DISK[IMAGE=\"$1\"]" DISK_ID)
+    if [ -z "$DISK_ID" ]; then
+    	die "Attach $1 failed"
+    fi
+    msg "Disk ID '$DISK_ID'"
+}
+
+function diskDetach()
+{
+    hdr "Detaching VM disk ID $1"
+    onevm disk-detach "$VM_ID" "$1"
+    waitforvm "$VM_NAME" runn || die "Disk detach timed out"
+    IMAGE=$(onevm show "$VM_ID" --xml |\
+        xmlget "//DISK[DISK_ID=\"$1\"]" IMAGE || true)
+    [ -z "$IMAGE" ] || die "Disk detach failed"
+    msg "Image '$IMAGE'"
 }
 
 function diskSaveas()
@@ -245,8 +289,33 @@ function diskSaveas()
     local vm_id="$1" disk_id="$2" name="$3"
     hdr "VM disk-saveas $*"
     echo
-    onevm disk-saveas "$vm_id" "$disk_id" "$name"
-    waitforimg "$name" "rdy"  || die "Image delete failed"
+    if onevm disk-saveas "$vm_id" "$disk_id" "$name" \
+        &>"${DATA_DIR}/saveas-$name"; then
+        waitforimg "$name" "rdy"  || die "Image delete failed"
+    else
+        cat "${DATA_DIR}/saveas-$name"
+        die "onevm disk-saveas failed"
+    fi
+    IMAGE_ID=$(oneimage list --xml |\
+        xmlget "//IMAGE[NAME=\"$name\"]" ID)
+    [ -n "$IMAGE_ID" ] || die "disk-saveas failed"
+}
+
+function imageCreate()
+{
+    hdr "Create${2:+ persistent} image '$1'"
+    if oneimage create --name "$1" --datastore "$IMAGE_DS_ID" --size 10000 \
+        --type datablock --driver raw --prefix sd ${2:+--persistent} \
+        &>"${DATA_DIR}/image-${1}"; then
+        waitforimg "$1" rdy || die "Image creation failed"
+        IMAGE_ID=$(oneimage list --xml |\
+            xmlget "//IMAGE[NAME=\"$1\"]" ID)
+        [ -n "$IMAGE_ID" ] || die "Create image failed"
+    else
+        cat "${DATA_DIR}/image-$PE_IMAGE_NAME"
+        die "Image creation failed"
+    fi
+    msg "Image ID '$IMAGE_ID'"
 }
 
 function imageDelete()
@@ -328,12 +397,17 @@ else
 		TEMPLATE_ID="$(onemarketapp list -f NAME~'Ubuntu 18.04',TYPE=img,STAT=rdy -l ID,NAME --csv |\
             tail -n 1 | cut -d, -f 1)"
 		hdr "Downloading template $TEMPLATE_ID from OpenNebula Marketplace as '$VM_TEMPLATE_NAME'"
-		onemarketapp export "$TEMPLATE_ID" "$VM_TEMPLATE_NAME" --datastore "$IMAGE_DS_ID"
+		if onemarketapp export "$TEMPLATE_ID" "$VM_TEMPLATE_NAME" --datastore "$IMAGE_DS_ID" \
+            &>"$DATA_DIR/export-$VM_TEMPLATE_NAME"; then
+    	    hdr "Waiting for template image '$VM_TEMPLATE_NAME' to become ready"
+        	waitforimg "$VM_TEMPLATE_NAME" rdy 300 \
+                || die "VM Tmeplate download timed out"
+        else
+            cat "$DATA_DIR/export-$VM_TEMPLATE_NAME"
+            die "Download failed!"
+        fi
 	fi
 
-	hdr "Waiting for template image '$VM_TEMPLATE_NAME' to become ready"
-	waitforimg "$VM_TEMPLATE_NAME" rdy 300 \
-        || die "VM Tmeplate download timed out"
 	deltemplate=y
 fi
 
@@ -349,8 +423,13 @@ fi
 # VM create
 hdr "Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME${VN_ID:+ using VNet ID $VN_ID}"
 echo
-onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" ${VN_ID:+--nic "$VN_ID"}
-waitforvm "$VM_NAME" runn 120 || die "Failed to instantiate VM '$VM_NAME'"
+if onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" \
+    ${VN_ID:+--nic "$VN_ID"} &>"${DATA_DIR}/instantiate-$VM_NAME"; then
+    waitforvm "$VM_NAME" runn 120 || die "Failed to instantiate VM '$VM_NAME'"
+else
+    cat "$DATA_DIR/instantiate-$VM_NAME"
+    die "Create VM failed"
+fi
 VM_ID=$(onevm show "$VM_NAME" --xml |\
     tee "${DATA_DIR}/vm-${VM_NAME}.XML" |\
     xmlget '//VM' ID)
@@ -360,139 +439,32 @@ fi
 CURRENT_HOST="$(onevm show "$VM_ID" --xml | xmlget '//HISTORY[last()]' HOSTNAME)"
 msg "VM $VM_ID is runnung on host '$CURRENT_HOST'"
 
-###############################################################################
-# non-persistent image
+
 NP_IMAGE_NAME="NP-$VM_NAME"
-NP_IMAGE_ID=$(oneimage list --xml |\
-    tee "${DATA_DIR}/image-${NP_IMAGE_NAME}1.XML" |\
-    xmlget "//IMAGE[NAME=\"$NP_IMAGE_NAME\"]" ID || true)
+imageDelete "$NP_IMAGE_NAME"
+imageCreate "$NP_IMAGE_NAME"
+NP_IMAGE_ID=$IMAGE_ID
+diskAttach "$NP_IMAGE_NAME"
+NP_DISK_ID=$DISK_ID
 
-if [ -n "$NP_IMAGE_ID" ]; then
-	hdr "Image $NP_IMAGE_NAME exists with ID $NP_IMAGE_ID, removing"
-	oneimage delete "$NP_IMAGE_ID"
-	waitforimg "$NP_IMAGE_NAME" "" || die "Delete timed out"
-fi
 
-hdr "Creating non-persistent image '$NP_IMAGE_NAME'"
-if oneimage create --name "$NP_IMAGE_NAME" --datastore "$IMAGE_DS_ID" --size 10000 \
-    --type datablock --driver raw --prefix sd \
-    &>"${DATA_DIR}/image-$NP_IMAGE_NAME" ; then
-    waitforimg "$NP_IMAGE_NAME" rdy || die "Image creation failed"
-else
-    cat "${DATA_DIR}/image-$NP_IMAGE_NAME"
-    die "Image creation failed"
-fi
-
-NP_IMAGE_ID=$(oneimage list --xml |\
-    tee "${DATA_DIR}/image-${NP_IMAGE_NAME}2.XML" |\
-    xmlget "//IMAGE[NAME=\"$NP_IMAGE_NAME\"]" ID || true)
-
-msg "Image ID '$NP_IMAGE_ID'"
-
-hdr "Attaching image $NP_IMAGE_ID to VM $VM_ID"
-onevm disk-attach "$VM_ID" --image "$NP_IMAGE_ID"
-waitforvm "$VM_NAME" runn || die "Attach $NP_IMAGE_NAME timed out"
-
-NP_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    tee "${DATA_DIR}/disk-${NP_IMAGE_NAME}.XML" |\
-    xmlget "//DISK[IMAGE=\"$NP_IMAGE_NAME\"]" DISK_ID)
-if [ -z "$NP_DISK_ID" ]; then
-	die "Attach ($NP_IMAGE_ID) $NP_IMAGE_NAME failed"
-fi
-msg "Disk ID '$NP_DISK_ID'"
-
-###############################################################################
-# persistent image
 PE_IMAGE_NAME="PE-$VM_NAME"
-PE_IMAGE_ID=$(oneimage list --xml |\
-    tee "${DATA_DIR}/image-${PE_IMAGE_NAME}1.XML" |\
-    xmlget "//IMAGE[NAME=\"$PE_IMAGE_NAME\"]" ID || true)
+imageDelete "$PE_IMAGE_NAME"
+imageCreate "$PE_IMAGE_NAME" persistent
+PE_IMAGE_ID=$IMAGE_ID
+diskAttach "$PE_IMAGE_NAME"
+PE_DISK_ID=$DISK_ID
 
-if [ -n "$PE_IMAGE_ID" ]; then
-	hdr "Image $PE_IMAGE_NAME exists with ID $PE_IMAGE_ID, removing"
-    imageDelete "$PE_IMAGE_NAME"
-fi
 
-hdr "Creating persistent image '$PE_IMAGE_NAME'"
-if oneimage create --name "$PE_IMAGE_NAME" --datastore "$IMAGE_DS_ID" --size 10000 \
-    --type datablock --driver raw --prefix sd --persistent \
-    &>"${DATA_DIR}/image-$PE_IMAGE_NAME"; then
-    waitforimg "$PE_IMAGE_NAME" rdy || die "Image creation failed"
-else
-    cat "${DATA_DIR}/image-$PE_IMAGE_NAME"
-    die "Image creation failed"
-fi
+diskCreate swap
+SWAP_DISK_ID=$DISK_ID
+diskCreate fs
+FS_DISK_ID=$DISK_ID
 
-PE_IMAGE_ID=$(oneimage list --xml |\
-    tee "${DATA_DIR}/image-${PE_IMAGE_NAME}2.XML" |\
-    xmlget "//IMAGE[NAME=\"$PE_IMAGE_NAME\"]" ID || true)
-
-msg "Image ID '$PE_IMAGE_ID'"
-
-hdr "Attaching image $PE_IMAGE_ID to VM $VM_ID"
-onevm disk-attach "$VM_ID" --image "$PE_IMAGE_ID"
-waitforvm "$VM_NAME" runn || die "attach $PE_IMAGE_NAME timed out"
-
-PE_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    tee "${DATA_DIR}/disk-${PE_IMAGE_NAME}.XML" |\
-    xmlget "//DISK[IMAGE=\"$PE_IMAGE_NAME\"]" DISK_ID)
-if [ -z "$PE_DISK_ID" ]; then
-	die "Attach ($PE_IMAGE_ID) $PE_IMAGE_NAME failed"
-fi
-msg "Disk ID '$PE_DISK_ID'"
-
-###############################################################################
-# Volatile disks
-hdr "Adding disk (volatile swap)"
-SWAP_TEMPLATE="${DATA_DIR}/volatile-swap.template"
-cat >"$SWAP_TEMPLATE" <<EOF
-DISK=[
-  SIZE="1024",
-  TYPE="swap",
-  FORMAT="raw",
-  DRIVER="raw",
-  CACHE="none",
-  IO="native",
-  DISCARD="unmap",
-  DEV_PREFIX="sd"
-]
-EOF
-
-onevm disk-attach "$VM_ID" --file "$SWAP_TEMPLATE"
-waitforvm "$VM_NAME" runn || die "Disk attach timed out"
-SWAP_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    tee "${DATA_DIR}/disk-swap.XML" |\
-    xmlget "//DISK[TYPE=\"swap\"]" DISK_ID)
-[ -n "$SWAP_DISK_ID" ] || die "Adding disk failed"
-msg "Disk ID '$SWAP_DISK_ID'"
-
-hdr "Adding disk (volatile fs)"
-FS_TEMPLATE="${DATA_DIR}/volatile-fs.template"
-cat >"$FS_TEMPLATE" <<EOF
-DISK=[
-  SIZE="1024",
-  TYPE="fs",
-  FORMAT="raw",
-  DRIVER="raw",
-  CACHE="none",
-  IO="native",
-  DISCARD="unmap",
-  DEV_PREFIX="sd"
-]
-EOF
-
-onevm disk-attach "$VM_ID" --file "$FS_TEMPLATE"
-waitforvm "$VM_NAME" runn || die "Volatile disk attach timed out"
-FS_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    tee "${DATA_DIR}/disk-fs.XML" |\
-    xmlget "//DISK[TYPE=\"fs\"]" DISK_ID)
-[ -n "$FS_DISK_ID" ] || die "Adding vilatile disk failed"
-msg "Disk ID '$FS_DISK_ID'"
 
 vmSnapshotCreate 'A'
 
-###############################################################################
-# add nic alias
+
 if [ -n "$VN_ID" ]; then
     NIC_NAME=$(onevm show $VM_ID --xml | xmlget "//NIC[NETWORK_ID=$VN_ID]" NAME)
     hdr "Add alias IP from VNet ID $VN_ID to '${NIC_NAME}'"
@@ -516,20 +488,14 @@ if [ -n "$VN_ID" ]; then
         die "Can't get NIC_ALIAS/NIC_ID"
     fi
     ipCheck "$CURRENT_HOST"
-#    if [ "${FILTER_MAC_SPOOFING^^}" = 'YES' ]; then
-#        ssh "$CURRENT_HOST" sudo /usr/sbin/iptables -L -nvx |\
-#        tee "${DATA_DIR}/iptables-L-nvx-${CURRENT_HOST}.out"
-#    fi
 fi
 
-###############################################################################
-# disk-saveas
 
 DISK_SAVEAS_NAME="SAVEAS-$VM_NAME"
-
 imageDelete "$DISK_SAVEAS_NAME"
 
 diskSaveas $VM_ID 0 "$DISK_SAVEAS_NAME"
+
 
 ###############################################################################
 # VM migration
@@ -554,48 +520,26 @@ vmResume
 
 vmSnapshotRevert 'A'
 
-#vmPoweroff hard
-#
-#vmResume
-
 vmSnapshotDelete 'A'
 
 ###############################################################################
 # non-persistent detach/destroy
 
-hdr "Detaching disk '$NP_DISK_ID' (non-persistent)"
-onevm disk-detach "$VM_ID" "$NP_DISK_ID"
-# check detach
-waitforvm "$VM_NAME" runn || die "Disk detach timed out"
-
-NP_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    xmlget "//DISK[IMAGE=\"$NP_IMAGE_NAME\"]" DISK_ID || true)
-[ -z "$NP_DISK_ID" ] || die "Detachment failed"
+diskDetach $NP_DISK_ID
 
 imageDelete "$NP_IMAGE_NAME"
 
 ###############################################################################
 # persistent detach/destroy
-hdr "Detaching disk '$PE_DISK_ID' (persistent)"
-onevm disk-detach "$VM_ID" "$PE_DISK_ID"
-# check detach
-waitforvm "$VM_NAME" runn || die "Disk detach timed out"
 
-PE_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    xmlget "//DISK[IMAGE=\"$PE_IMAGE_NAME\"]" DISK_ID || true)
-[ -z "$PE_DISK_ID" ] || die "Detachment failed"
+diskDetach $PE_DISK_ID
 
 imageDelete "$PE_IMAGE_NAME"
 
 ###############################################################################
 # Volatile destroy
-hdr "Detaching disk '$FS_DISK_ID' (volatile)"
-onevm disk-detach "$VM_ID" "$FS_DISK_ID"
-waitforvm "$VM_NAME" runn || die "Disk detach timed out"
-FS_DISK_ID=$(onevm show "$VM_ID" --xml |\
-    tee "${DATA_DIR}/disk-fs-detach.XML" |\
-    xmlget "//DISK[TYPE=\"fs\"]" DISK_ID || true)
-[ -z "$FS_DISK_ID" ] || die "Volatile disk detach failed"
+
+diskDetach $FS_DISK_ID
 
 imageDelete "$DISK_SAVEAS_NAME"
 
