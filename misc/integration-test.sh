@@ -24,16 +24,15 @@ source /var/lib/one/remotes/tm/storpool/storpool_common.sh
 
 # nobody else will create this.
 # hopefuly.
-VM_NAME=SPTEST.fadCarlarr
-VN_NAME=192.168.122-virbr0
+VM_NAME="${VM_NAME:-SPTEST.fadCarlarr}"
+VN_NAME="${VN_NAME:-192.168.122-virbr0}"
 DATA_DIR="$0.DATA"
 #KEEP_DATA_DIR=
 #KEEP_TEST_TEMPLATE=
 
 function xmlget()
 {
-    local XPATH="$1" ENTRY="$2"
-    xmlstarlet sel -t -m "$XPATH" -v "$ENTRY" $3
+    xmlstarlet sel -t -m "$1" -v "$2" $3
 }
 
 function do_waitfor() {
@@ -230,6 +229,26 @@ function vmSnapshotDelete()
     echo " Done."
 }
 
+function diskSaveas()
+{
+    local vm_id="$1" disk_id="$2" name="$3"
+    echo "* disk save-as $*..."
+    onevm disk-saveas "$vm_id" "$disk_id" "$name"
+    waitforimg "$name" "rdy"  || die "Image delete failed."
+    echo " Done."
+}
+
+function imageDelete()
+{
+    local IMAGE_ID="$(oneimage list --xml| \
+        xmlget "//IMAGE[NAME=\"$1\"]" ID ||true)"
+    if [ -n "$IMAGE_ID" ]; then
+        echo -n "* Removing image $IMAGE_ID ($1)..."
+        oneimage delete "$IMAGE_ID"
+        waitforimg "$IMAGE_ID" ""  || die "Image delete failed."
+        echo " Done."
+    fi
+}
 
 if ! which storpool &>/dev/null; then
 	echo "storpool cli not installed?"
@@ -302,14 +321,16 @@ else
 	waitforimg "$VM_TEMPLATE_NAME" rdy 300 \
         || die "VM Tmeplate download timed out."
 	echo " Done."
-#	deltemplate=y
+	deltemplate=y
 fi
 
-echo -n "* Looking for network '$VN_NAME'..."
-VN_ID="$(onevnet list --xml | \
-    tee "${DATA_DIR}/vnet-list.XML"| \
-    xmlget "//VNET[NAME=\"$VN_NAME\"]" ID ||true)"
-echo " Done${VN_ID:+ VNet ID $VN_ID}."
+if [ -n "$VN_NAME" ]; then
+    echo -n "* Looking for network '$VN_NAME'..."
+    VN_ID="$(onevnet list --xml | \
+        tee "${DATA_DIR}/vnet-list.XML"| \
+        xmlget "//VNET[NAME=\"$VN_NAME\"]" ID ||true)"
+    echo " Done${VN_ID:+ VNet ID $VN_ID}."
+fi
 
 echo "* Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME${VN_ID:+ using VNet ID $VN_ID}..."
 onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" ${VN_ID:+--nic "$VN_ID"}
@@ -456,6 +477,14 @@ if [ -n "$VN_ID" ]; then
 #        ssh "$CURRENT_HOST" sudo /usr/sbin/iptables -L -nvx | tee "${DATA_DIR}/iptables-L-nvx-${CURRENT_HOST}.out"
 #    fi
 fi
+
+###############################################################################
+# disk-saveas
+
+DISK_SAVEAS_NAME="SAVEAS-$VM_NAME"
+
+diskSaveas $VM_ID 0 "$DISK_SAVEAS_NAME"
+
 ###############################################################################
 # VM migration
 [ "$CURRENT_HOST" = "$HOST1" ] && HOST_TO_MOVE="$HOST2" || HOST_TO_MOVE="$HOST1"
@@ -499,10 +528,7 @@ else
     echo " Done."
 fi
 
-echo -n "* Removing image $NP_IMAGE_ID ($NP_IMAGE_NAME)..."
-oneimage delete "$NP_IMAGE_NAME"
-waitforimg "$NP_IMAGE_NAME" ""  || die "Image delete failed."
-echo " Done."
+imageDelete "$NP_IMAGE_NAME"
 
 ###############################################################################
 # persistent detach/destroy
@@ -518,10 +544,7 @@ else
     echo " Done."
 fi
 
-echo -n "* Removing image $PE_IMAGE_ID ($PE_IMAGE_NAME)..."
-oneimage delete "$PE_IMAGE_NAME"
-waitforimg "$PE_IMAGE_NAME" ""  || die "Image delete failed."
-echo " Done."
+imageDelete "$PE_IMAGE_NAME"
 
 ###############################################################################
 # Volatile destroy
@@ -531,6 +554,8 @@ waitforvm "$VM_NAME" runn || die "Disk detach timed out"
 FS_DISK_ID=$(onevm show "$VM_ID" --xml| tee "${DATA_DIR}/disk-fs-detach.XML"|xmlget "//DISK[TYPE=\"fs\"]" DISK_ID||true)
 [ -z "$FS_DISK_ID" ] || die "Volatile disk detach failed."
 echo " Done."
+
+imageDelete "$DISK_SAVEAS_NAME"
 
 ###############################################################################
 # VM Suspend
