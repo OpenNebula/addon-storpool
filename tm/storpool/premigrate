@@ -129,6 +129,9 @@ for i in ${!DISK_ID_ARRAY[@]}; do
                 if ! storpoolVolumeExists "$CDROM_VOL"; then
                     storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE"
                     storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
+                    SP_LINK="/dev/storpool/$SP_VOL"
+                    DST_PATH="$VM_PATH/disk.${DISK_ID}"
+                    oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
                 fi
                 SP_VOL="$CDROM_VOL"
             fi
@@ -137,12 +140,9 @@ for i in ${!DISK_ID_ARRAY[@]}; do
             else
                 SP_MODE=
             fi
-            SP_LINK="/dev/storpool/$SP_VOL"
-            DST_PATH="$VM_PATH/disk.${DISK_ID}"
             [ -z "$json" ] || json+=","
             [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
             json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "$SP_MODE")"
-#           oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
