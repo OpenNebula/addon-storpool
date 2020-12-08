@@ -23,6 +23,7 @@ DS_DIR="$1"
 
 DRIVER_PATH="${0%/*}"
 MONITOR_TAG="MONITOR"
+LEGACY_MONITOR_TAG="POLL"
 
 if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
     source "$DRIVER_PATH/../../addon-storpoolrc"
@@ -48,7 +49,9 @@ if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
     echo "su - oneadmin -c 'cd $PWD && $0 $*'" >>"/tmp/tm_monitor_ds-$DS_ID.sh"
 fi
 
-if ! boolTrue "LEGACY_MONITORING"; then
+if boolTrue "LEGACY_MONITORING"; then
+    MONITOR_TAG="$LEGACY_MONITOR_TAG"
+else
     if boolTrue "DDEBUG_TM_MONITOR_DS"; then
         splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
     fi
