@@ -132,7 +132,7 @@ if [ -f "$SP_MONITOR_DS" ]; then
 
         if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
 
-            if boolTrue "DEBUG_IM_MONITOR_DSG"; then
+            if boolTrue "DEBUG_IM_MONITOR_DS"; then
                 if boolTrue "DDEBUG_IM_MONITOR_DS"; then
                     splog "DS_ID $ds (StorPool) SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB $dir"
                 else
