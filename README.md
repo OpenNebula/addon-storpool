@@ -87,8 +87,8 @@ Folloing the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-sto
 
 The installation instructions are for OpenNebula 5.10+.
 
-For OpenNebula 5.6.x please use the following [installation instructions](docs/install-5.6.0.md)
-For OpenNebula 5.4.x please use the following [installation instructions](docs/install-5.4.0.md)
+* For OpenNebula 5.6.x please use the following [installation instructions](docs/install-5.6.0.md)
+* For OpenNebula 5.4.x please use the following [installation instructions](docs/install-5.4.0.md)
 
 If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) first!
 
