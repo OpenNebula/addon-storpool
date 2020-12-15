@@ -98,7 +98,7 @@ If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) f
 
 ```bash
 # on the front-end
-yum -y install --enablerepo=epel jq xmlstarlet
+yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz
 ```
 
 #### node dependencies
