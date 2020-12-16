@@ -468,3 +468,14 @@ patch -p1 < ~/addon-storpool/patches/vmm/5.8.0/attach_disk.patch
 
 > The installation script should apply the patch too
 
+## Delayed delete of non-persistent images
+
+When a VM is terminated or non-persistent image is detached from a given VM the coresponding StorPool volume is Deleted. To prevent from accidental volume deleta (wrong detach/termination) there is an option to rename to volume to an "anonymous" snapshot and mark for deletion by StorPool after a given time. 
+
+```bash
+# For example to set the delay to 12 hours
+echo 'DELAY_DELETE="12h"' >> /var/lib/one/remotes/addon-storpoolrc
+# and propagate the changes
+su - oneadmin -c "onehost sync --force"
+```
+

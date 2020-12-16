@@ -58,6 +58,7 @@ Support standard OpenNebula datastore operations:
 
 ### Extras
 
+* delayed termination of non-persistent images: When a VM is terminated the corresponding StorPool volume is stored as a snapshot that is deleted permanently after predefined time period (default 48 hours)
 * support different StorPool clusters as separate datastores
 * support multiple OpenNebula instances in single StorPool cluster
 * import of VmWare (VMDK) images
