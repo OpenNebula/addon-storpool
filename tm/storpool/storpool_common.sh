@@ -110,6 +110,8 @@ FORCE_DETACH_OTHER_MV=1
 FORCE_DETACH_OTHER_CONTEXT=1
 #
 STORPOOL_CLIENT_ID_SOURCES="LOCAL ONEHOST FROMHOST HOSTHOSTNAME BRIDGELIST CLONEGW"
+#
+DELAY_DELETE="1d"
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -727,7 +729,7 @@ function storpoolVolumeDelete()
             storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
         fi
     else
-        splog "Volume snapshots not deleted!"
+        splog "Volume snapshots not deleted due to registered error ($_ret)!"
     fi
     return $_ret
 }
