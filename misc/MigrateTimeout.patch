@@ -1,5 +1,5 @@
---- a/remotes/kvm/migrate
-+++ b/remotes/kvm/migrate
+--- a/remotes/vmm/kvm/migrate
++++ b/remotes/vmm/kvm/migrate
 @@ -22,6 +22,21 @@ source $(dirname $0)/../../scripts_common.sh
  deploy_id=$1
  dest_host=$2
