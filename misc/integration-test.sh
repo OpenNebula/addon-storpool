@@ -33,7 +33,8 @@ DATA_DIR="$0.DATA"
 
 function hdr()
 {
-    echo -ne "\n* $*"
+    echo -ne "\n[$(date +%T)] $*"
+    logger -t test_sp_test -- "$*"
 }
 
 function msg()
@@ -121,7 +122,7 @@ function ipPing() {
     false
 EOF
 )
-   ssh "$hst" "$rcmd" || die "IP ping failed"
+   ssh "$hst" "$rcmd" || die "IP $1 ping failed"
 }
 
 function ipCheck()
@@ -184,6 +185,13 @@ function vmStop()
     hdr "Stopping"
     onevm stop "$VM_ID"
     waitforvm "$VM_NAME" stop || die "VM stop timed out"
+}
+
+function vmUndeploy()
+{
+    hdr "Undeploy"
+    onevm undeploy "$VM_ID"
+    waitforvm "$VM_NAME" unde || die "VM undeploy timed out"
 }
 
 function vmTerminate()
@@ -553,6 +561,12 @@ imageDelete "$DISK_SAVEAS_NAME"
 ###############################################################################
 # VM Suspend
 vmSuspend
+
+vmResume
+
+###############################################################################
+# VM Undeploy
+vmUndeploy
 
 vmResume
 
