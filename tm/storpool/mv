@@ -278,9 +278,11 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             else
                 if boolTrue "IS_UNDEPLOY" && boolTrue "SKIP_UNDEPLOY_SSH"; then
                     splog "Transfer from $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR SKIPPED"
-                    if [ $LCM_STATE -eq 30 ] && boolTrue "CLEAN_SRC_ON_UNDEPLOY"; then
-                        splog "Claenup $SRC_HOST:$SRC_PATH"
-                        ssh_exec_and_log "$SRC_HOST" "rm -rf \"$SRC_PATH\"" "Error deleting $SRC_PATH from $SRC_HOST!"
+                    if [ $LCM_STATE -eq 30 ] || [ $LCM_STATE -eq 10 ]; then
+                        if boolTrue "CLEAN_SRC_ON_UNDEPLOY"; then
+                            splog "Claenup $SRC_HOST:$SRC_PATH (LCM_STATE=$LCM_STATE)"
+                            ssh_exec_and_log "$SRC_HOST" "rm -rf \"$SRC_PATH\"" "Error deleting $SRC_PATH from $SRC_HOST!"
+                        fi
                     fi
                 else
                     TAR_SSH=$(cat <<EOF
