@@ -179,6 +179,13 @@ function vmSuspend()
     waitforvm "$VM_NAME" susp || die "VM suspend timed out"
 }
 
+function vmStop()
+{
+    hdr "Stopping"
+    onevm stop "$VM_ID"
+    waitforvm "$VM_NAME" stop || die "VM stop timed out"
+}
+
 function vmTerminate()
 {
     local ID=$(onevm list --xml | \
@@ -546,6 +553,12 @@ imageDelete "$DISK_SAVEAS_NAME"
 ###############################################################################
 # VM Suspend
 vmSuspend
+
+vmResume
+
+###############################################################################
+# VM Stop
+vmStop
 
 vmResume
 
