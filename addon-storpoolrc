@@ -96,6 +96,12 @@ UPDATE_IMAGE_ON_IMPORT=1
 # 
 #LEGACY_MONITORING=0
 
+# Delayed Non-volatile disks removal
+# Format: $COUNT$METRIC where $COUNT is a number and $Metric isone of s,m,h,d (seconds, minutes, hours, days)
+# Default: 48h
+#
+#DELAY_DELETE="48h"
+
 #
 # variables enabling various Debuging
 

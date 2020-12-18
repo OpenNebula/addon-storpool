@@ -240,6 +240,7 @@ EOF
 
         trapDel "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
+        DELAY_DELETE=
         storpoolVolumeDelete "$SP_TEMP_VOL" "force" "snaps"
 
         storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST"

@@ -174,7 +174,7 @@ if boolTrue "DEBUG_TM_MONITOR_DISK"; then
 fi
 echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 
-while IFS=',' read name spaceUsed storedSize; do
+while IFS=',' read -u 5 name spaceUsed storedSize; do
 	name=${name//\"/}
     snap_size="${!used}"
     getSnapId "$name" "$spVolume" 
@@ -189,4 +189,4 @@ while IFS=',' read name spaceUsed storedSize; do
 		splog "$DISK ID:$DISK_ID SNAP:$snap_id ($name) SIZE:$snap_size ($used) spaceUsed:$spaceUsed storedSize:$storedSize"
 	fi
 	echo -n " SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
-done < <(eval $SP_CMD_SNAPSHOT_SPACE 2>/dev/null | jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" | sort)
+done 5< <(eval $SP_CMD_SNAPSHOT_SPACE 2>/dev/null | jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" | sort)

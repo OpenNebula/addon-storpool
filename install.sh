@@ -121,25 +121,25 @@ function patch_hook()
 function findFile()
 {
     local c f d="$1" csum="$2"
-    while read c f; do
+    while read -u 5 c f; do
         if [ "$c" = "$csum" ]; then
             echo $f
             break
         fi
-    done < <(md5sum $d/* 2>/dev/null)
+    done 5< <(md5sum $d/* 2>/dev/null)
 }
 
 function tmResetMigrate()
 {
     local current_csum=$(md5sum "${M_DIR}/${MIGRATE}" | awk '{print $1}')
     local csum comment found orig_csum
-    while read csum comment; do
+    while read -u 5 csum comment; do
         [ "$comment" = "orig" ] && orig_csum="$csum"
         if [ "$current_csum" = "$csum" ]; then
             found="$comment"
             break;
         fi
-    done < <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
+    done 5< <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
     case "$found" in
          orig)
             ;;

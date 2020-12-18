@@ -110,6 +110,8 @@ FORCE_DETACH_OTHER_MV=1
 FORCE_DETACH_OTHER_CONTEXT=1
 #
 STORPOOL_CLIENT_ID_SOURCES="LOCAL ONEHOST FROMHOST HOSTHOSTNAME BRIDGELIST CLONEGW"
+#
+DELAY_DELETE=48h
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -293,9 +295,9 @@ function oneHostInfo()
     fi
 
     unset XPATH_ELEMENTS i
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
+    done 5< <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /HOST/ID \
                             /HOST/NAME \
                             /HOST/STATE \
@@ -646,9 +648,10 @@ function storpoolVolumeCreate()
 function storpoolVolumeStartswith()
 {
     local _SP_VOL="$1" vName
-    while read vName; do
+    while read -u 5 vName; do
         echo "${vName//\"/}"
-    done < <(storpoolRetry -j volume list | jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv")
+    done 5< <(storpoolRetry -j volume list | \
+                  jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv")
 }
 
 function storpoolVolumeSnapshotsDelete()
@@ -669,27 +672,66 @@ function storpoolVolumeSnapshotsDelete()
 function storpoolVolumeDelete()
 {
     local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE_LOCATION="$4"
+    local _ret=0
     if storpoolVolumeExists "$_SP_VOL"; then
 
         storpoolVolumeDetach "$_SP_VOL" "$_FORCE" "" "all"
+        _ret=$?
 
         if [ -n "${_REMOTE_LOCATION}" ]; then
 			local _REMOTE_LOCATION_ARGS="${_REMOTE_LOCATION#*:}"
 			_REMOTE_LOCATION="${_REMOTE_LOCATION%:*}"
 			storpoolRetry volume "$_SP_VOL" backup "$_REMOTE_LOCATION" ${_REMOTE_LOCATION_ARGS} >/dev/null
-			local RET=$?
-			if [ $RET -ne 0 ]; then
+			_ret=$?
+			if [ $_ret -ne 0 ]; then
 				storpoolVolumeRename "${_SP_VOL}" "${_SP_VOL}-"$(date +%s) "tag del=y" >/dev/null
 				return $?
 			fi
 		fi
-		storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+        if [ -n "$DELAY_DELETE" ]; then
+            local DELAY_DELETE_tmp="${DELAY_DELETE//[[:digit:]]/}"
+            if [ -n "$DELAY_DELETE_tmp" ] && [ -z "${DELAY_DELETE_tmp/[smhd]/}" ]; then
+                storpoolRetry volume "$_SP_VOL" snapshot deleteAfter "$DELAY_DELETE" >/dev/null
+                _ret=$?
+                if [ $_ret -eq 0 ]; then
+                    storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+                    _ret=$?
+                else
+                   splog "Can't create anonymous snapshot for $_SP_VOL!"
+                fi
+            else
+                local msg="Unsupported format in DELAY_DELETE='$DELAY_DELETE'!"
+                local newName="${_sp_vol}_DELETE$(date +%s)"
+                storpoolRetry volume "$_SP_VOL" rename "$newName" >/dev/null
+                _ret=$?
+                if [ $_ret -ne 0 ]; then
+                    storpoolRetry volume "$newName" freeze >/dev/null
+                    _ret=$?
+                    if [ $_ret -eq 0 ]; then
+                        msg+=" $_SP_VOL converted to snapshot $newName"
+                    else
+                        msg+=" Unable to convert $_SP_VOL as snapshot $newName"
+                    fi
+                else
+                    msg+=" Unable to rename $_SP_VOL to $newName."
+                fi
+                splog "$msg"
+            fi
+        else
+            storpoolRetry volume "$_SP_VOL" delete "$_SP_VOL" >/dev/null
+            _ret=$?
+        fi
     else
         splog "volume $_SP_VOL not found "
     fi
-    if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
-        storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
+    if [ $_ret -eq 0 ]; then
+        if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
+            storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
+        fi
+    else
+        splog "Volume snapshots not deleted due to registered error ($_ret)!"
     fi
+    return $_ret
 }
 
 function storpoolVolumeRename()
@@ -771,7 +813,7 @@ function storpoolVolumeDetach()
     if [ "$_DETACH_ALL" = "all" ]; then
         _SP_CLIENT="all"
     fi
-    while IFS=',' read volume client snapshot; do
+    while IFS=',' read -u 5 volume client snapshot; do
         if boolTrue "_SOFT_FAIL" "_SOFT_FAIL"; then
             _FORCE=
         fi
@@ -797,7 +839,7 @@ function storpoolVolumeDetach()
                 fi
                 ;;
         esac
-    done < <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv")
+    done 5< <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv")
 }
 
 function storpoolVolumeTemplate()
@@ -982,6 +1024,7 @@ function oneCheckpointSave()
     local template="${ONE_PX}-ds-$_dsid"
     local volume="${ONE_PX}-sys-${_vmid}-checkpoint"
     local sp_link="/dev/storpool/$volume"
+    local _DELAY_DELETE="$DELAY_DELETE"
 
     SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
 
@@ -1011,6 +1054,7 @@ EOF
     fi
     splog "checkpoint_size=${file_size} volume_size=${volume_size}M"
 
+    DELAY_DELETE=
     if storpoolVolumeExists "$volume"; then
         storpoolVolumeDelete "$volume" "force"
     fi
@@ -1026,6 +1070,7 @@ EOF
                  "Error in checkpoint save of VM ${_vmid} on host ${_host}"
 
     trapReset
+    DELAY_DELETE="$_DELAY_DELETE"
 
     storpoolVolumeDetach "$volume" "" "${_host}" "all"
 }
@@ -1101,9 +1146,9 @@ function oneVmInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
+        done 5< <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /VM/DEPLOY_ID \
                             /VM/STATE \
                             /VM/PREV_STATE \
@@ -1242,9 +1287,9 @@ function oneDatastoreInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
+        done 5< <(cat "$tmpXML" | sed '/\/>$/d' | "$_XPATH" --stdin \
                             /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
@@ -1353,9 +1398,9 @@ function oneTemplateInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-        done < <($_XPATH "$_TEMPLATE" \
+        done 5< <($_XPATH "$_TEMPLATE" \
                     /VM/ID \
                     /VM/STATE \
                     /VM/LCM_STATE \
@@ -1380,9 +1425,9 @@ function oneTemplateInfo()
         _XPATH="$_XPATH -b"
     fi
     unset i XPATH_ELEMENTS
-    while read -r element; do
+    while read -u 5 -r element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <($_XPATH "$_TEMPLATE" \
+    done 5< <($_XPATH "$_TEMPLATE" \
                     /VM/TEMPLATE/DISK/TM_MAD \
                     /VM/TEMPLATE/DISK/DATASTORE_ID \
                     /VM/TEMPLATE/DISK/DISK_ID \
@@ -1434,9 +1479,9 @@ function oneDsDriverAction()
 
     unset i XPATH_ELEMENTS
 
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
+    done 5< <($_XPATH     /DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/ID \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/STATE \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/UID \
@@ -1482,7 +1527,6 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/UID \
                     /DS_DRIVER_ACTION_DATA/IMAGE/GID \
                     /DS_DRIVER_ACTION_DATA/MONITOR_VM_DISKS)
-
 
     unset i
     BASE_PATH="${XPATH_ELEMENTS[i++]}"
@@ -1594,9 +1638,9 @@ function oneMarketDriverAction()
 
     unset i XPATH_ELEMENTS
 
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <($_XPATH     /MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE \
+    done 5< <($_XPATH     /MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE \
                     /MARKET_DRIVER_ACTION_DATA/FORMAT \
                     /MARKET_DRIVER_ACTION_DATA/DISPOSE \
                     /MARKET_DRIVER_ACTION_DATA/SIZE \
@@ -1673,9 +1717,9 @@ oneVmVolumes()
     fi
 
     unset XPATH_ELEMENTS i
-    while read element; do
+    while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath_multi.py -s \
         /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
         /VM/TEMPLATE/CONTEXT/DISK_ID \
@@ -1801,9 +1845,9 @@ oneVmDiskSnapshots()
     fi
 
     unset XPATH_ELEMENTS i
-    while read element; do
+    while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath.rb \
         %m%/VM/SNAPSHOTS[DISK_ID="$DISK_ID"]/SNAPSHOT/ID)
     rm -f "$tmpXML"
@@ -1863,9 +1907,9 @@ oneVmSnapshots()
         /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/CLONE
         /VM/TEMPLATE/DISK[DISK_ID=\"$disk_id\"]/FORMAT"
     unset XPATH_ELEMENTS i
-    while IFS= read -r -d '' element; do
+    while IFS= read -u 5 -r -d '' element; do
         XPATH_ELEMENTS[i++]="$element"
-    done < <(cat "$tmpXML" |\
+    done 5< <(cat "$tmpXML" |\
         ${DRIVER_PATH}/../../datastore/xpath.rb $query)
     rm -f "$tmpXML"
     unset i

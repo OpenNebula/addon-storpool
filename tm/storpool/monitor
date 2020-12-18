@@ -100,7 +100,7 @@ SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_
 if boolTrue "DDDEBUG_TM_MONITOR"; then
 	splog "$DS_ID SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
 fi
-while IFS=',' read n t f u2 u3; do
+while IFS=',' read -u 5 n t f u2 u3; do
 	if [ "${n//\"/}" = "$DS_NAME" ]; then
 		if boolTrue "ALT_STATS"; then
 			f=$(( f + u2 + u3 ))
@@ -122,7 +122,7 @@ while IFS=',' read n t f u2 u3; do
 		fi
 		break
 	fi
-done < <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
+done 5< <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
 
 # VM disks monitoring
 if [ -d "$(readlink -f $BASE_PATH)" ]; then

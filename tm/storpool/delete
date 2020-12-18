@@ -99,6 +99,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         done
     else
 #        splog "[SYSTEM_DS] delete context iso"
+        DELAY_DELETE=
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "$SP_VOL" "force" "snaps"
         if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
@@ -146,6 +147,7 @@ elif [ "$TYPE" = "CDROM" ]; then
 			storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
         fi
 	fi
+    DELAY_DELETE=
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
 else

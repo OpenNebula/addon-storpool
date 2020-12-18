@@ -66,9 +66,9 @@ XPATH="${DRIVER_PATH}/datastore/xpath.rb --stdin"
 
 unset i j XPATH_ELEMENTS
 
-while IFS= read -r -d '' element; do
+while IFS= read -u 5 -r -d '' element; do
     XPATH_ELEMENTS[i++]="$element"
-done < <(onevm show -x $VM_ID |tee vm-${VM_ID}.xml| $XPATH \
+done 5< <(onevm show -x $VM_ID |tee vm-${VM_ID}.xml| $XPATH \
                     /VM/DEPLOY_ID \
                     /VM/LCM_STATE \
                     /VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SIZE \
@@ -113,7 +113,7 @@ fi
 
 source "${DRIVER_PATH}/vmm/kvm/kvmrc"
 
-while IFS=',' read -r device drv filename; do
+while IFS=',' read -u 5 -r device drv filename; do
   device=${device//\"/}
   drv=${drv//\"/}
   filename=${filename//\"/}
@@ -125,7 +125,7 @@ while IFS=',' read -r device drv filename; do
   if [ -n "$DEBUG" ]; then
     echo "$device | $drv | $filename"
   fi
-done < <(su - oneadmin -c "ssh $VMHOST \"virsh --connect $LIBVIRT_URI qemu-monitor-command \\\"$DEPLOY_ID\\\"  '{\\\"execute\\\":\\\"query-block\\\"}'\"" 2>/dev/null \
+done 5< <(su - oneadmin -c "ssh $VMHOST \"virsh --connect $LIBVIRT_URI qemu-monitor-command \\\"$DEPLOY_ID\\\"  '{\\\"execute\\\":\\\"query-block\\\"}'\"" 2>/dev/null \
 | jq -r ".return[]|[.device,.inserted.drv,.inserted.image.filename]|@csv")
 
 if [ -n "$qemu_device" ]; then
