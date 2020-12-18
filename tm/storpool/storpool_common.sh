@@ -1024,6 +1024,7 @@ function oneCheckpointSave()
     local template="${ONE_PX}-ds-$_dsid"
     local volume="${ONE_PX}-sys-${_vmid}-checkpoint"
     local sp_link="/dev/storpool/$volume"
+    local _DELAY_DELETE="$DELAY_DELETE"
 
     SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
 
@@ -1053,6 +1054,7 @@ EOF
     fi
     splog "checkpoint_size=${file_size} volume_size=${volume_size}M"
 
+    DELAY_DELETE=
     if storpoolVolumeExists "$volume"; then
         storpoolVolumeDelete "$volume" "force"
     fi
@@ -1068,6 +1070,7 @@ EOF
                  "Error in checkpoint save of VM ${_vmid} on host ${_host}"
 
     trapReset
+    DELAY_DELETE="$_DELAY_DELETE"
 
     storpoolVolumeDetach "$volume" "" "${_host}" "all"
 }
