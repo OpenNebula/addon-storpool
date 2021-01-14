@@ -99,7 +99,7 @@ If you are upgrading the addon please read the [Upgrade notes](#upgrade-notes) f
 
 ```bash
 # on the front-end
-yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz
+yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar
 ```
 
 #### node dependencies
@@ -107,7 +107,7 @@ yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz
  :grey_exclamation:*use when adding new hosts too*:grey_exclamation:
 
 ```bash
-yum -y install --enablerepo=epel jq python-lxml xmlstarlet
+yum -y install --enablerepo=epel jq python-lxml xmlstarlet tar
 ```
 
 ### Get the addon from github
