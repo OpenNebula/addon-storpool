@@ -393,7 +393,7 @@ function storpoolGetIdHOSTHOSTNAME()
 {
     local hst="$1" COMMON_DOMAIN="$2"
     [ -n "$HOST_HOSTNAME" ] || oneHostInfo "$hst"
-    storpooGetHost "$HOST_HOSTNAME"
+    storpoolGetHost "$HOST_HOSTNAME"
 }
 function storpoolClientId()
 {
