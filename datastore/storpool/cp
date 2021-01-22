@@ -145,6 +145,17 @@ else
 
     COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
 
+    if [ -z "$SIZE" ] || [ $SIZE -eq 0 ]; then
+        localFile="/var/tmp/$SP_TEMP_VOL"
+        splog "Image SIZE=$SIZE downloading on fe to get the size"
+        DOWNLOADER_ARGS=`set_downloader_args "$MD5" "$SHA1" "$NO_DECOMPRESS" "$LIMIT_TRANSFER_BW" "$IMAGE_PATH" "$localFile"`
+        COPY_CMD="${DRIVER_PATH}/../downloader.sh $DOWNLOADER_ARGS"
+        multiline_exec_and_log "$COPY_CMD" \
+                     "Error dumping $IMAGE_PATH to $localFile"
+        SIZE=`fs_size "${localFile}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}"`
+        splog "Image $localFile SIZE=$SIZE (M)"
+        CLEANUP="$localFile"
+    fi
     #-------------------------------------------------------------------------------
     # Import image to temp volume
     #-------------------------------------------------------------------------------
@@ -177,6 +188,11 @@ else
     tEnd=$((tEnd-tStart))
     [ $tEnd -ne 0 ] || tEnd=1
     splog "Image transferred in $tEnd seconds (~$((SIZE/tEnd))MB/s)"
+
+    if [ -n "$CLEANUP" ]; then
+        rm -f "$localFile"
+        splog "cleanup temp file $localFile ($?)"
+    fi
 
     #-------------------------------------------------------------------------------
     # Process imported image
