@@ -125,7 +125,7 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
             [ -z "$json" ] || json+=","
-            [ -n "$DST_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+            [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
             json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force")"
         fi
     done
@@ -136,7 +136,7 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
     DST_PATH="$VM_PATH/disk.${_CONTEXT_DISK_ID}"
     [ -z "$json" ] || json+=","
-    [ -n "$DST_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+    [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
     json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force")"
 
     #-------------------------------------------------------------------------------
