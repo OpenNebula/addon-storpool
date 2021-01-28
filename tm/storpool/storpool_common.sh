@@ -1174,6 +1174,7 @@ function oneVmInfo()
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/INCLUDE_CONTEXT_PACKAGES \
+                            /VM/USER_TEMPLATE/T_OS_NVRAM \
                             /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     unset i
@@ -1211,6 +1212,10 @@ function oneVmInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         INCLUDE_CONTEXT_PACKAGES="${_TMP}"
     fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
+        T_OS_NVRAM="${_TMP}"
+    fi
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "DEBUG_oneVmInfo" || return 0
@@ -1237,6 +1242,7 @@ ${VM_DS_ID:+VM_DS_ID=$VM_DS_ID }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
 ${VC_POLICY:+VC_POLICY='$VC_POLICY' }\
+${T_OS_NVRAM:+T_OS_NVRAM='$T_OS_NVRAM' }\
 ${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES' }\
 "
     _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
@@ -1406,6 +1412,7 @@ function oneTemplateInfo()
                     /VM/LCM_STATE \
                     /VM/PREV_STATE \
                     /VM/TEMPLATE/CONTEXT/DISK_ID \
+					/VM/USER_TEMPLATE/T_OS_NVRAM \
 					/VM/USER_TEMPLATE/VC_POLICY)
     unset i
     _VM_ID=${XPATH_ELEMENTS[i++]}
@@ -1413,6 +1420,7 @@ function oneTemplateInfo()
     _VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
+    T_OS_NVRAM="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
         splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY"
@@ -1733,6 +1741,7 @@ oneVmVolumes()
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
+        /VM/USER_TEMPLATE/T_OS_NVRAM \
         /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     trapDel "rm -f \"$tmpXML\""
@@ -1755,6 +1764,10 @@ oneVmVolumes()
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
+    fi
+    _TMP="${XPATH_ELEMENTS[i++]}"
+    if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
+        T_OS_NVRAM="${_TMP}"
     fi
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     local IMG=
@@ -1807,6 +1820,9 @@ oneVmVolumes()
         vmDisks=$((vmDisks+1))
         vmDisksMap+="$IMG:$DISK_ID "
     done
+    if [ -n "T_OS_NVRAM" ]; then
+        vmVolumes+="${ONE_PX}-sys-${VM_ID}-NVRAM "
+    fi
     DISK_ID="$CONTEXT_DISK_ID"
     if [ -n "$DISK_ID" ]; then
         IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
@@ -1816,7 +1832,7 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${VC_POLICY:+ VC_POLICY=$VC_POLICY}"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VC_POLICY:+ VC_POLICY=$VC_POLICY}"
     fi
 }
 

@@ -112,6 +112,17 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
         if boolTrue "SP_CHECKPOINT_BD"; then
             storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
         fi
+        if [ -n "$T_OS_NVRAM" ]; then
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
+            storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+                if [ $LCM_STATE -ne 15 ]; then
+                    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+                else
+                    splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=$LCM_STATE"
+                fi
+            fi
+        fi
     fi
     RM_CMD="rm -rf '$DST_PATH'"
     if hostReachable "$DST_HOST"; then

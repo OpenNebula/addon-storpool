@@ -185,5 +185,39 @@ if boolTrue "FORCE_DETACH_OTHER_CONTEXT"; then
     forceDetachOther "$VM_ID" "$DST_HOST"
 fi
 
+if [ -n "$T_OS_NVRAM" ]; then
+    NVRAM_TEMPLATE="${T_OS_NVRAM##*=}"
+    t_arr=(${NVRAM_TEMPLATE//\// })
+    if [ "${NVRAM_TEMPLATE#*/}" = "$NVRAM_TEMPLATE" ]; then
+        NVRAM_TEMPLATE="${OVMF_PATH:-/var/lib/one/remotes/OVMF}/${NVRAM_TEMPLATE}"
+    fi
+    if [ -f "$NVRAM_TEMPLATE" ]; then
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
+        SP_LINK="/dev/storpool/$SP_VOL"
+        if ! storpoolVolumeExists "$SP_VOL"; then
+            SIZE=$(stat --printf=%s "$NVRAM_TEMPLATE")
+            if [ -n "$SIZE" ]; then
+                splog "NVRAM_TEMPLATE=$NVRAM_TEMPLATE SIZE=$SIZE //$T_OS_NVRAM"
+                storpoolVolumeCreate "$SP_VOL" "$SIZE" "$SP_TEMPLATE"
+                trapAdd "storpoolVolumeDelete \"$SP_VOL\""
+                storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+                trapAdd "storpoolVolumeDetach \"$SP_VOL\" \"force\" \"\" \"all\""
+                PIPE_CMD="$DD if=\"$NVRAM_TEMPLATE\" bs=128k status=none conv=fdatasync"
+                splog "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$SP_LINK bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct"
+                exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$SP_LINK bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct" \
+                    "Error importing $NVRAM_TEMPLATE to ${DST_HOST}:${SP_LINK}"
+                trapReset
+                storpoolVolumeTag "$SP_VOL" "$VM_ID"
+            else
+                splog "Can't get the size of $NVRAM_TEMPLATE!"
+            fi
+        else
+            storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+        fi
+    else
+        splog "NVRAM_TEMPLATE=$NVRAM_TEMPLATE not found!"
+    fi
+fi
+
 splog "END $VM_ID"
 exit 0

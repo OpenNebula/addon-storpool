@@ -186,6 +186,16 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     fi
 
     #-------------------------------------------------------------------------------
+    # Attach NVRAM volume
+    #-------------------------------------------------------------------------------
+    if [ -n "$T_OS_NVRAM" ]; then
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
+        [ -z "$json" ] || json+=","
+        [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
+        json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "rw")"
+    fi
+
+    #-------------------------------------------------------------------------------
     # Call the other storage drivers
     #-------------------------------------------------------------------------------
     if declare -f migrate_other >/dev/null; then
