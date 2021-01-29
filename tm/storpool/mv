@@ -393,7 +393,7 @@ if boolTrue "CLONE"; then
 elif [ "$TYPE" = "CDROM" ]; then
     CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
     if ! storpoolVolumeExists "$CDROM_VOL"; then
-        if booltTrue "$NO_VOLUME_TEMPLATE" "NO_VOLUME_TEMPLATE"; then
+        if booltTrue "NO_VOLUME_TEMPLATE"; then
             SP_TEMPLATE_CD=
         else
             SP_TEMPLATE_CD="${ONE_PX}-ds-$DS_ID"
