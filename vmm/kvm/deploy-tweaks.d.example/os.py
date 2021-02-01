@@ -18,7 +18,6 @@
 
 from __future__ import print_function
 import os
-import subprocess
 from sys import argv, exit, stderr
 from xml.etree import ElementTree as ET
 
@@ -79,13 +78,6 @@ if t_os_e is not None:
 os_e = root.find('./os')
 if os_e is None:
     os_e = ET.SubElement(root, 'os', os_attr)
-#else if os is not None:
-#    root.remove(os_e)
-#    os_e = ET.SubElement(root, 'os', os_attr)
-#else:
-#    print("Can't find <os> element", file=stderr);
-#    exit(0)
-#changed = 1
 
 os_loader_e = vm.find('.//USER_TEMPLATE/T_OS_LOADER')
 if os_loader_e is not None:
