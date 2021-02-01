@@ -5,7 +5,7 @@
 1. Set ONE_PX variable in /var/lib/one/remotes/etc/vmm/kvm/kvmrc to match the one in /var/lib/one/remotes/addon-storpoolrc
 
 ```bash
-grep '^ONE_PX=' /var/lib/one/remotes/addon-storpoolrc >>/var/lib/one/remotes/etc/vmm/kvm/kvmr
+grep '^ONE_PX=' /var/lib/one/remotes/addon-storpoolrc >>/var/lib/one/remotes/etc/vmm/kvm/kvmrc
 ```
 
 2. The OVMF files must be in /var/lib/one/remotes/OVMF
