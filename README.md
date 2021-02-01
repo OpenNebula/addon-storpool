@@ -70,6 +70,8 @@ Support standard OpenNebula datastore operations:
 * (optional) alternate local kvm/deploy script that alows tweaks to the domain XML of the VMs with helper tools to enable iothreads, ioeventfd, fix virtio-scsi _nqueues_ to match the number of VCPUs, set cpu-model, etc
 * (optional) support VM checkpoint file directly on StorPool backed block device (see [Limitations](#Limitations))
 * (optional) replace the "VM snapshot" interface scripts to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations)
+* (optional) replace the <devices/video> element in the domain XML
+* (optional) support for UEFI Normal and Secure boot with persistent UEFI nvram storage
 
 Folloing the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-storpool do not patch opennebula files by default. Please contact OpenNebula support if you need any of the folloing items resolved.
 
