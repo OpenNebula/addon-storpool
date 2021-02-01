@@ -21,28 +21,52 @@ su - oneadmin -c 'onehost sync --force'
 3. Restrict the OVMF_VARS_FD variable to oneadmin only
 
 ```bash
-   echo "VM_RESTRICTED_ATTR = \"T_OS_LOADER\"" >>/etc/one/oned.conf
-   echo "VM_RESTRICTED_ATTR = \"T_OS_NVRAM\"" >>/etc/one/oned.conf
+ echo "VM_RESTRICTED_ATTR = \"T_OS_LOADER\"" >>/etc/one/oned.conf
+ echo "VM_RESTRICTED_ATTR = \"T_OS_NVRAM\"" >>/etc/one/oned.conf
+```
+
+4. Enable the os.py deploy-tweak on the frontend
+
+```
+ cd /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
+ ln -s ../deploy-tweaks.d.example/os.py .
 ```
 
 #### Usage
 
 
-To define which file to use as a template for the UEFI nvram (The file must be available in /var/lib/one/remotes/OVMF/ folder)
+To define which file to use as a template for the UEFI nvram (The file must be available in /var/lib/one/remotes/OVMF/ folder).
+For OpenNebula VM Templates the variables should be set as "*Tags*" named *T_OS_LOADER*
 
-USER_TEMPLATE/T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
-USER_TEMPLATE/T_OS_NVRAM = "storpool:template=OVMF_VARS.fd"
+```
+T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
+T_OS_NVRAM = "storpool:template=OVMF_VARS.fd"
+```
 
+Definig these variable any existing definitions in the domain XML will be replaced!
 
 ##### New VMs
 
-During VM instantiation when the contextualization IS built the provided in *T_OS_NVRAM* file will be dumped to a StorPool volume and the domain XML will be adjusted to use the volume as persistent UEFI nvram storeage.
-
+During VM instantiation when the contextualization is built the configured in *T_OS_NVRAM* file will be dumped to a StorPool volume.
+Nex the *os.py* deploy-tweak will replace the *os/loader* and *os/nvram* elements in the domain XML the StorPool volume as a persistent UEFI nvram storeage.
 
 ##### Existing VMs
 
 Following the naming convention create a StorPool volume with exact size as the *OVMF_VARS.fd* file, attach the volume to the node where the VM is running and dump the raw content of the *OVMF_VARS.fd* inside.
 
 ```bash
+storpool volume ${ONE_PX}-sys-${VM_ID}-NVRAM size 528k template ${ONE_PX}-ds-${SYSTEM_DS_ID}
+storpool attach volume ${ONE_PX}-sys-${VM_ID}-NVRAM here
 dd if=.../OVMF_VARS.fd of=/dev/storpool/${ONE_PX}-sys-${VM_ID}-NVRAM oflag=direct
 ```
+
+Next when the StorPool Volume is ready define T_OS_LOADER and T_OS_NVRAM variables as "VM Attributes"
+
+```bash
+# from command line
+echo "USER_TEMPLATE/T_OS_LOADER = \"/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash\"" > append.template
+echo "USER_TEMPLATE/T_OS_NVRAM = \"storpool:template=OVMF_VARS.fd\"" >>append.template
+onevm update $VM_ID --append append.template
+```
+
+Finally the VM should be restarted from OpenNebula with power cycling (power-off --> resume) for change to take effect.
