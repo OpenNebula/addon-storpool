@@ -73,9 +73,14 @@ if [ -d "${0}.d" ]; then
         cp -f "$DEP_XML" "$TMPDIR/deployment.xml"
         splog "cp -f $DEP_XML $TMPDIR/deployment.xml ($?)"
         splog "Calling $hook $TMPDIR/deployment.xml $TMPDIR/vm.xml ..."
-        "${0}.d/$hook" "$TMPDIR/deployment.xml" "$TMPDIR/vm.xml" 2>"$ERR_FILE"
+        "${0}.d/$hook" "$TMPDIR/deployment.xml" "$TMPDIR/vm.xml" 2>&1 >"$ERR_FILE"
         ret=$?
         splog "$hook ($ret)"
+        if [ -n "$DEBUG_DEPLOY_TWEAKS" ]; then
+            while read -u 4 l; do
+                splog "[D]stderr:$l"
+            done 4< <(cat "$ERR_FILE")
+        fi
         if [ $ret -eq 0 ]; then
             xmllint --noout "$TMPDIR/deployment.xml" 2>"$ERR_FILE"
             ret=$?
@@ -88,9 +93,11 @@ if [ -d "${0}.d" ]; then
         else
             splog "$hook failed with exit code $ret"
         fi
-        while read -u 4 l; do
-            splog "stderr:$l"
-        done 4< <(cat "$ERR_FILE")
+        if [ -z "$DEBUG_DEPLOY_TWEAKS" ]; then
+            while read -u 4 l; do
+                splog "stderr:$l"
+            done 4< <(cat "$ERR_FILE")
+        fi
     done
 else
     splog "Directory ${0}.d not found!"
