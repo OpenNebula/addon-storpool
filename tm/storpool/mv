@@ -252,6 +252,29 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
             fi
         fi
+        # NVRAM volume
+        if [ -n "$T_OS_NVRAM" ]; then
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
+            if [ "$SRC_HOST" != "$DST_HOST" ]; then
+                if storpoolVolumeExists "$SP_VOL"; then
+                    if [ -n "$ATTACH_ONLY" ]; then
+                        splog "$ATTACH_ONLY"
+                    else
+                        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
+                    fi
+#                if [ -n "$DETACH_ONLY" ]; then
+#                    splog "$DETACH_ONLY"
+#                else
+#                    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "rw"
+#                fi
+                 else
+                    splog "Warning: T_OS_NVRAM='$T_OS_NVRAM' but there is volume $SP_VOL"
+                 fi
+            fi
+            if [ "$SRC_PATH" != "$DST_PATH" ]; then
+                storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+            fi
+        fi
         # other files in the VM home
         SRC_DS_DIR=`dirname  $SRC_PATH`
         SRC_VM_DIR=`basename $SRC_PATH`

@@ -140,6 +140,14 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force")"
 
     #-------------------------------------------------------------------------------
+    # Detach NVRAM volume from DST_HOST
+    #-------------------------------------------------------------------------------
+    if [ -n "$T_OS_NVRAM" ]; then
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
+        [ -z "$json" ] || json+=","
+        json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "detach" "force")"
+    fi
+    #-------------------------------------------------------------------------------
     # Call the other storage drivers
     #-------------------------------------------------------------------------------
     if declare -f migrate_other >/dev/null; then
