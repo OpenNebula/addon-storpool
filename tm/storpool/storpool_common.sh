@@ -1820,7 +1820,7 @@ oneVmVolumes()
         vmDisks=$((vmDisks+1))
         vmDisksMap+="$IMG:$DISK_ID "
     done
-    if [ -n "T_OS_NVRAM" ]; then
+    if [ -n "$T_OS_NVRAM" ]; then
         vmVolumes+="${ONE_PX}-sys-${VM_ID}-NVRAM "
     fi
     DISK_ID="$CONTEXT_DISK_ID"
