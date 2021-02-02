@@ -48,6 +48,7 @@ function splog()
 
 function report()
 {
+    [ -n "$2" ] || return 0
     if boolTrue "LEGACY_MONITORING"; then
         echo "VM=[ID=${1},POLL=\"$2\"]"
         if boolTrue "DEBUG_NICSTATS"; then
@@ -71,9 +72,7 @@ while read -u 4 l; do
 	vid="${nica[1]}"
 	nid="${nica[2]}"
 	if [ "$vid" != "$vidold" ]; then
-		if [ -n "$poll" ]; then
-            report "$vidold" "$poll"
-		fi
+        report "$vidold" "$poll"
 		poll=
 	fi
 	vidold="$vid"
@@ -81,6 +80,4 @@ while read -u 4 l; do
 	poll+="NIC_STATS=[ID=${nid},RX=${a[41]},TX=${a[28]}]"
 done 4< <(ip -o -s link | grep one- | sort -k 2)
 
-if [ -n "$poll" ]; then
-    report "$vidold" "$poll"
-fi
+report "$vidold" "$poll"
