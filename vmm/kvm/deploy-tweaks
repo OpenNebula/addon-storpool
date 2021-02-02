@@ -31,7 +31,12 @@ if [ -f "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc" ]; then
 elif [ -f "$SCRIPT_PATH/kvmrc"]; then
     source "$SCRIPT_PATH/kvmrc"
 fi
+
 source "$SCRIPT_PATH/../../scripts_common.sh"
+
+if [ -f "$SCRIPT_PATH/../../addon-storpoolrc" ]; then
+    source "$SCRIPT_PATH/../../addon-storpoolrc"
+fi
 
 function splog()
 {
