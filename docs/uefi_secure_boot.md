@@ -49,7 +49,7 @@ T_OS_NVRAM = "storpool:template=OVMF_VARS.fd"
 For UEFI + Secure Boot
 
 ```
-T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
+T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash secure=yes"
 T_OS_NVRAM = "storpool:template=OVMF_VARS.secboot.fd"
 T_FEATURE_SMM = ":state=on"
 ```
