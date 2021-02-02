@@ -14,7 +14,7 @@ grep '^ONE_PX=' /var/lib/one/remotes/addon-storpoolrc >>/var/lib/one/remotes/etc
 #CentOS7 example
 yum -y install OVMF
 cp -a /usr/share/OVMF/ /var/lib/one/rempotes/OVMF/
-chown -R oneadmin.oneadmin /var/lib/one/rempotes
+chown -R oneadmin.oneadmin /var/lib/one/remotes
 su - oneadmin -c 'onehost sync --force'
 ```
 
