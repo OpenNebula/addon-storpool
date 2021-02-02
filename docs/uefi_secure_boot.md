@@ -1,4 +1,4 @@
-### UEFI Secure Boot support
+### UEFI + Secure Boot support
 
 #### Configuration
 
@@ -18,11 +18,13 @@ chown -R oneadmin.oneadmin /var/lib/one/remotes
 su - oneadmin -c 'onehost sync --force'
 ```
 
-3. Restrict the OVMF_VARS_FD variable to oneadmin only
+3. Restrict the variables to oneadmin only
 
 ```bash
  echo "VM_RESTRICTED_ATTR = \"T_OS_LOADER\"" >>/etc/one/oned.conf
  echo "VM_RESTRICTED_ATTR = \"T_OS_NVRAM\"" >>/etc/one/oned.conf
+ echo "VM_RESTRICTED_ATTR = \"T_FEATURE_SMM\"" >>/etc/one/oned.conf
+ echo "VM_RESTRICTED_ATTR = \"T_FEATURE_SMM_TSEG\"" >>/etc/one/oned.conf
 ```
 
 4. Enable the os.py deploy-tweak on the frontend
@@ -30,6 +32,7 @@ su - oneadmin -c 'onehost sync --force'
 ```
  cd /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
  ln -s ../deploy-tweaks.d.example/os.py .
+ ln -s ../deploy-tweaks.d.example/feature_smm.py .
 ```
 
 #### Usage
@@ -43,6 +46,14 @@ T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
 T_OS_NVRAM = "storpool:template=OVMF_VARS.fd"
 ```
 
+For UEFI + Secure Boot
+
+```
+T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
+T_OS_NVRAM = "storpool:template=OVMF_VARS.secboot.fd"
+T_FEATURE_SMM = ":state=on"
+```
+
 Definig these variable any existing definitions in the domain XML will be replaced!
 
 ##### New VMs
@@ -52,6 +63,8 @@ Nex the *os.py* deploy-tweak will replace the *os/loader* and *os/nvram* element
 
 ##### Existing VMs
 
+(note: for UEFI Secure Boot replace *OVMF_VARS.fd* with *OVMF_VARS.secboot.fd*)
+
 Following the naming convention create a StorPool volume with exact size as the *OVMF_VARS.fd* file, attach the volume to the node where the VM is running and dump the raw content of the *OVMF_VARS.fd* inside.
 
 ```bash
@@ -60,7 +73,7 @@ storpool attach volume ${ONE_PX}-sys-${VM_ID}-NVRAM here
 dd if=.../OVMF_VARS.fd of=/dev/storpool/${ONE_PX}-sys-${VM_ID}-NVRAM oflag=direct
 ```
 
-Next when the StorPool Volume is ready define T_OS_LOADER and T_OS_NVRAM variables as "VM Attributes"
+Next when the StorPool Volume is ready define *T_OS_LOADER* and *T_OS_NVRAM* (*T_FEATURE_SMM* for SecureBoot) as "VM Attributes"
 
 ```bash
 # from command line
