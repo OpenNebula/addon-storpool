@@ -103,6 +103,14 @@ if os_nvram_e is not None:
     if nvram_file == 'storpool':
         nvram_attr = {}
 
+    if 'template' in nvram_attr:
+        # expand relative path
+        if len(nvram_attr['template'].split('/')) == 1:
+            template_path = os.getenv(
+                                'OVMF_PATH', '/var/tmp/one/OVMF')
+            nvram_attr['template'] = '{}/{}'.format(
+                                    template_path, nvram_attr['template'])
+
     nvram_e = os_e.find('./nvram')
     if nvram_e is not None:
         os_e.remove(nvram_e)
@@ -110,11 +118,17 @@ if os_nvram_e is not None:
     if len(nvram_file) > 0:
         if nvram_file == 'storpool':
             vm_id = vm.find('./ID').text
-            nvram_e.text = '/dev/storpool/{}-sys-{}-NVRAM'.format(one_px, vm_id)
+            nvram_e.text = '/dev/storpool/{}-sys-{}-NVRAM'.format(
+                                one_px, vm_id)
             changed = 1
         else: 
-            system_ds = el = root.find('.//one:vm/one:system_datastore', ns).text
-            nvram_e.text = '{}/{}'.format(system_ds,nvram_file.split('')[-1])
+            system_ds = root.find('.//one:vm/one:system_datastore', ns).text
+            if nvram_file == '':
+                if 'template' not in nvram_attr:
+                    print('Error in <T_OS_NVRAM>: empty nvram file and missing "template" attribute', file=stderr)
+                    changed = 0
+                nvram_file = nvram_attr['template'].split('/')[-1]
+            nvram_e.text = '{}/{}'.format(system_ds, nvram_file.split('')[-1])
 
 
 if changed:
