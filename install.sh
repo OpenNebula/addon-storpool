@@ -45,7 +45,7 @@ CWD=$(pwd)
 function boolTrue()
 {
    case "${!1^^}" in
-       1|Y|YES|TRUE|ON)
+       1|Y|YES|T|TRUE|ON)
            return 0
            ;;
        *)
