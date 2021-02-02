@@ -36,6 +36,9 @@ source "$SCRIPT_PATH/../../scripts_common.sh"
 
 if [ -f "$SCRIPT_PATH/../../addon-storpoolrc" ]; then
     source "$SCRIPT_PATH/../../addon-storpoolrc"
+    for var in ONE_PX OVMF_PATH; do
+        [ -z "${!var}" ] || export $var
+    done
 fi
 
 function splog()
