@@ -14,7 +14,7 @@
 +    fi
 +fi
 +if [ -n "$MIGRATE_OPTIONS" ]; then
-+    MIGRATE_OPTIONS+=" --timeout=${MIGRATE_TIMEOUT:-600}"
++    MIGRATE_OPTIONS+=" --timeout-postcopy --timeout=${MIGRATE_TIMEOUT:-600}"
 +    log "MIGRATE_OPTIONS: $MIGRATE_OPTIONS"
 +fi
 +logger -t vmm_sp_migrate -- "$deploy_id memory=$memEntry $MIGRATE_OPTIONS"
