@@ -85,14 +85,12 @@ if t_smm_e is not None:
     if value is not '':
         f_e.text = '{}'.format(value)
     changed = 1
-    print('smm={} ({})'.format( value, attr), file=stderr)
     t_tseg_e = vm.find('.//USER_TEMPLATE/T_FEATURE_SMM_TSEG')
     if t_tseg_e is not None:
         value, attr = t_tseg_e.text.split(':')
         tseg_e = ET.SubElement(smm_e, 'tseg', get_attributes(attr))
         if value is not '':
             tseg_e.text = '{}'.format(value)
-    print('smm/tseg={} ({})'.format( value, attr), file=stderr)
 
 if changed:
     indent(root)

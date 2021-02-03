@@ -89,7 +89,8 @@ if cpu_threads is not None:
         if threads < 1:
             threads = 1
     except Exception as e:
-        print("USER_TEMPLATE/CPU_THREADS is '{0}' Error:{1}".format(cpu_threads.text,e))
+        print("USER_TEMPLATE/CPU_THREADS is '{0}' Error:{1}".format(
+                                        cpu_threads.text,e),file=stderr)
         exit(1)
 
 sockets = int(os.getenv('T_CPU_SOCKETS', 0))
@@ -98,7 +99,8 @@ if cpu_sockets is not None:
     try:
         sockets = int(cpu_sockets.text)
     except Exception as e:
-        print("USER_TEMPLATE/CPU_SOCKETS is '{0}' Error:{1}".format(cpu_sockets.text,e),file=stderr)
+        print("USER_TEMPLATE/CPU_SOCKETS is '{0}' Error:{1}".format(
+                                        cpu_sockets.text,e),file=stderr)
 
 if sockets > 0:
     socket_cpu_threads = int(vcpu / sockets)
