@@ -55,22 +55,31 @@ for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 changed = 0
-for disk in root.findall('./devices/disk[@type="file"][@device="disk"]'):
+for disk in root.findall('./devices/disk[@type="file"]'):
     try:
         source = disk.find('./source')
-        diskPath = source.attrib['file']
-        diskId = diskPath.split('.')[-1]
-        tm_mad = vm.find('./TEMPLATE/DISK[DISK_ID="{i}"]/TM_MAD'.format(i=diskId))
+        file_path = source.attrib['file']
+        disk_id = file_path.split('.')[-1]
+        tm_mad = vm.find('./TEMPLATE/DISK[DISK_ID="{}"]/TM_MAD'.format(disk_id))
+        context_disk_id = vm.find('./TEMPLATE/CONTEXT/DISK_ID')
         if tm_mad is not None:
             if tm_mad.text.lower() == 'storpool':
-                source.attrib['dev'] = diskPath
+                source.attrib['dev'] = file_path
                 del source.attrib['file']
                 disk.attrib['type'] = 'block'
                 changed = 1
+        elif context_disk_id is not None:
+            if context_disk_id.text == disk_id:
+                context_tm_mad = vm.find('.//HISTORY[last()]/TM_MAD')
+                if context_tm_mad.text.lower() == 'storpool':
+                    source.attrib['dev'] = file_path
+                    del source.attrib['file']
+                    disk.attrib['type'] = 'block'
+                    changed = 1
         else:
-            print("Can't get TM_MAD for disk '{d}'".format(d=diskPath), file=stderr)
+            print("Can't get TM_MAD for disk '{}'".format(file_path), file=stderr)
     except Exception as e:
-        print("Error: {e}".format(e=e), file=stderr)
+        print("Error: {}".format(e), file=stderr)
 
 if changed:
     indent(root)
