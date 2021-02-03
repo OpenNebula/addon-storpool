@@ -68,12 +68,13 @@ Nex the *os.py* deploy-tweak will replace the *os/loader* and *os/nvram* element
 Following the naming convention create a StorPool volume with exact size as the *OVMF_VARS.fd* file, attach the volume to the node where the VM is running and dump the raw content of the *OVMF_VARS.fd* inside.
 
 ```bash
-storpool volume ${ONE_PX}-sys-${VM_ID}-NVRAM size 528k template ${ONE_PX}-ds-${SYSTEM_DS_ID}
+storpool volume ${ONE_PX}-sys-${VM_ID}-NVRAM size 528k template ${ONE_PX}-ds-${SYSTEM_DS_ID} tag nvm=${VM_ID} tag vc-policy=${VM_VC_POLICY}
 storpool attach volume ${ONE_PX}-sys-${VM_ID}-NVRAM here
 dd if=.../OVMF_VARS.fd of=/dev/storpool/${ONE_PX}-sys-${VM_ID}-NVRAM oflag=direct
 ```
+note: `tag vc-policy=${VM_VC_POLICY}` could be skipped when there is no VC_policy defined for the given VM
 
-Next when the StorPool Volume is ready define *T_OS_LOADER* and *T_OS_NVRAM* (*T_FEATURE_SMM* for SecureBoot) as "VM Attributes"
+When the StorPool Volume is ready define *T_OS_LOADER* and *T_OS_NVRAM* (*T_FEATURE_SMM* for SecureBoot) as "VM Attributes"
 
 ```bash
 # from command line
