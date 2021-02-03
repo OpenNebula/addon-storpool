@@ -154,7 +154,11 @@ echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
 mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
-cp $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks.d.example/volatile2dev.py "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"/
+pushd "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
+for tweak in volatile2dev.py; do
+    ln -vsf "../deploy-tweaks.d.example/$tweak"
+done
+popd
 
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
