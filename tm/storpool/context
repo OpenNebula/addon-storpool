@@ -207,7 +207,8 @@ if [ -n "$T_OS_NVRAM" ]; then
                 exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$SP_LINK bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct" \
                     "Error importing $NVRAM_TEMPLATE to ${DST_HOST}:${SP_LINK}"
                 trapReset
-                storpoolVolumeTag "$SP_VOL" "$VM_ID"
+                storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
+
             else
                 splog "Can't get the size of $NVRAM_TEMPLATE!"
             fi
