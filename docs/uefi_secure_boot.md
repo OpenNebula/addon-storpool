@@ -77,8 +77,8 @@ Next when the StorPool Volume is ready define *T_OS_LOADER* and *T_OS_NVRAM* (*T
 
 ```bash
 # from command line
-echo "USER_TEMPLATE/T_OS_LOADER = \"/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash\"" > append.template
-echo "USER_TEMPLATE/T_OS_NVRAM = \"storpool:template=OVMF_VARS.fd\"" >>append.template
+echo "T_OS_LOADER = \"/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash\"" > append.template
+echo "T_OS_NVRAM = \"storpool:template=OVMF_VARS.fd\"" >>append.template
 onevm update $VM_ID --append append.template
 ```
 
