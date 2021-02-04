@@ -70,9 +70,20 @@ changed = 0
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-
-features_e = root.find('./features')
-if features_e is None:
+# merge all <features> elements in first one
+features_e = None
+features_elements = root.findall('.//features')
+features_len = len(features_elements)
+if features_len > 0:
+    features_e = features_elements[0]
+    if features_len > 1:
+        for features_element in features_elements[1:]:
+            for features_child in features_element.getchildren():
+                features_e.append(features_child)
+                features_element.remove(features_child)
+            root.remove(features_element)
+            changed = 1
+else:
     features_e = ET.SubElement(root, 'features', {})
 
 t_smm_e = vm.find('.//USER_TEMPLATE/T_FEATURE_SMM')

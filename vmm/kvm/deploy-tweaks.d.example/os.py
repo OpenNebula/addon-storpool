@@ -75,8 +75,20 @@ t_os_e = vm.find('.//USER_TEMPLATE/T_OS')
 if t_os_e is not None:
     os_attr = get_attributes(t_os_e.text)
 
-os_e = root.find('./os')
-if os_e is None:
+# merge all <os> elements in first one
+os_e = None
+os_elements = root.findall('.//os')
+os_len = len(os_elements)
+if os_len > 0:
+    os_e = os_elements[0]
+    if os_len > 1:
+        for os_element in os_elements[1:]:
+            for os_child in os_element.getchildren():
+                os_e.append(os_child)
+                os_element.remove(os_child)
+            root.remove(os_element)
+            changed = 1
+else:
     os_e = ET.SubElement(root, 'os', os_attr)
 
 os_loader_e = vm.find('.//USER_TEMPLATE/T_OS_LOADER')
