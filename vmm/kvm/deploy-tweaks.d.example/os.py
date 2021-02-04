@@ -67,15 +67,15 @@ for prefix, uri in ns.items():
 
 
 one_px = os.getenv('ONE_PX', 'one')
-os_attr = {}
+os_attrib = {}
 loader_attr = {}
 nvram_attr = {}
 
 t_os_e = vm.find('.//USER_TEMPLATE/T_OS')
 if t_os_e is not None:
-    os_attr = get_attributes(t_os_e.text)
+    os_attrib = get_attributes(t_os_e.text)
 
-# merge all <os> elements in first one
+# merge all <os> elements in first one and alter the attributes
 os_e = None
 os_elements = root.findall('.//os')
 os_len = len(os_elements)
@@ -86,10 +86,17 @@ if os_len > 0:
             for os_child in os_element.getchildren():
                 os_e.append(os_child)
                 os_element.remove(os_child)
+            for os_k, os_v in os_element.attrib.iteritems():
+                os_e.attrib[os_k] = '{}'.format(os_v)
             root.remove(os_element)
-            changed = 1
+    for key, val in os_attrib.iteritems():
+        if key in os_e.attrib:
+            if val == '':
+                del os_e.attrib[key] 
+                continue
+        os_e.attrib[key] = '{}'.format(val)
 else:
-    os_e = ET.SubElement(root, 'os', os_attr)
+    os_e = ET.SubElement(root, 'os', os_attrib)
 
 os_loader_e = vm.find('.//USER_TEMPLATE/T_OS_LOADER')
 if os_loader_e is not None:
