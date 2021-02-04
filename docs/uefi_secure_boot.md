@@ -35,11 +35,40 @@ su - oneadmin -c 'onehost sync --force'
  ln -s ../deploy-tweaks.d.example/feature_smm.py .
 ```
 
-#### Usage
+#### Variable format
 
+
+##### T_OS
+
+"space separated list of element attributes"
+
+Common for the topic:
+
+*firmware=efi*
+
+
+##### T_OS_LOADER
+
+*PATH_TO_LOADER*:*space separated list of element attributes in format key=value*
+
+*PATH_TO_LOADER* is the absolute path to the firmware file on the KVM node
+
+Common attributes:
+
+*readonly=yes* - mandatory
+*type=pflash* - mandatory
+*secure=yes* - optional, used to define secure boot, require T_FEATURE_SMM=":state=on"
+
+##### T_OS_NVRAM
+
+*PATH_TO_VM_NVRAM_FILE*:*space separated list of element attributes in format key=value*
+
+*PATH_TO_VM_NVRAM_FILE* with the *storpool* keyword the path will be a StorPool Volume. When there are no '/' in the string it is considered a relative path against the environment variable *NVRAM_TEMPLATE_PATH* (defined in *kvmrc* or *addon-storpoolrc* file)
 
 To define which file to use as a template for the UEFI nvram (The file must be available in /var/lib/one/remotes/OVMF/ folder).
 For OpenNebula VM Templates the variables should be set as "*Tags*" named *T_OS_LOADER*
+
+#### Usage
 
 ```
 T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"

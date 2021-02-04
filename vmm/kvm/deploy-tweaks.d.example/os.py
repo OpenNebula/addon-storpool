@@ -126,7 +126,7 @@ if os_nvram_e is not None:
         # expand relative path
         if len(nvram_attr['template'].split('/')) == 1:
             template_path = os.getenv(
-                                'OVMF_PATH', '/var/tmp/one/OVMF')
+                                'NVRAM_TEMPLATE_PATH', '/var/tmp/one/OVMF')
             nvram_attr['template'] = '{}/{}'.format(
                                     template_path, nvram_attr['template'])
 
