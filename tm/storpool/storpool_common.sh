@@ -981,17 +981,20 @@ function oneFsfreeze()
     #_FSFREEZE
     if [ -n "$_domain" ]; then
         [ -f "${SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ] && source "${SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
-        if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null; then
-            splog "fsfreeze domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
+        tmplog=\$(mktemp)
+        if virsh --connect \$LIBVIRT_URI domfsfreeze "$_domain" 2>&1 >\${tmplog}; then
+            splog "domfsfreeze $_domain \${tmplog}:\$(cat \${tmplog})"
         else
-            splog "($?) $_domain fsfreeze failed! snapshot not consistent!"
+            splog "($?) $_domain domfsfreeze failed! snapshot not consistent! \${tmplog}:\$(cat \${tmplog})"
         fi
+        rm -rf \${tmplog}
     fi
 
 EOF
 )
     ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
                  "Error in fsfreeze of domain $_domain on host $_host"
+    splog "fsfreeze $_domain on $_host ($?)"
 }
 
 function oneFsthaw()
@@ -1003,17 +1006,26 @@ function oneFsthaw()
     #_FSTHAW
     if [ -n "$_domain" ]; then
         [ -f "${SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ] && source "${SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
-        if virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null; then
-            splog "fsthaw domain $_domain \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "$_domain" "{\"execute\":\"guest-fsfreeze-status\"}")"
+        tmplog=\$(mktemp)
+        if virsh --connect \$LIBVIRT_URI domfsthaw "$_domain" 2>&1 >\${tmplog}; then
+            splog "domfsthaw $_domain \${tmplog}:\$(cat \${tmplog})"
         else
-            splog "($?) $_domain fsthaw failed! VM fs freezed?"
+            splog "($?) $_domain domfsthaw failed! VM fs freezed? (retry in 200 ms) \${tmplog}:\$(cat \${tmplog})"
+            sleep .2
+            if virsh --connect \$LIBVIRT_URI domfsthaw "$_domain" 2>&1 >\${tmplog}; then
+                splog "domfsthaw $_domain \${tmplog}:\$(cat \${tmplog})"
+            else
+                splog "($?) $_domain domfsthaw failed! VM fs freezed? \${tmplog}:\$(cat \${tmplog})"
+            fi
         fi
+        rm -rf \${tmplog}
     fi
 
 EOF
 )
     ssh_exec_and_log "$_host" "${REMOTE_HDR}${remote_cmd}${REMOTE_FTR}" \
                  "Error in fsthaw of domain $_domain on host $_host"
+    splog "fsthaw $_domain on $_host ($?)"
 }
 
 function oneCheckpointSave()
