@@ -95,13 +95,17 @@ fi
 # Create snapshot
 #-------------------------------------------------------------------------------
 
-oneFsfreeze "$DST_HOST" "$DEPLOY_ID"
-trapAdd "oneFsthaw \"$DST_HOST\" \"$DEPLOY_ID\""
+if boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
+    oneFsfreeze "$DST_HOST" "$DEPLOY_ID"
+    trapAdd "oneFsthaw \"$DST_HOST\" \"$DEPLOY_ID\""
+fi
 
 storpoolSnapshotCreate "$SP_SNAP" "$SP_VOL"
 
-oneFsthaw "$DST_HOST" "$DEPLOY_ID"
-trapReset
+if boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
+    oneFsthaw "$DST_HOST" "$DEPLOY_ID"
+    trapReset
+fi
 
 splog "END $VM_ID"
 exit 0
