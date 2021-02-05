@@ -1,14 +1,8 @@
-### UEFI + Secure Boot support
+### UEFI Legacy/Secure Boot support
 
 #### Configuration
 
-1. Set ONE_PX variable in /var/lib/one/remotes/etc/vmm/kvm/kvmrc to match the one in /var/lib/one/remotes/addon-storpoolrc
-
-```bash
-grep '^ONE_PX=' /var/lib/one/remotes/addon-storpoolrc >>/var/lib/one/remotes/etc/vmm/kvm/kvmrc
-```
-
-2. The OVMF files must be in /var/lib/one/remotes/OVMF
+1. The OVMF files must be in /var/lib/one/remotes/OVMF
 
 ```bash
 #CentOS7 example
@@ -18,7 +12,7 @@ chown -R oneadmin.oneadmin /var/lib/one/remotes
 su - oneadmin -c 'onehost sync --force'
 ```
 
-3. Restrict the variables to oneadmin only
+2. Restrict the variables to oneadmin only
 
 ```bash
 echo "VM_RESTRICTED_ATTR = \"T_OS\"" >>/etc/one/oned.conf
@@ -28,7 +22,7 @@ echo "VM_RESTRICTED_ATTR = \"T_FEATURE_SMM\"" >>/etc/one/oned.conf
 echo "VM_RESTRICTED_ATTR = \"T_FEATURE_SMM_TSEG\"" >>/etc/one/oned.conf
 ```
 
-4. Enable the os.py deploy-tweak on the frontend
+3. Enable the os.py deploy-tweak on the frontend
 
 ```
  cd /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
