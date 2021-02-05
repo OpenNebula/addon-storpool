@@ -64,7 +64,10 @@ if t_cputune_mul_e is not None:
     cputune_mul = float(t_cputune_mul_e.text)
 
 vcpu_e = vm.find('./TEMPLATE/VCPU')
-set_cputune_shares = ceil((float(vcpu_e.text) * cputune_mul) * 1024.0)
+vcpu = 1
+if vcpu_e is not None:
+    vcpu = vcpu_e.text
+set_cputune_shares = ceil((float(vcpu) * cputune_mul) * 1024.0)
 
 for t_cputune_shares_e in vm.findall('./USER_TEMPLATE/T_CPUTUNE_SHARES'):
     if t_cputune_shares_e.text:
