@@ -52,6 +52,10 @@ fi
 if boolTrue "LEGACY_MONITORING"; then
     MONITOR_TAG="$LEGACY_MONITOR_TAG"
 else
+    if [ -f "$DS_DIR/.monitor" ]; then
+        rm -f "$DS_DIR/.monitor"
+        splog "rm -f $DS_DIR/.monitor ($?) // LEGACY_MONITORING leftover"
+    fi
     if boolTrue "DDEBUG_TM_MONITOR_DS"; then
         splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
     fi
