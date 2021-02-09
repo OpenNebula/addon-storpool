@@ -288,6 +288,9 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         else
             vm_monitor_b64="$(echo "${vm_monitor}" | tr ' ' '\n' | base64 -w 0)"
             monitor+=" VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
+            if boolTrue "DDEBUG_TM_MONITOR"; then
+                splog "VM=[ID=$VM_ID,MONITOR=\"$vm_monitor_b64\"]"
+            fi
         fi
     done 4< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID][STATE=3]" -v "ID" -n "$ONE_VM_POOL_XML")
     if ! boolTrue "LEGACY_MONITORING"; then
