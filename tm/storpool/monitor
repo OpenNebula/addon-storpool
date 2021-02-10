@@ -297,20 +297,12 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
         fi
     done 4< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID][STATE=3]" -v "ID" -n "$ONE_VM_POOL_XML")
     if ! boolTrue "LEGACY_MONITORING"; then
-# pick host ID
-        for C_ID in $CLUSTERS_ID; do
-            HOST_ID=
-            while read -u 5 HOST_ID; do
-                break
-            done 5< <(onecluster show "$C_ID" -x | \
-                              xmlstarlet sel -t -m //HOSTS -v ID -n )
-            [ -z "$HOST_ID" ] || break 
-        done
         monitor_b64="$(echo $monitor | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
             base64 -w 0)"
-        TIMESTAMP="$(date +%s)"
-        echo MONITOR_VM SUCCESS ${HOST_ID:-0} $TIMESTAMP $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
+        TIMESTAMP=0
+        HOST_ID=-1
+        echo "MONITOR_VM SUCCESS ${HOST_ID:-0} $TIMESTAMP $monitor_b64" | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
         ret=$?
         if boolTrue "DDEBUG_TM_MONITOR"; then
             splog "$DS_ID ($ret) MONITOR_VM SUCCESS ${HOST_ID:-0} $TIMESTAMP $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
@@ -334,5 +326,5 @@ else
 	fi
 fi
 
-splog "$DS_ID $DS_TYPE END"
+splog "$DS_ID $DS_TYPE END (MONITOR_VM_DISKS=$MONITOR_VM_DISKS)"
 exit 0
