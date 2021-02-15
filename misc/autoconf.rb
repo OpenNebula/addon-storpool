@@ -137,10 +137,10 @@ default_config = {
                     "TM_MAD_SYSTEM" => "\"ssh,shared\"",
                     "LN_TARGET_SSH" => "\"NONE\"",
                     "CLONE_TARGET_SSH" => "\"SELF\"",
-                    "DISK_TYPE_SSH" => "\"BLOCK\"",
+                    "DISK_TYPE_SSH" => "\"NONE\"",
                     "LN_TARGET_SHARED" => "\"NONE\"",
                     "CLONE_TARGET_SHARED" => "\"SELF\"",
-                    "DISK_TYPE_SHARED" => "\"BLOCK\"",
+                    "DISK_TYPE_SHARED" => "\"NONE\"",
                 },
             },
             "vm_restricted_attr" => {
