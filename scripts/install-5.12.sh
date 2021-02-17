@@ -115,7 +115,6 @@ for MAD in datastore tm; do
     echo "*** Installing ${M_DIR}/storpool ..."
     mkdir -pv "${M_DIR}/storpool"
     cp $CP_ARG ${MAD}/storpool/* "${M_DIR}/storpool/"
-    chown -R "$ONE_USER" "${M_DIR}/storpool"
     chmod u+x -R "${M_DIR}/storpool"
 done
 
@@ -124,7 +123,6 @@ for f in xpath_multi.py xpath-sp.rb; do
     XPATH_MULTI="$ONE_VAR/remotes/datastore/$f"
     echo "*** Installing $f ..."
     cp $CP_ARG "datastore/$f" "$XPATH_MULTI"
-    chown "$ONE_USER" "$XPATH_MULTI"
     chmod a+x "$XPATH_MULTI"
 done
 
@@ -216,9 +214,10 @@ else
         fi
     done
     $CWD/misc/autoconf.rb -v -w $AUTOCONF
-
-    chown -R "$ONE_USER" "${ONE_VAR}/remotes"
 fi
+
+echo "*** chown -R $ONE_USER ${ONE_VAR}/remotes ..."
+chown -R "$ONE_USER" "${ONE_VAR}/remotes"
 
 if boolTrue "STORPOOL_EXTRAS"; then
     if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
