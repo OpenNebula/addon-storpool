@@ -213,6 +213,11 @@ fi
 echo "*** copying misc/reserved.sh to .../remotes"
 cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
 
+if [ -d "${ONE_VAR}/remotes/im/kvm-probes.d" ]; then
+    echo "*** copying misc/storpool_probe.sh to .../remotes/im/kvm-probes.d/"
+    cp -vf misc/storpool_probe.sh "${ONE_VAR}/remotes/im/kvm-probes.d/"
+fi
+
 if ! boolTrue "AUTOCONF" ; then
     echo "NOTICE: Configuration skipped!"
     echo "Hint: export AUTOCONF=1; bash install.sh"

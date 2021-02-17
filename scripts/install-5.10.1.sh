@@ -259,6 +259,11 @@ grep -q "MKFS=" "${ONE_VAR}/remotes/addon-storpoolrc" || echo 'MKFS="sudo /sbin/
 echo "*** copying misc/reserved.sh to .../remotes"
 cp -vf misc/reserved.sh "${ONE_VAR}/remotes/"
 
+if [ -d "${ONE_VAR}/remotes/im/kvm-probes.d" ]; then
+    echo "*** copying misc/storpool_probe.sh to .../remotes/im/kvm-probes.d/"
+    cp -vf misc/storpool_probe.sh "${ONE_VAR}/remotes/im/kvm-probes.d/"
+fi
+
 if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
     echo "!!! Please enable deploy-tweaks in the VM_MAD configuration for proper working of volatile disks"
 fi
