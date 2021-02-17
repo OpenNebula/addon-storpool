@@ -149,27 +149,18 @@ cp -a ~/addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
 
 # copy xpath_multi.py
 cp ~/addon-storpool/datastore/xpath_multi.py  /var/lib/one/remotes/datastore/
-
-# fix ownership
-chown -R oneadmin.oneadmin /var/lib/one/remotes/datastore/storpool /var/lib/one/remotes/datastore/xpath_multi.py
 ```
 
 * Copy storpool's TM_MAD driver files
 
 ```bash
 cp -a ~/addon-storpool/tm/storpool /var/lib/one/remotes/tm/
-
-# fix ownership
-chown -R oneadmin.oneadmin /var/lib/one/remotes/tm/storpool
 ```
 
 * Copy storpool's VM_MAD driver files
 
 ```bash
 cp -a ~/addon-storpool/vmm/kvm/snapshot_* /var/lib/one/remotes/vmm/kvm/
-
-# fix ownership
-chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 ```
 
 * Prepare the fix for the volatile disks (needs to be enabled in _/etc/one/oned.conf_)
@@ -184,6 +175,29 @@ cp -v /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d{.example,}/volatile2dev.py
 cp -a ~/addon-storpool/vmm/kvm/attach_disk.storpool /var/lib/one/remotes/vmm/kvm/
 
 cp -a ~/addon-storpool/vmm/kvm/tm* /var/lib/one/remotes/vmm/kvm/
+```
+
+* copy _reserved.sh_ helper tool to _/var/lib/one/remotes/_
+
+```bash
+cp -a ~/addon-storpool/misc/reserved.sh /var/lib/one/remotes/
+```
+
+* copy _storpool_probe.sh_ tool to _/var/lib/one/remotes/im/kvm-probes.d/host/system/_ (OpenNebula >= 5.12)
+
+```bash
+cp -a ~/addon-storpool/misc/storpool_probe.sh /var/lib/one/remotes/im/kvm-probes.d/host/system/
+```
+
+* copy _storpool_probe.sh_ tool to _/var/lib/one/remotes/im/kvm-probes.d/_ (OpenNebula <= 5.10.x)
+
+```bash
+cp -a ~/addon-storpool/misc/storpool_probe.sh /var/lib/one/remotes/im/kvm-probes.d/
+```
+* fix ownership of the files in _/var/lib/one/remotes/_
+
+```bash
+chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 ```
 
 * Create cron job for stats polling (fix the file paths if needed)
