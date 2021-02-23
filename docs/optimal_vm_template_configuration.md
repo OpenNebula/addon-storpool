@@ -4,7 +4,8 @@
 
 ### General
 
-####Physical CPU
+#### Physical CPU
+
 For 5 times oversubscription set physical _CPU = VCPU/10_
 
 Example: use `0.2` for 2 VCPUs
@@ -123,7 +124,3 @@ Set a `Tablet` type on `USB` bus to have better mouse experiens on the VNC conso
 ### Custom vars
 
 Depends on the use case. It is possible to set the VM hostname to match the _name_ of the VM defining `SET_HOSTNAME` variable with value `$NAME`
-
-
-
-
