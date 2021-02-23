@@ -6,9 +6,9 @@
 
 #### Physical CPU
 
-For 5 times oversubscription set physical _CPU = VCPU/10_
+Usually it is set with the formula _CPU = VCPU/10_
 
-Example: use `0.2` for 2 VCPUs
+For example, use `0.2` for 2 VCPUs
 
 ### Storage
 
