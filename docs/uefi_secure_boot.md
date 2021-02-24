@@ -32,33 +32,60 @@ echo "VM_RESTRICTED_ATTR = \"T_FEATURE_SMM_TSEG\"" >>/etc/one/oned.conf
 
 #### Variable format
 
+##### T_FEATURE_SMM
+
+Format: `:space separated list of element attributes`
+
+Common element atributes:
+| attribute | description |
+| --------- | ----------- |
+| `state=on` | optional |
+
+note: Please use the [libvirt docs](https://libvirt.org/formatdomain.html#hypervisor-features) for details
+
+##### T_FEATURE_SMM_TSEG
+
+Format: `SIZE:space separated list of element attributes`
+
+Where `SIZE` is the amount of RAM reserved for TSEG
+
+Common element atributes:
+| attribute | description |
+| --------- | ----------- |
+| `unit=MiB` | mandatory |
 
 ##### T_OS
 
-"space separated list of element attributes"
+Format: `:space separated list of element attributes`
 
-Common for the topic:
-
-*firmware=efi*
-
+Common element atributes:
+| attribute | description |
+| --------- | ----------- |
+| `firmware=efi` | optional |
 
 ##### T_OS_LOADER
 
-*PATH_TO_LOADER*:*space separated list of element attributes in format key=value*
+Format: `PATH_TO_LOADER:space separated list of element attributes in format key=value`
 
-*PATH_TO_LOADER* is the absolute path to the firmware file on the KVM node
+Where `PATH_TO_LOADER` is the absolute path to the firmware file on the KVM node
 
-Common attributes:
-
-*readonly=yes* - mandatory
-*type=pflash* - mandatory
-*secure=yes* - optional, used to define secure boot, require T_FEATURE_SMM=":state=on"
+Common element atributes:
+| attribute | description |
+| --------- | ----------- |
+| `readonly=yes` | mandatory |
+| `type=pflash` | mandatory |
+| `secure=yes` | optional, used to define secure boot, require T_FEATURE_SMM=":state=on" |
 
 ##### T_OS_NVRAM
 
-*PATH_TO_VM_NVRAM_FILE*:*space separated list of element attributes in format key=value*
+Format: `PATH_TO_VM_NVRAM_FILE:space separated list of element attributes in format key=value`
 
-*PATH_TO_VM_NVRAM_FILE* with the *storpool* keyword the path will be a StorPool Volume. When there are no '/' in the string it is considered a relative path against the environment variable *NVRAM_TEMPLATE_PATH* (defined in *kvmrc* or *addon-storpoolrc* file)
+Where `PATH_TO_VM_NVRAM_FIL` is the path the the nvram file. With the *storpool* keyword the path will be a StorPool Volume. When there are no '/' in the string it is considered a relative path against the environment variable *NVRAM_TEMPLATE_PATH* (defined in *kvmrc* or *addon-storpoolrc* file)
+
+Common element atributes:
+| attribute | description |
+| --------- | ----------- |
+| `template=/path/to/template/OVMF_VARS.fd` | optional, path to the template OVMF_VARS file |
 
 To define which file to use as a template for the UEFI nvram (The file must be available in /var/lib/one/remotes/OVMF/ folder).
 For OpenNebula VM Templates the variables should be set as "*Tags*" named *T_OS_LOADER*
@@ -78,7 +105,7 @@ T_OS_NVRAM = "storpool:template=OVMF_VARS.secboot.fd"
 T_FEATURE_SMM = ":state=on"
 ```
 
-Definig these variable any existing definitions in the domain XML will be replaced!
+With definig these variable any existing definitions in the domain XML will be replaced!
 
 ##### New VMs
 
