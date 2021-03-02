@@ -208,8 +208,9 @@ else
     mkdir -p "${AUGEAS_LENSES}/tests"
     cp -vf "$CWD/misc/augeas/tests"/*.aug "${AUGEAS_LENSES}/tests"/
     AUTOCONF=
-    for yaml in ${DEFAULT_AUTOCONF:-/etc/one/addon-storpool.autoconf}; do
+    for yaml in ${DEFAULT_AUTOCONF:-/etc/one/addon-storpool.autoconf "$CWD/misc/autoconf-${ONE_MAJOR}.${ONE_MINOR}.yaml"}; do
         if [ -f "$yaml" ]; then
+            echo "  - including: $yaml"
             AUTOCONF+="-m $yaml "
         fi
     done
