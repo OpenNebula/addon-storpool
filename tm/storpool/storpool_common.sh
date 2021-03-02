@@ -94,7 +94,7 @@ CLEAN_SRC_ON_UNDEPLOY=1
 # block creation of new disk snapshots when the limit is reached
 DISKSNAPSHOT_LIMIT=
 # update image template's variables DRIVER=raw and FORMAT=raw during import
-UPDATE_IMAGE_ON_IMPORT=1
+UPDATE_IMAGE_ON_IMPORT=0
 # Tag all VM disks with tag $VM_TAG=$VM_ID
 # Empty string will disable the tagging
 VM_TAG=nvm
@@ -114,6 +114,9 @@ STORPOOL_CLIENT_ID_SOURCES="LOCAL ONEHOST FROMHOST HOSTHOSTNAME BRIDGELIST CLONE
 DELAY_DELETE=48h
 #
 DISK_SNAPSHOT_FSFREEZE=0
+# datastore/cp to report iamge format (one 5.12+)
+DS_CP_REPORT_FORMAT=1
+
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1

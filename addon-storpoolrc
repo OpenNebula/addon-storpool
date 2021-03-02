@@ -86,9 +86,15 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 
 # during image import OpenNebula 5.6+ do exclusive lock on the image resource
 # which prevent Image Template manipulation
+# OpenNebula 6.0+ handle DRIVER and FORMAT differently
+# Default: 0 (disabled)
+#
+#UPDATE_IMAGE_ON_IMPORT=0
+
+# OpenNebula 6.0+ handle DRIVER and FORMAT differently
 # Default: 1 (enabled)
 #
-UPDATE_IMAGE_ON_IMPORT=1
+#DS_CP_REPORT_FORMAT=1
 
 # OpenNebula 5.12+ changed the monitoring data format
 # Set to 1 for OpenNebula 5.10 and below

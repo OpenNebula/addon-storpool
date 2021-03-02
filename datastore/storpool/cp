@@ -41,6 +41,13 @@ LOG_PREFIX="ds"
 
 source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
 
+if boolTrue "DS_CP_REPORT_FORMAT"; then
+    REPORT_FORMAT=raw
+    UPDATE_IMAGE_ON_IMPORT=0
+else
+    REPORT_FORMAT=
+fi
+
 #-------------------------------------------------------------------------------
 # Get cp and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
@@ -118,11 +125,11 @@ if [ -n "$SNAPSHOT_NAME" ]; then
 
     FORMAT="raw"
 
-    echo $SP_DST
+    echo $SP_DST $REPORT_FORMAT
 
 else
 
-    echo $SP_DST
+    echo $SP_DST $REPORT_FORMAT
 
     if [ -n "$SP_IMPORT_CGROUPS" ]; then
         set -o pipefail
