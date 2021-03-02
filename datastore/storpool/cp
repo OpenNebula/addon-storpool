@@ -295,11 +295,11 @@ if [ "$DRIVER" != "raw" ]; then
             fi
         fi
         rm -rf "$TMP_LOC"
-    else
+    elif [ -z "$REPORT_FORMAT" ]; then 
         splog "Image template DRIVER='$DRIVER' and FORMAT='$FORMAT' but image update is not enabled."
     fi
 fi
 
 trapReset
 
-splog "END:$SP_DST"
+splog "END:$SP_DST${REPORT_FORMAT:+ $REPORT_FORMAT}"
