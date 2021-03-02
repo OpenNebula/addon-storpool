@@ -134,7 +134,6 @@ if cpu_features is not None:
         arr = f.split(':')
         name = arr[0]
         feature = ET.SubElement(cpu, 'feature' , {
-                'policy' : policy,
                 'name' : name
             })
         if len(arr) > 1:
