@@ -66,10 +66,16 @@ EOF
 
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
-    while read -u 5 snap; do
+    while read -u 5 snap vid; do
+        if [ "$VM_ID" != "$vid" ]; then
+            if boolTrue "DEBUG_VMSNAPSHOT"; then
+                splog "Skip $snap (VM_ID $VM_ID != $vid, VM_TAG=$VM_TAG)"
+            fi
+            continue
+        fi
         snapList+=("$snap")
     done 5< <(storpoolRetry -j snapshot list |\
-                  jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+                  jq -r --arg snp "$SNAP_ID" --arg tag "$VM_TAG" '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$tag]')
     splog "snapList: ${snapList[@]}"
     finish=1
     for snap in ${snapList[@]}; do

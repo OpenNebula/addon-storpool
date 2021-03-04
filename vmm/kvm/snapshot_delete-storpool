@@ -43,8 +43,13 @@ if boolTrue "DEBUG_VMSNAPSHOT"; then
 fi
 
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
-	while read -u 5 snap; do
-		if [ "${snap:0:1}" = "*" ]; then
+	while read -u 5 snap vid; do
+        if [ "$VM_ID" != "$vid" ]; then
+            if boolTrue "DEBUG_VMSNAPSHOT"; then
+                splog "Skip $snap (VM_ID $VM_ID != $vid, VM_TAG=$VM_TAG)"
+            fi
+            continue
+        elif [ "${snap:0:1}" = "*" ]; then
 			if boolTrue "DEBUG_VMSNAPSHOT"; then
 				splog "Skip $* (already deleting)"
 			fi
@@ -52,7 +57,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 		fi
 		storpoolRetry snapshot "$snap" delete "$snap"
 	done 5< <(storpoolRetry -j snapshot list |\
-				jq -r --arg snp "$SNAP_ID" '.data|map(select(.name|contains($snp)))[]|[.name][]')
+				jq -r --arg snp "$SNAP_ID" --arg tag "$VM_TAG" '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$tag]')
 	splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID"
 	exit 0
 fi
