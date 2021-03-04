@@ -96,12 +96,6 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #DS_CP_REPORT_FORMAT=1
 
-# OpenNebula 5.12+ changed the monitoring data format
-# Set to 1 for OpenNebula 5.10 and below
-# Default: 0
-# 
-#LEGACY_MONITORING=0
-
 # Delayed Non-volatile disks removal
 # Format: $COUNT$METRIC where $COUNT is a number and $Metric isone of s,m,h,d (seconds, minutes, hours, days)
 # Default: 48h

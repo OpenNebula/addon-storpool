@@ -23,5 +23,4 @@
       :method: simple_conf
       :arguments:
         UPDATE_IMAGE_ON_IMPORT: "1"
-        LEGACY_MONITORING: "0"
         DS_CP_REPORT_FORMAT: "0"

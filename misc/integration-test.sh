@@ -320,7 +320,7 @@ function imageCreate()
 {
     hdr "Create${2:+ persistent} image '$1'"
     if oneimage create --name "$1" --datastore "$IMAGE_DS_ID" --size 10000 \
-        --type datablock --driver raw --prefix sd ${2:+--persistent} \
+        --type datablock --prefix sd ${2:+--persistent} \
         &>"${DATA_DIR}/image-${1}"; then
         waitforimg "$1" rdy || die "Image creation failed"
         IMAGE_ID=$(oneimage list --xml |\

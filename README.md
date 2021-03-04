@@ -223,14 +223,6 @@ crontab -u root -l | grep -v "storpool -j " | crontab -u root -
 
 The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
 
-* Disk size monitoring configuration
-
-OpenNebula 5.12+ introduced change in the monitoring. The default configuration of addon-storpool is to follow latest stable version of OpenNebula. So for opennebula 5.10 the following should be added:
-
-```bash
-LEGACY_MONITORING=1
-```
-
 * Add the `oneadmin` user to group `disk` on all nodes
 
 ```bash
@@ -465,7 +457,6 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
     5. Continue (re)configuring OpenNebula following the upstream docs
 
 * With OpenNebula 5.8+ The IMAGE datastore backed by StorPool must have TM_MAD for the SYSTEM datastore whitelisted.
-* The monitoring method had changed in OpenNebula 5.12+. If you are using Opennebula 5.10 or below add *LEGACY_MONITORING=1* to addon-storpoolrc file.
 
 Please follow the upgrade notes for the OpenNebula version you are using.
 

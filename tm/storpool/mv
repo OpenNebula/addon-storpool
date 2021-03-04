@@ -186,7 +186,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 fi
             else
                 if [ -n "$monitor" ]; then
-                    if ! boolTrue "LEGACY_MONITORING"; then
+                    if [ -d "${0%/*}/../../im/kvm-probes.d/vm/monitor" ]; then
                         rm -f "$monitor_file"
                         splog "Removed $monitor_file '$monitor' ($?)"
                     fi

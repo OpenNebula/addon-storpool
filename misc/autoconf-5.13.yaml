@@ -23,4 +23,3 @@
       :method: simple_conf
       :arguments:
         UPDATE_IMAGE_ON_IMPORT: "0"
-        LEGACY_MONITORING: "0"
