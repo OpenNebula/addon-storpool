@@ -43,15 +43,31 @@ if boolTrue "DEBUG_VMSNAPSHOT"; then
 fi
 
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
+    oneVmVolumes "$VM_ID"
+    declare -A diskVolumes
+    for v in $vmVolumes; do
+        diskVolumes["$v"]="$v"
+    done
 	while read -u 5 snap vid; do
-        if [ "$VM_ID" != "$vid" ]; then
-            if boolTrue "DEBUG_VMSNAPSHOT"; then
-                splog "Skip $snap (VM_ID $VM_ID != $vid, VM_TAG=$VM_TAG)"
+        if boolTrue "DDEBUG_VMSNAPSHOT"; then
+            splog "$snap vid:$vid"
+        fi
+        snapVol="${snap%-ONESNAP*}"
+        if [ -n "$vid" ]; then
+            if [ "$VM_ID" != "$vid" ]; then
+                if boolTrue "DEBUG_VMSNAPSHOT"; then
+                    splog "Skip $snap (VM_ID $VM_ID != $vid, VM_TAG=$VM_TAG)"
+                fi
+                continue
             fi
-            continue
         elif [ "${snap:0:1}" = "*" ]; then
 			if boolTrue "DEBUG_VMSNAPSHOT"; then
-				splog "Skip $* (already deleting)"
+				splog "Skip $snap (already deleting)"
+			fi
+			continue
+        elif [ -z "${diskVolumes["$snapVol"]}" ]; then
+			if boolTrue "DEBUG_VMSNAPSHOT"; then
+				splog "Skip $snap (not in vmVolumes:$vmVolumes)"
 			fi
 			continue
 		fi
