@@ -16,7 +16,8 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-from sys import argv
+from __future__ import print_function
+from sys import argv, exit, stderr
 from xml.etree import ElementTree as ET
 
 ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
@@ -43,9 +44,12 @@ def indent(elem, level=0, ind="  "):
             elem.tail = i
 
 xmlDomain = argv[1]
-
 doc = ET.parse(xmlDomain)
 root = doc.getroot()
+
+xmlVm = argv[2]
+vm_element = ET.parse(xmlVm)
+vm = vm_element.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
@@ -54,7 +58,13 @@ for prefix, uri in ns.items():
 iothreads = root.find('./iothreads')
 if iothreads is None:
     iothreads = ET.SubElement(root, 'iothreads')
-iothreads.text = "1"
+else:
+    t_iothreads_e = vm.find('.//T_IOTHREADS_OVERRIDE')
+    if t_iothreads_e is None:
+        print('Found iothreads={}, but T_IOTHREADS_OVERRIDE is not set'.format(iothreads.text), file=stderr)
+        exit(1)
+    else:
+        iothreads.text = "1"
 
 # virtio-blk
 for disk in root.findall('./devices/disk'):
