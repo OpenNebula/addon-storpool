@@ -1203,6 +1203,7 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/FORMAT \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/READONLY \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/PERSISTENT \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/FS \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_ACTIVE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE \
@@ -1232,6 +1233,7 @@ function oneVmInfo()
     FORMAT="${XPATH_ELEMENTS[i++]}"
     READONLY="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
+    FS="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_ACTIVE="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
@@ -1273,6 +1275,7 @@ ${DRIVER:+DRIVER=$DRIVER }\
 ${FORMAT:+FORMAT=$FORMAT }\
 ${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+${FS:+FS=$FS }\
 ${IMAGE:+IMAGE='$IMAGE' }\
 ${SIZE:+SIZE='$SIZE' }\
 ${ORIGINAL_SIZE:+ORIGINAL_SIZE='$ORIGINAL_SIZE' }\
@@ -1563,6 +1566,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/FS \
                     /DS_DRIVER_ACTION_DATA/IMAGE/CLONE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SAVE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/DISK_TYPE \
@@ -1617,6 +1621,7 @@ function oneDsDriverAction()
     FSTYPE="${XPATH_ELEMENTS[i++]}"
     SOURCE="${XPATH_ELEMENTS[i++]}"
     TYPE="${XPATH_ELEMENTS[i++]}"
+    FS="${XPATH_ELEMENTS[i++]}"
     CLONE="${XPATH_ELEMENTS[i++]}"
     SAVE="${XPATH_ELEMENTS[i++]}"
     DISK_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -1654,6 +1659,7 @@ ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
 ${DRIVER:+DRIVER=$DRIVER }\
 ${FORMAT:+FORMAT=$FORMAT }\
 ${FSTYPE:+FSTYPE=$FSTYPE }\
+${FS:+FS=$FS }\
 ${TYPE:+TYPE=$TYPE }\
 ${CLONE:+CLONE=$CLONE }\
 ${SAVE:+SAVE=$SAVE }\
