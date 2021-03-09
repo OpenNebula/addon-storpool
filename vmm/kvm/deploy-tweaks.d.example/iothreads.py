@@ -63,8 +63,7 @@ else:
     if t_iothreads_e is None:
         print('Found iothreads={}, but T_IOTHREADS_OVERRIDE is not set'.format(iothreads.text), file=stderr)
         exit(1)
-    else:
-        iothreads.text = "1"
+iothreads.text = "1"
 
 # virtio-blk
 for disk in root.findall('./devices/disk'):
