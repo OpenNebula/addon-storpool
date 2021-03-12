@@ -539,10 +539,23 @@ function storpoolWrapper()
 	esac
 }
 
+function splogFile() {
+    if boolTrue "DEBUG_splogFile"; then
+        splog "splogFile $*"
+    fi
+    while read -u 8 l; do
+        splog "stderr: $l"
+    done 8< <(cat "$1" 2>&1)
+    [ -z "$2" ] || rm -f "$1"
+}
+
 function storpoolRetry() {
+    local t=${STORPOOL_RETRIES:-10}
+    local errfile=$(mktemp)
+    local err=
     if boolTrue "DEBUG_SP_RUN_CMD"; then
         if boolTrue "DDEBUG_SP_RUN_CMD"; then
-            splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $*"
+            splog "${SP_API_HTTP_HOST:+$SP_API_HTTP_HOST:}storpool $* #$errfile"
         else
             for _last_cmd;do :;done
             if [ "${_last_cmd}" != "list" ]; then
@@ -550,23 +563,32 @@ function storpoolRetry() {
             fi
         fi
     fi
-    t=${STORPOOL_RETRIES:-10}
     while true; do
-        if storpoolWrapper "$@"; then
+        if storpoolWrapper "$@" 2>"$errfile"; then
+            if boolTrue "DEBUG_SP_RUN_CMD"; then
+                splogFile "$errfile" clean
+            fi
             break
         fi
+        err=$?
         if boolTrue "_SOFT_FAIL"; then
             splog "storpool $* SOFT_FAIL"
+            splogFile "$errfile" clean
             break
         fi
         t=$((t - 1))
         if [ "$t" -lt 1 ]; then
-            splog "storpool $* FAILED ($t::$?)"
+            splog "storpool $* FAILED (try:$t, err:$err)"
+            splogFile "$errfile" clean
             exit 1
         fi
+        splogFile "$errfile"
         sleep .1
-        splog "retry $t storpool $*"
+        splog "retry $t storpool $* (err:$err)"
     done
+    if [ -f "$errfile" ]; then
+        rm -f "$errfile"
+    fi
 }
 
 function storpoolTemplate()
