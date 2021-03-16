@@ -52,18 +52,24 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         else
             oneDatastoreInfo "$VM_DS_ID"
         fi
-        if [ -n "$VMSNAPSHOT_LIMIT" ] && \
-           [ "${VMSNAPSHOT_LIMIT//[[:digit:]]}" = "" ]; then
-           if [ $VMSNAPSHOT_LIMIT -lt ${#SNAPSHOT_ID_A[@]} ]; then
-               res="VMSNAPSHOT_LIMIT of $VMSNAPSHOT_LIMIT snaphosts exceeded!"
-               splog "$res"
-               error_message "$res"
-               exit 1
-           else
-               res="VM snapshots limit VMSNAPSHOT_LIMIT:$VMSNAPSHOT_LIMIT >= ${#SNAPSHOT_ID_A[@]}"
-               log "$res"
-               splog "$res"
-           fi
+        if [ -n "$VMSNAPSHOT_LIMIT" ]; then
+            if [ "${VMSNAPSHOT_LIMIT//[[:digit:]]}" = "" ]; then
+                if [ $VMSNAPSHOT_LIMIT -lt ${#SNAPSHOT_ID_A[@]} ]; then
+                    res="VMSNAPSHOT_LIMIT of $VMSNAPSHOT_LIMIT snaphosts exceeded!"
+                    splog "$res"
+                    error_message "$res"
+                    exit 1
+                else
+                    res="VM snapshots limit VMSNAPSHOT_LIMIT:$VMSNAPSHOT_LIMIT >= ${#SNAPSHOT_ID_A[@]}"
+                    splog "$res"
+                    log "$res"
+                fi
+            else
+                res="Error: VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' Not a number"
+                splog "$res"
+                error_message "$res"
+                exit 1
+            fi
         fi
     fi
     ts=$(date +%s)
