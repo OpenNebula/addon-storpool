@@ -45,3 +45,6 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     splog "$SSH $HVHOST rm -f '$FILE' ($?)"
 
 fi
+
+splog "END $VM_ID"
+exit 0

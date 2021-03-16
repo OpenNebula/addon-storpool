@@ -69,3 +69,5 @@ if [ -f "$POST_SCRIPT" ] && [ -x "$POST_SCRIPT" ]; then
     splog "calling $POST_SCRIPT $*"
     echo "$DRV_ACTION" | $POST_SCRIPT "$@" || exit $?
 fi
+splog "END $VM_ID"
+exit 0

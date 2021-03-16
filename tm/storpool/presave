@@ -54,3 +54,6 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     splog "ssh $HVHOST ln -sf /dev/storpool/$SP_VOL $FILE ($?)"
     trapReset
 fi
+
+splog "END $VM_ID"
+exit 0

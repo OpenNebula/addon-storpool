@@ -42,3 +42,6 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     fi
 
 fi
+
+splog "END $VM_ID"
+exit 0
