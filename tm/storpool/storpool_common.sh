@@ -2111,7 +2111,10 @@ if [ -n "$3" ]; then
    if [ -f "\\$monitor_file" ]; then
        monitor="\\$(<"\\$monitor_file" 2>/dev/null)"
    fi
-   [ "\\$monitor" = "$3" ] || echo "$3" > "\\$monitor_file" 2>&1
+   if [ "\\$monitor" != "$3" ]; then
+       echo "$3" > "\\$monitor_file" 2>&1
+       logger -t "$0##*/[$$]" -- "ssh_make_path '$3' to \\$monitor_file (\\$?)"
+   fi
 fi
 EOF`
     SSH_EXEC_RC=$?
