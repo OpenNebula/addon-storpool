@@ -115,12 +115,12 @@ fi
 splog "Sending $DEP_XML to $HOST for ${DATASTORE_LOCATION:-/var/lib/one/datastores}/$DS_ID/$VM_ID/$DEP_NAME ..."
 DOMAIN_ID="$(cat "$DEP_XML" | ssh "$HOST" "${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm/deploy ${DATASTORE_LOCATION:-/var/lib/one/datastores}/$DS_ID/$VM_ID/$DEP_NAME" 2>>"$ERR_FILE")"
 ret=$?
-splog "deploy on $HOST returned ($ret) DOMAIN_ID=$DOMAIN_ID"
+splog "VM $VM_ID deploy on $HOST returned ($ret) DOMAIN_ID=$DOMAIN_ID"
 
 if [ $ret -eq 0 ]; then
     echo "$DOMAIN_ID"
 else
-    error_message "[deploy-tweaks] Could not create domain from $DEP_FILE"
+    error_message "[deploy-tweaks] VM $VM_ID could not create domain from $DEP_FILE"
     cat "$ERR_FILE" >&2
     exit -1
 fi
