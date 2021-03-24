@@ -285,7 +285,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
             fi
         fi
         if ! boolTrue "DS_SHARED" || [ "${SP_SYSTEM^^}" = "SSH" ] || [ -n "$SYSTEM_DS_TRANSFER" ]; then
-            if [ "$SRC_HOST" = "$DST_HOST" ] || boolTrue "MIGRATE_UNKNOWN"; then
+            if boolTrue "MIGRATE_UNKNOWN"; then
+                splog "MIGRATE_UNKNOWN: $SRC_HOST is in ERROR state"
+            elif [ "$SRC_HOST" = "$DST_HOST" ]; then
                 RANDOM_FILE=$($SSH "$DST_HOST" "mktemp -p \"$DST_DIR\"")
                 trapAdd "$SSH $DST_HOST \"rm -f $RANDOM_FILE\""
                 if $SSH "$SRC_HOST" "test -f $RANDOM_FILE"; then
