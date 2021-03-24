@@ -116,6 +116,7 @@ oneTemplateInfo "$TEMPLATE"
 # Attach storpool volumes
 #-------------------------------------------------------------------------------
 json=
+shareable_attach=
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
@@ -140,9 +141,15 @@ for i in ${!DISK_ID_ARRAY[@]}; do
             else
                 SP_MODE=
             fi
-            [ -z "$json" ] || json+=","
             [ -n "$DST_CLIENT" ] || DST_CLIENT="$(storpoolClientId "$DST_HOST" "$COMMON_DOMAIN")"
-            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "$SP_MODE")"
+            if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
+                IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
+                IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
+                shareable_attach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}/${SP_MODE} "
+            else
+                [ -z "$json" ] || json+=","
+                json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$DST_CLIENT" "$SP_MODE")"
+            fi
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
@@ -205,6 +212,10 @@ fi
 
 if [ -n "$json" ]; then
     storpoolRetry groupAttach "$json"
+fi
+
+if [ -n "$shareable_attach" ]; then
+    shareableAttach "$DST_HOST" "$shareable_attach"
 fi
 
 splog "END $VM_ID"

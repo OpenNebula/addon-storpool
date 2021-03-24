@@ -336,8 +336,11 @@ EOF
             fi
         fi
      else
+        shareable_detach=
+        shareable_attach=
         for i in ${!DISK_ID_ARRAY[@]}; do
             if [ "${DISK_TM_ARRAY[i]}" = "" ]; then
+                DISK_ID="${DISK_ID_ARRAY[i]}"
                 DISK_PATH="$DST_PATH"
                 FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
                 if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
@@ -348,28 +351,38 @@ EOF
                         continue
                     fi
                 else
-                    DISK_PATH="${DST_PATH}/disk.${DISK_ID_ARRAY[i]}"
+                    DISK_PATH="${DST_PATH}/disk.${DISK_ID}"
                 fi
                 SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
                 SP_LINK="/dev/storpool/$SP_VOL"
                 if [ -n "$ATTACH_ONLY" ]; then
                     splog "$ATTACH_ONLY"
                 else
-                    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
+                    if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
+                        IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
+                        IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
+                        shareable_detach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/$SP_VOL "
+                    else
+                        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
+                    fi
                 fi
                 if [ -n "$DETACH_ONLY" ]; then
                     splog "$DETACH_ONLY"
                 else
-                    storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
-
-                    storpoolVolumeTag "$SP_VOL" "$VM_ID"
-
+                    if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
+                        IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
+                        IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
+                        [ -z "$shareable_attach" ] || shareable_attach+=";"
+                        shareable_attach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL} "
+                    else
+                        storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
+                        storpoolVolumeTag "$SP_VOL" "$VM_ID"
+                        if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
+                            forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"
+                        fi
+                    fi
                     if boolTrue "DO_SYMLINK"; then
                         oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
-                    fi
-
-                    if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
-                        forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"
                     fi
                 fi
                 if [ "$SRC_PATH" != "$DST_PATH" ]; then
@@ -377,6 +390,12 @@ EOF
                 fi
             fi
         done
+     fi
+     if [ -n "$shareable_attach" ]; then
+         shareableAttach "$DST_HOST" "$shareable_attach"
+     fi
+     if [ -n "$shareable_detach" ]; then
+         shareableDetach "$SRC_HOST" "$shareable_detach"
      fi
      splog "END $VM_ID [SYSTEM_DS]"
      exit 0
@@ -390,12 +409,16 @@ else
                 oneVmVolumes "$VM_ID"
             fi
         fi
-        if [ "$TYPE" = "CDROM" ]; then
-            # backward compatibility ...
-            storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "" "$READONLY"
-            SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+        if boolTrue "SHAREABLE"; then
+            shareableDetach "$SRC_HOST" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/$SP_VOL"
+        else
+            if [ "$TYPE" = "CDROM" ]; then
+                # backward compatibility ...
+                storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "" "$READONLY"
+                SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+            fi
+            storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL" "$READONLY" "$vmVolumes"
         fi
-        storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL" "$READONLY" "$vmVolumes"
     fi
 fi
 
@@ -415,27 +438,43 @@ fi
 SP_VOL="${SOURCE##*/}"
 if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
-elif [ "$TYPE" = "CDROM" ]; then
-    CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-    if ! storpoolVolumeExists "$CDROM_VOL"; then
-        if booltTrue "NO_VOLUME_TEMPLATE"; then
-            SP_TEMPLATE_CD=
-        else
-            SP_TEMPLATE_CD="${ONE_PX}-ds-$DS_ID"
-        fi
-        storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE_CD"
-        storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
+fi
+
+if boolTrue "SHAREABLE"; then
+    tagv="1"
+    tagn="shareable"
+    if [ "$TYPE" = "CDROM" ]; then
+        SP_MODE=ro
+        tagv+=";CDROM"
+        tagn+=";type"
     fi
-    SP_MODE="ro"
-    SP_VOL="$CDROM_VOL"
+    shareableAttach "$DST_HOST" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}/${SP_MODE}"
+    storpoolVolumeTag "$SP_VOL" "$tagv" "$tagn"
+else
+    if [ "$TYPE" = "CDROM" ]; then
+        CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+        if ! storpoolVolumeExists "$CDROM_VOL"; then
+            if booltTrue "NO_VOLUME_TEMPLATE"; then
+                SP_TEMPLATE_CD=
+            else
+                SP_TEMPLATE_CD="${ONE_PX}-ds-$DS_ID"
+            fi
+            storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE_CD"
+            storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
+        fi
+        SP_MODE="ro"
+        SP_VOL="$CDROM_VOL"
+    fi
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+
+    storpoolVolumeTag "$SP_VOL" "$VM_ID"
+
+    if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
+        forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"
+    fi
 fi
 
 SP_LINK="/dev/storpool/$SP_VOL"
-
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
-
-storpoolVolumeTag "$SP_VOL" "$VM_ID"
-
 if boolTrue "DO_SYMLINK"; then
     # Get SYSTEM datastore info
     oneDatastoreInfo "$VM_DS_ID"
@@ -444,10 +483,6 @@ if boolTrue "DO_SYMLINK"; then
         MONITOR_TM_MAD="$VM_TM_MAD"
     fi
     oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
-fi
-
-if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
-    forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"
 fi
 
 splog "END $VM_ID [IMAGE_DS]"
