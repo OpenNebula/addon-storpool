@@ -119,7 +119,10 @@ else
     FS=
 fi
 
-if [ "${FSTYPE,,}" != "raw" ] || [ -n "$FS" ]; then
+if [ -n "$FSTYPE" -a "${FSTYPE,,}" != "raw" ] || [ -n "$FS" ]; then
+    if boolTrue "DEBUG_DS_MKFS"; then
+        splog "FSTYPE='$FSTYPE' FS='$FS'"
+    fi
     trapAdd "splog \"return \$? \"; storpoolVolumeDelete \"$SP_VOL\" force snaps"
 
     storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
