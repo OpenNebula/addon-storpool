@@ -119,7 +119,7 @@ else
     FS=
 fi
 
-if [ "${FSTYPE,,}" != "raw" ] || [ -n "FS" ]; then
+if [ "${FSTYPE,,}" != "raw" ] || [ -n "$FS" ]; then
     trapAdd "splog \"return \$? \"; storpoolVolumeDelete \"$SP_VOL\" force snaps"
 
     storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
