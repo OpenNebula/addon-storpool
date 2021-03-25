@@ -25,3 +25,4 @@
       :arguments:
         UPDATE_IMAGE_ON_IMPORT: "1"
         DS_CP_REPORT_FORMAT: "0"
+        MKSWAP: "/sbin/mkswap"

@@ -23,3 +23,6 @@
       :method: simple_conf
       :arguments:
         UPDATE_IMAGE_ON_IMPORT: "0"
+        MKSWAP: "/sbin/mkswap"
+        MKFS: "/sbin/mkfs"
+
