@@ -46,6 +46,12 @@ splog "$0 $*"
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
     splog "vmDisks:$vmDisks vmVolumes:'$vmVolumes'"
+    if [ -n "$oneVmVolumesShareable" ]; then
+        res="VM Snapshot of shareable disk is not supported!($oneVmVolumesShareable)"
+        error_message "$res"
+        splog "$res (exit 1)"
+        exit 1
+    fi
     if boolTrue "VMSNAPSHOT_ENABLE_LIMIT"; then
         if [ -n "$VM_VMSNAPSHOT_LIMIT" ]; then
             VMSNAPSHOT_LIMIT="$VM_VMSNAPSHOT_LIMIT"
@@ -122,5 +128,8 @@ EOF
     splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID suffix:$res"
     exit 0
 else
-    splog "[CONTINUE]"
+    res="VMSNAPSHOT_OVERRIDE is not set"
+    splog "$res"
+    error_message "$res"
+    exit 1
 fi

@@ -1807,6 +1807,7 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/CLONE \
         /VM/TEMPLATE/DISK/FORMAT \
         /VM/TEMPLATE/DISK/TYPE \
+        /VM/TEMPLATE/DISK/SHAREABLE \
         /VM/TEMPLATE/DISK/TM_MAD \
         /VM/TEMPLATE/DISK/TARGET \
         /VM/TEMPLATE/DISK/IMAGE_ID \
@@ -1824,6 +1825,7 @@ oneVmVolumes()
     local CLONE="${XPATH_ELEMENTS[i++]}"
     local FORMAT="${XPATH_ELEMENTS[i++]}"
     local TYPE="${XPATH_ELEMENTS[i++]}"
+    local SHAREABLE="${XPATH_ELEMENTS[i++]}"
     local TM_MAD="${XPATH_ELEMENTS[i++]}"
     local TARGET="${XPATH_ELEMENTS[i++]}"
     local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
@@ -1849,6 +1851,7 @@ oneVmVolumes()
     CLONE_A=($CLONE)
     FORMAT_A=($FORMAT)
     TYPE_A=($TYPE)
+    SHAREABLE_A=($SHAREABLE)
     TM_MAD_A=($TM_MAD)
     TARGET_A=($TARGET)
     IMAGE_ID_A=($IMAGE_ID)
@@ -1859,6 +1862,7 @@ oneVmVolumes()
         CLONE="${CLONE_A[$ID]}"
         FORMAT="${FORMAT_A[$ID]}"
         TYPE="${TYPE_A[$ID]}"
+        SHAREABLE="${SHAREABLE_A[$ID]}"
         TM_MAD="${TM_MAD_A[$ID]}"
         TARGET="${TARGET_A[$ID]}"
         DISK_ID="${DISK_ID_A[$ID]}"
@@ -1885,12 +1889,15 @@ oneVmVolumes()
                     IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
             esac
         fi
-        vmVolumes+="$IMG "
         if boolTrue "DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
+        vmVolumes+="$IMG "
         vmDisks=$((vmDisks+1))
         vmDisksMap+="$IMG:$DISK_ID "
+        if boolTrue "SHAREABLE"; then
+            oneVmVolumesShareable+="$IMG:$DISK_ID "
+        fi
     done
     if [ -n "$T_OS_NVRAM" ]; then
         IMG="${ONE_PX}-sys-${VM_ID}-NVRAM"
