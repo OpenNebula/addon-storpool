@@ -55,6 +55,12 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     for disk in $vmDisksMap; do
         vmVolumesMap["${disk%:*}"]="${disk##*:}"
     done
+
+    if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
+        MEM_VOL="${ONE_PX}-sys-${VM_ID}"
+        diskVolumes["$MEM_VOL"]="$MEM_VOL"
+    fi
+
     rCMD=$(cat <<EOF
     [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
 	while read -u 4 out; do
@@ -66,14 +72,18 @@ EOF
     $SSH "$VMHOST" "$rCMD" 2>/dev/null >/dev/null
     splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed"
     sleep .5
-
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
+    MEM_VOL="${ONE_PX}-sys-${VM_ID}"
     while read -u 5 snap vid; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "$snap vid:$vid"
         fi
         snapVol="${snap%-ONESNAP*}"
+        if [ "$snapVol" = "$MEM_VOL" ]; then
+            MEM_SNAP="$snap"
+            continue
+        fi
         if [ -n "$vid" ]; then
             if [ "$VM_ID" != "$vid" ]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
@@ -83,13 +93,19 @@ EOF
             fi
         elif [ -z "${diskVolumes["$snapVol"]}" ]; then
             if boolTrue "DEBUG_VMSNAPSHOT"; then
-                splog "Skip $snap (not in vmVolumes:$vmVolumes)"
+                splog "Skip $snap (not in diskVolumes:$diskVolumes)"
             fi
             continue
         fi
         snapList+=("$snap")
     done 5< <(storpoolRetry -j snapshot list |\
                   jq -r --arg snp "$SNAP_ID" --arg tag "$VM_TAG" '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$tag]')
+    if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
+        if [ -z "$MEM_SNAP" ]; then
+           splog "Error: VMSNAPSHOT_WITH_CHECKPOINT is set but checkpoint snapshot not found"
+           exit 1
+        fi
+    fi
     splog "snapList: ${snapList[@]}"
     finish=1
     for snap in ${snapList[@]}; do
@@ -134,6 +150,55 @@ EOF
         for volume in ${tmpVolumes[@]}; do
             storpoolVolumeDelete "$volume" "force" "snaps"
         done
+    fi
+    if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
+        RET=$?
+        storpoolVolumeAttach "$MEM_SNAP" "$VMHOST" "ro" "snapshot"
+        MEM_LNK="/dev/storpool/$MEM_SNAP"
+        TDIR="$(mktemp -d)"
+        VM_XML="${TDIR}/restore-${VM_ID}.xml"
+        rCMD=$(cat <<EOF
+ mkdir "$TDIR"
+ RET=\$?
+ logger -t "${0##*/}_r[$$]" -- "mkdir $TDIR(\$RET)"
+ [ \$RET -eq 0 ] || exit \$RET
+ [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+ virsh --connect \$LIBVIRT_URI save-image-dumpxml "$MEM_LNK" >"$VM_XML"
+ RET=\$?
+ logger -t "${0##*/}_r[$$]" -- "virsh save-image-dumpxml $MEM_LNK >$VM_XML (\$RET)"
+ [ \$RET -eq 0 ] || exit \$RET
+ for i in 0 1 2; do
+   virsh --connect \$LIBVIRT_URI restore "$MEM_LNK" --xml $VM_XML &>>"$TDIR/restore-${VM_ID}-\${i}.log"
+   RET=\$?
+   logger -t "${0##*/}_r[$$]" -- "[\$i] virsh restore $MEM_LNK --xml $VM_XML (\$RET)"
+   if [ \$RET -ne 0 ]; then
+       logger -t "${0##*/}_r[$$]" -- "[\$i] Error: \$(cat "$TDIR/restore-${VM_ID}-\${i}.log")"
+   else
+       break
+   fi
+   sleep 0.5
+ done
+ rm -rf "$TDIR"
+ logger -t "${0##*/}_r[$$]" -- "END $VM_ID (\$RET)"
+ exit \$RET
+EOF
+)
+        splog "ssh $VMHOST virsh restore ..."
+        if $SSH "$VMHOST" "$rCMD" >"$TDIR/ssh.out" 2>"$TDIR/ssh.err"; then
+            splog "OK ssh $VMHOST ($?)"
+            RET=0
+        else
+            splog "ssh $VMHOST failed! ($?)"
+            splog "DEBUG_OUT:$(cat "$TDIR/ssh.out")"
+            splog "DEBUG_ERR:$(cat "$TDIR/ssh.err")"
+            RET=1
+        fi
+        storpoolVolumeDetach "$MEM_SNAP" "" "$VMHOST"
+        if [ $RET -ne 0 ]; then
+            splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID Failed! ($RET)"
+            exit $RET
+        fi
+        rm -rf "$TDIR"
     fi
     splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID"
     exit 0

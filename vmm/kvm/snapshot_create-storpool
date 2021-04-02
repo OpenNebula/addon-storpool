@@ -80,6 +80,93 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     fi
     ts=$(date +%s)
     res="${VMSNAPSHOT_TAG}-${SNAP_ID}-${ts}"
+    for volume in $vmVolumes; do
+        snap="${volume}-${res}"
+        list+=($volume $snap)
+    done
+    if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
+        # get guest memory
+        rCMD=$(cat <<EOF
+    [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+    virsh --connect \$LIBVIRT_URI dumpxml "$DOMAIN"
+EOF
+)
+        domXML="$($SSH "$VMHOST" "$rCMD")"
+        domMem=$(echo "$domXML" | xmlstarlet sel -t -v domain/memory)
+        MEM_VOL="${ONE_PX}-sys-${VM_ID}"
+        storpoolVolumeCreate "$MEM_VOL" "$((domMem * 2))K" "${ONE_PX}-ds-${VM_DS_ID}"
+        RET=$?
+        if [ $RET -ne 0 ]; then
+            splog "Can't create checkpoint volume! Domain memory ${domMem}K"
+        fi
+        storpoolVolumeAttach "$MEM_VOL" "$VMHOST"
+        if [ $RET -ne 0 ]; then
+            splog "Can't attach checkpoint volume to $VMHOST!"
+        fi
+        list+=($MEM_VOL ${MEM_VOL}-$res)
+        json="$(volumesGroupSnapshotJson "tag:$VM_TAG=$VM_ID" ${list[@]})"
+        apiCmd="$(storpoolApiCmdline=1 storpoolApi "VolumesGroupSnapshot" "$json")"
+        MEM_LNK="/dev/storpool/$MEM_VOL"
+        TDIR="$(mktemp -d)"
+        trapAdd "rm -rf $TDIR"
+        VM_XML="$TDIR/one-${VM_ID}.XML"
+        rCMD=$(cat <<EOF
+ mkdir "$TDIR"
+ RET=\$?
+ logger -t "${0##*/}_r[$$]" -- "mkdir $TDIR(\$RET)"
+ [ \$RET -eq 0 ] || exit \$RET
+ [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+ virsh --connect \$LIBVIRT_URI save "$DOMAIN" "$MEM_LNK"
+ RET=\$?
+ logger -t "${0##*/}_r[$$]" -- "virsh save "$DOMAIN" "$MEM_LNK" (\$RET)"
+ [ \$RET -eq 0 ] || exit \$RET
+ virsh --connect \$LIBVIRT_URI save-image-dumpxml "$MEM_LNK" >"$VM_XML"
+ RET=\$?
+ logger -t "${0##*/}_r[$$]" -- "virsh save-image-dumpxml $MEM_LNK >$VM_XML (\$RET)"
+ [ \$RET -eq 0 ] || exit \$RET
+ $apiCmd >"$TDIR/curl.out" 2>"$TDIR/curl.err"
+ RET=\$?
+ APIRET=42
+ logger -t "${0##*/}_r[$$]" -- "volumeGroupSnapshot (\$RET) \$(cat "$TDIR/curl.out")"
+ if [ \$RET -eq 0 ]; then
+   OK=\$(jq -r '.data.ok' "$TDIR/curl.out" 2>/dev/null)
+   if [ "\$OK" = "true" ]; then
+     APIRET=0
+   else
+     logger -t "${0##*/}_r[$$]" -- "Error: OK='\$OK'"
+   fi
+ else
+   logger -t "${0##*/}_r[$$]" -- "Curl error: \$(cat "$TDIR/curl.err")"
+   exit \$RET
+ fi
+ for i in 0 1 2; do
+   virsh --connect \$LIBVIRT_URI restore "$MEM_LNK" --xml $VM_XML &>>/tmp/one-${VM_ID}-\$i.log
+   RET=\$?
+   logger -t "${0##*/}_r[$$]" -- "[\$i] virsh restore $MEM_LNK --xml $VM_XML (\$RET)"
+   [ \$RET -ne 0 ] || break
+   sleep 0.5
+ done
+ logger -t "${0##*/}_r[$$]" -- "END $VM_ID (\$APIRET::\$RET)"
+ rm -rf "$TDIR"
+ exit \$((RET + APIRET))
+EOF
+)
+        if $SSH "$VMHOST" "$rCMD" >"$TDIR/ssh.out" 2>"$TDIR/ssh.err"; then
+            splog "OK ssh $VMHOST ($?)"
+            RET=0
+        else
+            splog "ssh $VMHOST failed! ($?)"
+            splog "DEBUG_OUT:$(cat "$TDIR/ssh.out")"
+            splog "DEBUG_ERR:$(cat "$TDIR/ssh.err")"
+            RET=1
+        fi
+        storpoolVolumeDelete "$MEM_VOL" "force"
+        if [ $RET -eq 0 ]; then
+            echo "$res"
+        fi
+        splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID suffix:$res ($RET)"
+        exit $RET
+    fi
 
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
         rCMD=$(cat <<EOF
@@ -105,10 +192,6 @@ EOF
         splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN is frosen"
         sleep ${VMSNAPSHOT_SLEEP:-.3}
     fi
-    for volume in $vmVolumes; do
-        snap="${volume}-${res}"
-        list+=($volume $snap)
-    done
     storpoolRetry groupSnapshot "tag:$VM_TAG=$VM_ID" ${list[@]}
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
         pids="$(jobs -p)"

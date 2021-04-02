@@ -441,11 +441,40 @@ function storpoolApi()
     if boolTrue "DDEBUG_SP_RUN_CMD"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}}"
     fi
-    curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
-    --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
-    --max-time "${3:-300}" ${2:+-d "$2"} \
-    "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>/dev/null
-    splog "storpoolApi $1 $2 ret:$?"
+    if boolTrue "storpoolApiCmdline"; then
+
+        local apiCmd="curl -s -S -q -N -H 'Authorization: Storpool v1:$SP_AUTH_TOKEN' \
+        --connect-timeout '${SP_API_CONNECT_TIMEOUT:-1}' \
+        --max-time '${3:-300}' ${2:+-d '$2'} \
+        '$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1'"
+        echo "$apiCmd"
+    else
+        curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
+        --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
+        --max-time "${3:-300}" ${2:+-d "$2"} \
+        "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>/dev/null
+        splog "storpoolApi $1 $2 ret:$?"
+    fi
+}
+
+function volumesGroupSnapshotJson()
+{
+    local json= tags= tg=
+    while [ ${1:0:4} = "tag:" ]; do
+        tg="${1#tag:}"
+        [ -z "$tags" ] || tags+=","
+        tags+="\"${tg%%=*}\":\"${tg#*=}\""
+        shift
+    done
+    while [ -n "$2" ]; do
+        [ -z "$json" ] || json+=","
+        json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
+        shift 2
+    done
+    if [ -n "$json" ]; then
+        res="{\"volumes\":[$json]${tags:+,\"tags\":{$tags}}}"
+        echo "$res"
+    fi
 }
 
 function storpoolWrapper()
@@ -1815,6 +1844,7 @@ oneVmVolumes()
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/T_OS_NVRAM \
+        /VM/USER_TEMPLATE/VMSNAPSHOT_WITH_CHECKPOINT \
         /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     trapDel "rm -f \"$tmpXML\""
@@ -1843,6 +1873,7 @@ oneVmVolumes()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
         T_OS_NVRAM="${_TMP}"
     fi
+    VMSNAPSHOT_WITH_CHECKPOINT="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     local IMG=
     _OFS=$IFS
@@ -1913,7 +1944,7 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VC_POLICY:+ VC_POLICY=$VC_POLICY}"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VC_POLICY:+ VC_POLICY=$VC_POLICY}${VMSNAPSHOT_WITH_CHECKPOINT:+ VMSNAPSHOT_WITH_CHECKPOINT=$VMSNAPSHOT_WITH_CHECKPOINT}"
     fi
 }
 
