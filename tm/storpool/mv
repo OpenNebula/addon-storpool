@@ -340,10 +340,14 @@ EOF
         shareable_attach=
         for i in ${!DISK_ID_ARRAY[@]}; do
             if [ "${DISK_TM_ARRAY[i]}" = "" ]; then
-                DISK_ID="${DISK_ID_ARRAY[i]}"
                 DISK_PATH="$DST_PATH"
                 FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
-                if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
+                if boolTrue "DEBUG_TM_MV"; then
+                    dbg="IS_DISK=$IS_DISK DISK_ID:$DISK_ID DISK_PATH=$DISK_PATH FORMAT=$FORMAT"
+                    dbg+="// DISK_TYPE_A:${DISK_TYPE_ARRAY[i]} // DISK_ID_A:${DISK_ID_ARRAY[i]}"
+                    splog "$dbg"
+                fi
+                if [ "${DISK_TYPE_ARRAY[i]}" = "swap" ]; then
                     FORMAT="swap"
                 fi
                 if boolTrue "IS_DISK"; then
@@ -351,7 +355,7 @@ EOF
                         continue
                     fi
                 else
-                    DISK_PATH="${DST_PATH}/disk.${DISK_ID}"
+                    DISK_PATH="${DST_PATH}/disk.${DISK_ID_ARRAY[i]}"
                 fi
                 SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
                 SP_LINK="/dev/storpool/$SP_VOL"
@@ -361,7 +365,7 @@ EOF
                     if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
                         IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
                         IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
-                        shareable_detach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/$SP_VOL "
+                        shareable_detach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID_ARRAY[i]}/$SP_VOL "
                     else
                         storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "$DETACH_ALL"
                     fi
@@ -373,7 +377,7 @@ EOF
                         IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
                         IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
                         [ -z "$shareable_attach" ] || shareable_attach+=";"
-                        shareable_attach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL} "
+                        shareable_attach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID_ARRAY[i]}/${SP_VOL} "
                     else
                         storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
                         storpoolVolumeTag "$SP_VOL" "$VM_ID"
