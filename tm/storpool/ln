@@ -33,6 +33,7 @@ DS_ID="$4"
 
 TM_PATH="$(dirname $0)"
 source "${TM_PATH}/storpool_common.sh"
+SHAREABLE=
 
 splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
@@ -99,20 +100,32 @@ if boolTrue "READONLY"; then
     SP_MODE="ro"
 fi
 
-if [ "$TYPE" = "CDROM" ]; then
-    CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-    if ! storpoolVolumeExists "$CDROM_VOL"; then
-        storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE"
-        storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
+
+if boolTrue "SHAREABLE"; then
+    if ! oneIsStandalone; then
+        msg="SHAREABLE Image not supported on Federated environment"
+        splog "$msg"
+        log "$msg"
+        exit 1
     fi
-    SP_VOL="$CDROM_VOL"
+    shareableAttach "$DST_HOST" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}/${SP_MODE}"
+    storpoolVolumeTag "$SP_VOL" "${VC_POLICY};1" "${VC_POLICY:+vc-policy};shareable"
 else
+    if [ "$TYPE" = "CDROM" ]; then
+        CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+        if ! storpoolVolumeExists "$CDROM_VOL"; then
+            storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE"
+            storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
+        fi
+        SP_VOL="$CDROM_VOL"
+    fi
+
     storpoolVolumeDetach "$SP_VOL" "force" "" "all"
+
+    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
+
+    storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
 fi
-
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
-
-storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
 
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information

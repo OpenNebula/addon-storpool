@@ -134,7 +134,7 @@ else
     fi
     if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
         tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
-        if [ "${tmp:0:5}" == "local" ]; then
+        if [ "${tmp:0:5}" = "local" ]; then
             if boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "Found leader IP ($RAFT_LEADER_IP)."
             fi

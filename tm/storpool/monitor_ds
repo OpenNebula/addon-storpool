@@ -22,8 +22,6 @@ function splog() { logger -t "tm_sp_${0##*/}[$$]" "$(date +%s.%N) $*"; }
 DS_DIR="$1"
 
 DRIVER_PATH="${0%/*}"
-MONITOR_TAG="MONITOR"
-LEGACY_MONITOR_TAG="POLL"
 
 if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
     source "$DRIVER_PATH/../../addon-storpoolrc"
@@ -49,12 +47,10 @@ if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
     echo "su - oneadmin -c 'cd $PWD && $0 $*'" >>"/tmp/tm_monitor_ds-$DS_ID.sh"
 fi
 
-if boolTrue "LEGACY_MONITORING"; then
-    MONITOR_TAG="$LEGACY_MONITOR_TAG"
-else
+if [ -d "${0%/*}/../../im/kvm-probes.d/vm" ]; then
     if [ -f "$DS_DIR/.monitor" ]; then
         rm -f "$DS_DIR/.monitor"
-        splog "rm -f $DS_DIR/.monitor ($?) // LEGACY_MONITORING leftover"
+        splog "rm -f $DS_DIR/.monitor ($?) // Legacy monitoring leftover"
     fi
     if boolTrue "DDEBUG_TM_MONITOR_DS"; then
         splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
@@ -89,7 +85,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 			[ -e "$DISK" ] || continue
 		fi
 		
-		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,${MONITOR_TAG}=\""
+		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,POLL=\""
 		
 		if [ -f "${DISK}.monitor" ]; then
 			DRIVER="$(<"${DISK}.monitor")"
@@ -107,11 +103,7 @@ for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
 		vm_data+="$("$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER")"
 	done
     if [ -n "${vm_data:0:1}" ]; then
-        if [ "${MONITOR_TAG^^}" = "MONITOR" ]; then
-            echo "${vm_data// /\\n}" | base64 -w 0 -
-        else
-            echo "$vm_data"
-        fi
+        echo "$vm_data"
     fi
 	[ -z "$DRIVER_RUN" ] || echo "\"]"
 done

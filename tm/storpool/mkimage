@@ -36,12 +36,16 @@ DST="$3"
 VM_ID="$4"
 DS_ID="$5"
 
-TM_PATH="$(dirname $0)"
-source "${TM_PATH}/storpool_common.sh"
+DRIVER_PATH=$(dirname $0)
+source "${DRIVER_PATH}/storpool_common.sh"
 
-source "${TM_PATH}/../../datastore/libfs.sh"
+source "${DRIVER_PATH}/../../datastore/libfs.sh"
 
-splog "SIZE=$SIZE FSTYPE=$FSTYPE DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
+if [ -f "${DRIVER_PATH}/../../etc/datastore/datastore.conf" ]; then
+    source "${DRIVER_PATH}/../../etc/datastore/datastore.conf"
+fi
+
+splog "SIZE=$SIZE FSTYPE=$FSTYPE DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID${SUPPORTED_FS:+ SUPPORTED_FS=$SUPPORTED_FS}${FS_OPTS:+ FS_OPTS=$FS_OPTS}"
 
 if [ "${FSTYPE,,}" != "raw" ] && [ "${FSTYPE,,}" != "swap" ]; then
     log_error "Unsupported FSTYPE '$FSTYPE'! Please use 'raw'."
@@ -102,12 +106,25 @@ storpoolVolumeCheck "$SP_VOL"
 
 storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
-if [ "${FSTYPE,,}" != "raw" ]; then
+if contains "${SUPPORTED_FS}" "${FS}" ","; then
+    splog "FS:'$FS' is SUPPORTED_FS:$SUPPORTED_FS"
+else
+    splog "FS:'$FS' not in SUPPORTED_FS:$SUPPORTED_FS"
+    FS=
+fi
+
+if [ "${FSTYPE,,}" != "raw" ] || [ -n "$FS" ]; then
     if [ "$FSTYPE" = "swap" ]; then
         MKFS_CMD="${MKSWAP:-mkswap} -L swap \"$SP_LINK\""
     else
-        MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
+        if [ -n "$FS" ]; then
+            FS_OPTS=$(eval $(echo "echo \$FS_OPTS_$FS"))
+            MKFS_CMD="${MKFS:-mkfs} -F -t \"$FS\" $FS_OPTS \"$SP_LINK\""
+        else
+            MKFS_CMD=`mkfs_command "$SP_LINK" "$FSTYPE" "$SIZE"`
+        fi
     fi
+    splog "MKFS_CMD=$MKFS_CMD"
 
     trapAdd "splog \"return \$? \"; storpoolVolumeDetach \"$SP_VOL\" \"force\" \"\" \"all\"; storpoolVolumeDelete \"$SP_VOL\" force snaps"
 

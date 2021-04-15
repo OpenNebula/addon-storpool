@@ -76,6 +76,7 @@ oneTemplateInfo "$TEMPLATE"
 # Detach storpool volumes
 #-------------------------------------------------------------------------------
 json=
+shareable_detach=
 for i in ${!DISK_ID_ARRAY[@]}; do
     if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
@@ -90,9 +91,16 @@ for i in ${!DISK_ID_ARRAY[@]}; do
                 storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
-            [ -z "$json" ] || json+=","
             [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
-            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
+            if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
+                IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
+                IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
+                shareable_detach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL} "
+            else
+                [ -z "$json" ] || json+=","
+                json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
+            fi
+
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
@@ -161,6 +169,10 @@ if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
     CMD="$SSH $SRC_HOST 'rm -rf $VM_PATH'"
     splog "$CMD"
     exec_and_log "eval $CMD" "Error removing $VM_PATH"
+fi
+
+if [ -n "$shareable_detach" ]; then
+    shareableDetach $SRC_HOST "$shareable_detach"
 fi
 
 splog "END $VM_ID"

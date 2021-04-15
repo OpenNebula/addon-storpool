@@ -34,7 +34,6 @@ SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_CMD_SNAPSHOT_SPACE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_SNAPSHOT_SPACE_JSON_"
 # alternate calculation of the Free space
 ALT_STATS=
-LEGACY_MONITORING=0
 MONITOR_ADDRESS=127.0.0.1
 MONITOR_PORT=4124
 
@@ -43,6 +42,12 @@ if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
 fi
 if [ -f "/etc/storpool/addon-storpool.conf" ]; then
     source "/etc/storpool/addon-storpool.conf"
+fi
+
+if [ -d "${0%/*}/../../im/kvm-probes.d/vm/monitor" ]; then
+    MONITOR_TAG=MONITOR
+else
+    MONITOR_TAG=POLL
 fi
 
 DS_NAME="${ONE_PX:-one}-ds-$DS_ID"
@@ -281,7 +286,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 vm_monitor+=" VMSNAPSHOT=[ID=$i,BYTES=$sum]"
             done
         fi
-        if boolTrue "LEGACY_MONITORING"; then
+        if [ $MONITOR_TAG = "POLL" ]; then
             echo -n "VM=[ID=\"$VM_ID\", POLL=\""
             echo -n "$vm_monitor"
             echo "\"]"
@@ -296,7 +301,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             fi
         fi
     done 4< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=$DS_ID][STATE=3]" -v "ID" -n "$ONE_VM_POOL_XML")
-    if ! boolTrue "LEGACY_MONITORING"; then
+    if [ $MONITOR_TAG = "MONITOR" ]; then
         monitor_b64="$(echo $monitor | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
             base64 -w 0)"

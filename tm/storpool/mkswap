@@ -34,9 +34,9 @@ DST="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname $0)"
-source "${TM_PATH}/storpool_common.sh"
+DRIVER_PATH="$(dirname $0)"
+source "${DRIVER_PATH}/storpool_common.sh"
 
 splog "SIZE=$SIZE DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
 
-$TM_PATH/mkimage "$SIZE" "swap" "$DST" "$VM_ID" "$DS_ID"
+$DRIVER_PATH/mkimage "$SIZE" "swap" "$DST" "$VM_ID" "$DS_ID"

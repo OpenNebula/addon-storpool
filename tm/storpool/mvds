@@ -76,27 +76,31 @@ else
     SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 fi
 
-splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}"
+splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}${SHAREABLE:+ SHAREABLE=$SHAREABLE}"
 
 #-------------------------------------------------------------------------------
 # Detach and if it is deferred OpenNebula snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
+if boolTrue "SHAREABLE"; then
+    shareableDetach "$SRC_HOST" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}"
+else
+    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
-storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
+    storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
+
+    if boolTrue "DEFERRED"; then
+        storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
+    fi
+
+    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+        storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+    fi
+fi
 
 splog "deleting $SRC_PATH on $SRC_HOST"
 ssh_exec_and_log "$SRC_HOST" "rm -vf ${SRC_PATH}*" \
-                "Error deleting $SRC_PATH on $SRC_HOST"
-
-if boolTrue "DEFERRED"; then
-    storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
-fi
-
-if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
-fi
+            "Error deleting $SRC_PATH on $SRC_HOST"
 
 splog "END $VM_ID"
 exit 0

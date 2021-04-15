@@ -33,6 +33,15 @@ DISK_TYPE=$(echo $DRV_ACTION | base64 -d | \
 TYPE=$(echo $DRV_ACTION | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TYPE)
 
+if boolTrue "DEBUG_ATTACH_DISK"; then
+    SHAREABLE=$(echo $DRV_ACTION | base64 -d | \
+              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v SHAREABLE)
+    splog "KVMHOST=$KVMHOST TM_MAD=$TM_MAD DISK_TYPE=$DISK_TYPE TYPE=$TYPE${SHAREABLE:+ SHAREABLE=$SHAREABLE}"
+    if boolTrue "DDDEBUG_ATTACH_DISK"; then
+        echo "$DRV_ACTION" >/tmp/atach_disk.b64
+    fi
+fi
+
 if [ "${TM_MAD:0:8}" = "storpool" ]; then
     if [ "$DISK_TYPE" = "BLOCK" ]; then
         splog "Disk $1 $2 $3 DISK_TYPE '$DISK_TYPE'"

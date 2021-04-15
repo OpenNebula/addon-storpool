@@ -48,6 +48,10 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     for v in $vmVolumes; do
         diskVolumes["$v"]="$v"
     done
+    if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
+        MEM_VOL="$ONE_PX-sys-$VM_ID"
+        diskVolumes["$MEM_VOL"]="$MEM_VOL"
+    fi
 	while read -u 5 snap vid; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "$snap vid:$vid"

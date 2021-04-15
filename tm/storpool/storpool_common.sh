@@ -94,7 +94,7 @@ CLEAN_SRC_ON_UNDEPLOY=1
 # block creation of new disk snapshots when the limit is reached
 DISKSNAPSHOT_LIMIT=
 # update image template's variables DRIVER=raw and FORMAT=raw during import
-UPDATE_IMAGE_ON_IMPORT=1
+UPDATE_IMAGE_ON_IMPORT=0
 # Tag all VM disks with tag $VM_TAG=$VM_ID
 # Empty string will disable the tagging
 VM_TAG=nvm
@@ -114,6 +114,9 @@ STORPOOL_CLIENT_ID_SOURCES="LOCAL ONEHOST FROMHOST HOSTHOSTNAME BRIDGELIST CLONE
 DELAY_DELETE=48h
 #
 DISK_SNAPSHOT_FSFREEZE=0
+# datastore/cp to report iamge format (one 5.12+)
+DS_CP_REPORT_FORMAT=1
+
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -438,11 +441,40 @@ function storpoolApi()
     if boolTrue "DDEBUG_SP_RUN_CMD"; then
         splog "SP_API_HTTP_HOST=$SP_API_HTTP_HOST SP_API_HTTP_PORT=$SP_API_HTTP_PORT SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}}"
     fi
-    curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
-    --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
-    --max-time "${3:-300}" ${2:+-d "$2"} \
-    "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>/dev/null
-    splog "storpoolApi $1 $2 ret:$?"
+    if boolTrue "storpoolApiCmdline"; then
+
+        local apiCmd="curl -s -S -q -N -H 'Authorization: Storpool v1:$SP_AUTH_TOKEN' \
+        --connect-timeout '${SP_API_CONNECT_TIMEOUT:-1}' \
+        --max-time '${3:-300}' ${2:+-d '$2'} \
+        '$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1'"
+        echo "$apiCmd"
+    else
+        curl -s -S -q -N -H "Authorization: Storpool v1:$SP_AUTH_TOKEN" \
+        --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
+        --max-time "${3:-300}" ${2:+-d "$2"} \
+        "$SP_API_HTTP_HOST:${SP_API_HTTP_PORT:-81}/ctrl/1.0/$1" 2>/dev/null
+        splog "storpoolApi $1 $2 ret:$?"
+    fi
+}
+
+function volumesGroupSnapshotJson()
+{
+    local json= tags= tg=
+    while [ ${1:0:4} = "tag:" ]; do
+        tg="${1#tag:}"
+        [ -z "$tags" ] || tags+=","
+        tags+="\"${tg%%=*}\":\"${tg#*=}\""
+        shift
+    done
+    while [ -n "$2" ]; do
+        [ -z "$json" ] || json+=","
+        json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
+        shift 2
+    done
+    if [ -n "$json" ]; then
+        res="{\"volumes\":[$json]${tags:+,\"tags\":{$tags}}}"
+        echo "$res"
+    fi
 }
 
 function storpoolWrapper()
@@ -1159,6 +1191,18 @@ EOF
     fi
 }
 
+function oneImageInfo()
+{
+    local _IMAGE_ID="$1"
+    unset i XPATH_ELEMENTS
+    while read -u 5 element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done 5< <(oneimage show -x "$_IMAGE_ID" | xmlstarlet sel -t -m '/IMAGE' \
+            -v 'TEMPLATE/SHAREABLE')
+    unset i
+    IMAGE_TEMPLATE_SHAREABLE="${XPATH_ELEMENTS[i++]}"
+}
+
 function oneVmInfo()
 {
     local _VM_ID="$1" _DISK_ID="$2"
@@ -1200,11 +1244,14 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/FORMAT \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/READONLY \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/PERSISTENT \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SHAREABLE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/FS \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_ACTIVE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/HOTPLUG_SAVE_AS_SOURCE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
+                            /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/DATASTORE_ID \
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/TM_MAD \
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
@@ -1229,11 +1276,14 @@ function oneVmInfo()
     FORMAT="${XPATH_ELEMENTS[i++]}"
     READONLY="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
+    SHAREABLE="${XPATH_ELEMENTS[i++]}"
+    FS="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_ACTIVE="${XPATH_ELEMENTS[i++]}"
     HOTPLUG_SAVE_AS_SOURCE="${XPATH_ELEMENTS[i++]}"
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
+    IMAGE_DS_ID="${XPATH_ELEMENTS[i++]}"
     VM_TM_MAD="${XPATH_ELEMENTS[i++]}"
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     _TMP="${XPATH_ELEMENTS[i++]}"
@@ -1263,6 +1313,7 @@ ${VMPREVSTATE:+VMPREVSTATE=$VMPREVSTATE(${VmState[$VMPREVSTATE]}) }\
 ${CONTEXT_DISK_ID:+CONTEXT_DISK_ID=$CONTEXT_DISK_ID }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${IMAGE_ID:+IMAGE_ID=$IMAGE_ID }\
+${IMAGE_DS_ID:+IMAGE_DS_ID=$IMAGE_DS_ID }\
 ${CLONE:+CLONE=$CLONE }\
 ${SAVE:+SAVE=$SAVE }\
 ${TYPE:+TYPE=$TYPE }\
@@ -1270,6 +1321,8 @@ ${DRIVER:+DRIVER=$DRIVER }\
 ${FORMAT:+FORMAT=$FORMAT }\
 ${READONLY:+READONLY=$READONLY }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+${SHAREABLE:+SHAREABLE=$SHAREABLE }\
+${FS:+FS=$FS }\
 ${IMAGE:+IMAGE='$IMAGE' }\
 ${SIZE:+SIZE='$SIZE' }\
 ${ORIGINAL_SIZE:+ORIGINAL_SIZE='$ORIGINAL_SIZE' }\
@@ -1478,39 +1531,45 @@ function oneTemplateInfo()
                     /VM/TEMPLATE/DISK/CLUSTER_ID \
                     /VM/TEMPLATE/DISK/SOURCE \
                     /VM/TEMPLATE/DISK/PERSISTENT \
+                    /VM/TEMPLATE/DISK/SHAREABLE \
                     /VM/TEMPLATE/DISK/TYPE \
                     /VM/TEMPLATE/DISK/CLONE \
                     /VM/TEMPLATE/DISK/READONLY \
+                    /VM/TEMPLATE/DISK/IMAGE_ID \
                     /VM/TEMPLATE/DISK/FORMAT)
     unset i
     _DISK_TM_MAD=${XPATH_ELEMENTS[i++]}
-    _DISK_DATASTORE_ID=${XPATH_ELEMENTS[i++]}
+    _DISK_DS_ID=${XPATH_ELEMENTS[i++]}
     _DISK_ID=${XPATH_ELEMENTS[i++]}
     _DISK_CLUSTER_ID=${XPATH_ELEMENTS[i++]}
     _DISK_SOURCE=${XPATH_ELEMENTS[i++]}
     _DISK_PERSISTENT=${XPATH_ELEMENTS[i++]}
+    _DISK_SHAREABLE=${XPATH_ELEMENTS[i++]}
     _DISK_TYPE=${XPATH_ELEMENTS[i++]}
     _DISK_CLONE=${XPATH_ELEMENTS[i++]}
     _DISK_READONLY=${XPATH_ELEMENTS[i++]}
+    _DISK_IMAGE_ID=${XPATH_ELEMENTS[i++]}
     _DISK_FORMAT=${XPATH_ELEMENTS[i++]}
 
     _OLDIFS=$IFS
     IFS=";"
     DISK_TM_MAD_ARRAY=($_DISK_TM_MAD)
-    DISK_DATASTORE_ID_ARRAY=($_DISK_DATASTORE_ID)
+    DISK_DS_ID_ARRAY=($_DISK_DS_ID)
     DISK_ID_ARRAY=($_DISK_ID)
     DISK_CLUSTER_ID_ARRAY=($_DISK_CLUSTER_ID)
     DISK_SOURCE_ARRAY=($_DISK_SOURCE)
     DISK_PERSISTENT_ARRAY=($_DISK_PERSISTENT)
+    DISK_SHAREABLE_ARRAY=($_DISK_SHAREABLE)
     DISK_TYPE_ARRAY=($_DISK_TYPE)
     DISK_CLONE_ARRAY=($_DISK_CLONE)
     DISK_READONLY_ARRAY=($_DISK_READONLY)
+    DISK_IMAGE_ID_ARRAY=($_DISK_IMAGE_ID)
     DISK_FORMAT_ARRAY=($_DISK_FORMAT)
     IFS=$_OLDIFS
 
     boolTrue "DEBUG_oneTemplateInfo" || return 0
 
-    splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DATASTORE_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT"
+    splog "[oneTemplateInfo] disktm:$_DISK_TM_MAD ds:$_DISK_DS_ID disk:$_DISK_ID cluster:$_DISK_CLUSTER_ID src:$_DISK_SOURCE persistent:$_DISK_PERSISTENT type:$_DISK_TYPE clone:$_DISK_CLONE readonly:$_DISK_READONLY format:$_DISK_FORMAT shareable:$_DISK_SHAREABLE"
 #    echo $_TEMPLATE | base64 -d >/tmp/${ONE_PX}-template-${_VM_ID}-${0##*/}-${_VM_STATE}.xml
 }
 
@@ -1557,9 +1616,11 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/FORMAT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/SHAREABLE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/FSTYPE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SOURCE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TYPE \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/FS \
                     /DS_DRIVER_ACTION_DATA/IMAGE/CLONE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SAVE \
                     /DS_DRIVER_ACTION_DATA/IMAGE/DISK_TYPE \
@@ -1611,9 +1672,11 @@ function oneDsDriverAction()
     FORMAT="${XPATH_ELEMENTS[i++]}"
     IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
+    SHAREABLE="${XPATH_ELEMENTS[i++]}"
     FSTYPE="${XPATH_ELEMENTS[i++]}"
     SOURCE="${XPATH_ELEMENTS[i++]}"
     TYPE="${XPATH_ELEMENTS[i++]}"
+    FS="${XPATH_ELEMENTS[i++]}"
     CLONE="${XPATH_ELEMENTS[i++]}"
     SAVE="${XPATH_ELEMENTS[i++]}"
     DISK_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -1648,9 +1711,11 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=DEFINED }\
 ${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }\
 ${SOURCE:+SOURCE=$SOURCE }\
 ${PERSISTENT:+PERSISTENT=$PERSISTENT }\
+${SHAREABLE:+SHAREABLE=$SHAREABLE }\
 ${DRIVER:+DRIVER=$DRIVER }\
 ${FORMAT:+FORMAT=$FORMAT }\
 ${FSTYPE:+FSTYPE=$FSTYPE }\
+${FS:+FS=$FS }\
 ${TYPE:+TYPE=$TYPE }\
 ${CLONE:+CLONE=$CLONE }\
 ${SAVE:+SAVE=$SAVE }\
@@ -1771,6 +1836,7 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/CLONE \
         /VM/TEMPLATE/DISK/FORMAT \
         /VM/TEMPLATE/DISK/TYPE \
+        /VM/TEMPLATE/DISK/SHAREABLE \
         /VM/TEMPLATE/DISK/TM_MAD \
         /VM/TEMPLATE/DISK/TARGET \
         /VM/TEMPLATE/DISK/IMAGE_ID \
@@ -1778,6 +1844,7 @@ oneVmVolumes()
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/T_OS_NVRAM \
+        /VM/USER_TEMPLATE/VMSNAPSHOT_WITH_CHECKPOINT \
         /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     trapDel "rm -f \"$tmpXML\""
@@ -1788,6 +1855,7 @@ oneVmVolumes()
     local CLONE="${XPATH_ELEMENTS[i++]}"
     local FORMAT="${XPATH_ELEMENTS[i++]}"
     local TYPE="${XPATH_ELEMENTS[i++]}"
+    local SHAREABLE="${XPATH_ELEMENTS[i++]}"
     local TM_MAD="${XPATH_ELEMENTS[i++]}"
     local TARGET="${XPATH_ELEMENTS[i++]}"
     local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
@@ -1805,6 +1873,7 @@ oneVmVolumes()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
         T_OS_NVRAM="${_TMP}"
     fi
+    VMSNAPSHOT_WITH_CHECKPOINT="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     local IMG=
     _OFS=$IFS
@@ -1813,6 +1882,7 @@ oneVmVolumes()
     CLONE_A=($CLONE)
     FORMAT_A=($FORMAT)
     TYPE_A=($TYPE)
+    SHAREABLE_A=($SHAREABLE)
     TM_MAD_A=($TM_MAD)
     TARGET_A=($TARGET)
     IMAGE_ID_A=($IMAGE_ID)
@@ -1823,6 +1893,7 @@ oneVmVolumes()
         CLONE="${CLONE_A[$ID]}"
         FORMAT="${FORMAT_A[$ID]}"
         TYPE="${TYPE_A[$ID]}"
+        SHAREABLE="${SHAREABLE_A[$ID]}"
         TM_MAD="${TM_MAD_A[$ID]}"
         TARGET="${TARGET_A[$ID]}"
         DISK_ID="${DISK_ID_A[$ID]}"
@@ -1849,12 +1920,15 @@ oneVmVolumes()
                     IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
             esac
         fi
-        vmVolumes+="$IMG "
         if boolTrue "DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
+        vmVolumes+="$IMG "
         vmDisks=$((vmDisks+1))
         vmDisksMap+="$IMG:$DISK_ID "
+        if boolTrue "SHAREABLE"; then
+            oneVmVolumesShareable+="$IMG:$DISK_ID "
+        fi
     done
     if [ -n "$T_OS_NVRAM" ]; then
         IMG="${ONE_PX}-sys-${VM_ID}-NVRAM"
@@ -1870,7 +1944,7 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VC_POLICY:+ VC_POLICY=$VC_POLICY}"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VC_POLICY:+ VC_POLICY=$VC_POLICY}${VMSNAPSHOT_WITH_CHECKPOINT:+ VMSNAPSHOT_WITH_CHECKPOINT=$VMSNAPSHOT_WITH_CHECKPOINT}"
     fi
 }
 
@@ -2097,6 +2171,141 @@ else
     fi
     function ssh_forward(){ "$@"; }
 fi
+
+hostReachable()
+{
+    ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
+}
+
+function oneIsStandalone()
+{
+    if grep -q -i 'MODE=STANDALONE' "${ONE_HOME:-/var/lib/one}/config" &>/dev/null; then
+        if boolTrue "DEBUG_oneIsStandalone"; then
+            splog "oneIsStandalone: YES"
+        fi
+        return 0
+    else
+        splog "oneIsStandalone: NO (fedarated?$(grep FEDERATION= "${ONE_HOME:-/var/lib/one}/config"))"
+        return 1
+    fi
+}
+
+function isRaftLeader()
+{
+    local RET=1 ONE_CONFIG="${ONE_HOME:-/var/lib/one}/config"
+    # try detecting RAFT_LEADER_IP from opennebula's config
+    if [ -z "${RAFT_LEADER_IP}" ] && [ -f "$ONE_CONFIG" ]; then
+        #RAFT_LEADER_HOOK=ARGUMENTS=leader vlan11 10.163.1.250,COMMAND=raft/vip.sh
+        RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "${ONE_CONFIG}" | tail -n 1)"
+        if [ -n "$RAFT_IP" ]; then
+            RAFT_LEADER_IP="${RAFT_IP%%/*}"
+            RAFT_LEADER_IP="${RAFT_LEADER_IP%%,*}"
+        fi
+    fi
+    if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
+        tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
+        if [ "${tmp:0:5}" = "local" ]; then
+            if boolTrue "DEBUG_isRaftLeader"; then
+                splog "Found leader IP ($RAFT_LEADER_IP)."
+            fi
+            RET=0
+        else
+            if boolTrue "DEBUG_isRaftLeader"; then
+                splog "There is no leader IP found ($RAFT_LEADER_IP)."
+            fi
+        fi
+    else
+        if boolTrue "DDEBUG_isRaftLeader"; then
+            splog "RAFT_LEADER_IP:$RAFT_LEADER_IP"
+        fi
+        if oneIsStandalone; then
+            RET=0
+        fi
+    fi
+    return $RET
+}
+
+function shareableAttach()
+{
+    local HOST="$1" ENTRIES="$2" ENTRY= _LOCK=
+    local _DS_ID= _IMAGE_ID= _VM_ID= _DISK_ID= 
+    local _SP_VOL= _SP_MODE= _SP_TARGET= _S_PATH=
+    for ENTRY in ${ENTRIES}; do
+        arr=(${ENTRY//\// })
+        _DS_ID=${arr[0]}
+        _IMAGE_ID=${arr[1]}
+        _VM_ID=${arr[2]}
+        _DISK_ID=${arr[3]}
+        _SP_VOL=${arr[4]}
+        _SP_MODE=${arr[5]:-rw}
+        _SP_TARGET=${arr[6]:-volume}
+        _LOCK="/tmp/shareable-${_DS_ID}-${_IMAGE_ID}"
+        if boolTrue "DEBUG_SHAREABLE"; then
+            splog "shareableAttach: $HOST ${arr[*]}"
+        fi
+        exec 213>"$_LOCK"
+        if flock -x -w ${SHAREABLE_LOCK_WAIT:-60} 213; then
+            _S_PATH=".shareable/${_DS_ID}/${_IMAGE_ID}/${HOST}/${_VM_ID}-${_DISK_ID}"
+            storpoolVolumeAttach "$_SP_VOL" "$HOST" "$_SP_MODE" "$_SP_TARGET"
+            mkdir -p "$_S_PATH"
+            splog "shareableAttach: mkdir -p $_S_PATH ($?)"
+            flock -u 213
+        else
+            splog "shareableAttach: Timed out (${SHAREABLE_LOCK_WAIT:-60}) getting lock for $_LOCK"
+            return 1
+        fi
+    done
+}
+
+function shareableDetach()
+{
+    local HOST="$1" ENTRIES="$2" ENTRY= _LOCK= _S_PATH=
+    local _DS_ID= _IMAGE_ID= _VM_ID= _DISK_ID= _SP_VOL=
+    local SCOUNT=
+    for ENTRY in ${ENTRIES}; do
+        arr=(${ENTRY//\// })
+        _DS_ID=${arr[0]}
+        _IMAGE_ID=${arr[1]}
+        _VM_ID=${arr[2]}
+        _DISK_ID=${arr[3]}
+        _SP_VOL=${arr[4]}
+        _LOCK="/tmp/shareable-${_DS_ID}-${_IMAGE_ID}"
+        if boolTrue "DEBUG_SHAREABLE"; then
+            splog "shareableDetach: $HOST ${arr[*]}"
+        fi
+        exec 213>"$_LOCK"
+        if flock -x -w ${SHAREABLE_LOCK_WAIT:-60} 213; then
+            _S_PATH=".shareable/${_DS_ID}/${_IMAGE_ID}/${HOST}/${_VM_ID}-${_DISK_ID}"
+            if [ -d "$_S_PATH" ]; then
+                rmdir "$_S_PATH"
+                splog "rmdir $_S_PATH ($?)"
+            fi
+            _S_PATH="${_S_PATH%/*}"
+            SCOUNT=$(ls -1 ${_S_PATH} 2>/dev/null | wc -l)
+            splog "shareableDetach COUNT:$SCOUNT $_S_PATH/*"
+            if [ $SCOUNT -eq 0 ]; then
+                storpoolVolumeDetach "$_SP_VOL" "" "$HOST" "" "1"
+                if rmdir "${_S_PATH}" 2>/dev/null; then
+                    _S_PATH="${_S_PATH%/*}"
+                    if rmdir "${_S_PATH}" 2>/dev/null; then
+                        storpoolVolumeTag "$_SP_VOL" ";" "shareable;vc-policy"
+                        _S_PATH="${_S_PATH%/*}"
+                        if rmdir -p "${_S_PATH}" 2>/dev/null; then
+                            splog "shareableDetach: rmdir -p ${_S_PATH} (Success)"
+                        else
+                            splog "shareableDetach: rmdir -p ${_S_PATH} (Failed: more attachments)"
+                        fi
+                    fi
+                fi
+            fi
+        else
+            splog "shareableDetach: Timed out getting lock for $_LOCK"
+            return 1
+        fi
+        flock -u 213
+    done
+}
+
 # redefine own version of ssh_make_path()
 function ssh_make_path
 {
@@ -2123,9 +2332,3 @@ EOF`
         exit $SSH_EXEC_RC
     fi
 }
-
-hostReachable()
-{
-    ping -i 0.3 -c ${PING_COUNT:-2} "$1" >/dev/null
-}
-
