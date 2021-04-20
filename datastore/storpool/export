@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # -------------------------------------------------------------------------- #
-# Copyright 2015-2020, StorPool (storpool.com)                               #
+# Copyright 2015-2021, StorPool (storpool.com)                               #
 #                                                                            #
 # Portions copyright OpenNebula Project, OpenNebula Systems                  #
 #                                                                            #
@@ -40,7 +40,7 @@ source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
 DRV_ACTION=$1
 ID=$2
 
-#dumpTemplate $DRV_ACTION
+dumpTemplate "$DRV_ACTION"
 
 oneDsDriverAction "$DRIVER_PATH"
 
@@ -51,7 +51,9 @@ fi
 DST_HOST=`get_destination_host $ID`
 
 if [ -z "$DST_HOST" ]; then
-    error_message "Datastore template missing 'BRIDGE_LIST' attribute."
+    msg="Error: Datastore template missing 'BRIDGE_LIST' attribute."
+    splog "$msg"
+    error_message "$msg"
     exit -1
 fi
 
@@ -59,39 +61,84 @@ SP_VOL="${SOURCE#*/}"
 SP_SNAPSHOT="$SP_VOL-export-$(mktemp --dry-run XXXXXX)"
 SP_LINK="/dev/storpool/$SP_SNAPSHOT"
 
-
-# there is not code (yet) to handle the DISPOSE!=NO on the marketplace side
 DISPOSE="YES"
+
+if [ -n "$EXPORT_FILE_FORMAT" ]; then
+    case "${EXPORT_FILE_FORMAT,,}" in
+        raw)
+            EXPORT_FILE_FORMAT=raw
+            ;;
+        qcow*)
+            EXPORT_FILE_FORMAT=qcow
+            ;;
+        *)
+            msg="Error: Unsupported configuration! EXPORT_FILE_FORMAT '$EXPORT_FILE_FORMAT' but raw,qcow or nudefined variable expected"
+            splog "$msg"
+            error_message "$msg"
+            exit -1
+            ;;
+    esac
+    if [ "${EXPORT_FILE_FORMAT:0:4}" = "qcow" ]; then
+        QEMU_IMG_EXTRA_ARGS+=" -C"
+    fi
+fi
+
+EXPORT_DELETE="${ONE_LOCATION:-/var/lib/one}/remotes/datastore/storpool/export.delete"
+
+storpoolVolumeInfo "$SP_VOL"
+
+if [ -n "$V_SIZE" ]; then
+    SIZE="$((V_SIZE/1024/1024))"
+else
+    msg="Error: Can't get the SIZE of volume $SP_VOL "
+    splog "$msg"
+    error_message "$msg"
+    exit -1
+fi
 
 storpoolSnapshotCreate "$SP_SNAPSHOT" "$SP_VOL"
 
 storpoolVolumeAttach "$SP_SNAPSHOT" "$DST_HOST" "ro" "snapshot"
 
-if [ -n "$EXPORT_TO" ]; then
-    FORMAT="$EXPORT_TO"
+if [ -n "$EXPORT_FILE_FORMAT" ]; then
+    FORMAT="$EXPORT_FILE_FORMAT"
     EXPORT_FILE="${STAGING_DIR:-/var/tmp}/$SP_SNAPSHOT"
-    CMD=$(CAT<<EOF
-    $QEMU_IMG convert -O $EXPORT_TO $SP_LINK $STAGING_FILE
-    ${DU} -Lm ${STAGING_FILE} | cut -f1
+    CMD=$(cat <<EOF
+$QEMU_IMG convert -O $FORMAT $QEMU_IMG_EXTRA_ARGS $SP_LINK $EXPORT_FILE
+logger -t "ds_sp_export_r[$$]" -- "$QEMU_IMG convert -O $FORMAT $QEMU_IMG_EXTRA_ARGS $SP_LINK $EXPORT_FILE (\$?)"
+${DU} -Lm ${EXPORT_FILE} | cut -f1
 EOF
+)
+    splog "CMD=$CMD"
+    QCOW_SIZE=$(ssh_monitor_and_log "$DST_HOST" "$CMD" "export file convert ")
+    splog "$EXPORT_FILE SIZE=$SIZE QCOW_SIZE=$QCOW_SIZE ($?)"
     storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
     storpoolSnapshotDelete "$SP_SNAPSHOT"
-)
-    SIZE=$(ssh_monitor_and_log "$DST_HOST" "$CMD" "export file convert ")
-    if [ $? -eq 0 ]; then
-        # TODO ?
-        DISPOSE="YES"
-    fi
+    DISPOSE_CMD="$EXPORT_DELETE $DST_HOST $EXPORT_FILE"
 else
     FORMAT="raw"
     EXPORT_FILE="$SP_LINK"
+    DISPOSE_CMD="$EXPORT_DELETE $DST_HOST $EXPORT_FILE"
 fi
 
-CHECKSUM=$(ssh_monitor_and_log "$DST_HOST" "openssl dgst -md5 $EXPORT_FILE | cut -d' ' -f2" "export file checksum calc." 2>&1)
+splog "$EXPORT_FILE calculating checksum ..."
+CHECKSUM=$($SSH "$DST_HOST" "set -o pipefail&&openssl dgst -md5 $EXPORT_FILE | cut -d' ' -f2")
+RET=$?
+splog "$EXPORT_FILE CHECKSUM $CHECKSUM ($RET)"
+if [ $RET -ne 0 ]; then
+    msg="Error: Can't calculate MD5 checksum for $EXPORT_FILE"
+    splog "$msg"
+    error_message "$msg"
+    if [ -z "$EXPORT_FILE_FORMAT" ]; then
+        storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
+        storpoolSnapshotDelete "$SP_SNAPSHOT"
+    fi
+    exit -1
+fi
 
 IMPORT_SOURCE="ssh://$DST_HOST:$EXPORT_FILE"
 
-splog "IMPORT_SOURCE=$IMPORT_SOURCE MD5=$MD5 CHECKSUM=$CHECKSUM SIZE=$SIZE FORMAT=$FORMAT EXPORT_TO=$EXPORT_TO"
+splog "IMPORT_SOURCE=$IMPORT_SOURCE MD5=$CHECKSUM SIZE=$SIZE${QCOW_SIZE:+ QCOW_SIZE=$QCOW_SIZE} FORMAT=$FORMAT${EXPORT_FILE_FORMAT:+ EXPORT_FILE_FORMAT=$EXPORT_FILE_FORMAT} DISPOSE=$DISPOSE DISPOSE_CMD=$DISPOSE_CMD"
 
 cat <<EOF
 <IMPORT_INFO>
@@ -99,6 +146,7 @@ cat <<EOF
     <MD5><![CDATA[$CHECKSUM]]></MD5>
     <SIZE><![CDATA[$SIZE]]></SIZE>
     <FORMAT><![CDATA[$FORMAT]]></FORMAT>
-    <DISPOSE><![CDATA[$DISPOSE]]</DISPOSE>
-</IMPORT_INFO>"
+    <DISPOSE><![CDATA[$DISPOSE]]></DISPOSE>
+    <DISPOSE_CMD><![CDATA[$DISPOSE_CMD]]></DISPOSE_CMD>
+</IMPORT_INFO>
 EOF
