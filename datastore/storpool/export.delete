@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2021, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+DRIVER_PATH=$(dirname $0)
+LOG_PREFIX="ds"
+
+source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+
+DST_HOST="$1"
+FILE="$2"
+
+splog "DST_HOST:$DST_HOST FILE=$FILE"
+
+$SSH "$DST_HOST" "test -L \"$FILE\""
+RET=$?
+if [ $RET -eq 0 ]; then
+    splog "$SSH $DST_HOST test -L $FILE ($RET) -- symlink"
+    SP_SNAPSHOT="${FILE##*/}"
+    storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
+    storpoolSnapshotDelete "$SP_SNAPSHOT"
+else
+    splog "$SSH $DST_HOST test -L $FILE ($RET) -- not symlink"
+    $SSH "$DST_HOST" "rm -f \"$FILE\""
+    splog "$SSH \"$DST_HOST\" rm -f \"$FILE\" ($?)"
+fi
+splog "END $FILE"
