@@ -116,7 +116,8 @@ DELAY_DELETE=48h
 DISK_SNAPSHOT_FSFREEZE=0
 # datastore/cp to report iamge format (one 5.12+)
 DS_CP_REPORT_FORMAT=1
-
+# exclude CDROM images from VM Snapshots
+VMSNAPSHOT_EXCLUDE_CDROM=0
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -1909,6 +1910,10 @@ oneVmVolumes()
             if boolTrue "CLONE"; then
                 IMG+="-$VM_ID-$DISK_ID"
             elif [ "$TYPE" = "CDROM" ]; then
+                if boolTrue "VMSNAPSHOT_EXCLUDE_CDROM"; then
+                    splog "Image $IMAGE_ID excluded because TYPE=CDROM"
+                    continue
+                fi
                 IMG+="-$VM_ID-$DISK_ID"
             fi
         else
