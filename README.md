@@ -298,6 +298,22 @@ The addon will try to autodetect the leader IP address from oned configuration b
 echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
 ```
 
+* DS_CP_REPORT_FORMAT
+
+OpenNebula 6.0 introduces changes in the Image import function
+
+For OpenNebula up to _5.12.*_:
+
+```bash
+echo "DS_CP_REPORT_FORMAT=0" >> /var/lib/one/remotes/addon-storpoolrc
+```
+
+For OpenNebula 6+:
+
+```bash
+echo "DS_CP_REPORT_FORMAT=1" >> /var/lib/one/remotes/addon-storpoolrc
+```
+
 * If you plan to do live disk snapshots with fsfreeze via qemu-guest-agent but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the addon global configuration.
 
 ### Post-install
