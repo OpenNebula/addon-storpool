@@ -64,7 +64,7 @@ if t_uuid is not None:
     uuid_e = domain.find('./uuid')
     if uuid_e is None:
         uuid_e = ET.SubElement(domain, 'uuid')
-    uuid_e.text = t_uuid
+    uuid_e.text = t_uuid.text
     changed = 1
 
 if changed:
