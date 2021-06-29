@@ -97,7 +97,7 @@ if [ -n "$SIZE" ]; then
 fi
 
 if boolTrue "READONLY"; then
-    SP_MODE="ro"
+    SP_MODE="$READONLY_MODE"
 fi
 
 
