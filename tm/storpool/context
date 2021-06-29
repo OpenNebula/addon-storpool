@@ -160,8 +160,8 @@ else
 fi
 #-------------------------------------------------------------------------------
 # (re)attach readonly
-#-------------------------------------------------------------------------------
-storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+#------------------------------------------------------------------------------
+storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$READONLY_MODE"
 
 if boolTrue "TAG_CONTEXT_ISO"; then
     storpoolVolumeTag "$SP_VOL" "$VM_ID"

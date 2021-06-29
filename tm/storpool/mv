@@ -241,7 +241,7 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                     if [ -n "$DETACH_ONLY" ]; then
                         splog "$DETACH_ONLY"
                     else
-                        storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "ro"
+                        storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$READONLY_MODE"
                         if boolTrue "DO_SYMLINK"; then
                             oneSymlink "$DST_HOST" "$SP_LINK" "$CTX_PATH"
                         fi
@@ -466,7 +466,7 @@ else
             storpoolVolumeClone "$SP_VOL" "$CDROM_VOL" "$SP_TEMPLATE_CD"
             storpoolVolumeTag "$CDROM_VOL" "CDROM" "type"
         fi
-        SP_MODE="ro"
+        SP_MODE="$READONLY_MODE"
         SP_VOL="$CDROM_VOL"
     fi
     storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"

@@ -112,12 +112,12 @@ EOF
         tb=$(date +%s%N)
         splog "BEGIN snapshot $snap ($tb)"
         volume="${snap%-$SNAP_ID}"
-        [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="ro"
+        [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="$READONLY_MODE"
         storpoolVolumeDetach "$volume" "force" "$VMHOST" "all"
         storpoolVolumeInfo "$volume"
         OLD_SIZE_M=$((V_SIZE/1024/1024))
         if [ "$V_TYPE" = "CDROM"  ]; then
-            mode="ro"
+            mode="$READONLY_MODE"
         fi
         tmpVolume="${volume}-${SP_TMP}"
         storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null || finish=0
