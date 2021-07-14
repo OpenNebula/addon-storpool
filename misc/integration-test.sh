@@ -207,13 +207,13 @@ function vmTerminate()
 
 function vmSnapshotEnabled()
 {
-    grep -q snapshot_create-storpool ~oneadmin/config
+    grep -q snapshot_create-storpool ~oneadmin/config || return 1
 }
 
 function vmSnapshotCreate()
 {
     local n="${VM_NAME}-$1"
-    vmSnapshotEnabled || return
+    vmSnapshotEnabled || return 0
     hdr "Creating VM Snapshot '$n'"
     onevm snapshot-create "$VM_ID" "$n"
     waitforvm "$VM_NAME" runn || die "VM Snapshot create timed out"
@@ -225,7 +225,7 @@ function vmSnapshotCreate()
 function vmSnapshotRevert()
 {
     local n="${VM_NAME}-$1"
-    vmSnapshotEnabled || return
+    vmSnapshotEnabled || return 0
     hdr "Reverting VM Snapshot '$n'"
     local VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml |\
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
@@ -240,7 +240,7 @@ function vmSnapshotRevert()
 function vmSnapshotDelete()
 {
     local n="${VM_NAME}-$1"
-    vmSnapshotEnabled || return
+    vmSnapshotEnabled || return 0
     hdr "Deleting VM Snapshot '$n'"
     local VM_SNAPSHOT_ID=$(onevm show "$VM_ID" --xml |\
         xmlget "//SNAPSHOT[NAME=\"$n\"]" SNAPSHOT_ID)
