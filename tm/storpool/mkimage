@@ -137,14 +137,14 @@ if [ "${FSTYPE,,}" != "raw" ] || [ -n "$FS" ]; then
         R_HOST=`get_destination_host $VM_ID`
         storpoolVolumeAttach "$SP_VOL" "$R_HOST"
 
-        splog "run on $R_HOST $MKFS_CMD"
+        splog "ssh_exec_and_log $R_HOST $MKFS_CMD"
         ssh_exec_and_log "$R_HOST" "$MKFS_CMD" \
            "Error running $MKFS_CMD on $R_HOST"
     else
         storpoolVolumeAttach "$SP_VOL"
 
-        splog "run $MKFS_CMD"
-        exec_and_log "$MKFS_CMD" \
+        splog "multiline_exec_and_log $MKFS_CMD"
+        multiline_exec_and_log "$MKFS_CMD" \
            "Error running $MKFS_CMD"
     fi
 
