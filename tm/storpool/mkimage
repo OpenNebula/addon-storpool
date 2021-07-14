@@ -106,10 +106,14 @@ storpoolVolumeCheck "$SP_VOL"
 
 storpoolVolumeCreate "$SP_VOL" "$SIZE"M "$SP_TEMPLATE"
 
-if contains "${SUPPORTED_FS}" "${FS}" ","; then
-    splog "FS:'$FS' is SUPPORTED_FS:$SUPPORTED_FS"
+if type -t contains &>/dev/null; then
+    if contains "${SUPPORTED_FS}" "${FS}" ","; then
+        splog "FS:'$FS' is SUPPORTED_FS:$SUPPORTED_FS"
+    else
+        splog "FS:'$FS' not in SUPPORTED_FS:$SUPPORTED_FS"
+        FS=
+    fi
 else
-    splog "FS:'$FS' not in SUPPORTED_FS:$SUPPORTED_FS"
     FS=
 fi
 
