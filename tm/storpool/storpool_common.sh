@@ -120,6 +120,8 @@ DS_CP_REPORT_FORMAT=1
 VMSNAPSHOT_EXCLUDE_CDROM=0
 # libvirt 7.0.0 require cdrom volumes to be RW
 READONLY_MODE="rw"
+# do domfsfreezer when cloninfg a disk
+DISK_SAVEAS_FSFREEZE=0
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
