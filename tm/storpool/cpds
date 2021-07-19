@@ -60,7 +60,6 @@ oneVmInfo "$VM_ID" "$DISK_ID"
 
 SP_SRC=${SRC_PATH##*/}
 SP_DST="${SP_SRC}-${VM_ID}-${DISK_ID}"
-splog "DISK_ID=$DISK_ID SP_DST=$SP_DST"
 
 SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
@@ -74,14 +73,18 @@ else
 	SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 fi
 
+splog "DISK_ID=$DISK_ID SP_DST=$SP_DST SP_VOL=$SP_VOL SP_PARENT=$SP_PARENT${SP_TEMPLATE:+ SP_TEMPLATE=$SP_TEMPLATE}"
+
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
 storpoolVolumeDelete "$SP_VOL" "force" "snaps"
 
-oneFsfreeze "$SRC_HOST" "$DEPLOY_ID"
-trapAdd "oneFsthaw \"$SRC_HOST\" \"$DEPLOY_ID\""
+if boolTrue "DISK_SAVEAS_FSFREEZE"; then
+    oneFsfreeze "$SRC_HOST" "$DEPLOY_ID"
+    trapAdd "oneFsthaw \"$SRC_HOST\" \"$DEPLOY_ID\""
+fi
 
 if [ "$SNAP_ID" = "-1" ]; then
     storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
@@ -90,8 +93,10 @@ else
     storpoolSnapshotClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
 fi
 
-oneFsthaw "$SRC_HOST" "$DEPLOY_ID"
-trapReset
+if boolTrue "DISK_SAVEAS_FSFREEZE"; then
+    oneFsthaw "$SRC_HOST" "$DEPLOY_ID"
+    trapReset
+fi
 
 splog "END $VM_ID"
 exit 0
