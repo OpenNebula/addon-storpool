@@ -37,7 +37,6 @@ MKSWAP="/usr/sbin/mkswap"
 # Do not store the VM checkpoint on migrate
 #SP_CHECKPOINT=nomigrate
 
-
 # Save VM checkpoint file on a StorPool volume
 # To enable set to '1'
 # Default: 0 (disabled)

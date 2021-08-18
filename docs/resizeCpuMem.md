@@ -8,6 +8,8 @@ The functionality has the following limitations:
 * not compatible with OpenNebula's NUMA configuration
 * not compatible with hugepages
 
+Tested with OpenNebula 5.10 should work with 5.12, 6.0+ has native functionality
+
 ## Installation
 
 Enable the deploy-tweaks script:
@@ -41,16 +43,14 @@ systemctl restart opennebula
 
 ## Configuration
 
-
 To trigger the reconfiguration of the domain XML:
 
 * Set *T_VCPU_MAX* to enable VCPU hotplug
 * Set *T_MEMORY_MAX* to enable Memory hotplug 
 
-
 ## Usage
 
-After a VM is restarted and the new domain XML configuration is in place.
+After a VM is restarted and the new domain XML configuration is in place it is possible to change the number of VCPUs and the size of the VM Memory.
 
 ### VCPU change
 
