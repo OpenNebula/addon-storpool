@@ -21,7 +21,7 @@ More info:
 
 ## Compatibility
 
-Details could be found in [Support Life Cycles for OpenNebula Environments](https://kb.storpool.com/storpool_integrations/OpenNebula/support_lifecycle.html) document at the StorPool Knowledge Base.
+Details could be found in [Support Life Cycles for OpenNebula Environments](https://kb.storpool.com/storpool_integrations/OpenNebula/support_lifecycle.html) at the StorPool Knowledge Base.
 
 ## Requirements
 
