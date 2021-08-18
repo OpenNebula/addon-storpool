@@ -1,13 +1,13 @@
-### Deploy tweaks
+## Deploy tweaks
 
-#### Setup
+### Setup
 
-##### Installation
+#### Installation
 
 The scripts are installed with the default installation of addon-storpool
 
 
-##### Configuration
+#### Configuration
 
 The deploy-tweaks script is activated by replacing the upstream deploy script with a local one executed on the front-end node.
 
@@ -18,17 +18,17 @@ VM_MAD = [
 ```
 
 
-#### Usage
+### Usage
 
 The deploy-tweaks script is called on the active front-end node. The script call all found executable helpers in the `deploy-tweaks.d` folder one by one passing two files as arguments - a copy of the VM domain XML file and the OpenNebula's VM definition in XML format. The helper scripts overwrite the VM domain XML copy and on successful return code the VM domain XML is updated from the copy (and passed to the next helper).
 
 Once all helper scripts are processed the native _vmm/kvm/deploy_ script on the destination KVM host id called with the tweaked domain XML for VM deployment.
 
-##### context-cache.py
+#### context-cache.py
 
 Replaces the `devices/disk/driver` attributes _cache=none_ and _io=native_ on all found cdrom disks that had _type=file_ and _device=cdrom_
 
-##### cpu.py
+#### cpu.py
 
 * `domain/vcpu element` if missing (with default value '1')
 * definition for VCPU topology using defined with `USER_TEMPLATE/T_CPU_THREADS`, `USER_TEMPLATE/T_CPU_SOCKETS`
@@ -43,7 +43,7 @@ The script create/tweak the _cpu_ element of the domain XML.
 > Default values could be exported via the `kvmrc` file.
 
 
-#### T_CPU_SOCKETS and T_CPU_THREADS
+##### T_CPU_SOCKETS and T_CPU_THREADS
 
 Set the number of sockets and VCPU threads of the CPU topology.
 For example the following configuration represent VM with 8 VCPUs, in single socket with 2 threads:
@@ -63,43 +63,43 @@ T_CPU_THREADS = 2
   </cpu>
 ```
 
-#### Advanced
+##### Advanced
 
 The following variables were made available for use in some corner cases.
 
 > For advanced use only! A special care should be taken when mixing the variables as some of the options are not compatible when combined.
 
-##### T_CPU_MODE
+###### T_CPU_MODE
 
 Possible options: _custom_, _host-model_, _host-passthrough_.
 
 Special keyword _delete_ will instruct the helper to delete the element from the domain XML.
 
-##### T_CPU_FEATURES
+###### T_CPU_FEATURES
 
 Comma separated list of supported features. The policy could be added using a colon (':') as separator.
 
-##### T_CPU_MODEL
+###### T_CPU_MODEL
 
 The optional _fallback_ attribute could be set after the model, separated with a colon (':').
 The special keyword _delete_ will instruct the helper to delete the element.
 
-##### T_CPU_VENDOR
+###### T_CPU_VENDOR
 
 Could be set only when a `model` is defined.
 
-##### T_CPU_CHECK
+###### T_CPU_CHECK
 
 Possible options: _none_, _partial_, _full_.
 The special keyword _delete_ will instruct the helper to delete the element.
 
-##### T_CPU_MATCH
+###### T_CPU_MATCH
 
 Possible options: _minimum_, _exact_, _strict_.
 The special keyword _delete_ will instruct the helper to delete the element.
 
 
-### cpuShares.py
+#### cpuShares.py
 
 The script will reconfigure _/domain/cputune/shares_ using the folloing formula
 
@@ -107,31 +107,31 @@ The script will reconfigure _/domain/cputune/shares_ using the folloing formula
 
 Default for the _multiplier_ is _0.1_ and to change per VM set _USER_TEMPLATE/T_CPU_MUL_ variable
 
-#### T_CPUTUNE_MUL
+##### T_CPUTUNE_MUL
 
 Override VCPU _multiplier_ for the given VM
 
 `domain/cputune/shares` = VCPU * `USER_TEMPLATE/T_CPUTUNE_MUL` * 1024
 
-#### T_CPUTUNE_SHARES
+##### T_CPUTUNE_SHARES
 
 To override the above calculations and use the value for _/domain/cputune/shares/_ for the given VM.
 
 `domain/cputune/shares` =`USER_TEMPLATE/T_CPUTUNE_SHARES`
 
-##### disk-cache-io.py
+#### disk-cache-io.py
 
 Set disk `cache=none` and `io=native` for all StorPool backed disks
 
-##### feature_smm.py
+#### feature_smm.py
 
 See [UEFI boot](uefi_boot.md)
 
-##### hv-enlightenments.py
+#### hv-enlightenments.py
 
 Set HYPERV enlightenments features at `domain/features/hyperv` when defined `T_HV_SPINLOCKS`,T_HV_RELAXED`,`T_HV_VAPIC`,`T_HV_TIME`,`T_HV_CRASH`,`T_HV_RESET`,`T_HV_VPINDEX`,`T_HV_RUNTIME`,`T_HV_SYNC`,`T_HV_STIMER`,`T_HV_FEQUENCIES` (`T_HV_REENLIGHTENMENT`,`T_HV_TLBFLUSH`,`T_HV_IPI` and `T_HV_EVMCS`) with value _on_ or _1_ 
 
-##### hyperv-clock.py
+#### hyperv-clock.py
 
 The script add additional tunes to the _clock_ entry when the _hyperv_ feature is enabled in the domain XML.
 
@@ -150,7 +150,7 @@ The script add additional tunes to the _clock_ entry when the _hyperv_ feature i
 
 Note: Same could be done by editing `HYPERV_OPTIONS` variable in `/etc/one/vmm_exec/vmm_exec_kvm.conf`
 
-##### iothreads.py
+#### iothreads.py
 
 The script will define an [iothread](https://libvirt.org/formatdomain.html#elementsIOThreadsAllocation) and assign it to all virtio-blk disks and vitio-scsi controllers.
 
@@ -172,25 +172,25 @@ The script will define an [iothread](https://libvirt.org/formatdomain.html#eleme
 
 With OpenNebula 6.0+ use `USER_TEMPLATE/T_IOTHREADS_OVERRIDE` to override the default values)
 
-##### kvm-hide.py
+#### kvm-hide.py
 
 Set `domain/features/kvm/hidden[@state=on]` when `USER_TEMPLATE/T_KVM_HIDE` is defined
 
-##### os.py
+#### os.py
 
 Set/update `domain/os` element
 
 see [UEFI boot](uefi_boot.md)
 
-##### q35-pcie-root.py
+#### q35-pcie-root.py
 
 Update PCIe root ports when machine type `q35` is defined with the number defined in `USER_TEMPLATE/Q35_PCIE_ROOT_PORTS`
 
-##### resizeCpuMem.py
+#### resizeCpuMem.py
 
 See [Live resize CPU and Memory](resizeCpuMem.md)
 
-##### scsi-queues.py
+#### scsi-queues.py
 
 Set the number of `nqueues` for virtio-scsi controllers to match the number of VCPUs. This code is triggered when there are alredy defined number of quieues for a given VM.
 
@@ -205,13 +205,13 @@ Set the number of `nqueues` for virtio-scsi controllers to match the number of V
 </domain>
 ```
 
-##### uuid.py
+#### uuid.py
 
 Override/define `domain/uuid` with the value from `USER_TEMPLATE/T_UUID`
 
 Note: With OpenNebula 6.0+ same could be aciheved with `OS/DEPLOY_ID`.
 
-##### vfhostdev2interface.py
+#### vfhostdev2interface.py
 
 OpenNebula provides generic PCI passthrough definition using _hostdev_. But
 when it is used for NIC VF passthrough the VM's kernel assign random MAC
@@ -264,11 +264,11 @@ will be converted to
   </interface>
 ```
 
-##### video.py
+#### video.py
 
 Redefine `domain/devices/video` and using `USER_TEMPLATE/T_VIDEO_MODEL` with space separated list of attributes (_name=value_)
 
-##### volatile2dev.py
+#### volatile2dev.py
 
 The script will reconfigure the volatile disks from file to device when the VM disk's TM_MAD is _storpool_.
 
