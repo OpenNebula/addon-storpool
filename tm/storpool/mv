@@ -208,13 +208,13 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
         # check DISK_TM_MADS
+        STORPOOL_ONLY=1
+        for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
+            if [ "x${tm_mad/storpool/}" = "x$tm_mad" ]; then
+                STORPOOL_ONLY=0
+            fi
+        done
         if boolTrue "IS_UNDEPLOY"; then
-            STORPOOL_ONLY=1
-            for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
-                if [ "x${tm_mad/storpool/}" = "x$tm_mad" ]; then
-                    STORPOOL_ONLY=0
-                fi
-            done
             if boolTrue "STORPOOL_ONLY"; then
                 SKIP_UNDEPLOY_SSH=1
             fi
@@ -330,8 +330,12 @@ logger -t "tm_sp_mv_r[\$\$]" -- "END $VM_ID (\$ret)"
 exit \$ret
 EOF
 )
-                    splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
-                    ssh_forward ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
+                    if boolTrue "STORPOOL_ONLY"; then
+                        splog "All disks on StorPool datastores. SSH transfer skipped."
+                    else
+                        splog "Transfering $SRC_HOST:$SRC_PATH to $DST_HOST:$DST_DIR/$SRC_VM_DIR"
+                        ssh_forward ssh_exec_and_log "$SRC_HOST" "eval $TAR_SSH" "Error transferring SYSTEM_DS from $SRC_HOST to $DST_HOST"
+                    fi
                 fi
             fi
         fi
