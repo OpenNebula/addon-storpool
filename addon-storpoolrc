@@ -101,6 +101,16 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #DELAY_DELETE="48h"
 
+# Image export to custom Marketplace
+# using a qcow2 file on the bridge node
+# Disabled by default.
+#
+#EXPORT_FILE_FORMAT="qcow2"
+# compress skip caching
+#EXPORT_QEMU_IMG_ARGS="-c -T none -t none"
+# option to change the reported transport method
+#EXPORT_TRANSPORT=ssh
+
 #
 # variables enabling various Debuging
 

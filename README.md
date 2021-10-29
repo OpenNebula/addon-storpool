@@ -259,7 +259,7 @@ TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SH
 * Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool
 
 ```
-DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "" ]
+DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "export" ]
 ```
 
 * Edit `/etc/one/oned.conf` and append the following _VM_RESTRICTED_ATTR_

@@ -68,8 +68,8 @@ if [ -n "$EXPORT_FILE_FORMAT" ]; then
         raw)
             EXPORT_FILE_FORMAT=raw
             ;;
-        qcow*)
-            EXPORT_FILE_FORMAT=qcow
+        qcow|qcow2)
+            EXPORT_FILE_FORMAT="${EXPORT_FILE_FORMAT,,}"
             ;;
         *)
             msg="Error: Unsupported configuration! EXPORT_FILE_FORMAT '$EXPORT_FILE_FORMAT' but raw,qcow or nudefined variable expected"
@@ -78,9 +78,6 @@ if [ -n "$EXPORT_FILE_FORMAT" ]; then
             exit -1
             ;;
     esac
-    if [ "${EXPORT_FILE_FORMAT:0:4}" = "qcow" ]; then
-        QEMU_IMG_EXTRA_ARGS+=" -C"
-    fi
 fi
 
 EXPORT_DELETE="${ONE_LOCATION:-/var/lib/one}/remotes/datastore/storpool/export.delete"
@@ -104,9 +101,15 @@ if [ -n "$EXPORT_FILE_FORMAT" ]; then
     FORMAT="$EXPORT_FILE_FORMAT"
     EXPORT_FILE="${STAGING_DIR:-/var/tmp}/$SP_SNAPSHOT"
     CMD=$(cat <<EOF
-$QEMU_IMG convert -O $FORMAT $QEMU_IMG_EXTRA_ARGS $SP_LINK $EXPORT_FILE
-logger -t "ds_sp_export_r[$$]" -- "$QEMU_IMG convert -O $FORMAT $QEMU_IMG_EXTRA_ARGS $SP_LINK $EXPORT_FILE (\$?)"
-${DU} -Lm ${EXPORT_FILE} | cut -f1
+set -o pipefail
+logger -t "ds_sp_export_r[$$]" -- "Begin $EXPORT_FILE (\$?)"
+$QEMU_IMG convert $EXPORT_QEMU_IMG_ARGS -O $FORMAT $SP_LINK $EXPORT_FILE 2>&1 >"/tmp/export$$.log"
+logger -t "ds_sp_export_r[$$]" -- "$QEMU_IMG convert $EXPORT_QEMU_IMG_ARGS -O $FORMAT $SP_LINK $EXPORT_FILE (\$?)"
+while read -u 4 l; do
+  logger -t "ds_sp_export_r[$$]" -- "LOG:\$l"
+done 4< <("cat /tmp/export$$.log")
+rm -f "/tmp/export$$.log"
+${DU} -Lm "${EXPORT_FILE}" | cut -f1
 EOF
 )
     splog "CMD=$CMD"
@@ -136,7 +139,7 @@ if [ $RET -ne 0 ]; then
     exit -1
 fi
 
-IMPORT_SOURCE="ssh://$DST_HOST:$EXPORT_FILE"
+IMPORT_SOURCE="${EXPORT_TRANSPORT:-ssh}://$DST_HOST:$EXPORT_FILE"
 
 splog "IMPORT_SOURCE=$IMPORT_SOURCE MD5=$CHECKSUM SIZE=$SIZE${QCOW_SIZE:+ QCOW_SIZE=$QCOW_SIZE} FORMAT=$FORMAT${EXPORT_FILE_FORMAT:+ EXPORT_FILE_FORMAT=$EXPORT_FILE_FORMAT} DISPOSE=$DISPOSE DISPOSE_CMD=$DISPOSE_CMD"
 
