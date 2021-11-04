@@ -79,7 +79,7 @@ EOF
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "$snap vid:$vid"
         fi
-        snapVol="${snap%-ONESNAP*}"
+        snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
         if [ "$snapVol" = "$MEM_VOL" ]; then
             MEM_SNAP="$snap"
             continue

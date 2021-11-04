@@ -263,7 +263,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
                 fi
                 if boolTrue "MONITOR_VMSNAPSHOTS"; then
                     # mrs-img-150-ONESNAP-0-1580924156
-                    VMSNAP="${snapshot#*-ONESNAP-}"
+                    VMSNAP="${snapshot#*-${VMSNAPSHOT_TAG}-}"
                     SNAP_ID=${VMSNAP%%-*}
                     if [ -z "${SNAP_ID//[0-9]/}" ]; then
                         snap_size="${sp_data[$size_idx]}"

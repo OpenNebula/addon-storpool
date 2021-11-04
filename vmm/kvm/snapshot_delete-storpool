@@ -56,7 +56,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "$snap vid:$vid"
         fi
-        snapVol="${snap%-ONESNAP*}"
+        snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
         if [ -n "$vid" ]; then
             if [ "$VM_ID" != "$vid" ]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
