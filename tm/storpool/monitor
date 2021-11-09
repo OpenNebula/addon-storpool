@@ -306,7 +306,7 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
             base64 -w 0)"
         TIMESTAMP=0
-        HOST_ID=-1
+        HOST_ID=${MONITOR_HOST_ID:--1}
         echo "MONITOR_VM SUCCESS ${HOST_ID:-0} $TIMESTAMP $monitor_b64" | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
         ret=$?
         if boolTrue "DDEBUG_TM_MONITOR"; then
