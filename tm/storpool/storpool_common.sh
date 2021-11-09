@@ -26,6 +26,9 @@ PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
 function splog()
 {
     logger -t "${LOG_PREFIX:-tm}_sp_${0##*/}[$$]" "$(date +%s.%N) ${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
+    if [ -n "$LOG_TO_FILE" ] && [ -d /var/log/one ]; then
+        echo "$(date +'%F %X.%N %Z') ${LOG_PREFIX:-tm}_sp_${0##*/}[$$]:[${BASH_LINENO[-2]}] $*" >>/var/log/one/addon-storpool.log
+    fi
 }
 
 #-------------------------------------------------------------------------------
