@@ -160,7 +160,7 @@ case "$LCM_STATE" in
         DO_SYMLINK="yes"
     ;;
     *)
-        splog ">>> STATE=$VMSTATE LCM_STATE=$LCM_STATE <<<"
+        splog ">>> STATE=$VMSTATE(${VmState[$VMSTATE]}) LCM_STATE=$LCM_STATE(${LcmState[$LCM_STATE]}) <<<"
     ;;
 esac
 
