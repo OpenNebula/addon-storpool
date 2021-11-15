@@ -151,6 +151,12 @@ case "$LCM_STATE" in
         DO_CONTEXT="no"
         IS_UNDEPLOY=1
     ;;
+    43)
+        #-----------------------------------------------------------------------
+        # (re)create symlinks on PROLOG_MIGRATE_POWEROFF
+        #-----------------------------------------------------------------------
+        DO_SYMLINK="yes"
+    ;;
     6[01])
         #-----------------------------------------------------------------------
         # detach from all and attach to dst on PROLOG_MIGRATE_UNKNOWN[_FAILURE]
