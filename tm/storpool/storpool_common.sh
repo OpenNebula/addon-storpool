@@ -394,7 +394,7 @@ function storpoolGetIdONEHOST()
     oneHostInfo "$hst"
     if [ -n "$HOST_SP_OURID" ]; then
         if [ "${HOST_SP_OURID//[[:digit:]]/}" = "" ]; then
-            SP_OURID="$HOST_SP_OURID"
+            CLIENT_OURID="$HOST_SP_OURID"
             if boolTrue "DEBUG_SP_OURID"; then
                 splog "storpoolGetIdONEHOST($hst) SP_OURID=$SP_OURID"
             fi
