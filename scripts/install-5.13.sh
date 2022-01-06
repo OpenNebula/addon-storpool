@@ -182,6 +182,21 @@ for f in {save,restore}.storpool{,-pre,-post}; do
     fi
 done
 
+for mad in im vmm vnm; do
+    [ -d "patches/${mad}" ] || continue
+    for ver in ${ONE_VER} ${ONE_MAJOR}.${ONE_MINOR}; do
+        patchdir="${PWD}/patches/${mad}/${ver}"
+        [ -d "$patchdir" ] || continue
+        echo "*** Applying patches found in ${patchdir} ..."
+        pushd "${ONE_VAR}"
+        while read -u 5 patchfile; do
+            do_patch "$patchfile" "backup"
+        done 5< <(ls -1 $patchdir/*.patch)
+        popd
+        break 1
+    done
+done
+
 echo -n "*** addon-storpoolrc "
 if [ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
     echo "(found)"
