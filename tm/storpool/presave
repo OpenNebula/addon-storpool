@@ -27,13 +27,14 @@ DEPLOY_ID=$1
 FILE=$2
 HVHOST=$3
 VM_ID=$4
-DS_ID=$5
+HVHOST2=$5
 
 splog "$*"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-
-    DRV_MESSAGE="$(cat)"
+    DS_ID_A=( ${FILE//\// } )
+    DS_ID="${DS_ID_A[-3]}"
+    oneDatastoreInfo "$DS_ID"
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 

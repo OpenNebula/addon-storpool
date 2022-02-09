@@ -48,6 +48,8 @@ fi
 
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
+    oneDatastoreInfo "$VM_DS_ID"
+
     declare -A vmVolumesMap diskVolumes
     for v in $vmVolumes; do
         diskVolumes["$v"]="$v"
