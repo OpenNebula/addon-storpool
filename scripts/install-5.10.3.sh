@@ -179,27 +179,20 @@ echo "*** Copy VM checkpoint helpers to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp $CP_ARG "$CWD/vmm/kvm/"{save,restore}.storpool* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"{save,restore}.storpool*
 
-echo "*** VMM checkpoint to block device patch ..."
-pushd "$ONE_VAR"
-    do_patch "$CWD/patches/vmm/${ONE_VER}/save.patch" "backup"
-    do_patch "$CWD/patches/vmm/${ONE_VER}/restore.patch" "backup"
-    do_patch "$CWD/patches/vmm/${ONE_VER}/attach_disk.patch" "backup"
-popd
-
-echo "*** im/kvm-probe.d/monitor_ds.sh patch ..."
-pushd "$ONE_VAR" >/dev/null
-    do_patch "$CWD/patches/im/$ONE_VER/00-monitor_ds.patch"
-popd >/dev/null
-
-echo "*** tm/shared/monitor patch ..."
-pushd "$ONE_VAR" >/dev/null
-    do_patch "$CWD/patches/tm/$ONE_VER/00-shared-monitor.patch" "backup"
-popd >/dev/null
-
-echo "*** tm/ssh/monitor patch ..."
-pushd "$ONE_VAR" >/dev/null
-    do_patch "$CWD/patches/tm/$ONE_VER/00-ssh-monitor_ds.patch" "backup"
-popd >/dev/null
+for mad in tm im vmm vnm; do
+    [ -d "patches/${mad}" ] || continue
+    for ver in ${ONE_VER} ${ONE_MAJOR}.${ONE_MINOR}; do
+        patchdir="${PWD}/patches/${mad}/${ver}"
+        [ -d "$patchdir" ] || continue
+        echo "*** Applying patches found in ${patchdir} ..."
+        pushd "${ONE_VAR}"
+        while read -u 5 patchfile; do
+            do_patch "$patchfile" "backup"
+        done 5< <(ls -1 $patchdir/*.patch)
+        popd
+        break 1
+    done
+done
 
 echo -n "*** addon-storpoolrc "
 if [ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]; then
