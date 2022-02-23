@@ -10,19 +10,19 @@
 +    while read -u 4 qdev tray_open inserted_file locked; do
 +        logger -t "vmm_sp_rec" -- "$qdev locked:$locked tray_open:$tray_open file:$inserted_file //loop"
 +        if [ "${inserted_file##*/}" == "${ISO_PATH##*/}" ]; then
-+            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"eject\",\"arguments\":{\"id\":\"$qdev\"}}" &>"/tmp/json-rec-${DOMAIN}-eject"
++            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"eject\",\"arguments\":{\"id\":\"$qdev\"}}"
 +            logger -t "vmm_sp_rec" -- "qemu-monitor-command $DOMAIN --cmd '{\"execute\":\"eject\",\"arguments\":{\"id\":\"$qdev\"}}' ($?)"
-+            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}" &>"/tmp/json-rec-${DOMAIN}-open-tray"
++            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}"
 +            logger -t "vmm_sp_rec" -- "qemu-monitor-command $DOMAIN --cmd {\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}} ($?)"
 +            devid="$qdev"
 +        fi
 +	if [ "$inserted_file" == "null" ] && [ "$tray_open" == "false" ]; then
-+            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}" &>"/tmp/json-rec${DOMAIN}-open-tray"
++            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}"
 +            logger -t "vmm_sp_rec" -- "qemu-monitor-command $DOMAIN --cmd {\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}} ($?)"
 +            devid="$qdev"
 +        fi
 +    done 4< <(virsh --connect $LIBVIRT_URI \
-+        qemu-monitor-command "$DOMAIN" --cmd '{"execute":"query-block"}' | tee "/tmp/json-rec-${DOMAIN}-query" |\
++        qemu-monitor-command "$DOMAIN" --cmd '{"execute":"query-block"}' |\
 +        jq -r '.return[]|select(.removable)|.qdev+" "+(.tray_open|tostring)+" "+(.inserted.file|tostring)+" "+(.locked|tostring)' || true)
 +
 +    cnt=0

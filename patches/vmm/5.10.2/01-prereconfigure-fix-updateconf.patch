@@ -23,19 +23,19 @@
 +        logger -t "vmm_sp_pre" -- "$qdev locked:$locked tray_open:$tray_open file:$inserted_file //loop"
 +        if [ "${inserted_file##*/}" == "${disk##*/}" ]; then
 +            QDEV="$qdev"
-+            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"eject\",\"arguments\":{\"id\":\"$qdev\"}}" &>"/tmp/json-pre-${DOMAIN}-eject"
++            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"eject\",\"arguments\":{\"id\":\"$qdev\"}}"
 +            logger -t "vmm_sp_pre" -- "qemu-monitor-command $DOMAIN --cmd '{\"execute\":\"eject\",\"arguments\":{\"id\":\"$qdev\"}}' ($?)"
-+            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}" &>"/tmp/json-pre-${DOMAIN}-open-tray"
++            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}"
 +            logger -t "vmm_sp_pre" -- "qemu-monitor-command $DOMAIN --cmd {\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}} ($?)"
 +            devid=$qdev
 +        fi
 +	if [ "$inserted_file" == "null" ] && [ "$tray_open" == "false" ]; then
-+            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}" &>"/tmp/json-${DOMAIN}-open-tray"
++            virsh --connect $LIBVIRT_URI qemu-monitor-command "$DOMAIN" --cmd "{\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}}"
 +            logger -t "vmm_sp_pre" -- "qemu-monitor-command $DOMAIN --cmd {\"execute\":\"blockdev-open-tray\",\"arguments\":{\"id\":\"$qdev\"}} ($?) tray_open"
 +            devid=$qdev
 +        fi
 +    done 4< <(virsh --connect $LIBVIRT_URI \
-+        qemu-monitor-command "$DOMAIN" --cmd '{"execute":"query-block"}' | tee "/tmp/json-pre-${DOMAIN}-query" |\
++        qemu-monitor-command "$DOMAIN" --cmd '{"execute":"query-block"}' |\
 +        jq -r '.return[]|select(.removable)|.qdev+" "+(.tray_open|tostring)+" "+(.inserted.file|tostring)+" "+(.locked|tostring)' || true)
 +    cnt=0
 +    [ -z "$devid" ] || while : ; do
