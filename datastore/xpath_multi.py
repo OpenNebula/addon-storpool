@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2021, StorPool (storpool.com)                               #
@@ -26,6 +26,8 @@
 #  cat XMLfile | xpath_mylti.py -s XPATH
 #  cat base64XMLfile | xpath_mylti.py -s -b XPATH
 #--------------------------------------------------------------------------- #
+
+from __future__ import print_function
 
 from sys import argv, stdin
 from base64 import b64decode
@@ -73,4 +75,4 @@ for arg in args:
                 out.append( '{0}'.format( entry.text ) )
         else:
             out.append( '{0}'.format( e.findtext( a, '' ) ) )
-    print ";".join( out )
+    print( ";".join( out ) )
