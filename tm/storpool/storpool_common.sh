@@ -1954,6 +1954,7 @@ oneVmVolumes()
     if [ -n "$DISK_ID" ]; then
         IMG="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
         vmVolumes+="$IMG "
+        vmDisksMap+="$IMG:$DISK_ID "
         if boolTrue "DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
