@@ -125,6 +125,8 @@ VMSNAPSHOT_EXCLUDE_CDROM=0
 READONLY_MODE="rw"
 # do domfsfreezer when cloninfg a disk
 DISK_SAVEAS_FSFREEZE=0
+# tag contextualization iso with nvm (and vc-policy tags)
+TAG_CONTEXT_ISO=1
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1

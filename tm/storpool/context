@@ -164,7 +164,7 @@ fi
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$READONLY_MODE"
 
 if boolTrue "TAG_CONTEXT_ISO"; then
-    storpoolVolumeTag "$SP_VOL" "$VM_ID"
+    storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
 fi
 
 MONITOR_TM_MAD=
