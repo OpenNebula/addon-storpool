@@ -88,7 +88,7 @@ Folloing the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-sto
 
 The installation instructions are for OpenNebula 5.10+.
 
-If you are upgrading addon-storpoop please read the [Upgrade notes](#upgrade-notes) first!
+If you are upgrading addon-storpool please read the [Upgrade notes](#upgrade-notes) first!
 
 ### Pre-install
 
