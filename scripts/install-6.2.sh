@@ -1,1 +1,1 @@
-install-5.13.sh
+install-6.0.sh
