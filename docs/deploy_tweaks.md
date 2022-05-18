@@ -9,7 +9,7 @@ The scripts are installed with the default installation of addon-storpool
 
 #### Configuration
 
-The deploy-tweaks script is activated by replacing the upstream deploy script with a local one executed on the front-end node.
+The deploy-tweaks script is activated by replacing the upstream deploy script with a local one executed on the front-end node which chainload the original script at the end.
 
 ```
 VM_MAD = [
@@ -20,7 +20,7 @@ VM_MAD = [
 
 ### Usage
 
-The deploy-tweaks script is called on the active front-end node. The script call all found executable helpers in the `deploy-tweaks.d` folder one by one passing two files as arguments - a copy of the VM domain XML file and the OpenNebula's VM definition in XML format. The helper scripts overwrite the VM domain XML copy and on successful return code the VM domain XML is updated from the copy (and passed to the next helper).
+The deploy-tweaks script is called on the active front-end node. The script call all executable helpers found in the `deploy-tweaks.d` folder one by one passing two files as arguments - a copy of the VM domain XML file and the OpenNebula's VM definition in XML format. The helper scripts overwrite the VM domain XML copy and on successful return code the VM domain XML is updated from the copy (and passed to the next helper).
 
 Once all helper scripts are processed the native _vmm/kvm/deploy_ script on the destination KVM host id called with the tweaked domain XML for VM deployment.
 
@@ -300,5 +300,123 @@ VM_MAD = [
     ARGUMENTS = "... -l deploy=deploy-tweaks,attach_disk=attach_disk.storpool",
     ...
 ]
+```
+
+#### sysinfo_smbios.py
+
+Adds smbios information to the VMs. An entry in the OS element is created to enable the smbios sysinfo:
+
+```xml
+<os>
+  <smbios mode="sysinfo"/>
+</os>
+```
+
+When at least one of the folling variables are defined in the USER_TEMPLATE
+
+##### T_SMBIOS_BIOS
+
+A list of variables in format `key=value` separated by a semi-colon. The following example:
+
+```
+USER_TEMPLATE/T_SMBIOS_BIOS="vendor=BVendor;version=BVersion;date=05/13/2022;release=42.42"
+```
+Will generate the following element in the domain XML:
+
+```xml
+  <sysinfo type="smbios">
+    ...
+    <bios>
+      <entry name="vendor">BVendor</entry>
+      <entry name="version">BVersion</entry>
+      <entry name="date">05/13/2022</entry>
+      <entry name="release">42.42</entry>
+    </bios>
+  </sysinfo>
+```
+
+Note the special formating of the *date* and *release* elements in the libvirt documentation!
+
+##### T_SMBIOS_SYSTEM
+
+A list of variables in format `key=value` separated by a semi-colon. The following example:
+
+```
+USER_TEMPLATE/T_SMBIOS_SYSTEM="manufacturer=SManufacturer;product=SProduct;version=SVersion;serial=SSerial;sku=SSKU;family=SFamily"
+```
+Will generate the following element in the domain XML:
+
+```xml
+  <sysinfo type="smbios">
+    <system>
+      <entry name="manufacturer">SManufacturer</entry>
+      <entry name="product">SProduct</entry>
+      <entry name="version">SVersion</entry>
+      <entry name="serial">SSerial</entry>
+      <entry name="sku">SSKU</entry>
+      <entry name="family">SFamily</entry>
+    </system>
+  </sysinfo>
+```
+
+##### T_SMBIOS_BASEBOARD
+
+A list of variables in format `key=value` separated by a semi-colon. The following example:
+
+```
+USER_TEMPLATE/T_SMBIOS_BASEBOARD="manufacturer=BBManufacturer;version=BBVersion;serial=BBSerial;product=BBProduct;asset=BBAsset;location=BBLocation"
+```
+Will generate the following element in the domain XML:
+
+```xml
+  <sysinfo type="smbios">
+    <baseBoard>
+      <entry name="manufacturer">BBManufacturer</entry>
+      <entry name="version">BBVersion</entry>
+      <entry name="serial">BBSerial</entry>
+      <entry name="product">BBProduct</entry>
+      <entry name="asset">BBAsset</entry>
+      <entry name="location">BBLocation</entry>
+    </baseBoard>
+  </sysinfo>
+```
+
+##### T_SMBIOS_CHASSIS
+
+A list of variables in format `key=value` separated by a semi-colon. The following example:
+
+```
+USER_TEMPLATE/T_SMBIOS_CHASSIS="manufacturer=CManufacturer;version=CVersion;serial=CSerial;asset=CAsset;sku=CSKU"
+```
+Will generate the following element in the domain XML:
+
+```xml
+  <sysinfo type="smbios">
+    <chassis>
+      <entry name="manufacturer">CManufacturer</entry>
+      <entry name="version">CVersion</entry>
+      <entry name="serial">CSerial</entry>
+      <entry name="asset">CAsset</entry>
+      <entry name="sku">CSKU</entry>
+    </chassis>
+  </sysinfo>
+```
+
+##### T_SMBIOS_OEMSTRINGS
+
+A list of strings separated by a semi-colon. The following example:
+
+```
+USER_TEMPLATE/T_SMBIOS_OEMSTRINGS="myappname:some arbitrary data;otherappname:more arbitrary data"
+```
+Will generate the following element in the domain XML:
+
+```xml
+  <sysinfo type="smbios">
+    <oemStrings>
+      <entry>myappname:some arbitrary data</entry>
+      <entry>otherappname:more arbitrary data</entry>
+    </oemStrings>
+  </sysinfo>
 ```
 
