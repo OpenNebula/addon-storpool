@@ -58,6 +58,8 @@ option = vm.find('.//USER_TEMPLATE/T_KVM_HIDE')
 if option is not None:
     if option.text.lower() in ['on','1']:
         features = root.find('./features')
+        if features is None:
+            features = ET.SubElement(root, 'features')
         kvm = ET.SubElement(features, 'kvm')
         kvm.append(ET.Element('hidden', state='on'))
         changed = 1
