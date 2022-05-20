@@ -16,7 +16,7 @@
 # limitations under the License.
 #---------------------------------------------------------------------------
 ---
-"/var/lib/one/remotes/addon_storpoolrc":
+"/var/lib/one/remotes/addon-storpoolrc":
   :lens: Shellvars.lns
   :apply:
     version_defaults:
