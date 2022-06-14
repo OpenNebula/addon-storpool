@@ -38,6 +38,7 @@ for snap in $snaps; do
 done
 
 tmpDir="$(mktemp -d -p ${ONE_RUNDIR:-/var/run/one} migrate-XXXXXXXX)"
+trap "rm -rf $tmpDir" EXIT QUIT
 
 deployXML="$tmpDir/${deploy_id}.xml"
 virsh --connect $QEMU_PROTOCOL://$src_host/system dumpxml --migratable $deploy_id >"$deployXML"
