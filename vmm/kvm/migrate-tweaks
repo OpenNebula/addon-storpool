@@ -62,8 +62,9 @@ MIGRATE_OPTIONS+=" --xml $deployXML"
 splog "MIGRATE_OPTIONS=$MIGRATE_OPTIONS"
 
 virsh --connect $QEMU_PROTOCOL://$src_host/system \
-    migrate --live $deploy_id $MIGRATE_OPTIONS $QEMU_PROTOCOL://$dest_host/system
+    migrate --live $MIGRATE_OPTIONS $deploy_id $QEMU_PROTOCOL://$dest_host/system --xml $deployXML
 ret=$?
+splog "($ret) virsh --connect $QEMU_PROTOCOL://$src_host/system migrate --live $MIGRATE_OPTIONS $deploy_id $QEMU_PROTOCOL://$dest_host/system --xml $deployXML"
 
 rm -rf "$tmpDir"
 
