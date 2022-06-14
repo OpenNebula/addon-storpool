@@ -50,16 +50,14 @@ onevm show -x "$vm_id" >"$vmMetaXml"
 if [ -d "${0}.d" ]; then
     while read -u 4 helper; do
         if [ -x "$helper" ]; then
-            splog "calling $helper $deployXML $vmMetaXml"
             $helper "$deployXML" "$vmMetaXml"
+            splog "($?) $helper $deployXML $vmMetaXml"
         fi
     done 4< <(find ${0}.d -type f -o -type l)
 fi
 
 rm -f "$vmMetaXml"
 
-MIGRATE_OPTIONS+=" --xml $deployXML"
-splog "MIGRATE_OPTIONS=$MIGRATE_OPTIONS"
 
 virsh --connect $QEMU_PROTOCOL://$src_host/system \
     migrate --live $MIGRATE_OPTIONS $deploy_id $QEMU_PROTOCOL://$dest_host/system --xml $deployXML
