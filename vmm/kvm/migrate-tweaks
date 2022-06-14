@@ -40,7 +40,7 @@ done
 tmpDir="$(mktemp -d -p ${ONE_RUNDIR:-/var/run/one} migrate-XXXXXXXX)"
 
 deployXML="$tmpDir/${deploy_id}.xml"
-virsh --connect $QEMU_PROTOCOL://$src_host/system dumpxml $deploy_id >"$deployXML"
+virsh --connect $QEMU_PROTOCOL://$src_host/system dumpxml --migratable $deploy_id >"$deployXML"
 splog "($?) virsh --connect $QEMU_PROTOCOL://$src_host/system dumpxml"
 
 vm_id="${deploy_id#one-}"
