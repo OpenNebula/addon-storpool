@@ -1,0 +1,28 @@
+--- a/remotes/vmm/kvm/migrate.orig
++++ a/remotes/vmm/kvm/migrate
+@@ -88,6 +88,25 @@
+ DISKS=$(virsh --connect $LIBVIRT_URI domblklist "$DEPLOY_ID" \
+     | tail -n+3 | grep -v "^$" | awk '{print $1 "," $2}')
+ 
++if [ "${MIGRATE_OPTIONS//--postcopy/}" != "$MIGRATE_OPTIONS" ]; then
++    if [ "${MIGRATE_OPTIONS//--timeout-postcopy/}" == "$MIGRATE_OPTIONS" ]; then
++        MIGRATE_OPTIONS+=" --timeout-postcopy"
++    fi
++    if [ "${MIGRATE_OPTIONS//--timeout=/}" == "$MIGRATE_OPTIONS" ]; then
++        memEntry="$(virsh --connect $LIBVIRT_URI dumpxml "$DEPLOY_ID" | grep "<memory ")"
++        memEntry="${memEntry#*>}"
++        memEntry="${memEntry%<*}"
++        if [ -n "$memEntry" ] && [ -z "${memEntry//[[:digit:]]/}" ]; then
++            memGB=$((memEntry/1024**2))
++            if [ $memGB -gt 0 ] ; then
++                MIGRATE_TIMEOUT=$((memGB*2))
++            fi
++        fi
++        MIGRATE_OPTIONS+=" --timeout=${MIGRATE_TIMEOUT:-600}"
++    fi
++    logger -t vmm_sp_migrate -- "$DEPLOY_ID memory=$memEntry $MIGRATE_OPTIONS"
++    log "MIGRATE_OPTIONS: $MIGRATE_OPTIONS"
++fi
+ 
+ unset i j XPATH_ELEMENTS
+ while IFS= read -r -d '' element; do
