@@ -1,0 +1,29 @@
+--- a/remotes/vmm/kvm/migrate
++++ b/remotes/vmm/kvm/migrate
+@@ -22,6 +22,26 @@
+ deploy_id=$1
+ dest_host=$2
+ 
++if [ "${MIGRATE_OPTIONS//--postcopy/}" != "$MIGRATE_OPTIONS" ]; then
++    if [ "${MIGRATE_OPTIONS//--timeout-postcopy/}" == "$MIGRATE_OPTIONS" ]; then
++        MIGRATE_OPTIONS+=" --timeout-postcopy"
++    fi
++    if [ "${MIGRATE_OPTIONS//--timeout=/}" == "$MIGRATE_OPTIONS" ]; then
++        memEntry="$(virsh --connect $LIBVIRT_URI dumpxml "$deploy_id" | grep "<memory ")"
++        memEntry="${memEntry#*>}"
++        memEntry="${memEntry%<*}"
++        if [ -n "$memEntry" ] && [ -z "${memEntry//[[:digit:]]/}" ]; then
++            memGB=$((memEntry/1024**2))
++            if [ $memGB -gt 0 ] ; then
++                MIGRATE_TIMEOUT=$((memGB*2))
++            fi
++        fi
++        MIGRATE_OPTIONS+=" --timeout=${MIGRATE_TIMEOUT:-600}"
++    fi
++    logger -t vmm_sp_migrate -- "$deploy_id memory=$memEntry $MIGRATE_OPTIONS"
++    log "MIGRATE_OPTIONS: $MIGRATE_OPTIONS"
++fi
++
+ # migration can't be done with domain snapshots, drop them first
+ snaps=$(monitor_and_log \
+    "virsh --connect $LIBVIRT_URI snapshot-list $deploy_id --name 2>/dev/null" \
