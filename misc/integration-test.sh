@@ -409,7 +409,7 @@ else
 	
 	if ! onetemplate show "$VM_TEMPLATE_NAME" &> /dev/null; then
         imageDelete "$VM_TEMPLATE_NAME"
-		TEMPLATE_ID="$(onemarketapp list -f NAME~'Ubuntu 18.04' -l ID,NAME,TYPE,STAT --csv |\
+		TEMPLATE_ID="$(onemarketapp list -f NAME~'Alpine Linux' -l ID,NAME,TYPE,STAT --csv |\
             grep 'img,rdy' | tail -n 1 | cut -d, -f 1)"
 		hdr "Downloading template $TEMPLATE_ID from OpenNebula Marketplace as '$VM_TEMPLATE_NAME'"
 		if onemarketapp export "$TEMPLATE_ID" "$VM_TEMPLATE_NAME" --datastore "$IMAGE_DS_ID" \
