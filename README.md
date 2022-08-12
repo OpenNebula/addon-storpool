@@ -99,6 +99,13 @@ If you are upgrading addon-storpool please read the [Upgrade notes](#upgrade-not
 yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint
 ```
 
+```bash
+# Ubuntu front-end
+apt -y install tar jq xmlstarlet netcat pigz python-lxml libxml2-utils
+```
+
+_Please check the alternatives that there is python available_
+
 #### node dependencies
 
  :grey_exclamation:*use when adding new hosts too*:grey_exclamation:
@@ -106,6 +113,13 @@ yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint
 ```bash
 yum -y install --enablerepo=epel jq python-lxml xmlstarlet tar
 ```
+
+```bash
+# Ubuntu
+apt -y install jq xmlstarlet pigz python-lxml libxml2-utils tar
+```
+
+_Please check the alternatives that there is python available_
 
 ### Get the addon from github
 
