@@ -96,7 +96,7 @@ If you are upgrading addon-storpool please read the [Upgrade notes](#upgrade-not
 
 ```bash
 # on the front-end
-yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar
+yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint
 ```
 
 #### node dependencies
