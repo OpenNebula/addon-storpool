@@ -55,14 +55,19 @@ for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 
+t_iothreads_e = vm.find('.//T_IOTHREADS_OVERRIDE')
+if t_iothreads_e is not None:
+    if t_iothreads_e.text == '0':
+        print('T_IOTHREADS_OVERRIDE=0, Bail out!', file=stderr)
+        exit(1)
 iothreads = root.find('./iothreads')
 if iothreads is None:
     iothreads = ET.SubElement(root, 'iothreads')
 else:
-    t_iothreads_e = vm.find('.//T_IOTHREADS_OVERRIDE')
     if t_iothreads_e is None:
         print('Found iothreads={}, but T_IOTHREADS_OVERRIDE is not set'.format(iothreads.text), file=stderr)
         exit(1)
+
 iothreads.text = "1"
 
 # virtio-blk
