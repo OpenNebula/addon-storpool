@@ -16,7 +16,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-set -e
+set -e -o pipefail
 
 SLP=${SLP:-1}
 
@@ -30,6 +30,7 @@ DATA_DIR="$0.DATA"
 #KEEP_DATA_DIR=
 #KEEP_TEST_TEMPLATE=
 
+trap 'echo "PID:$$ exit status:$?"' EXIT QUIT
 
 function hdr()
 {
@@ -47,19 +48,27 @@ function xmlget()
     xmlstarlet sel -t -m "$1" -v "$2" $3
 }
 
-function do_waitfor() {
-	local NAME="$1" CMD="$2" STATE="$3" TIMEOUT="${4:-60}"
+function do_waitfor()
+{
+	local vmid="$1" CMD="$2" STATE="$3" TIMEOUT="${4:-60}"
 	local SEC=0 CSTATE= DO_CMD="$CMD list --list STAT,ID,NAME --csv"
 
 	while [ $SEC -lt $TIMEOUT ]; do
-		CSTATE=$($DO_CMD | grep -E ",$NAME\$" | cut -d, -f1)
-        [ -z "$DEBUG" ] || echo "  $NAME $CSTATE waiting for $STATE #$SEC::$TIMEOUT //$DO_CMD" 
-		if [ "$CSTATE" = "$STATE" ]; then
+		CSTATE=$($DO_CMD | grep -E ",$vmid\$|,$vmid," | cut -d, -f1) || true
+        [ -z "$DEBUG" ] || echo "  $vmid state '$CSTATE' waiting for '$STATE' #$SEC::$TIMEOUT //$DO_CMD $?"
+        if [ -z "$CSTATE" ]; then
+            hdr "[Warn] Can't get $CMD '$vmid' state! ($STATE)"
+        fi
+		if [ "$CSTATE" == "$STATE" ]; then
+            if [ -n "$DEBUG" ]; then
+                hdr "[DBG] cstate match"
+            fi
 			return 0
 		fi
 		sleep $SLP
 		SEC=$((SEC + SLP))
 	done
+    hdr "Timeout waiting for '$STATE'. Last is '$STATE'"
     return 1
 }
 
@@ -140,12 +149,33 @@ function ipCheck()
     fi
 }
 
+function vmDeploy()
+{
+    local vmid="${1:-$VM_ID}" hst="${2:-$CURRENT_HOST}"
+    hdr "Deploy on '$hst'"
+    if onevm deploy "$vmid" "$hst" &>"${DATA_DIR}/deploy-$VM_NAME"; then
+        waitforvm "$vmid" runn 120 || die "Failed to deploy VM '$vmid' on '$hst'"
+    else
+        cat "$DATA_DIR/deploy-$VM_NAME"
+        die "Deploy VM '$vmid' failed"
+    fi
+    CURRENT_HOST="$(onevm show "$vmid" --xml | \
+        xmlget '//HISTORY[last()]' HOSTNAME)"
+    msg "on '$CURRENT_HOST'."
+    ipCheck "$CURRENT_HOST"
+}
+
 function vmResume()
 {
+    local vmid="${1:-$VM_ID}"
     hdr "Resuming"
-    onevm resume "$VM_ID"
-    waitforvm "$VM_NAME" runn || die "Cannot power up"
-    CURRENT_HOST="$(onevm show "$VM_ID" --xml | \
+    if onevm resume "$vmid" &>"${DATA_DIR}/resume-$VM_NAME"; then
+        waitforvm "$vmid" runn || die "Cannot resume '$vmid'"
+    else
+        cat "$DATA_DIR/resume-$VM_NAME"
+        die "Resume VM '$vmid' failed"
+    fi
+    CURRENT_HOST="$(onevm show "$vmid" --xml | \
         xmlget '//HISTORY[last()]' HOSTNAME)"
     msg "on '$CURRENT_HOST'."
     ipCheck "$CURRENT_HOST"
@@ -154,7 +184,7 @@ function vmResume()
 function vmMigrate()
 {
     local DST="$1" ARGS="$2" EXPECT="${3:-runn}"
-    hdr "Migrating to '$DST'${ARGS:+ $ARGS}"
+    hdr "Migrating to '$DST'${ARGS:+ $ARGS} //($EXPECT)"
     onevm migrate $ARGS "$VM_ID" "$DST"
     waitforvm "$VM_NAME" "$EXPECT" ||\
         die "Migration failed (expected $EXPECT)"
@@ -199,9 +229,16 @@ function vmTerminate()
     local ID=$(onevm list --xml | \
         xmlget "//VM[NAME=\"$VM_NAME\"]" ID || true)
     if [ -n "$ID" ]; then
-        hdr "Terminating (hard) VM ($ID) ${VM_NAME}"
-        onevm terminate --hard "$VM_NAME"
-        waitforvm  "$VM_NAME" ""
+        hdr "Terminate (hard) VM ($ID) ${VM_NAME}"
+        if onevm terminate --hard "$VM_NAME" &>"${DATA_DIR}/terminate-$VM_NAME"; then
+            echo "   Terminate '$VM_NAME'"
+        else
+            cat "${DATA_DIR}/terminate-$VM_NAME"
+            die "Terminate '$VM_NAME' failed!"
+        fi
+        waitforvm "$VM_NAME" ""
+    else
+        hdr "Terminate VM - $VM_NAME not found."
     fi
 }
 
@@ -251,7 +288,7 @@ function vmSnapshotDelete()
     [ -z "$VM_SNAPSHOT_ID" ] || die "VM Snapshot delete failed"
 }
 
-diskCreate()
+function diskCreate()
 {
     hdr "Adding disk (volatile $1)"
     local VOLATILE_TEMPLATE="${DATA_DIR}/volatile-${1}.template"
@@ -394,7 +431,11 @@ fi
 IMAGE_DS_NAME="$(onedatastore show "$IMAGE_DS_ID" --xml |\
     xmlget "//DATASTORE" NAME)"
 
-vmTerminate
+if vmTerminate; then
+    hdr "VM terminated"
+else
+    hdr "vmTerminate status $?"
+fi
 
 hdr "Using IMAGE datastore: $IMAGE_DS_ID ($IMAGE_DS_NAME)"
 
@@ -439,12 +480,13 @@ fi
 hdr "Creating VM $VM_NAME from Template $VM_TEMPLATE_NAME${VN_ID:+ using VNet ID $VN_ID}"
 echo
 if onetemplate instantiate "$VM_TEMPLATE_NAME" --name "$VM_NAME" \
-    ${VN_ID:+--nic "$VN_ID"} &>"${DATA_DIR}/instantiate-$VM_NAME"; then
-    waitforvm "$VM_NAME" runn 120 || die "Failed to instantiate VM '$VM_NAME'"
+    ${VN_ID:+--nic "$VN_ID"} --hold &>"${DATA_DIR}/instantiate-$VM_NAME"; then
+    waitforvm "$VM_NAME" hold || die "Failed to instantiate VM '$VM_NAME' //HOLD"
 else
     cat "$DATA_DIR/instantiate-$VM_NAME"
-    die "Create VM failed"
+    die "Create VM failed //HOLD"
 fi
+vmDeploy "$VM_NAME" "$HOST1"
 VM_ID=$(onevm show "$VM_NAME" --xml |\
     tee "${DATA_DIR}/vm-${VM_NAME}.XML" |\
     xmlget '//VM' ID)
@@ -568,13 +610,13 @@ vmResume
 # VM Undeploy
 vmUndeploy
 
-vmResume
+vmDeploy
 
 ###############################################################################
 # VM Stop
 vmStop
 
-vmResume
+vmDeploy
 
 ###############################################################################
 # Cleanup
