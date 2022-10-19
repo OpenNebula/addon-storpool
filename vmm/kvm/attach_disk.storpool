@@ -42,15 +42,18 @@ if boolTrue "DEBUG_ATTACH_DISK"; then
     fi
 fi
 
-if [ "${TM_MAD:0:8}" = "storpool" ]; then
-    if [ "$DISK_TYPE" = "BLOCK" ]; then
-        splog "Disk $1 $2 $3 DISK_TYPE '$DISK_TYPE'"
+if [ "${TM_MAD:0:8}" == "storpool" ]; then
+    if [ "${DISK_TYPE^^}" == "BLOCK" ] && [ "${TYPE^^}" == "BLOCK" ]; then
+        splog "Disk $1 $2 $3 DISK_TYPE '$DISK_TYPE', TYPE '$TYPE'"
     else
         splog "Replacing $1 $2 $3 DISK_TYPE '$DISK_TYPE' and TYPE '$TYPE' to BLOCK"
         DRV_ACTION="$(echo "$DRV_ACTION" | base64 -d | \
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v BLOCK |\
                    base64 -w 0)"
+        if boolTrue "DDDEBUG_ATTACH_DISK"; then
+            echo "$DRV_ACTION" >/tmp/atach_disk_out.b64
+        fi
     fi
 fi
 
