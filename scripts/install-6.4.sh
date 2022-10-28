@@ -128,16 +128,16 @@ done
 
 # Periodic task
 echo "*** Clean up old style crontab jobs ..."
-(sudo crontab -u oneadmin -l | grep -v monitor_helper-sync | sudo crontab -u oneadmin -)||:
-(sudo crontab -u root -l | grep -v "storpool -j " | sudo crontab -u root -)||:
+(crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)||:
+(crontab -u root -l | grep -v "storpool -j " | crontab -u root -)||:
 
 if [ -f "/etc/cron.d/addon-storpool" ]; then
    echo "*** Deleting /etc/cron.d/addon-storpool"
-   sudo rm -vf /etc/cron.d/addon-storpool
+   rm -vf /etc/cron.d/addon-storpool
 fi
 
 echo "*** Creating systemd timer service"
-cat <<_EOF_ | sudo tee /etc/systemd/system/monitor_helper-sync.service
+cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.service
 [Unit]
 Description=Create cached StorPool data JSONs in /tmp/monitor
 Wants=monitor_helper-sync.timer
@@ -153,7 +153,7 @@ ExecStart=/var/lib/one/remotes/datastore/storpool/monitor_helper-sync
 WantedBy=multi-user.target
 _EOF_
 
-cat <<_EOF_ | sudo tee /etc/systemd/system/monitor_helper-sync.timer
+cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.timer
 [Unit]
 Description=Timer trigger for monitor_helper-sync.service
 Requires=monitor_helper-sync.service
@@ -166,10 +166,10 @@ OnCalendar=*:0/4
 [Install]
 WantedBy=timers.target
 _EOF_
-sudo systemctl daemon-reload
+systemctl daemon-reload
 
 echo "*** Activating systemd time service ..."
-sudo systemctl enable monitor_helper-sync.timer
+systemctl enable monitor_helper-sync.timer
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
