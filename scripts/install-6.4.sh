@@ -126,32 +126,50 @@ for f in xpath_multi.py xpath-sp.rb; do
     chmod a+x "$XPATH_MULTI"
 done
 
-echo "*** Clean up old style crontab jobs"
-(crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)
-(crontab -u root -l | grep -v "storpool -j " | crontab -u root -)
-
-########################
+# Periodic task
+echo "*** Clean up old style crontab jobs ..."
+(sudo crontab -u oneadmin -l | grep -v monitor_helper-sync | sudo crontab -u oneadmin -)||:
+(sudo crontab -u root -l | grep -v "storpool -j " | sudo crontab -u root -)||:
 
 if [ -f "/etc/cron.d/addon-storpool" ]; then
-   echo "*** File exists. /etc/cron.d/addon-storpool"
-else
-   echo "*** Creating /etc/cron.d/addon-storpool"
-   cat >>/etc/cron.d/addon-storpool <<_EOF_
-# addon-storpool jobs
-SHELL=/bin/bash
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-MAILTO=oneadmin
-_EOF_
+   echo "*** Deleting /etc/cron.d/addon-storpool"
+   sudo rm -vf /etc/cron.d/addon-storpool
 fi
 
-if grep monitor_helper-sync /etc/cron.d/addon-storpool 2>/dev/null; then
-    echo "*** job exist for monitor_helper-sync"
-else
-    echo "*** Adding job for monitor_helper-sync"
-    cat >>/etc/cron.d/addon-storpool <<_EOF_
-*/4 * * * * oneadmin ${ONE_VAR}/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err
+echo "*** Creating systemd timer service"
+cat <<_EOF_ | sudo tee /etc/systemd/system/monitor_helper-sync.service
+[Unit]
+Description=Create cached StorPool data JSONs in /tmp/monitor
+Wants=monitor_helper-sync.timer
+
+[Service]
+Type=oneshot
+User=oneadmin
+Group=oneadmin
+WorkingDirectory=/var/lib/one/remotes
+ExecStart=/var/lib/one/remotes/datastore/storpool/monitor_helper-sync
+
+[Install]
+WantedBy=multi-user.target
 _EOF_
-fi
+
+cat <<_EOF_ | sudo tee /etc/systemd/system/monitor_helper-sync.timer
+[Unit]
+Description=Timer trigger for monitor_helper-sync.service
+Requires=monitor_helper-sync.service
+
+[Timer]
+Unit=monitor_helper-sync.service
+AccuracySec=1m
+OnCalendar=*:0/4
+
+[Install]
+WantedBy=timers.target
+_EOF_
+sudo systemctl daemon-reload
+
+echo "*** Activating systemd time service ..."
+sudo systemctl enable monitor_helper-sync.timer
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
