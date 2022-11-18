@@ -22,7 +22,7 @@
     version_defaults:
       :method: simple_conf
       :arguments:
-        UPDATE_IMAGE_ON_IMPORT: "0"
-        MKSWAP: "/sbin/mkswap"
-        MKFS: "/sbin/mkfs"
+        UPDATE_IMAGE_ON_IMPORT: "1"
+        MKSWAP: "/usr/sbin/mkswap"
+        MKFS: "/usr/sbin/mkfs"
 
