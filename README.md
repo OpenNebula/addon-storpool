@@ -30,6 +30,7 @@ Details could be found in [Support Life Cycles for OpenNebula Environments](http
 * Working OpenNebula CLI interface with `oneadmin` account authorized to OpenNebula's core with UID=0
 * Network access to the StorPool API management interface
 * StorPool CLI installed
+* Python3 installed
 
 ### OpenNebula Node
 
