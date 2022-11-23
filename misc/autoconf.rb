@@ -235,8 +235,8 @@ def oned_conf_arguments(aug, c, name=nil)
     end
     log "#DBG# arguments_new='#{arguments_new}'",2
     if argument_idx.nil?
-        arguments << c[:match]
-        arguments << arguments_new.join(',')
+        arguments.unshift(arguments_new.join(','))
+        arguments.unshift(c[:match])
         changed << "#{c[:match]} #{arguments_new.join(',')}"
     else
         arguments[argument_idx] = argument_hash.keys.join(',')

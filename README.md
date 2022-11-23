@@ -30,6 +30,7 @@ Details could be found in [Support Life Cycles for OpenNebula Environments](http
 * Working OpenNebula CLI interface with `oneadmin` account authorized to OpenNebula's core with UID=0
 * Network access to the StorPool API management interface
 * StorPool CLI installed
+* Python3 installed
 
 ### OpenNebula Node
 
@@ -86,7 +87,7 @@ Folloing the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-sto
 
 ## Installation
 
-The installation instructions are for OpenNebula 5.10+.
+The installation instructions are for OpenNebula 5.12+.
 
 If you are upgrading addon-storpool please read the [Upgrade notes](#upgrade-notes) first!
 
@@ -95,31 +96,38 @@ If you are upgrading addon-storpool please read the [Upgrade notes](#upgrade-not
 #### front-end dependencies
 
 ```bash
-# on the front-end
-yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint
+# CentOS 7 front-end
+yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint python36-lxml
 ```
 
 ```bash
-# Ubuntu front-end
-apt -y install tar jq xmlstarlet netcat pigz python-lxml libxml2-utils
+# AlmaLinux 8 front-end
+yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint python3-lxml
 ```
 
-_Please check the alternatives that there is python available_
+```bash
+# Ubuntu 22.04 front-end
+apt -y install tar jq xmlstarlet netcat pigz python3-lxml libxml2-utils
+```
 
 #### node dependencies
 
  :grey_exclamation:*use when adding new hosts too*:grey_exclamation:
 
 ```bash
-yum -y install --enablerepo=epel jq python-lxml xmlstarlet tar
+# CentOS 7 node-kvm
+yum -y install --enablerepo=epel jq pigz python36-lxml xmlstarlet tar
 ```
 
 ```bash
-# Ubuntu
-apt -y install jq xmlstarlet pigz python-lxml libxml2-utils tar
+# AlmaLinux 8 node-kvm
+yum -y install --enablerepo=epel jq pigz python3-lxml xmlstarlet tar
 ```
 
-_Please check the alternatives that there is python available_
+```bash
+# Ubuntu 22.04 node-kvm
+apt -y install jq xmlstarlet pigz python3-lxml libxml2-utils tar
+```
 
 ### Get the addon from github
 
@@ -192,33 +200,54 @@ cp -a ~/addon-storpool/vmm/kvm/tm* /var/lib/one/remotes/vmm/kvm/
 cp -a ~/addon-storpool/misc/reserved.sh /var/lib/one/remotes/
 ```
 
-* copy _storpool_probe.sh_ tool to _/var/lib/one/remotes/im/kvm-probes.d/host/system/_ (OpenNebula >= 5.12)
+* copy _storpool_probe.sh_ tool to _/var/lib/one/remotes/im/kvm-probes.d/host/system/_
 
 ```bash
 cp -a ~/addon-storpool/misc/storpool_probe.sh /var/lib/one/remotes/im/kvm-probes.d/host/system/
 ```
 
-* copy _storpool_probe.sh_ tool to _/var/lib/one/remotes/im/kvm-probes.d/_ (OpenNebula <= 5.10.x)
-
-```bash
-cp -a ~/addon-storpool/misc/storpool_probe.sh /var/lib/one/remotes/im/kvm-probes.d/
-```
 * fix ownership of the files in _/var/lib/one/remotes/_
 
 ```bash
 chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 ```
 
-* Create cron job for stats polling (alter the file paths if needed)
+* Create systemd timer for stats polling (alter the file paths if needed)
 
 ```bash
-cat >>/etc/cron.d/addon-storpool <<_EOF_
-# StorPool
-SHELL=/bin/bash
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-MAILTO=oneadmin
-*/4 * * * * oneadmin /var/lib/one/remotes/datastore/storpool/monitor_helper-sync 2>&1 >/tmp/monitor_helper_sync.err
+cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.service
+[Unit]
+Description=Create cached StorPool data JSONs in /tmp/monitor
+Wants=monitor_helper-sync.timer
+
+[Service]
+Type=oneshot
+User=oneadmin
+Group=oneadmin
+WorkingDirectory=/var/lib/one/remotes
+ExecStart=/var/lib/one/remotes/datastore/storpool/monitor_helper-sync
+
+[Install]
+WantedBy=multi-user.target
 _EOF_
+
+cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.timer
+[Unit]
+Description=Timer trigger for monitor_helper-sync.service
+Requires=monitor_helper-sync.service
+
+[Timer]
+Unit=monitor_helper-sync.service
+AccuracySec=1m
+OnCalendar=*:0/4
+
+[Install]
+WantedBy=timers.target
+_EOF_
+
+systemctl daemon-reload
+
+systemctl enable --now monitor_helper-sync.timer
 ```
 
 ### addon-storpool configuration
@@ -250,7 +279,7 @@ VM_MAD = [
     NAME           = "kvm",
     SUNSTONE_NAME  = "KVM",
     EXECUTABLE     = "one_vmm_exec",
-    ARGUMENTS      = "-t 15 -r 0 kvm -l deploy=deploy-tweaks",
+    ARGUMENTS      = "-l deploy=deploy-tweaks -t 15 -r 0 kvm",
     ...
 ```
   Optionally add attach_disk,tmsave/tmrestore:
@@ -260,14 +289,14 @@ VM_MAD = [
     NAME           = "kvm",
     SUNSTONE_NAME  = "KVM",
     EXECUTABLE     = "one_vmm_exec",
-    ARGUMENTS      = "-t 15 -r 0 kvm -l deploy=deploy-tweaks,attach_disk=attach_disk.storpool,save=tmsave,restore=tmrestore",
+    ARGUMENTS      = "-l deploy=deploy-tweaks,attach_disk=attach_disk.storpool,save=tmsave,restore=tmrestore -t 15 -r 0 kvm",
     ...
 ```
 
 * Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool
 
 ```
-TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "ssh,shared,qcow2", LN_TARGET_SSH = "NONE", CLONE_TARGET_SSH = "SELF", DISK_TYPE_SSH = "NONE", LN_TARGET_SHARED = "NONE", CLONE_TARGET_SHARED = "SELF", DISK_TYPE_SHARED = "NONE", LN_TARGET_QCOW2 = "NONE", CLONE_TARGET_QCOW2 = "SELF", DISK_TYPE_QCOW2 = "NONE"  ]
+TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "ssh,shared,qcow2", LN_TARGET_SSH = "NONE", CLONE_TARGET_SSH = "SELF", DISK_TYPE_SSH = "NONE", LN_TARGET_SHARED = "NONE", CLONE_TARGET_SHARED = "SELF", DISK_TYPE_SHARED = "NONE", LN_TARGET_QCOW2 = "NONE", CLONE_TARGET_QCOW2 = "SELF", DISK_TYPE_QCOW2 = "NONE" ]
 ```
 
 * Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool
@@ -279,12 +308,11 @@ DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY
 * Edit `/etc/one/oned.conf` and append the following _VM_RESTRICTED_ATTR_
 
 ```bash
-cat >>/etc/one/oned.conf <<EOF
+cat >>/etc/one/oned.conf <<_EOF_
 VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"
 VM_RESTRICTED_ATTR = "DISKSNAPSHOT_LIMIT"
 VM_RESTRICTED_ATTR = "VC_POLICY"
-
-EOF
+_EOF_
 ```
 
 * Enable live disk snapshots support for StorPool by adding `kvm-storpool` to `LIVE_DISK_SNAPSHOTS` variable in `/etc/one/vmm_exec/vmm_execrc`
@@ -305,7 +333,7 @@ echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
 
 OpenNebula 6.0 introduces changes in the Image import function
 
-For OpenNebula up to _5.12.*_:
+For OpenNebula up to _5.12.*_(included):
 
 ```bash
 echo "DS_CP_REPORT_FORMAT=0" >> /var/lib/one/remotes/addon-storpoolrc
@@ -488,6 +516,5 @@ The following line just before the line that do the VM migration could leverage 
 
 ```bash
 (virsh --connect $LIBVIRT_URI dumpxml $deploy_id 2>/dev/null || echo '<a><disk device="disk"><driver cache="writeback"/></disk></a>') | xmllint --xpath '(//disk[@device="disk"]/driver[not(@cache="none")])' - >/dev/null 2>&1 || MIGRATE_OPTIONS+=" --unsafe"
-
 ```
 

@@ -89,6 +89,10 @@ umask -S u=rwx,g=rwx,o= >/dev/null
 
 ONE_PX="${ONE_PX:-one}"
 
+if [ -d /opt/storpool/python3/bin ]; then
+    export PATH="/opt/storpool/python3/bin:$PATH"
+fi
+
 function boolTrue()
 {
    case "${!1^^}" in

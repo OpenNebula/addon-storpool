@@ -42,6 +42,10 @@ for var in ONE_PX NVRAM_TEMPLATE_PATH; do
     [ -z "${!var}" ] || export $var
 done
 
+if [ -d /opt/storpool/python3/bin ]; then
+    export PATH="/opt/storpool/python3/bin:$PATH"
+fi
+
 function splog()
 {
     logger -t "vmm_sp_${0##*/}[$$]" "${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
