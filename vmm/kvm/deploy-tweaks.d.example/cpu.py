@@ -118,7 +118,7 @@ if sockets > 0:
     for i in range(sockets):
         cpuStart = socket_cpu_threads * i
         cpuEnd = (socket_cpu_threads * (i+1)) -1
-        cpuMem = memory / sockets
+        cpuMem = int(memory / sockets)
         cell = ET.SubElement(numa, 'cell', {
                 'id' : '{0}'.format(i),
               'cpus' : '{0}-{1}'.format(cpuStart, cpuEnd),
