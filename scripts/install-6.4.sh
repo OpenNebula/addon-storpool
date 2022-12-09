@@ -169,7 +169,7 @@ _EOF_
 systemctl daemon-reload
 
 echo "*** Activating systemd time service ..."
-systemctl enable monitor_helper-sync.timer
+systemctl enable monitor_helper-sync.timer --now
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
