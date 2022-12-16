@@ -86,10 +86,10 @@ if os_len > 0:
             for os_child in os_element.getchildren():
                 os_e.append(os_child)
                 os_element.remove(os_child)
-            for os_k, os_v in os_element.attrib.iteritems():
+            for os_k, os_v in os_element.attrib.items():
                 os_e.attrib[os_k] = '{}'.format(os_v)
             root.remove(os_element)
-    for key, val in os_attrib.iteritems():
+    for key, val in os_attrib.items():
         if key in os_e.attrib:
             if val == '':
                 del os_e.attrib[key] 
