@@ -1355,7 +1355,7 @@ ${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES'
 
 function oneDatastoreInfo()
 {
-    local _DS_ID="$1" local _DS_POOL_FILE="$2"
+    local _DS_ID="$1" _DS_POOL_FILE="$2"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
 
     local tmpXML="$(mktemp -t oneDatastoreInfo-${_DS_ID}-XXXXXX)"
