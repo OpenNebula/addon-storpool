@@ -1824,38 +1824,41 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 
 oneVmVolumes()
 {
-    local VM_ID="$1" VM_POOL_FILE="$2"
+    local VM_ID="$1" VM_POOL_FILE="$2" VM_XML_FILE="$3"
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID vmPoolFile:$VM_POOL_FILE"
+        splog "oneVmVolumes() VM_ID:$VM_ID vmPoolFile:$VM_POOL_FILE${VM_XML_FILE:+ VM_XML_FILE:$VM_XML_FILE}"
     fi
 
-    local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
-    local ret=$? errmsg=
-    if [ $ret -ne 0 ]; then
-        errmsg="(oneVmVolumes) Error: Can't create temp file! (ret:$ret)"
-        log_error "$errmsg"
-        splog "$errmsg"
-        exit $ret
-    fi
-    trapAdd "rm -f \"$tmpXML\""
-    if [ -f "$VM_POOL_FILE" ]; then
-        xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$VM_POOL_FILE" >"$tmpXML"
-        ret=$?
-    else
-        onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
-        ret=$?
-    fi
-    if [ $ret -ne 0 ]; then
-        errmsg="(oneVmVolumes) Error: Can't get VM info! $(head -n 1 "$tmpXML") (ret:$ret)"
-        log_error "$errmsg"
-        splog "$errmsg"
-        exit $ret
+    if [ -z "$VM_XML_FILE" ]; then
+        local tmpXML="$(mktemp -t oneVmVolumes-${VM_ID}-XXXXXX)"
+        local ret=$? errmsg=
+        if [ $ret -ne 0 ]; then
+            errmsg="(oneVmVolumes) Error: Can't create temp file! (ret:$ret)"
+            log_error "$errmsg"
+            splog "$errmsg"
+            exit $ret
+        fi
+        trapAdd "rm -f \"$tmpXML\""
+        if [ -f "$VM_POOL_FILE" ]; then
+            xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$VM_POOL_FILE" >"$tmpXML"
+            ret=$?
+        else
+            onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
+            ret=$?
+        fi
+        if [ $ret -ne 0 ]; then
+            errmsg="(oneVmVolumes) Error: Can't get VM info! $(head -n 1 "$tmpXML") (ret:$ret)"
+            log_error "$errmsg"
+            splog "$errmsg"
+            exit $ret
+        fi
+        VM_XML_FILE="$tmpXML"
     fi
 
     unset XPATH_ELEMENTS i
     while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done 5< <(cat "$tmpXML" |\
+    done 5< <(cat "$VM_XML_FILE" |\
         ${DRIVER_PATH}/../../datastore/xpath_multi.py -s \
         /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
         /VM/TEMPLATE/CONTEXT/DISK_ID \
@@ -1873,8 +1876,10 @@ oneVmVolumes()
         /VM/USER_TEMPLATE/T_OS_NVRAM \
         /VM/USER_TEMPLATE/VMSNAPSHOT_WITH_CHECKPOINT \
         /VM/USER_TEMPLATE/VC_POLICY)
-    rm -f "$tmpXML"
-    trapDel "rm -f \"$tmpXML\""
+    if [ -f "$tmpXML" ]; then
+        rm -f "$tmpXML"
+        trapDel "rm -f \"$tmpXML\""
+    fi
     unset i
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
