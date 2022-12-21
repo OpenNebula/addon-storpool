@@ -127,7 +127,7 @@ READONLY_MODE="rw"
 DISK_SAVEAS_FSFREEZE=0
 # tag contextualization iso with nvm (and vc-policy tags)
 TAG_CONTEXT_ISO=1
-# timeout on attach when the client is not reachable
+# timeout on attach when the client is not reachable (in seconds)
 ATTACH_TIMEOUT=20
 
 declare -A SYSTEM_COMPATIBLE_DS
@@ -199,6 +199,12 @@ HostState=(INIT MONITORING_MONITORED MONITORED ERROR DISABLED MONITORING_ERROR M
 
 if [ -d /opt/storpool/python3/bin ]; then
     export PATH="/opt/storpool/python3/bin:$PATH"
+fi
+
+ATTACH_TIMEOUT="${ATTACH_TIMEOUT//[^[:digit:]]/}"
+if [ -z "$ATTACH_TIMEOUT" ]; then
+    splog "Warning: ATTACH_TIMEOUT=$ATTACH_TIMEOUT is not digits! Defaulting to 20 seconds"
+    ATTACH_TIMEOUT=20
 fi
 
 function boolTrue()
@@ -537,7 +543,7 @@ function storpoolWrapper()
 		groupAttach)
 			shift
 			if [ -n "$1" ]; then
-				res="$(storpoolApi "VolumesReassignWait" "{\"reassign\":[$1]}")"
+				res="$(storpoolApi "VolumesReassignWait" "{\"attachTimeout\":$ATTACH_TIMEOUT,\"reassign\":[$1]}")"
 				ret=$?
 				if [ $ret -ne 0 ]; then
 					splog "API communication error:$res ($ret)"
@@ -840,7 +846,7 @@ function storpoolVolumeAttach()
             exit -1
         fi
     fi
-    storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} timeout ${ATTACH_TIMEOUT:-20} >/dev/null
+    storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} timeout $ATTACH_TIMEOUT >/dev/null
 }
 
 function storpoolVolumeJsonHelper()
