@@ -127,6 +127,8 @@ READONLY_MODE="rw"
 DISK_SAVEAS_FSFREEZE=0
 # tag contextualization iso with nvm (and vc-policy tags)
 TAG_CONTEXT_ISO=1
+# timeout on attach when the client is not reachable
+ATTACH_TIMEOUT=20
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -838,7 +840,7 @@ function storpoolVolumeAttach()
             exit -1
         fi
     fi
-    storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} >/dev/null
+    storpoolRetry attach ${_SP_TARGET} "$_SP_VOL" ${_SP_MODE:+mode "$_SP_MODE"} ${_SP_CLIENT:-here} timeout ${ATTACH_TIMEOUT:-20} >/dev/null
 }
 
 function storpoolVolumeJsonHelper()
@@ -1355,7 +1357,7 @@ ${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES'
 
 function oneDatastoreInfo()
 {
-    local _DS_ID="$1" local _DS_POOL_FILE="$2"
+    local _DS_ID="$1" _DS_POOL_FILE="$2"
     local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
 
     local tmpXML="$(mktemp -t oneDatastoreInfo-${_DS_ID}-XXXXXX)"
