@@ -43,6 +43,8 @@ oneHostInfo "$KVMHOST"
 
 oneDatastoreInfo "$SYSDS_ID"
 
+umask 077
+
 VM_XML="$(mktemp -t prebackup-${VM_ID}-XXXXXXXX)"
 trapAdd "rm -f \"$VM_XML\""
 cat > "$VM_XML"
@@ -106,6 +108,7 @@ for b in $backups; do
     snapPath="/dev/storpool/$snap"
     dstFile="$B_DIR/disk.${did}.0"
     RCMD=$(cat <<EOF
+umask 077
 mkdir -p "$B_DIR"
 qemu-img convert -T none -t none -O qcow2 "$snapPath" "$dstFile"
 EOF
