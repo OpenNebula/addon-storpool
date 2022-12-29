@@ -74,6 +74,8 @@ set_up_datastore "$BASE_PATH" "$RESTRICTED_DIRS" "$SAFE_DIRS"
 
 IMAGE_HASH=`generate_image_hash`
 
+IMAGE_PATH="$(echo "$IMAGE_PATH")"
+
 case "$IMAGE_PATH" in
 *VMSNAP:*|*SPSNAPSHOT:*)
     oneSnapshotLookup "${IMAGE_PATH##*/}"
