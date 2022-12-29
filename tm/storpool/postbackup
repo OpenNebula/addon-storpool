@@ -48,15 +48,16 @@ trapAdd "rm -f \"$VM_XML\""
 cat > "$VM_XML"
 
 if [ -d "$B_DIR" ]; then
-    splog "pre-clean $B_DIR"
-    if [ -f "$B_DIR/.storpool_snapshots" ]; then
-        for snapshot in $(cat "$B_DIR/.storpool_snapshots"); do
-            storpoolVolumeDetach "$snapshot" "force" "" "all"
-            storpoolSnapshotDelete "$snapshot"
+    splog "post-clean $B_DIR ..."
+    snapshots_list="$B_DIR/.storpool_snapshots"
+    if [ -f "$snapshots_list" ]; then
+        for snp in $(cat "$snapshots_list"); do
+            storpoolVolumeDetach "$snp" "force" "" "all"
+            storpoolSnapshotDelete "$snp"
         done
     fi
     rm -rf "$B_DIR"
-    splog "rm -rf $B_DIR ($?)"
+    splog "post-clean completed ($?)"
 else
     splog "Folder not found. $B_DIR"
 fi
