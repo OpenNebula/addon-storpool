@@ -78,8 +78,6 @@ for disk in ${DISKS//:/ }; do
     D_ARR["$disk"]="$disk"
 done
 
-splog "ZDBG D_ARR:${#D_ARR[*]}:${D_ARR[*]}"
-
 B_SUFFIX="ONEBACKUP-$(date +%s)"
 echo "$B_SUFFIX" >"$B_DIR/.snapshot_suffix"
 list=()
@@ -95,8 +93,6 @@ for map in $vmDisksMap; do
         echo "$snapshot" >"$B_DIR/disk.${did}.0.storpool_snapshot"
     fi
 done
-
-splog "ZDBG backups='$backups' list='$list'"
 
 storpoolRetry groupSnapshot "tag:$VM_TAG=$VM_ID" ${list[@]}
 
