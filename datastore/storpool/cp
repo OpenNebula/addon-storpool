@@ -81,6 +81,9 @@ case "$IMAGE_PATH" in
 http://*|https://*|ssh://*|s3://*|rbd://*|vcenter://*)
     log "Downloading $IMAGE_PATH to the image repository"
     ;;
+rsync://*|restic://*)
+    log "Downloading backup $IMAGE_PATH to the image repository"
+    ;;
 *)
     if [ `check_restricted $IMAGE_PATH` -eq 1 ]; then
         log_error "Not allowed to copy images from $RESTRICTED_DIRS"
