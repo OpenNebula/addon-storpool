@@ -129,6 +129,8 @@ DISK_SAVEAS_FSFREEZE=0
 TAG_CONTEXT_ISO=1
 # timeout on attach when the client is not reachable (in seconds)
 ATTACH_TIMEOUT=20
+# Shareable disk(s) function is administratively disabled! Communicate with StorPool support for assistance."
+ENABLE_SHAREABLE_SUPPORT=
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1
@@ -2273,6 +2275,12 @@ function shareableAttach()
     local HOST="$1" ENTRIES="$2" ENTRY= _LOCK=
     local _DS_ID= _IMAGE_ID= _VM_ID= _DISK_ID= 
     local _SP_VOL= _SP_MODE= _SP_TARGET= _S_PATH=
+    if ! boolTrue "ENABLE_SHAREABLE_SUPPORT"; then
+        msg="Shareable disk(s) function is administratively disabled! Communicate with StorPool support for assistance."
+        log "$msg"
+        splog "$msg"
+        exit 1
+    fi
     for ENTRY in ${ENTRIES}; do
         arr=(${ENTRY//\// })
         _DS_ID=${arr[0]}
