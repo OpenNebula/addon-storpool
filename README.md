@@ -102,7 +102,7 @@ yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint python
 
 ```bash
 # AlmaLinux 8 front-end
-dnf -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint python3-lxml
+dnf -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar libxml2 python3-lxml
 ```
 
 ```bash
