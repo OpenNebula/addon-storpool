@@ -360,6 +360,12 @@ systemctl restart opennebula
 su - oneadmin -c 'onehost sync --force'
 ```
 
+* Add _oneadmin_ user to the _mysyslog_ group if available
+
+```bash
+grep -q mysyslog /etc/group && usermod -a -G mysyslog oneadmin
+```
+
 ## OpenNebula Configuration
 
 Make sure that the OpenNebula shell tools are working without additional arguments. When OpenNebula endpoint differ from default one eider create `~oneadmin/.one/one_endpoint` file or set `ONE_XMLRPC` in `addon-storpoolrc`.
