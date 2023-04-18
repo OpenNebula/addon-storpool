@@ -239,7 +239,8 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             v_data=($(grep "^${volume} " "$TMP_VOLUME_SPACE"))
             disk_size="${v_data[$size_idx]}"
             if [ -n "$disk_size" ] && [ -z "${disk_size//[0-9]/}" ]; then
-                vm_monitor+=" DISK_SIZE=[ID=${DISK_ID},SIZE=$((disk_size/1024**2))]"
+                [ -z "$vm_monitor" ] || vm_monitor+=" "
+                vm_monitor+="DISK_SIZE=[ID=${DISK_ID},SIZE=$((disk_size/1024**2))]"
             else
                 if boolTrue "DEBUG_TM_MONITOR"; then
                     splog "$DS_ID $DS_TYPE VM $VM_ID DISK $DISK_ID v_data:${v_data[*]} SKIPPED"
