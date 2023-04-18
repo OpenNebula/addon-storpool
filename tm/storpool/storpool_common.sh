@@ -131,6 +131,8 @@ TAG_CONTEXT_ISO=1
 ATTACH_TIMEOUT=20
 # Shareable disk(s) function is administratively disabled! Communicate with StorPool support for assistance."
 ENABLE_SHAREABLE_SUPPORT=
+# TM/monitor send VM disk stats over UDP
+MONITOR_SEND_UDP=
 
 declare -A SYSTEM_COMPATIBLE_DS
 SYSTEM_COMPATIBLE_DS["ceph"]=1

@@ -307,12 +307,12 @@ if [ -d "$(readlink -f $BASE_PATH)" ]; then
             base64 -w 0)"
         TIMESTAMP=0
         HOST_ID=${MONITOR_HOST_ID:--1}
-        echo "MONITOR_VM SUCCESS $HOST_ID $TIMESTAMP $monitor_b64" | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
+        echo "MONITOR_VM SUCCESS $HOST_ID $TIMESTAMP $monitor_b64" | nc ${MONITOR_SEND_UDP:+-u }-w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}
         ret=$?
         if boolTrue "DDEBUG_TM_MONITOR"; then
-            splog "$DS_ID ($ret) MONITOR_VM SUCCESS $HOST_ID $TIMESTAMP $monitor_b64 | nc -u -w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
+            splog "$DS_ID ($ret) MONITOR_VM SUCCESS $HOST_ID $TIMESTAMP monitor_b64 | nc ${MONITOR_SEND_UDP:+-u }-w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
             if boolTrue "DDDEBUG_TM_MONITOR"; then
-                echo "echo $monitor_b64 | base64 -d | pigz -d" >/tmp/ds-$DS_ID
+                echo "echo $monitor_b64 | base64 -d | pigz -d" >"/tmp/ds-${DS_ID}.sh"
             fi
         fi
     fi
