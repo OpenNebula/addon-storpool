@@ -1401,7 +1401,6 @@ function oneDatastoreInfo()
         ret=$?
     fi
 
-    ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
         log_error "$errmsg"
