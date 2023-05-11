@@ -52,8 +52,13 @@ fi
 # Get cp and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-export DRV_ACTION="$1"
-ID="$2"
+if [ -n "$2" ]; then
+    export DRV_ACTION="$1"
+    ID="$2"
+else
+    export DRV_ACTION="$(cat)"
+    ID="$1"
+fi
 
 #echo "cd $PWD; bash -x $0 $*" >"/tmp/cp-$ID"
 oneDsDriverAction "$DRIVER_PATH"

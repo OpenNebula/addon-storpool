@@ -45,8 +45,13 @@ source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-DRV_ACTION="$1"
-ID="$2"
+if [ -n "$2" ]; then
+    DRV_ACTION="$1"
+    ID="$2"
+else
+    DRV_ACTION="$(cat)"
+    ID="$1"
+fi
 
 oneDsDriverAction "$DRIVER_PATH"
 
