@@ -19,8 +19,13 @@
 
 function splog() { logger -t "tm_sp_${0##*/}[$$]" "$(date +%s.%N) $DS_ID $*"; }
 
-DRV_ACTION="$1"
-DS_ID="$2"
+if [ -n "$2" ]; then
+    DRV_ACTION="$1"
+    DS_ID="$2"
+else
+    DRV_ACTION="$(cat)"
+    DS_ID="$1"
+fi
 
 DRIVER_PATH="${0%/*}"
 SP_JSON_PATH="/tmp"
