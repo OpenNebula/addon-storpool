@@ -119,6 +119,8 @@ if os_nvram_e is not None:
     if len(arr) > 1:
         nvram_attr = get_attributes(arr[1])
 
+    nvram_type = nvram_attr.get('type')
+
     if nvram_file == 'storpool':
         nvram_attr = {}
 
@@ -137,9 +139,17 @@ if os_nvram_e is not None:
     if len(nvram_file) > 0:
         if nvram_file == 'storpool':
             vm_id = vm.find('./ID').text
-            nvram_e.text = '/dev/storpool/{}-sys-{}-NVRAM'.format(
-                                one_px, vm_id)
-            changed = 1
+            nvram_filepath = '/dev/storpool/{}-sys-{}-NVRAM'.format(
+				one_px, vm_id)
+            if nvram_type is not None:
+                source = 'file'
+                if nvram_type == 'block':
+                    source = 'dev'
+                nvram_source_e = ET.SubElement(nvram_e, 'source',
+                                               {source: nvram_filepath})
+                nvram_e.attrib['type'] = nvram_type
+            else:
+                nvram_e.text = nvram_filepath
         else: 
             system_ds = root.find('.//one:vm/one:system_datastore', ns).text
             if nvram_file == '':
@@ -147,7 +157,16 @@ if os_nvram_e is not None:
                     print('Error in <T_OS_NVRAM>: empty nvram file and missing "template" attribute', file=stderr)
                     changed = 0
                 nvram_file = nvram_attr['template'].split('/')[-1]
-            nvram_e.text = '{}/{}'.format(system_ds, nvram_file.split('')[-1])
+            nvram_filepath = '{}/{}'.format(system_ds, nvram_file.split('')[-1])
+            if nvram_type is not None:
+                source = 'file'
+                if nvram_type == 'block':
+                    source = 'dev'
+                nvram_source_e = ET.SubElement(nvram_e, 'source',
+                                               {source: nvram_filepath})
+                nvram_e.attrib['type'] = nvram_type
+            else:
+                nvram_e.text = nvram_filepath
 
 
 if changed:
