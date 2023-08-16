@@ -109,7 +109,7 @@ if boolTrue "SHAREABLE"; then
         exit 1
     fi
     shareableAttach "$DST_HOST" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}/${SP_MODE}"
-    storpoolVolumeTag "$SP_VOL" "${VC_POLICY};1" "${VC_POLICY:+vc-policy};shareable"
+    storpoolVolumeTag "$SP_VOL" "${VC_POLICY};${SP_QOSCLASS};1" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};shareable"
 else
     if [ "$TYPE" = "CDROM" ]; then
         CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
@@ -124,7 +124,7 @@ else
 
     storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
-    storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
+    storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
 fi
 
 #-------------------------------------------------------------------------------

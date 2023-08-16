@@ -21,6 +21,7 @@ set -e
 
 VMID="$1"
 VC_POLICY="$2"
+SP_QOSCLASS="$3"
 
 LOG_PREFIX="vc"
 ONE_HOME="${ONE_HOME:-/var/lib/one}"
@@ -96,7 +97,7 @@ function alterVcPolicy()
     done
 
     if boolTrue "DEBUG_alterVcPolicy"; then
-        splog "VM $vmId VC_POLICY:$VC_POLICY $vmDisksMap"
+        splog "VM $vmId VC_POLICY:$VC_POLICY SP_QOSCLASS=$SP_QOSCLASS $vmDisksMap"
     fi
 
     if [ -z "$volumeListJson" ]; then
@@ -105,18 +106,28 @@ function alterVcPolicy()
     fi
 
     while read -u 7 l; do
-        v="${l%%\;*}"
-        vcp="${l##*\;}"
+        IFS=\; read -ra spdata <<<"$l"
+        v="${spdata[0]}"
+        vcp="${spdata[1]}"
+        qc="${spdata[2]}"
         if [ -n "${vols[$v]}" ]; then
             vcpNew="${VC_POLICY//[[:space:]]/}"
             if [ "$vcpNew" != "$vcp" ]; then
-                splog "volume:$v current vc-policy:$vcp new:$vcpNew"
+                splog "VM $vmId volume:$v current vc-policy:$vcp new:$vcpNew"
                 storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
             elif boolTrue "DDEBUG_alterVcPolicy"; then
-                splog "volume $v current vc-policy:$vcp"
+                splog "VM $vmId volume $v current vc-policy:$vcp"
+            fi
+            qcNew="${SP_QOSCLASS//[[:space:]]/}"
+            qcNew="${qcNew:-${DEFAULT_QOSCLASS}}"
+            if [ "$qcNew" != "$qc" ]; then
+                splog "VM $vmId volume:$v current qc:$qc new:$qcNew"
+                storpoolRetry volume "$v" tag "qc"="$qcNew"
+            elif boolTrue "DDEBUG_alterVcPolicy"; then
+                splog "VM $vmId volume $v current qc:$qc"
             fi
         fi
-    done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]' "$volumeListJson")
+    done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "$volumeListJson")
     unset vmDisksMap
 }
 

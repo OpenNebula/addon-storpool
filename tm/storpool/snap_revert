@@ -107,7 +107,7 @@ else
 fi
 
 storpoolVolumeAttach "$SP_VOL" "$SRC_HOST"
-storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
+storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
 oneSymlink "$SRC_HOST" "$SP_LINK" "$SRC_PATH"
 trapReset
 

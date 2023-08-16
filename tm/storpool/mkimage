@@ -155,7 +155,7 @@ fi
 
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
 
-storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY}" "$VM_TAG;${VC_POLICY:+vc-policy}"
+storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
 
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED"; then
