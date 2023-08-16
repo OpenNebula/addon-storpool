@@ -162,6 +162,7 @@ default_config = {
 #                    "T_CPU_MATCH" => "T_CPU_MATCH",
 #                    "T_VF_MACS" => "T_VF_MACS",
                     "VC_POLICY" => "VC_POLICY",
+                    "SP_QOSCLASS" => "SP_QOSCLASS",
                 },
             },
         },

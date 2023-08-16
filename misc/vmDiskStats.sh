@@ -75,6 +75,7 @@ oneVmVolumes()
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
+        /VM/USER_TEMPLATE/SP_QOSCLASS \
         /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     unset i
@@ -97,6 +98,7 @@ oneVmVolumes()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ]; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
+    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     local IMG=
     _OFS=$IFS

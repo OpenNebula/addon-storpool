@@ -155,7 +155,7 @@ elif [ "$TYPE" = "CDROM" ]; then
 	if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then
         if storpoolVolumeExists "$SP_VOL"; then
             storpoolVolumeDetach "$SP_VOL" "force" "$DST_HOST" "" "$READONLY"
-			storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
+			storpoolVolumeTag "$SP_VOL" ";;${DEFAULT_QOSCLASS}" "$VM_TAG;vc-policy;qc"
         fi
 	fi
     DELAY_DELETE=
@@ -167,7 +167,7 @@ else
 
     storpoolVolumeDetach "$SP_VOL" "force" "" "all" "$READONLY"
 
-	storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
+	storpoolVolumeTag "$SP_VOL" ";;${DEFAULT_QOSCLASS}" "$VM_TAG;vc-policy;qc"
 fi
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     if [ $LCM_STATE -ne 15 ]; then

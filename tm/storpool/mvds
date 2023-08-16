@@ -87,7 +87,7 @@ if boolTrue "SHAREABLE"; then
 else
     storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
-    storpoolVolumeTag "$SP_VOL" ";" "$VM_TAG;vc-policy"
+    storpoolVolumeTag "$SP_VOL" ";;${DEFAULT_QOSCLASS}" "$VM_TAG;vc-policy;qc"
 
     if boolTrue "DEFERRED"; then
         storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"

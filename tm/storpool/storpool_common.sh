@@ -1286,6 +1286,7 @@ function oneVmInfo()
                             /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
                             /VM/USER_TEMPLATE/INCLUDE_CONTEXT_PACKAGES \
                             /VM/USER_TEMPLATE/T_OS_NVRAM \
+                            /VM/USER_TEMPLATE/SP_QOSCLASS \
                             /VM/USER_TEMPLATE/VC_POLICY)
     rm -f "$tmpXML"
     unset i
@@ -1330,6 +1331,7 @@ function oneVmInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         T_OS_NVRAM="${_TMP}"
     fi
+    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "DEBUG_oneVmInfo" || return 0
@@ -1358,6 +1360,7 @@ ${VM_TM_MAD:+VM_TM_MAD=$VM_TM_MAD }\
 ${VM_DS_ID:+VM_DS_ID=$VM_DS_ID }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
+${SP_QOSCLASS:+SP_QOSCLASS='$SP_QOSCLASS' }\
 ${VC_POLICY:+VC_POLICY='$VC_POLICY' }\
 ${T_OS_NVRAM:+T_OS_NVRAM='$T_OS_NVRAM' }\
 ${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES' }\
@@ -1529,6 +1532,7 @@ function oneTemplateInfo()
                     /VM/PREV_STATE \
                     /VM/TEMPLATE/CONTEXT/DISK_ID \
 					/VM/USER_TEMPLATE/T_OS_NVRAM \
+					/VM/USER_TEMPLATE/SP_QOSCLASS \
 					/VM/USER_TEMPLATE/VC_POLICY)
     unset i
     _VM_ID=${XPATH_ELEMENTS[i++]}
@@ -1537,9 +1541,10 @@ function oneTemplateInfo()
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
     T_OS_NVRAM="${XPATH_ELEMENTS[i++]}"
+    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
-        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY"
+        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY SP_QOSCLASS=$SP_QOSCLASS"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
@@ -1878,6 +1883,7 @@ oneVmVolumes()
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/T_OS_NVRAM \
         /VM/USER_TEMPLATE/VMSNAPSHOT_WITH_CHECKPOINT \
+        /VM/USER_TEMPLATE/SP_QOSCLASS \
         /VM/USER_TEMPLATE/VC_POLICY \
         /VM/BACKUPS/BACKUP_CONFIG/BACKUP_VOLATILE \
         /VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE \
@@ -1912,6 +1918,7 @@ oneVmVolumes()
         T_OS_NVRAM="${_TMP}"
     fi
     VMSNAPSHOT_WITH_CHECKPOINT="${XPATH_ELEMENTS[i++]}"
+    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     BACKUP_VOLATILE="${XPATH_ELEMENTS[i++]}"
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
@@ -1990,7 +1997,7 @@ oneVmVolumes()
         fi
     fi
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VC_POLICY:+ VC_POLICY=$VC_POLICY}${VMSNAPSHOT_WITH_CHECKPOINT:+ VMSNAPSHOT_WITH_CHECKPOINT=$VMSNAPSHOT_WITH_CHECKPOINT}${BACKUP_VOLATILE:+ BACKUP_VOLATILE=$BACKUP_VOLATILE}${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=$BACKUP_FS_FREEZE}${BACKUP_MODE:+ BACKUP_MODE=$BACKUP_MODE}"
+        splog "oneVmVolumes() VM_ID:$VM_ID VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${SP_QOSCLASS:+ SP_QOSCLASS=$SP_QOSCLASS}{VC_POLICY:+ VC_POLICY=$VC_POLICY}${VMSNAPSHOT_WITH_CHECKPOINT:+ VMSNAPSHOT_WITH_CHECKPOINT=$VMSNAPSHOT_WITH_CHECKPOINT}${BACKUP_VOLATILE:+ BACKUP_VOLATILE=$BACKUP_VOLATILE}${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=$BACKUP_FS_FREEZE}${BACKUP_MODE:+ BACKUP_MODE=$BACKUP_MODE}"
     fi
 }
 
@@ -2340,7 +2347,7 @@ function shareableDetach()
                 if rmdir "${_S_PATH}" 2>/dev/null; then
                     _S_PATH="${_S_PATH%/*}"
                     if rmdir "${_S_PATH}" 2>/dev/null; then
-                        storpoolVolumeTag "$_SP_VOL" ";" "shareable;vc-policy"
+                        storpoolVolumeTag "$_SP_VOL" ";;${DEFAULT_QOSCLASS}" "shareable;vc-policy;qc"
                         _S_PATH="${_S_PATH%/*}"
                         if rmdir -p "${_S_PATH}" 2>/dev/null; then
                             splog "shareableDetach: rmdir -p ${_S_PATH} (Success)"
