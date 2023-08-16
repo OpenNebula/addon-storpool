@@ -32,6 +32,7 @@ EOF
 ```bash
 # restrict the VC_POLICY variable to the 'oneadmin' group only
 echo 'VM_RESTRICTED_ATTR = "VC_POLICY"' >>/etc/one/oned.conf
+echo 'VM_RESTRICTED_ATTR = "VC_QOSCLASS"' >>/etc/one/oned.conf
 
 # restart the opennebula service
 systemctl restart opennebula.service
@@ -41,6 +42,8 @@ systemctl restart opennebula.service
 
 Set the _VC_POLICY_ variable in the VM's _USER_TEMPLATE_ with the corresponding volumecare policy.
 To disable the volumecare delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
+
+For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. Optionally, to improve the managin of the QOS set the _DEFAULT_QOSCLASS_ variable in addon-storpoolrc to the desired value.
 
 ## Troubleshooting
 
@@ -158,10 +161,14 @@ EXECUTION STDERR
 
 ```bash
 $ grep vc_sp_ /var/log/messages
-Jan 22 17:42:22 vs04 vc_sp_vc-policy.sh: /var/lib/one/remotes/hooks/volumecare/volumecare '185'
-Jan 22 17:42:23 vs04 vc_sp_volumecare[20066]: (0) onedatastore list  -x >/tmp/tmp.4sUnQoi7ll/datastorePool.xml
-Jan 22 17:42:24 vs04 vc_sp_volumecare[20066]: volume:one-img-24-185-0 current vc-policy: new:monthly
-Jan 22 17:42:24 vs04 vc_sp_volumecare[20066]: storpool volume one-img-24-185-0 tag vc-policy=monthly
-Jan 22 17:42:24 vs04 vc_sp_volumecare[20066]: volume:one-img-26-185-1 current vc-policy: new:monthly
-Jan 22 17:42:24 vs04 vc_sp_volumecare[20066]: storpool volume one-img-26-185-1 tag vc-policy=monthly
+Aug 16 13:16:35 vs04 vc_sp_vc-policy.sh: /var/lib/one/remotes/hooks/volumecare/volumecare '185'
+Aug 16 13:16:36 vs04 vc_sp_volumecare[20066]: (0) onedatastore list  -x >/tmp/tmp.4sUnQoi7ll/datastorePool.xml
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 volume:one-img-24-185-0 current vc-policy: new:monthly
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 storpool volume one-img-24-185-0 tag vc-policy=monthly
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 volume:one-img-26-185-1 current vc-policy: new:monthly
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 storpool volume one-img-26-185-1 tag vc-policy=monthly
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 volume:one-img-24-185-0 current qc: new:tier2
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 storpool volume one-img-24-185-0 tag qc=tier2
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 volume:one-img-26-185-1 current qc: new:tier2
+Aug 16 13:16:37 vs04 vc_sp_volumecare[20066]: VM 185 storpool volume one-img-26-185-1 tag qc=tier2
 ```
