@@ -25,6 +25,8 @@ if [ -f ./config ]; then
     eval "$(egrep 'DATASTORE_LOCATION|SCRIPTS_REMOTE_DIR' ./config)"
 fi
 
+set -a
+
 SCRIPT_PATH="$(dirname $0)"
 if [ -f "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc" ]; then
     source "$SCRIPT_PATH/../../etc/vmm/kvm/kvmrc"
@@ -38,7 +40,7 @@ if [ -f "$SCRIPT_PATH/../../addon-storpoolrc" ]; then
     source "$SCRIPT_PATH/../../addon-storpoolrc"
 fi
 
-for var in ONE_PX NVRAM_TEMPLATE_PATH; do
+for var in ONE_PX NVRAM_TEMPLATE_PATH TMPDIR ERR_FILE; do
     [ -z "${!var}" ] || export $var
 done
 

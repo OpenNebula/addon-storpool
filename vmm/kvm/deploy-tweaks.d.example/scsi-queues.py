@@ -17,6 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 from sys import argv
+import os
 from xml.etree import ElementTree as ET
 
 ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
@@ -47,6 +48,10 @@ xmlDomain = argv[1]
 doc = ET.parse(xmlDomain)
 root = doc.getroot()
 
+xmlVm = argv[2]
+vm_element = ET.parse(xmlVm)
+vm = vm_element.getroot()
+
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
@@ -74,6 +79,19 @@ for scsi in controllers:
     if driver is None:
         driver = ET.SubElement(scsi, 'driver')
     driver.attrib['queues'] = '{0}'.format(vcpu)
+
+# virtio-blk
+blk_queues = os.getenv('T_BLK_QUEUES', 'NO')
+blk_queues_e = vm.find('.//USER_TEMPLATE/T_BLK_QUEUES')
+if blk_queues_e is not None:
+    blk_queues = blk_queues_e.text
+if blk_queues.upper() in ['1', 'YES', 'Y']:
+    for disk in root.findall('./devices/disk'):
+        target = disk.find('./target')
+        if target.attrib['dev'][:2] != 'vd' :
+            continue
+        driver = disk.find('./driver')
+        driver.attrib['queues'] = '{0}'.format(vcpu)
 
 indent(root)
 doc.write(xmlDomain)
