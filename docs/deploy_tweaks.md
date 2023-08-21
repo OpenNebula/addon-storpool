@@ -205,6 +205,10 @@ Set the number of `nqueues` for virtio-scsi controllers to match the number of V
 </domain>
 ```
 
+There is an option to enable the queues for virtio-blk disks too by defining `T_BLK_QUEUES=YES` per VM in the `USER_TEMPLATE` or globally in addon-storpoolrc or vmm/kvmrc file.
+Note: This functionallity must be supported by the installed qemu-kvm.
+
+
 #### uuid.py
 
 Override/define `domain/uuid` with the value from `USER_TEMPLATE/T_UUID`
