@@ -320,11 +320,11 @@ function oneHostInfo()
     fi
     onehost show $ONE_ARGS -x "$_name" >"$tmpXML"
     ret=$?
-    if [ $ret -ne 0 ]; then
-        errmsg="(oneHostInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
-        log_error "$errmsg"
-        splog "$errmsg"
-        exit $ret
+    if [[ ${ret} -ne 0 ]]; then
+        errmsg="(oneHostInfo) Error: Can't get info for host '${_name}'! $(head -n 1 "${tmpXML}") (ret:${ret})"
+        log_error "${errmsg}"
+        splog "${errmsg}"
+        exit "${ret}"
     fi
 
     unset XPATH_ELEMENTS i
