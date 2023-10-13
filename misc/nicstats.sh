@@ -43,7 +43,7 @@ function boolTrue()
 
 function splog()
 {
-   logger -t "nic_sp_${0##*/}[$$]" -- "$*"
+   logger -t "nic_sp_${0##*/}" -- "[$$] $*"
 }
 
 function report()
