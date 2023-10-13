@@ -19,7 +19,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "tm_sp_${0##*/}[$$]" "$*"; }
+function splog() { logger -t "tm_sp_${0##*/}" "[$$] $*"; }
 
 DISK="$1"
 DS_ID="$2"
