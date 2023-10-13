@@ -1,0 +1,13 @@
+--- remotes/vmm/kvm/reconfigure.~1~	2022-05-10 17:40:48.000000000 +0300
++++ remotes/vmm/kvm/reconfigure	2022-05-11 10:15:32.289806919 +0300
+@@ -28,6 +28,10 @@
+     CMD="virsh --connect $LIBVIRT_URI \
+         change-media $DOMAIN $TARGET_DEVICE $ISO_PATH --insert"
+ 
++    CDROM_TYPE=$(stat -L --format=%F "$ISO_PATH" | awk '{print $1}')
++    [ "$CDROM_TYPE" != "block" ] || CMD="$CMD --block"
++    logger -t "vmm_sp_rec" -- "$CMD # $CDROM_TYPE"
++
+     exec_and_log "$CMD" "Could not insert CDROM $ISO_PATH to $TARGET_DEVICE"
+ fi
+ 
