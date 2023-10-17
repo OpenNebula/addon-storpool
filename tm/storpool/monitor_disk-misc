@@ -70,7 +70,7 @@ if [ -b "$DISK_DEV" ]; then
 elif [ -f "$DISK_DEV" ]; then
 	# borrowed from ../shared/monitor
 	vmdir="$(basename "$DISK")"
-	disk_size="$(du -mL "$DISK_DEV" | awk '{print $1}')"
+	disk_size="$(du -mL --apparent-size "$DISK_DEV" | awk '{print $1}')"
 	
 	if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
 		splog "$DISK ID:$DISK_ID SIZE:$disk_size"
@@ -83,7 +83,7 @@ elif [ -f "$DISK_DEV" ]; then
 		snaps="$(ls "$snap_dir" | grep '^[0-9]$')"
 		
 		for snap in $snaps; do
-			snap_size="$(du -mL "${snap_dir}/${snap}" | awk '{print $1}')"
+			snap_size="$(du -mL --apparent-size "${snap_dir}/${snap}" | awk '{print $1}')"
 			[ -z "$snap_size" ] && continue
 			
 			if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
