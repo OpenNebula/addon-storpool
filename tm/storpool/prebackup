@@ -90,7 +90,6 @@ for map in $vmDisksMap; do
         list+=(${img} ${snapshot})
         backups+="${snapshot}:${did} "
         echo "$snapshot" >>"$B_DIR/.storpool_snapshots"
-        echo "$snapshot" >"$B_DIR/disk.${did}.0.storpool_snapshot"
     fi
 done
 
