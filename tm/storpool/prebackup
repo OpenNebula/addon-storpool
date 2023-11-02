@@ -36,6 +36,11 @@ DISKS="$2"
 DEPLOY_ID="$3"
 VM_ID="$4"
 SYSDS_ID="$5"
+if [ -n "$6" ]; then
+    BJ_ID="$4"
+    VM_ID="$5"
+    SYSDS_ID="$6"
+fi
 
 B_DIR="$VMDIR/backup"
 
