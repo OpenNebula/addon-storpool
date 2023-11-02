@@ -1389,10 +1389,10 @@ function oneDatastoreInfo()
             onedatastore list $ONE_ARGS -x >"$_DS_POOL_FILE"
             ret=$?
             if boolTrue "DEBUG_oneDatastoreInfo"; then
-                splog "($?) onedatastore list $ONE_ARGS -x >$_DS_POOL_FILE" 
+                splog "($ret) onedatastore list $ONE_ARGS -x >$_DS_POOL_FILE"
             fi
             if [ $ret -ne 0 ]; then
-                errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
+                errmsg="(oneDatastoreInfo) Error: Can't get info DS=${_DS_ID}! $(head -n 1 "$tmpXML") (ret:$ret)"
                 splog "$errmsg"
                 exit $ret
             fi
@@ -1405,7 +1405,7 @@ function oneDatastoreInfo()
     fi
 
     if [ $ret -ne 0 ]; then
-        errmsg="(oneDatastoreInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
+        errmsg="(oneDatastoreInfo) Error: Can't get info DS=${_DS_ID}! $(head -n 1 "$tmpXML") (ret:$ret)"
         log_error "$errmsg"
         splog "$errmsg"
         exit $ret
