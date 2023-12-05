@@ -164,7 +164,7 @@ fi
 storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$READONLY_MODE"
 
 if boolTrue "TAG_CONTEXT_ISO"; then
-    storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
+    storpoolVolumeTag "$SP_VOL" "${ONE_PX:-one}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
 fi
 
 MONITOR_TM_MAD=
@@ -207,7 +207,7 @@ if [ -n "$T_OS_NVRAM" ]; then
                 exec_and_log "eval $PIPE_CMD | $SSH $DST_HOST $DD of=$SP_LINK bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct" \
                     "Error importing $NVRAM_TEMPLATE to ${DST_HOST}:${SP_LINK}"
                 trapReset
-                storpoolVolumeTag "$SP_VOL" "$VM_ID;${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
+                storpoolVolumeTag "$SP_VOL" "${ONE_PX:-one}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
 
             else
                 splog "Can't get the size of $NVRAM_TEMPLATE!"

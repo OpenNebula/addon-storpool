@@ -76,6 +76,7 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 
 # Tag all VM disks with tag $VM_TAG=$VM_ID
 # Empty string will disable the tagging
+# The tag value is set to '${ONE_PX}:${VM_ID}'
 # Default: nvm
 #
 #VM_TAG=nvm

@@ -54,15 +54,15 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         MEM_VOL="$ONE_PX-sys-$VM_ID"
         diskVolumes["$MEM_VOL"]="$MEM_VOL"
     fi
-	while read -u 5 snap vid; do
+	while read -u 5 snap vmtag; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
-            splog "$snap vid:$vid"
+            splog "$snap vmtag:$vmtag"
         fi
         snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
-        if [ -n "$vid" ]; then
-            if [ "$VM_ID" != "$vid" ]; then
+        if [ -n "$vmtag" ]; then
+            if [ "${ONE_PX:-one}:$VM_ID" != "$vmtag" ]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
-                    splog "Skip $snap (VM_ID $VM_ID != $vid, VM_TAG=$VM_TAG)"
+                    splog "Skip $snap (${ONE_PX:-one}:${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
                 fi
                 continue
             fi

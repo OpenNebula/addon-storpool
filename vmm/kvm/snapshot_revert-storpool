@@ -77,19 +77,19 @@ EOF
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-    while read -u 5 snap vid; do
+    while read -u 5 snap vmtag; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
-            splog "$snap vid:$vid"
+            splog "$snap vmtag:$vmtag"
         fi
         snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
         if [ "$snapVol" = "$MEM_VOL" ]; then
             MEM_SNAP="$snap"
             continue
         fi
-        if [ -n "$vid" ]; then
-            if [ "$VM_ID" != "$vid" ]; then
+        if [ -n "$vmtag" ]; then
+            if [ "${ONE_PX:-one}:${VM_ID}" != "$vmtag" ]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
-                    splog "Skip $snap (VM_ID $VM_ID != $vid, VM_TAG=$VM_TAG)"
+                    splog "Skip $snap (${ONE_PX:-one}:${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
                 fi
                 continue
             fi
@@ -143,7 +143,7 @@ EOF
             splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
         fi
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
-        storpoolVolumeTag "$volume" "$VM_ID;${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
+        storpoolVolumeTag "$volume" "${ONE_PX:-one}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)
         splog "END snapshot $snap ($te dt:$((te-tb)))"

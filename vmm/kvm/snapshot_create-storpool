@@ -104,7 +104,7 @@ EOF
             splog "Can't attach checkpoint volume to $VMHOST!"
         fi
         list+=($MEM_VOL ${MEM_VOL}-$res)
-        json="$(volumesGroupSnapshotJson "tag:$VM_TAG=$VM_ID" ${list[@]})"
+        json="$(volumesGroupSnapshotJson "tag:$VM_TAG=${ONE_PX:-one}:${VM_ID}" ${list[@]})"
         apiCmd="$(storpoolApiCmdline=1 storpoolApi "VolumesGroupSnapshot" "$json")"
         MEM_LNK="/dev/storpool/$MEM_VOL"
         TDIR="$(mktemp -d)"
@@ -192,7 +192,7 @@ EOF
         splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN is frosen"
         sleep ${VMSNAPSHOT_SLEEP:-.3}
     fi
-    storpoolRetry groupSnapshot "tag:$VM_TAG=$VM_ID" ${list[@]}
+    storpoolRetry groupSnapshot "tag:$VM_TAG=${ONE_PX:-one}:${VM_ID}" ${list[@]}
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
         pids="$(jobs -p)"
         if [ -n "$pids" ]; then
