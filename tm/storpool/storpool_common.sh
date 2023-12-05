@@ -98,7 +98,7 @@ CLEAN_SRC_ON_UNDEPLOY=1
 DISKSNAPSHOT_LIMIT=
 # update image template's variables DRIVER=raw and FORMAT=raw during import
 UPDATE_IMAGE_ON_IMPORT=0
-# Tag all VM disks with tag $VM_TAG=$VM_ID
+# Tag all VM disks with tag $VM_TAG=${ONE_PX}:${VM_ID}
 # Empty string will disable the tagging
 VM_TAG=nvm
 # common opennebula tools args
@@ -2179,7 +2179,7 @@ forceDetachOther()
         vmVolumes="$VOLUME"
     else
         if boolTrue "FORCE_DETACH_BY_TAG"; then
-            storpoolVmVolumes "$VM_TAG" "$VM_ID"
+            storpoolVmVolumes "$VM_TAG" "${ONE_PX:-one}:${VM_ID}"
         else
             oneVmVolumes "$VM_ID"
         fi

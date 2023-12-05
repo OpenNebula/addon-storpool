@@ -181,7 +181,9 @@ EOF
 
 For each OpenNebula instance set a different string in the `ONE_PX` variable.
 
-It is possible to change the default volume tagging by setting `VM_TAG` variable.
+It is possible to change the default volume tag name (`nvm`) by setting `VM_TAG` variable.
+
+The tag value has format `${ONE_PX}:${VM_ID}`
 
 
 ## VM's domain XML tweaking
