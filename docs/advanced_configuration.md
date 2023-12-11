@@ -181,9 +181,13 @@ EOF
 
 For each OpenNebula instance set a different string in the `ONE_PX` variable.
 
+It is possible to change the instance tag name (`nloc`) by setting `LOC_TAG` variable.
+
+The ${LOC_TAG} tag value is set using the `LOC_TAG_VAL` variable, where the default is `LOC_TAG_VAL=${ONE_PX}`
+
 It is possible to change the default volume tag name (`nvm`) by setting `VM_TAG` variable.
 
-The tag value has format `${ONE_PX}:${VM_ID}`
+The `${VM_TAG}` tag value has format `${VM_ID}`
 
 
 ## VM's domain XML tweaking

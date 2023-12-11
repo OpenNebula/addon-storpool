@@ -98,7 +98,7 @@ CLEAN_SRC_ON_UNDEPLOY=1
 DISKSNAPSHOT_LIMIT=
 # update image template's variables DRIVER=raw and FORMAT=raw during import
 UPDATE_IMAGE_ON_IMPORT=0
-# Tag all VM disks with tag $VM_TAG=${ONE_PX}:${VM_ID}
+# Tag all VM disks with tag $VM_TAG=${VM_ID}
 # Empty string will disable the tagging
 VM_TAG=nvm
 # common opennebula tools args
@@ -172,6 +172,8 @@ function get_one_version()
 }
 
 ONE_PX="${ONE_PX:-one}"
+LOC_TAG="${LOC_TAG:-nloc}"
+LOC_TAG_VAL="${LOC_TAG_VAL:-${ONE_PX}}"
 
 DRIVER_PATH="$(dirname $0)"
 sprcfile="$(lookup_file "addon-storpoolrc" "$DRIVER_PATH")"
@@ -2157,11 +2159,13 @@ oneSnapshotLookup()
 storpoolVmVolumes()
 {
     vmVolumes=
-    while read -u 7 vol; do
+    while read -u 7 vol loctagval; do
+        [ "${loctagval}" == "${LOC_TAG_VAL}" ] || continue
         [ -z "${vol%${ONE_PX}*}" ] || continue
         vmVolumes+="$vol "
     done 7< <(storpoolRetry -j volume list |\
-        jq -r --arg t "$1" --arg v "$2" '.data[]|select(.tags[$t]==$v)|.name'
+        jq -r --arg vmtag "$1" --arg vmtagval "$2" \
+            '.data[]|select(.tags[$vmtag]==$vmtagval)|.name+" "+.tags[$loctag]'
     )
     splog "storpoolVmVolumes($1,$2) $vmVolumes"
 }
@@ -2179,7 +2183,7 @@ forceDetachOther()
         vmVolumes="$VOLUME"
     else
         if boolTrue "FORCE_DETACH_BY_TAG"; then
-            storpoolVmVolumes "$VM_TAG" "${ONE_PX:-one}:${VM_ID}"
+            storpoolVmVolumes "$VM_TAG" "${VM_ID}"
         else
             oneVmVolumes "$VM_ID"
         fi
@@ -2347,7 +2351,7 @@ function shareableDetach()
                 if rmdir "${_S_PATH}" 2>/dev/null; then
                     _S_PATH="${_S_PATH%/*}"
                     if rmdir "${_S_PATH}" 2>/dev/null; then
-                        storpoolVolumeTag "$_SP_VOL" ";;${DEFAULT_QOSCLASS}" "shareable;vc-policy;qc"
+                        storpoolVolumeTag "$_SP_VOL" "one;;;${DEFAULT_QOSCLASS}" "virt;shareable;vc-policy;qc"
                         _S_PATH="${_S_PATH%/*}"
                         if rmdir -p "${_S_PATH}" 2>/dev/null; then
                             splog "shareableDetach: rmdir -p ${_S_PATH} (Success)"

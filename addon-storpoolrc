@@ -81,6 +81,11 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #VM_TAG=nvm
 
+# Tag to which OpenNebula /RAFT cluster/ a volume/snapshot belong
+# Default: nloc
+#
+#LOC_TAG=nloc
+
 # Optional common arguments to OpenNebula shell tools
 #ONE_ARGS=
 

@@ -46,9 +46,9 @@ while read -u 4 -d' ' VM_ID; do
     echo "# VM_ID=$VM_ID vmVolumes=$vmVolumes"
     for vol in $vmVolumes; do
         if [ "${vol%iso}" = "$vol" ]; then
-            storpoolVolumeTag "$vol" "${ONE_PX:-one}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
+            storpoolVolumeTag "$vol" "one;${LOC_TAG_VAL}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG}:$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
             while read -u 5 snap; do
-                storpoolSnapshotTag "$snap" "${ONE_PX:-one}:${VM_ID}" "$VM_TAG"
+                storpoolSnapshotTag "$snap" "one;${LOC_TAG_VAL};${VM_ID}" "virt;${LOC_TAG};$VM_TAG"
             done 5< <( jq -r --arg n "${vol}-ONESNAP" ".data[]|select(.name|startswith(\$n))|.name" "$snapshots_json")
         else
             echo "# skipping $vol"
