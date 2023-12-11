@@ -77,21 +77,29 @@ EOF
     SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-    while read -u 5 snap vmtag; do
+    while read -u 5 snap vmtag loctagval; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
-            splog "$snap vmtag:$vmtag"
+            splog "$snap vmtag:$vmtag loctagval:$loctagval"
         fi
         snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
         if [ "$snapVol" = "$MEM_VOL" ]; then
             MEM_SNAP="$snap"
             continue
         fi
-        if [ -n "$vmtag" ]; then
-            if [ "${ONE_PX:-one}:${VM_ID}" != "$vmtag" ]; then
+        if [ -n "${vmtag/null/}" ]; then
+            if [ "${VM_ID}" != "$vmtag" ]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
-                    splog "Skip $snap (${ONE_PX:-one}:${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
+                    splog "Skip $snap (${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
                 fi
                 continue
+            fi
+            if [ -n "${loctagval/null/}" ]; then
+                if [ "$loctagval" != "$LOC_TAG_VAL" ]; then
+                    if boolTrue "DEBUG_VMSNAPSHOT"; then
+                        splog "Skip $snap (loctagval $loctagval != $LOC_TAG_VAL)"
+                    fi
+                    continue
+                fi
             fi
         elif [ -z "${diskVolumes["$snapVol"]}" ]; then
             if boolTrue "DEBUG_VMSNAPSHOT"; then
@@ -101,7 +109,8 @@ EOF
         fi
         snapList+=("$snap")
     done 5< <(storpoolRetry -j snapshot list |\
-                  jq -r --arg snp "$SNAP_ID" --arg tag "$VM_TAG" '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$tag]')
+                  jq -r --arg snp "$SNAP_ID" --arg vmtag "$VM_TAG" --arg loctag "$LOC_TAG" \
+                      '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]')
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
         if [ -z "$MEM_SNAP" ]; then
            splog "Error: VMSNAPSHOT_WITH_CHECKPOINT is set but checkpoint snapshot not found"
@@ -143,7 +152,7 @@ EOF
             splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
         fi
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
-        storpoolVolumeTag "$volume" "${ONE_PX:-one}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "$VM_TAG;${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
+        storpoolVolumeTag "$volume" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG};$VM_TAG;${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)
         splog "END snapshot $snap ($te dt:$((te-tb)))"

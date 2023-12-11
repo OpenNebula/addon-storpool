@@ -54,17 +54,25 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         MEM_VOL="$ONE_PX-sys-$VM_ID"
         diskVolumes["$MEM_VOL"]="$MEM_VOL"
     fi
-	while read -u 5 snap vmtag; do
+	while read -u 5 snap vmtag loctagval; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
-            splog "$snap vmtag:$vmtag"
+            splog "$snap vmtag:$vmtag loctagval:$loctagval"
         fi
         snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
-        if [ -n "$vmtag" ]; then
-            if [ "${ONE_PX:-one}:$VM_ID" != "$vmtag" ]; then
+        if [ -n "${vmtag/null/}" ]; then
+            if [ "$VM_ID" != "$vmtag" ]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
-                    splog "Skip $snap (${ONE_PX:-one}:${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
+                    splog "Skip $snap (${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
                 fi
                 continue
+            fi
+            if [ -n "${loctagval/null/}" ]; then
+                if [ "$loctagval" != "$LOC_TAG_VAL" ]; then
+                    if boolTrue "DEBUG_VMSNAPSHOT"; then
+                        splog "Skip $snap (loctagval $loctagval != $LOC_TAG_VAL)"
+                    fi
+                    continue
+                fi
             fi
         elif [ "${snap:0:1}" = "*" ]; then
 			if boolTrue "DEBUG_VMSNAPSHOT"; then
@@ -79,7 +87,9 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 		fi
 		storpoolRetry snapshot "$snap" delete "$snap"
 	done 5< <(storpoolRetry -j snapshot list |\
-				jq -r --arg snp "$SNAP_ID" --arg tag "$VM_TAG" '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$tag]')
+				jq -r --arg snp "$SNAP_ID" --arg vmtag "$VM_TAG" --arg loctag "$LOC_TAG" \
+                    '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]')
 	splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID"
 	exit 0
+C_TAG_VA
 fi

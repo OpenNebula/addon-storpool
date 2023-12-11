@@ -501,7 +501,6 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
 
 ## Upgrade notes
 
-
 * The suggested upgrade procedure is as follow
 
     1. Stop all opennebula services
@@ -509,6 +508,8 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
     3. Upgrade the addon (checkout/clone latest from github and run _AUTOCONF=1 bash install.sh_)
     4. Follow the addon configuration chapter in README.md to (re)configure the extras
     5. Continue (re)configuring OpenNebula following the upstream docs
+
+* After upgrade please run misc/tagVolumes.sh to update/apply the common tags for volumes/snapshots
 
 ## StorPool naming convention
 

@@ -487,7 +487,7 @@ else
     fi
     storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "$SP_MODE"
 
-    storpoolVolumeTag "$SP_VOL" "$VM_ID"
+    storpoolVolumeTag "$SP_VOL" "one;${LOC_TAG_VAL};$VM_ID" "virt;${LOC_TAG};$VM_TAG"
 
     if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
         forceDetachOther "$VM_ID" "$DST_HOST" "$SP_VOL"

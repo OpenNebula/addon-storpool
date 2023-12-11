@@ -98,7 +98,7 @@ for map in $vmDisksMap; do
     fi
 done
 
-storpoolRetry groupSnapshot "tag:$VM_TAG=${ONE_PX:-one}:${VM_ID}" ${list[@]}
+storpoolRetry groupSnapshot "tag:$VM_TAG=${VM_ID}" "tag:${LOC_TAG}=${LOC_TAG_VAL}" "tag:virt=one" ${list[@]}
 
 for b in $backups; do
     snap="${b%:*}"
