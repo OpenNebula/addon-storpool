@@ -177,9 +177,20 @@ else
     # Import image to temp volume
     #-------------------------------------------------------------------------------
 
+    TEMP_SIZE="${SIZE}"
+    if [[ -f "${IMAGE_PATH}" ]] && [[ -s "${IMAGE_PATH}" ]]; then
+        # Check is the file(qcow2) size bigger than the virtual size
+        FSIZE_S=$(${STAT:-stat} --printf="%s" "${IMAGE_PATH}" || true)
+        FSIZE=$(((FSIZE_S+1048575)/1048576))
+        if [[ ${FSIZE} -gt ${SIZE} ]]; then
+            splog "File ${IMAGE_PATH} stat size ${FSIZE}(${FSIZE_S}) > SIZE=${SIZE} (with ~ $((FSIZE-SIZE))MB)"
+            TEMP_SIZE=${FSIZE}
+        fi
+    fi
+
     storpoolTemplate "$SP_TEMPLATE"
 
-    storpoolVolumeCreate "$SP_TEMP_VOL" "$SIZE"M "$SP_TEMPLATE"
+    storpoolVolumeCreate "$SP_TEMP_VOL" "$TEMP_SIZE"M "$SP_TEMPLATE"
 
     trapAdd "storpoolVolumeDelete \"$SP_TEMP_VOL\" force snaps"
 
