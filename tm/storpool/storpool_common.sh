@@ -2395,3 +2395,30 @@ EOF`
         exit $SSH_EXEC_RC
     fi
 }
+
+# Override the non-working upstream function
+function remove_off_hosts {
+    local hst="" state="" HOST="" _RET=1
+    read -ra LOOKUP_HOSTS_ARRAY <<<"$1"
+    unset HOSTS_ARRAY
+    declare -A HOSTS_ARRAY
+    for hst in "${LOOKUP_HOSTS_ARRAY[@]}"; do
+        HOSTS_ARRAY["${hst//\./}"]="1"
+    done
+    while IFS=',' read -r -u 4 hst state; do
+        [[ -n ${state} ]] || continue
+        if [[ ${state} -lt 1 ]] || [[ ${state} -gt 2 ]]; then
+            continue
+        fi
+        [[ -n "${HOSTS_ARRAY["${hst//\./}"]}" ]] || continue
+        echo -ne "${hst} "
+        _RET=0
+    done 4< <(oneCallXml onehost list | \
+        xmlstarlet sel -t -m '//HOST' -v NAME -o ',' -v STATE -n 2>/dev/null \
+        || true)
+    if [[ ${_RET} -ne 0 ]]; then
+        splog "remove_off_hosts($1) Error: Can't filter hosts!"
+        echo "${LOOKUP_HOSTS_ARRAY[*]}"
+    fi
+    return "${_RET}"
+}
