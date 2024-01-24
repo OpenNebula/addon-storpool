@@ -32,7 +32,7 @@ EOF
 ```bash
 # restrict the VC_POLICY variable to the 'oneadmin' group only
 echo 'VM_RESTRICTED_ATTR = "VC_POLICY"' >>/etc/one/oned.conf
-echo 'VM_RESTRICTED_ATTR = "VC_QOSCLASS"' >>/etc/one/oned.conf
+echo 'VM_RESTRICTED_ATTR = "SP_QOSCLASS"' >>/etc/one/oned.conf
 
 # restart the opennebula service
 systemctl restart opennebula.service
@@ -43,7 +43,7 @@ systemctl restart opennebula.service
 Set the _VC_POLICY_ variable in the VM's _USER_TEMPLATE_ with the corresponding volumecare policy.
 To disable the volumecare delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
 
-For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. Optionally, to improve the managin of the QOS set the _DEFAULT_QOSCLASS_ variable in addon-storpoolrc to the desired value.
+For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. Optionally, to improve the management of the QOS set the _DEFAULT_QOSCLASS_ variable in addon-storpoolrc to the desired value.
 
 ## Troubleshooting
 
@@ -51,18 +51,18 @@ For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable
 
 ```bash
 $ onehook list
-  ID NAME                TYPE    
+  ID NAME                TYPE
    1 vc-policy           api
    0 vnm_filter          state
 
 $ onehook  show 1
-HOOK 1 INFORMATION                                                              
-ID                : 1                   
-NAME              : vc-policy           
-TYPE              : api                 
-LOCK              : None                
+HOOK 1 INFORMATION
+ID                : 1
+NAME              : vc-policy
+TYPE              : api
+LOCK              : None
 
-HOOK TEMPLATE                                                                   
+HOOK TEMPLATE
 ARGUMENTS="$API"
 ARGUMENTS_STDIN="YES"
 CALL="one.vm.update"
@@ -93,15 +93,15 @@ EXECUTION LOG
    29     01/22 17:42     0 SUCCESS
 
 $ onehook show 1 -e 18
-HOOK 1 INFORMATION                                                              
-ID                : 1                   
-NAME              : vc-policy           
-TYPE              : api                 
-LOCK              : None                
+HOOK 1 INFORMATION
+ID                : 1
+NAME              : vc-policy
+TYPE              : api
+LOCK              : None
 
-HOOK EXECUTION RECORD                                                           
-EXECUTION ID      : 18                  
-TIMESTAMP         : 01/21 16:42:47      
+HOOK EXECUTION RECORD
+EXECUTION ID      : 18
+TIMESTAMP         : 01/21 16:42:47
 COMMAND           : /var/lib/one/remotes/hooks/volumecare/vc-policy.sh
 ARGUMENTS         : <CALL_INFO>
   <RESULT>1</RESULT>
@@ -147,13 +147,13 @@ VC_POLICY = "cust-main-remote1"
     </PARAMETER>
   </PARAMETERS>
   <EXTRA/>
-</CALL_INFO> 
-EXIT CODE         : 127                 
+</CALL_INFO>
+EXIT CODE         : 127
 
-EXECUTION STDOUT                                                                
+EXECUTION STDOUT
 
 
-EXECUTION STDERR                                                                
+EXECUTION STDERR
 
 ```
 
