@@ -43,7 +43,7 @@ systemctl restart opennebula.service
 Set the _VC_POLICY_ variable in the VM's _USER_TEMPLATE_ with the corresponding volumecare policy.
 To disable the volumecare delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
 
-For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. Optionally, to improve the management of the QOS set the _DEFAULT_QOSCLASS_ variable in addon-storpoolrc to the desired value.
+For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. Optionally, to improve the management of the QOS set the _DEFAULT_QOSCLASS_ variable in addon-storpoolrc to the desired value. For further datails see [qosclass.md](qosclass.md).
 
 ## Troubleshooting
 

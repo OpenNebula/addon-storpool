@@ -80,7 +80,7 @@ else
     SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 fi
 
-splog "SP_VOL=$SP_VOL SP_TEMPLATE=$SP_TEMPLATE"
+splog "SP_VOL=${SP_VOL} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}"
 
 #-------------------------------------------------------------------------------
 # Enable the destination device

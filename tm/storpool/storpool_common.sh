@@ -247,13 +247,18 @@ function getFromConf()
 #-------------------------------------------------------------------------------
 function trapReset()
 {
-    TRAP_CMD="-"
-    if boolTrue "DEBUG_TRAPS"; then
-        splog "trapReset"
+    if [[ ! -d "${TMPDIR}" ]]; then
+        TMPDIR=$(mktemp --tmpdir=/run/one -d addon-XXXXXXXX)
+        export TMPDIR
     fi
-
-    trap "$TRAP_CMD" TERM INT QUIT HUP EXIT
-}
+    local OLD_TRAP_CMD="${TRAP_CMD}"
+    export TRAP_CMD="rm -rf \"${TMPDIR}\";"
+    if boolTrue "DDEBUG_TRAPS"; then
+        splog "trapReset:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
+    fi
+    # shellcheck disable=SC2064
+    trap "${TRAP_CMD}" TERM INT QUIT HUP EXIT 
+}   
 function trapAdd()
 {
     local _trap_cmd="$1"
@@ -261,21 +266,20 @@ function trapAdd()
         splog "trapAdd:$*"
     fi
 
-    [ -n "$TRAP_CMD" ] || TRAP_CMD="-"
-
-    if [ "$TRAP_CMD" = "-" ]; then
-        TRAP_CMD="${_trap_cmd};"
+    [[ -n ${TRAP_CMD} ]] || TRAP_CMD="rm -rf \"${TMPDIR}\";"
+    
+    if [[ ${_trap_cmd} == APPEND ]]; then
+        _trap_cmd="$2"
+        export TRAP_CMD="${_trap_cmd};${TRAP_CMD}"
     else
-        if [ "$_trap_cmd" = "APPEND" ]; then
-            _trap_cmd="$2"
-            TRAP_CMD="${_trap_cmd};${TRAP_CMD}"
-        else
-            TRAP_CMD="${TRAP_CMD}${_trap_cmd};"
-        fi
+        export TRAP_CMD="${TRAP_CMD}${_trap_cmd};"
     fi
-
-#    splog "trapAdd:$TRAP_CMD"
-    trap "$TRAP_CMD" TERM INT QUIT HUP EXIT
+        
+    if boolTrue "DDEBUG_TRAPS"; then
+        splog "trapAdd:[${TRAP_CMD}]"
+    fi
+    # shellcheck disable=SC2064
+    trap "${TRAP_CMD}" TERM INT QUIT HUP EXIT
 }
 function trapDel()
 {
@@ -283,16 +287,20 @@ function trapDel()
     if boolTrue "DEBUG_TRAPS"; then
         splog "trapDel:$*"
     fi
-    TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
-    if [ -n "$TRAP_CMD" ]; then
-        if boolTrue "DEBUG_TRAPS"; then
-            splog "trapDel:$TRAP_CMD"
+    local OLD_TRAP_CMD="${TRAP_CMD}"
+    export TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
+    if [[ -n ${TRAP_CMD} ]]; then
+        if boolTrue "DDEBUG_TRAPS"; then
+            splog "trapDel:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
         fi
-        trap "$TRAP_CMD" TERM INT QUIT HUP EXIT
+        # shellcheck disable=SC2064
+        trap "${TRAP_CMD}" TERM INT QUIT HUP EXIT
     else
         trapReset
     fi
 }
+
+trapReset
 
 REMOTE_HDR=$(cat <<EOF
     #_REMOTE_HDR
@@ -306,6 +314,47 @@ REMOTE_FTR=$(cat <<EOF
     splog "END \$endmsg"
 EOF
 )
+
+function oneCallXml()
+{
+    local _CALL="$1" _METHOD="$2" _ID="$3" _OUT_FILE="$4"
+    local _ERR_FILE="${TMPDIR}/${_CALL}-${_ID}.error"
+    local _TIMEFILE="${TMPDIR}/${_CALL}-${_ID}.time"
+    local _ONETRY=${ONE_CALL_RETRIES:-3}
+    local _TMP_XML="" _TIME="" _XML_LINES=0 _TMP_XML=""
+    if [[ -z "${_OUT_FILE}" ]]; then
+        _TMP_XML="${TMPDIR}/${_CALL}-${_ID}.XML"
+        _OUT_FILE="${_TMP_XML}"
+    fi
+    case "${_CALL}" in
+        onevm|onehost|onedatastore|oneimage)
+            read -ra _ONECMD <<<"${_CALL} ${_METHOD} ${ONE_ARGS} -x ${_ID}"
+            ;;
+        *)
+            echo "oneCallXml($*) Error: Unknown call'"
+            return 1
+            ;;
+    esac
+    while :; do
+        time ("${_ONECMD[@]}" >"${_OUT_FILE}" 2>"${_ERR_FILE}") 2>"${_TIMEFILE}"
+        _RET=$?
+        _TIME="$(tr '\n' ' ' <"${_TIMEFILE}" | tr '\t' ' ' ||true)"
+        _XML_LINES=$(wc -l "${_OUT_FILE}")
+        if [[ ${_RET} -eq 0 ]]; then
+            break
+        fi
+        if [[ ${_ONETRY} -lt 1 ]]; then
+            splog "'${_ONECMD[*]}' retry:${_ONETRY} Error: Timeout"
+            exit "${_RET}"
+        fi
+        _ONETRY=$((_ONETRY-1))
+        sleep 0.5
+    done
+    if [[ -n "${_TMP_XML}" ]]; then
+        cat "${_TMP_XML}"
+    fi
+    return "${_RET}"
+}
 
 function oneHostInfo()
 {
@@ -988,6 +1037,9 @@ function storpoolVolumeTag()
     tagVals=(${_TAG_VAL})
     tagKeys=(${_TAG_KEY})
     IFS=$_OFS
+    if boolTrue "DEBUG_storpoolVolumeTag"; then
+        splog "storpoolVolumeTag($_SP_VOL, $_TAG_VAL, $_TAG_KEY)"
+    fi
     local tagCmd=
     for i in ${!tagKeys[*]}; do
         tagKey="${tagKeys[i]//[[:space:]]/}"
@@ -1334,7 +1386,31 @@ function oneVmInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         T_OS_NVRAM="${_TMP}"
     fi
-    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
+    SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
+    IFS=';' read -ra SP_QOSCLASS_A <<<"${SP_QOSCLASS_LINE}"
+    local _IMAGE_QC=""
+    if [[ "${CLONE^^}" == "NO" ]]; then
+        _IMAGE_QC="$(oneImageQc "${IMAGE_ID}")"
+    fi
+    SP_QOSCLASS="${DEFAULT_QOSCLASS:-}"
+    unset DISKS_QC
+    declare -gA DISKS_QC
+    for qc in "${SP_QOSCLASS_A[@]}"; do
+        IFS=':' read -ra tmparr <<<"${qc}"
+        if [[ ${#tmparr[@]} -eq 1 ]]; then
+            SP_QOSCLASS="${qc}"
+        elif [[ ${#tmparr[@]} -eq 2 ]]; then
+            did="${tmparr[0]//[^[:digit:]]/}"
+            if [[ -n ${did} ]]; then
+                DISKS_QC[${did}]="${tmparr[1]}"
+            fi
+        fi
+    done
+    if [[ -n "${DISKS_QC[$_DISK_ID]+found}" ]]; then
+        SP_QOSCLASS="${DISKS_QC[$_DISK_ID]}"
+    elif [[ -n ${_IMAGE_QC} ]]; then
+        SP_QOSCLASS="${_IMAGE_QC}"
+    fi
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "DEBUG_oneVmInfo" || return 0
@@ -1544,10 +1620,10 @@ function oneTemplateInfo()
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
     T_OS_NVRAM="${XPATH_ELEMENTS[i++]}"
-    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
+    _SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
-        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY SP_QOSCLASS=$SP_QOSCLASS"
+        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY _SP_QOSCLASS=$_SP_QOSCLASS"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
@@ -1833,6 +1909,19 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 "
 }
 
+oneImageQc()
+{
+    local _IMAGE_ID="$1"
+    local _SP_QOSCLASS=""
+    _SP_QOSCLASS="$(oneCallXml oneimage show "${_IMAGE_ID}" | \
+                xmlstarlet sel -t -m '//TEMPLATE' -v SP_QOSCLASS 2>/dev/null \
+                || true)"
+    echo "${_SP_QOSCLASS}"
+    if boolTrue "DEBUG_oneImageQc"; then
+        splog "oneImageQc(${_IMAGE_ID}) SP_QOSCLASS=${_SP_QOSCLASS}"
+    fi
+}
+
 oneVmVolumes()
 {
     local VM_ID="$1" VM_POOL_FILE="$2" VM_XML_FILE="$3"
@@ -1921,7 +2010,7 @@ oneVmVolumes()
         T_OS_NVRAM="${_TMP}"
     fi
     VMSNAPSHOT_WITH_CHECKPOINT="${XPATH_ELEMENTS[i++]}"
-    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
+    SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     BACKUP_VOLATILE="${XPATH_ELEMENTS[i++]}"
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
@@ -1938,16 +2027,32 @@ oneVmVolumes()
     TARGET_A=($TARGET)
     IMAGE_ID_A=($IMAGE_ID)
     SNAPSHOT_ID_A=($SNAPSHOT_ID)
+    SP_QOSCLASS_A=(${SP_QOSCLASS_LINE})
     IFS=$_OFS
-    for ID in ${!DISK_ID_A[@]}; do
-        IMAGE_ID="${IMAGE_ID_A[$ID]}"
-        CLONE="${CLONE_A[$ID]}"
-        FORMAT="${FORMAT_A[$ID]}"
-        TYPE="${TYPE_A[$ID]}"
-        SHAREABLE="${SHAREABLE_A[$ID]}"
-        TM_MAD="${TM_MAD_A[$ID]}"
-        TARGET="${TARGET_A[$ID]}"
-        DISK_ID="${DISK_ID_A[$ID]}"
+    vmVolumesQc=""
+    unset DISKS_QC
+    declare -gA DISKS_QC
+    SP_QOSCLASS="${DEFAULT_QOSCLASS:-}"
+    for qc in "${SP_QOSCLASS_A[@]}"; do
+        IFS=':' read -ra arr <<<"${qc}"
+        if [[ ${#arr[@]} -eq 1 ]]; then
+            SP_QOSCLASS="${qc}"
+        elif [[ ${#arr[@]} -eq 2 ]]; then
+            did="${arr[0]//[^[:digit:]]/}"
+            if [[ -n ${did} ]]; then
+                DISKS_QC[${did}]="${arr[1]}"
+            fi
+        fi
+    done
+    for idx in ${!DISK_ID_A[@]}; do
+        IMAGE_ID="${IMAGE_ID_A[$idx]}"
+        CLONE="${CLONE_A[$idx]}"
+        FORMAT="${FORMAT_A[$idx]}"
+        TYPE="${TYPE_A[$idx]}"
+        SHAREABLE="${SHAREABLE_A[$idx]}"
+        TM_MAD="${TM_MAD_A[$idx]}"
+        TARGET="${TARGET_A[$idx]}"
+        DISK_ID="${DISK_ID_A[$idx]}"
         if [ "${TM_MAD:0:8}" != "storpool" ]; then
             splog "DISK_ID:$DISK_ID TYPE:$TYPE TM_MAD:$TM_MAD "
             if ! boolTrue "SYSTEM_COMPATIBLE_DS[$TM_MAD]"; then
@@ -1979,6 +2084,14 @@ oneVmVolumes()
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
         vmVolumes+="$IMG "
+        if [[ -n "${DISKS_QC[$DISK_ID]+found}" ]]; then
+            vmVolumesQc+="${IMG}:${DISKS_QC[$DISK_ID]} "
+        elif [[ "${CLONE^^}" == "NO" ]]; then
+            imageQc="$(oneImageQc "${IMAGE_ID}")"
+            if [[ -n "${imageQc}" ]]; then
+                vmVolumesQc+="${IMG}:${imageQc} "
+            fi
+        fi
         vmDisks=$((vmDisks+1))
         vmDisksMap+="$IMG:$DISK_ID "
         if boolTrue "SHAREABLE"; then

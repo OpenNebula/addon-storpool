@@ -67,10 +67,12 @@ function alterVcPolicy()
         return 0
     fi
 
+
     if boolTrue "DDEBUG_alterVcPolicy"; then
-        splog "alterVcPolicy($vmId,$vmPoolFile)"
+        splog "alterVcPolicy($vmId, $vmPoolFile) BEGIN"
     fi
 
+    SP_QOSCLASS=""
     oneVmVolumes "$vmId" "$vmPoolFile"
 
     if [ -z "$vmDisksMap" ]; then
@@ -89,15 +91,20 @@ function alterVcPolicy()
         return 0
     fi
 
-    declare -A vols
-
+    declare -A vols  # vols[VolumeName]=DISK_ID
     for disk in $vmDisksMap; do
         volume="${disk%:*}"
-        vols[$volume]="$volume"
+        vols[$volume]="${disk#*:}"
+    done
+    unset volumesQc
+    declare -A volumesQc  # volumesQc[DISK_ID]=QosClassName
+    for vol in ${vmVolumesQc}; do
+        volumesQc["${vol%%:*}"]="${vol#*:}"
     done
 
     if boolTrue "DEBUG_alterVcPolicy"; then
-        splog "VM $vmId VC_POLICY:$VC_POLICY SP_QOSCLASS=$SP_QOSCLASS $vmDisksMap"
+        splog "VM $vmId VC_POLICY:'$VC_POLICY' vmDisksMap='$vmDisksMap'"
+        splog "VM $vmId SP_QOSCLASS='${SP_QOSCLASS}' vmVolumesQc='${vmVolumesQc}'"
     fi
 
     if [ -z "$volumeListJson" ]; then
@@ -113,18 +120,21 @@ function alterVcPolicy()
         if [ -n "${vols[$v]}" ]; then
             vcpNew="${VC_POLICY//[[:space:]]/}"
             if [ "$vcpNew" != "$vcp" ]; then
-                splog "VM $vmId volume:$v current vc-policy:$vcp new:$vcpNew"
+                splog "VM $vmId DISK ${vols[$v]} volume $v current vc-policy:$vcp new:$vcpNew"
                 storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
             elif boolTrue "DDEBUG_alterVcPolicy"; then
-                splog "VM $vmId volume $v current vc-policy:$vcp"
+                splog "VM $vmId DISK ${vols[$v]} volume $v current vc-policy:$vcp"
             fi
             qcNew="${SP_QOSCLASS//[[:space:]]/}"
+            if [[ -n "${volumesQc[${v}]+found}" ]]; then
+                qcNew="${volumesQc[${v}]}"
+            fi
             qcNew="${qcNew:-${DEFAULT_QOSCLASS}}"
             if [ "$qcNew" != "$qc" ]; then
-                splog "VM $vmId volume:$v current qc:$qc new:$qcNew"
+                splog "VM $vmId DISK ${vols[$v]} volume $v current qc:$qc new:$qcNew"
                 storpoolRetry volume "$v" tag "qc"="$qcNew"
             elif boolTrue "DDEBUG_alterVcPolicy"; then
-                splog "VM $vmId volume $v current qc:$qc"
+                splog "VM $vmId DISK ${vols[$v]} volume $v current qc:$qc"
             fi
         fi
     done 7< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "$volumeListJson")

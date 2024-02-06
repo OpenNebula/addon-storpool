@@ -43,7 +43,12 @@ $SUDO storpool -B -j snapshot list >"$snapshots_json"
 while read -u 4 -d' ' VM_ID; do
     vmVolumes=
     oneVmVolumes "$VM_ID" "$vmPool"
-    echo "# VM_ID=$VM_ID vmVolumes=$vmVolumes"
+    echo "# VM_ID=$VM_ID vmVolumes=$vmVolumes${vmVolumesQc:+, vmVolumesQc=${vmVolumesQc}}"
+    unset volumesQc
+    declare -A volumesQc
+    for vol in ${vmVolumesQc}; do
+        volumesQc["${vol%%:*}"]="${vol#*:}"
+    done
     for vol in $vmVolumes; do
         if [ "${vol%iso}" = "$vol" ]; then
             storpoolVolumeTag "$vol" "one;${LOC_TAG_VAL}:${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG}:$VM_TAG;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
