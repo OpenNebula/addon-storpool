@@ -172,6 +172,8 @@ function get_one_version()
 }
 
 ONE_PX="${ONE_PX:-one}"
+LOC_TAG="${LOC_TAG:-nloc}"
+LOC_TAG_VAL="${LOC_TAG_VAL:-${ONE_PX}}"
 
 DRIVER_PATH="$(dirname $0)"
 sprcfile="$(lookup_file "addon-storpoolrc" "$DRIVER_PATH")"
