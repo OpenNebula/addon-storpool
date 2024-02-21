@@ -76,7 +76,10 @@ else
     SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 fi
 
-splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}${SHAREABLE:+ SHAREABLE=$SHAREABLE}"
+SP_QOSCLASS=$(oneImageQc "${IMAGE_ID}")
+SP_QOSCLASS=${$SP_QOSCLASS:-${DEFAULT_SP_QOSCLASS}}
+
+splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}${SHAREABLE:+ SHAREABLE=$SHAREABLE}"
 
 #-------------------------------------------------------------------------------
 # Detach and if it is deferred OpenNebula snapshot "convert" to Image
@@ -87,7 +90,7 @@ if boolTrue "SHAREABLE"; then
 else
     storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
 
-    storpoolVolumeTag "$SP_VOL" ";;${DEFAULT_QOSCLASS}" "$VM_TAG;vc-policy;qc"
+    storpoolVolumeTag "$SP_VOL" ";;${SP_QOSCLASS}" "$VM_TAG;vc-policy;qc"
 
     if boolTrue "DEFERRED"; then
         storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
