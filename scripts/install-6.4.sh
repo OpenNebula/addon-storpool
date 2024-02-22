@@ -126,6 +126,14 @@ for f in xpath_multi.py xpath-sp.rb; do
     chmod a+x "$XPATH_MULTI"
 done
 
+# volumecare hook files
+echo "*** Installing volumecare hook files..."
+volumecarePath="${ONE_VAR}/remotes/hooks/volumecare"
+mkdir -p "${volumecarePath}"
+for vFile in volumecare vc-policy.sh; do
+    cp ${CP_ARG} "hooks/volumecare/${vFile}" "${volumecarePath}"/
+done
+
 # Periodic task
 echo "*** Clean up old style crontab jobs ..."
 (crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)||:
@@ -240,6 +248,20 @@ if boolTrue "STORPOOL_EXTRAS"; then
     if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
         echo "!!! Please enable deploy-tweaks in the VM_MAD configuration"
     fi
+fi
+
+echo "*** Registering the vc-policy hook"
+if onehook list -x >"${TMPDIR}/onehook.xml" 2>/dev/null; then
+    vc_policy="$(xmlstarlet sel -t -m //HOOK -v NAME -o " COMMAND=" -v TEMPLATE/COMMAND -n | grep vc-policy)"
+    if [[ -n "${vc_policy}" ]]; then
+        echo "--- already registered HOOK=${vc_policy}"
+    else
+        onehook create "${CWD}/misc/volumecare.hook"
+    fi
+else
+    echo "Can't get hooks list. Is the opennebula service running?"
+    echo "Please check the existance of the vc-policy hook"
+    echo "and register it if missing 'onehook create ${CWD}/misc/volumecare.hook'"
 fi
 
 echo "*** Please sync hosts (onehost sync --force)"
