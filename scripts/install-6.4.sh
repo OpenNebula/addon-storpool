@@ -131,45 +131,28 @@ echo "*** Clean up old style crontab jobs ..."
 (crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)||:
 (crontab -u root -l | grep -v "storpool -j " | crontab -u root -)||:
 
-if [ -f "/etc/cron.d/addon-storpool" ]; then
-   echo "*** Deleting /etc/cron.d/addon-storpool"
-   rm -vf /etc/cron.d/addon-storpool
-fi
+for cronfile in "/etc/cron.d/addon-storpool" "/etc/cron.d/vc-policy"; do
+    if [[ -f "${cronfile}" ]]; then
+        echo "*** Deleting ${cronfile}"
+        rm -vf "${cronfile}"
+    fi
+done
 
-echo "*** Creating systemd timer service"
-cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.service
-[Unit]
-Description=Create cached StorPool data JSONs in /tmp/monitor
-Wants=monitor_helper-sync.timer
+echo "*** Processing the systemd timers"
+for sName in monitor_helper-sync vc-policy; do
+    for sType in service timer; do
+        sFile="/etc/systemd/system/${sName}.${sType}"
+        if [[ ! -f "${sFile}" ]]; then
+            cp -v "${CWD}/misc${sFile}" /etc/systemd/system/
+        fi
+    done
+done
 
-[Service]
-Type=oneshot
-User=oneadmin
-Group=oneadmin
-WorkingDirectory=/var/lib/one/remotes
-ExecStart=/var/lib/one/remotes/datastore/storpool/monitor_helper-sync
-
-[Install]
-WantedBy=multi-user.target
-_EOF_
-
-cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.timer
-[Unit]
-Description=Timer trigger for monitor_helper-sync.service
-Requires=monitor_helper-sync.service
-
-[Timer]
-Unit=monitor_helper-sync.service
-AccuracySec=1m
-OnCalendar=*:0/4
-
-[Install]
-WantedBy=timers.target
-_EOF_
 systemctl daemon-reload
 
-echo "*** Activating systemd time service ..."
+echo "*** Activating systemd timers ..."
 systemctl enable monitor_helper-sync.timer --now
+systemctl enable vc-policy.timer
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
