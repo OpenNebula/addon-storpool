@@ -181,6 +181,10 @@ fi
 
 oneVersion "$ONE_VER"
 
+TMPDIR="$(mktemp -d addon-storpool-install-XXXXXXXX)"
+export TMPDIR
+trap "rm -rf \"${TMPDIR}\"" EXIT QUIT TERM
+
 if [ -f "scripts/install-${ONE_VER}.sh" ]; then
     source "scripts/install-${ONE_VER}.sh"
 elif [ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]; then
