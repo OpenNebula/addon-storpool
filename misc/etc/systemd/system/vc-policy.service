@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenNebula VolumeCare and QoS housekeeping service
+Wants=vc-policy.timer
+
+[Service]
+Type=oneshot
+User=oneadmin
+Group=oneadmin
+WorkingDirectory=/var/lib/one/remotes
+ExecStart=/var/lib/one/remotes/hooks/volumecare/volumecare
+
+[Install]
+WantedBy=multi-user.target

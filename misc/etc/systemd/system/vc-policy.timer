@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer trigger for VolumeCare and QoS housekeeping service
+Requires=vc-policy.service
+
+[Timer]
+Unit=vc-policy.service
+AccuracySec=1m
+OnCalendar=*:0/5
+
+[Install]
+WantedBy=timers.target

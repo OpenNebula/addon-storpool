@@ -1,0 +1,13 @@
+[Unit]
+Description=Create cached StorPool data JSONs in /tmp/monitor
+Wants=monitor_helper-sync.timer
+
+[Service]
+Type=oneshot
+User=oneadmin
+Group=oneadmin
+WorkingDirectory=/var/lib/one/remotes
+ExecStart=/var/lib/one/remotes/datastore/storpool/monitor_helper-sync
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer trigger for monitor_helper-sync.service
+Requires=monitor_helper-sync.service
+
+[Timer]
+Unit=monitor_helper-sync.service
+AccuracySec=1m
+OnCalendar=*:0/4
+
+[Install]
+WantedBy=timers.target
