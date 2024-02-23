@@ -6,7 +6,7 @@ The [StorPool](https://storpool.com/) datastore driver enables OpenNebula to use
 
 ## Development
 
-To contribute bug patches or new features, you can use the github Pull Request model. It is assumed that code and documentation are contributed under the Apache License 2.0.
+To contribute bug patches or new features, you can use the GitHub Pull Request model. It is assumed that code and documentation are contributed under the Apache License 2.0.
 
 More info:
 
@@ -59,23 +59,23 @@ Standard OpenNebula datastore operations:
 ### Extras
 
 * delayed termination of non-persistent images: When a VM is terminated the corresponding StorPool volume is stored as a snapshot that is deleted permanently after predefined time period (default 48 hours)
+* support setting StorPool VolumeCare tags on VMs
+* support setting StorPool QoS Class tags on VMs
 * support different StorPool clusters as separate datastores
-* support multiple OpenNebula instances in single StorPool cluster
+* support StorPool MultiCluster (technology preview)
+* support multiple OpenNebula instances(controllers) in a single StorPool cluster
 * import of VmWare (VMDK) images
 * import of Hyper-V (VHDX) images
 * partial SYSTEM datastore support (see limitations)
 * (optional) set limit on the number of VM disk snapshots (per disk limits)
-* (optional) helper tool to migrate CONTEXT iso image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
+* (optional) helper tool to migrate CONTEXT ISO image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
 * (optional) send volume snapshot to a remote StorPool cluster on image delete 
-* (optional) alternate local kvm/deploy script that allows [tweaks](docs/deploy_tweaks.md) to the domain XML of the VMs with helper tools to enable iothreads, ioeventfd, fix virtio-scsi _nqueues_ to match the number of VCPUs, set cpu-model, etc
+* (optional) alternate local kvm/deploy script replacement that allows [tweaks](docs/deploy_tweaks.md) to the domain XML of the VMs with helper tools to enable iothreads, ioeventfd, fix virtio-scsi _nqueues_ to match the number of VCPUs, set cpu-model, etc
 * (optional) support VM checkpoint file stored directly on a StorPool backed block device (see [Limitations](#Limitations))
 * (optional) replace the "VM snapshot" interface scripts to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations)
 * (optional) replace the <devices/video> element in the domain XML
-* (optional) support for [UEFI Normali/Secure boot](docs/uefi_boot.md) with persistent UEFI nvram stored on StorPool backed block device
+* (optional) support for [UEFI Normal/Secure boot](docs/uefi_boot.md) with persistent UEFI NVRAM stored on StorPool backed block device
 
-Following the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-storpool do not patch opennebula files by default. Please contact OpenNebula support if you need any of the following items resolved.
-
-* (optional) patches for Sunstone to integrate addon-storpool to the Datastore Wizard. There is no known resolution beside patching and rebuilding the sunstone interface.
 
 ## Limitations
 
@@ -83,11 +83,11 @@ Following the OpenNebula Policy change introduced with OpenNebula 5.12+ addon-st
 1. OpenNebula temporary keep the VM checkpoint file on the Host and then (optionally) transfer it to the storage. An workaround was added on the base of OpenNebula/one#3272.
 1. When SYSTEM datastore integration is enabled the reported free/used/total space of the Datastore is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space).
 1. VM snapshotting is not possible because it is handled internally by libvirt which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
-1. Tested only with KVM hypervisor and CentOS. Should work on other Linux OS.
+1. Tested only with KVM hypervisor and CentOS/Alma Linux. Should work on other Linux OS.
 
 ## Installation
 
-The installation instructions are for OpenNebula 5.12+.
+The installation instructions are for OpenNebula 6.4+.
 
 If you are upgrading addon-storpool please read the [Upgrade notes](#upgrade-notes) first!
 
@@ -142,7 +142,7 @@ The automated installation is best suitable for new deployments. The install scr
 
 If oned and sunstone services are on different servers it is possible to install only part of the integration:
 
- * set environment variable AUTOCONF=1 to enable the automatic configuration of addon defaults in the opennebula config
+ * set environment variable AUTOCONF=1 to enable the automatic configuration of driver defaults in the opennebula configuration
 
 * Run the install script as 'root' user and check for any reported errors or warnings
 
@@ -157,7 +157,7 @@ The following commands are related to latest Stable version of OpenNebula.
 
 #### oned related pieces
 
-* Copy storpool's DATASTORE_MAD driver files.
+* Copy the DATASTORE_MAD driver files.
 
 ```bash
 cp -a ~/addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
@@ -166,13 +166,13 @@ cp -a ~/addon-storpool/datastore/storpool /var/lib/one/remotes/datastore/
 cp ~/addon-storpool/datastore/xpath_multi.py  /var/lib/one/remotes/datastore/
 ```
 
-* Copy storpool's TM_MAD driver files
+* Copy the TM_MAD driver files
 
 ```bash
 cp -a ~/addon-storpool/tm/storpool /var/lib/one/remotes/tm/
 ```
 
-* Copy storpool's VM_MAD driver files
+* Copy the VM_MAD driver files
 
 ```bash
 cp -a ~/addon-storpool/vmm/kvm/snapshot_* /var/lib/one/remotes/vmm/kvm/
@@ -212,38 +212,10 @@ cp -a ~/addon-storpool/misc/storpool_probe.sh /var/lib/one/remotes/im/kvm-probes
 chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 ```
 
-* Create systemd timer for stats polling (alter the file paths if needed)
+* Create a systemd timer for stats polling (alter the file paths if needed)
 
 ```bash
-cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.service
-[Unit]
-Description=Create cached StorPool data JSONs in /tmp/monitor
-Wants=monitor_helper-sync.timer
-
-[Service]
-Type=oneshot
-User=oneadmin
-Group=oneadmin
-WorkingDirectory=/var/lib/one/remotes
-ExecStart=/var/lib/one/remotes/datastore/storpool/monitor_helper-sync
-
-[Install]
-WantedBy=multi-user.target
-_EOF_
-
-cat <<_EOF_ | tee /etc/systemd/system/monitor_helper-sync.timer
-[Unit]
-Description=Timer trigger for monitor_helper-sync.service
-Requires=monitor_helper-sync.service
-
-[Timer]
-Unit=monitor_helper-sync.service
-AccuracySec=1m
-OnCalendar=*:0/4
-
-[Install]
-WantedBy=timers.target
-_EOF_
+cp -v addon-storpool/misc/systemd/system/monitor_helper-sync* /etc/systemd/system/
 
 systemctl daemon-reload
 
@@ -282,7 +254,7 @@ VM_MAD = [
     ARGUMENTS      = "-l deploy=deploy-tweaks -t 15 -r 0 kvm",
     ...
 ```
-  Optionally add attach_disk,tmsave/tmrestore:
+  Optionally add _attach_disk_, _tmsave_ and _tmrestore_:
 
 ```
 VM_MAD = [
@@ -324,7 +296,7 @@ LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 
 * RAFT_LEADER_IP
 
-The addon will try to autodetect the leader IP address from oned configuration but if it fail set it manually in addon-storpoolrc
+The driver will try to autodetect the leader IP address from oned configuration but if it fail set it manually in addon-storpoolrc
 
 ```bash
 echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
@@ -346,7 +318,7 @@ For OpenNebula 6+:
 echo "DS_CP_REPORT_FORMAT=1" >> /var/lib/one/remotes/addon-storpoolrc
 ```
 
-* If you plan to do live disk snapshots with fsfreeze via qemu-guest-agent but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the addon global configuration.
+* If you plan to do live disk snapshots with _fsfreeze_ via _qemu-guest-agent_ but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the drivers configuration.
 
 ### Post-install
 
@@ -385,7 +357,7 @@ _Please note that the 'Overcommitment' change has no effect when NUMA configurat
 
 ### Configuring the System Datastore
 
-addon-storpool is doing its best to support transfer manager (TM_MAD) backend of type _shared_, _ssh_, or _storpool_ (*recommended*) for the SYSTEM datastore. When only StorPool Storage is used the SYSTEM datastore will hold only symbolic links to the StorPool block devices, so it will not take much space. See more details on the [Open Cloud Storage Setup](https://docs.opennebula.io/6.0/open_cluster_deployment/storage_setup/).
+addon-storpool driver is doing its best to support transfer manager (TM_MAD) backend of type _shared_, _ssh_, or _storpool_ (*recommended*) for the SYSTEM datastore. When only StorPool Storage is used the SYSTEM datastore will hold only symbolic links to the StorPool block devices, so it will not take much space. See more details on the [Open Cloud Storage Setup](https://docs.opennebula.io/6.0/open_cluster_deployment/storage_setup/).
 
 * By default the storpool TM_MAD is with enabled SHARED attribute (*SHARED=YES*). But the default behavior for SYSTEM datastores is to use `ssh`. If a SYSTEM datastore is on shared filesystem then *SP_SYSTEM=shared* should be set in the datastore configuration
 
@@ -399,7 +371,7 @@ Some configuration attributes must be set to enable a datastore as StorPool enab
 * **BRIDGE_LIST**: Nodes to use for image datastore operations. String (1)
 
 
-1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty or removed the front-end must have working storpool_block service (must have access to the storpool cluster) as all disk preparations will be done locally.
+1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty or removed the front-end must have working _storpool_block_ service (must have access to the StorPool cluster) as all disk preparations will be done locally.
 
 After a datastore is created in OpenNebula a StorPool template must be created to represent the datastore in StorPool. The name of the template should be *one-ds-${DATASTORE_ID}* where *${DATASTORE_ID}* is the *ID* of the OpenNebula's Datastore. Please refer the *StorPool's User Guide* for details how to configure a StorPool template. 
 
@@ -506,10 +478,12 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
     1. Stop all opennebula services
     2. Upgrade the opennebula packages. But do not reconfigure anything yet
     3. Upgrade the addon (checkout/clone latest from github and run _AUTOCONF=1 bash install.sh_)
-    4. Follow the addon configuration chapter in README.md to (re)configure the extras
+    4. Follow the addon configuration chapter in README.md to (re)configure the deriver
     5. Continue (re)configuring OpenNebula following the upstream docs
 
 * After upgrade please run misc/tagVolumes.sh to update/apply the common tags for volumes/snapshots
+
+* remove old _cron_ configuration files `/etc/cron.d/vc-policy`, `/etc/cron.d/addon-storpool`
 
 ## StorPool naming convention
 
@@ -519,7 +493,7 @@ Please follow the [naming convention](docs/naming_convention.md) for details on 
 
 * In release 19.03.2 the volume names of the attached CDROM images was changed. A separate volume with a unique name is created for each attachment. This could lead to errors when using restore with the alternate VM snapshot interface enabled. The workaround is to manually create/or rename/ a snapshot of the desired CDROM volume following the new naming convention. The migration to the new CDROM's volume naming convention is integrated so there is no manual operations needed.
 
-* Recent version of libvirt has more strict checks of the domain xml and do not allow live migration when there are file backed VM disks that are not on shared filesystem. The definition of the volatile disks that OpenNebula create are with hard-coded type 'file' that conflict with libvirt. There is a fix for this in addon-storpool 19.04.3+ but it will not alter the currently running VM's. A workaround is to patch _vmm/kvm/migrate_ and add a check that enable `--unsafe` option if all disks are with disabled cache (`cache="none"`).
+* Recent version of libvirt has more strict checks of the domain XML and do not allow live migration when there are file backed VM disks that are not on shared filesystem. The definition of the volatile disks that OpenNebula create are with hard-coded type 'file' that conflict with libvirt. There is a fix for this in addon-storpool 19.04.3+ but it will not alter the currently running VM's. A workaround is to patch _vmm/kvm/migrate_ and add a check that enable `--unsafe` option if all disks are with disabled cache (`cache="none"`).
 The following line just before the line that do the VM migration could leverage this issue:
 
 ```bash

@@ -1,5 +1,13 @@
 ### Advanced configuration variables
 
+#### StorPool VolumeCare policy tags
+
+See [volumecare.md](volumecare.md).
+
+#### StorPool QoS Class tags
+
+See [qosclass.md](qosclass.md).
+
 #### StorPool backed SYSTEM datastore on shared filesystem
 
 * **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS.
