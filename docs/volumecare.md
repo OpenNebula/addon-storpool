@@ -17,14 +17,10 @@ chown -R oneadmin.oneadmin /var/lib/one/remotes
 # register the hook
 onehook create addon-storpool/misc/volumecare.hook
 
-# create crontab file
-cat >/etc/cron.d/vc-policy <<EOF
-# addon-storpool vc-policy safeguard
-SHELL=/bin/bash
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-MAILTO=oneadmin
-0 */2 * * * oneadmin /var/lib/one/remotes/hooks/volumecare/volumecare 2>&1 >/tmp/volumecare_cron.err
-EOF
+# Set the regular housekeeping task via a systemd timer
+cp -v addon-storpool/misc/etc/systemd/system/vc-policy* /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable vc-policy.timer
 ```
 
 ## Configuration
@@ -40,10 +36,10 @@ systemctl restart opennebula.service
 
 ## Usage
 
-Set the _VC_POLICY_ variable in the VM's _USER_TEMPLATE_ with the corresponding volumecare policy.
-To disable the volumecare delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
+Set the _VC_POLICY_ variable in the VM's _USER_TEMPLATE_ with the corresponding VolumeCare policy.
+To disable the VolumeCare delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
 
-For the optional tagging for QOS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. Optionally, to improve the management of the QOS set the _DEFAULT_QOSCLASS_ variable in addon-storpoolrc to the desired value. For further datails see [qosclass.md](qosclass.md).
+For the optional tagging for QoS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. For further details see [qosclass.md](qosclass.md).
 
 ## Troubleshooting
 

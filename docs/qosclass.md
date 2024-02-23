@@ -1,6 +1,6 @@
 ## Installation
 
-The function to update the VM and enforce the policy is part of the [volumecare helper skript](volumecare.md)
+The function to update the VM and enforce the policy is part of the [volumecare helper script](volumecare.md)
 
 ## Setting QoS tags
 
@@ -29,7 +29,7 @@ Example:
 
 ### Per VM Disk QoS Class tag name
 
-The `SP_QOSCLASS` variable in the VM attribute could be extended with a semicolon ';' separated list of speciffic QoS tag for given disks in format `{VM_DISK_ID}:QosClassTagName`
+The `SP_QOSCLASS` variable in the VM attribute could be extended with a semicolon ';' separated list of specific QoS tag for given disks in format `{VM_DISK_ID}:QosClassTagName`
 
 Example 1:
 `SP_QOSCLASS=defaultVMQosTagName;2:QosTagNameForDiskId_2;4:QosTagNameForDiskId_4`
@@ -39,4 +39,4 @@ Example 2:
 `SP_QOSCLASS=0:QosTagNameForDiskId_0;0:QosTagNameForDiskId_3`
 All VM disks will have the Global Default QoS Class tag name, if defined, but disks with _DISK_ID_ 0 and 3 will have `QosTagNameForDiskId_0` and `QosTagNameForDiskId_3` respectively.
 
-Note: The defined VM Disk Qos Class tag will overrdide the defined Qos Class tag name for a Persistent image!
+Note: The defined VM Disk QoS Class tag will override the defined QoS Class tag name for a Persistent image!
