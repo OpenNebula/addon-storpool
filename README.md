@@ -506,3 +506,8 @@ The following line just before the line that do the VM migration could leverage 
 (virsh --connect $LIBVIRT_URI dumpxml $deploy_id 2>/dev/null || echo '<a><disk device="disk"><driver cache="writeback"/></disk></a>') | xmllint --xpath '(//disk[@device="disk"]/driver[not(@cache="none")])' - >/dev/null 2>&1 || MIGRATE_OPTIONS+=" --unsafe"
 ```
 
+## More information
+
+[Tips](docs/tips.md)
+
+
