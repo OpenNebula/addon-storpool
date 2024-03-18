@@ -214,12 +214,15 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
     oneTemplateInfo "$TEMPLATE"
     if [ $IS_DISK == 0 ]; then
         # check DISK_TM_MADS
-        STORPOOL_ONLY=1
-        for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
-            if [ "x${tm_mad/storpool/}" = "x$tm_mad" ]; then
-                STORPOOL_ONLY=0
-            fi
-        done
+        STORPOOL_ONLY=0
+        if boolTrue "SP_CHECKPOINT_BD"; then
+            STORPOOL_ONLY=1
+            for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
+                if [ "x${tm_mad/storpool/}" = "x$tm_mad" ]; then
+                    STORPOOL_ONLY=0
+                fi
+            done
+        fi
         if boolTrue "IS_UNDEPLOY"; then
             if boolTrue "STORPOOL_ONLY"; then
                 SKIP_UNDEPLOY_SSH=1
@@ -337,10 +340,12 @@ exit \$ret
 EOF
 )
                     
-                    oneHostInfo "$SRC_HOST"
-                    if [ -z "${HOST_STATE/[024]/}" ]; then
-                        splog "All disks on StorPool but $SRC_HOST STATE:$HOST_STATE(${HostState[$HOST_STATE]})"
-                        STORPOOL_ONLY=0
+                    if [[ -z "${ATTACH_ONLY}" ]]; then
+                        oneHostInfo "$SRC_HOST"
+                        if [ -z "${HOST_STATE/[024]/}" ]; then
+                            splog "All disks on StorPool but $SRC_HOST STATE:$HOST_STATE(${HostState[$HOST_STATE]})"
+                            STORPOOL_ONLY=0
+                        fi
                     fi
                     if boolTrue "STORPOOL_ONLY"; then
                         splog "All disks on StorPool datastores. SSH transfer skipped. //HOST_STATE:$HOST_STATE"
