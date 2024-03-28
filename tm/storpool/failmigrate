@@ -44,7 +44,7 @@ for _PATH in "$TM_PATH/"{,..,../..,../../..}/storpool; do
 done
 
 if [ ! -t 0 ]; then
-    tmpxml="$(mktemp -t premigrate-${VM_ID}-XXXXXXXX)"
+    tmpxml="$(mktemp -t failmigrate-${VM_ID}-XXXXXXXX)"
     trapAdd "rm -rf \"$tmpxml\""
     cat > "$tmpxml"
     if [ -s "$tmpxml" ]; then
