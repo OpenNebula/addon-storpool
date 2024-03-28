@@ -483,7 +483,13 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
 
 * After upgrade please run misc/tagVolumes.sh to update/apply the common tags for volumes/snapshots
 
-* remove old _cron_ configuration files `/etc/cron.d/vc-policy`, `/etc/cron.d/addon-storpool`
+* Remove old _cron_ configuration files `/etc/cron.d/vc-policy`, `/etc/cron.d/addon-storpool`
+
+* Run the following code to update the StorPool volume tags
+
+```bash
+source /var/lib/one/remotes/addon-storpoolrc && while read -r -u 4 volume; do storpool volume "${volume}" update tag nloc=${ONE_PX:-one} tag virt=one; done 4< <(storpool -B -j volume list | jq -r --arg onepx "${ONE_PX:-one}" '.data[]|select(.name|startswith($onepx))|.name')
+```
 
 ## StorPool naming convention
 
