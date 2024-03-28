@@ -2278,8 +2278,8 @@ storpoolVmVolumes()
         [ -z "${vol%${ONE_PX}*}" ] || continue
         vmVolumes+="$vol "
     done 7< <(storpoolRetry -j volume list |\
-        jq -r --arg vmtag "$1" --arg vmtagval "$2" \
-            '.data[]|select(.tags[$vmtag]==$vmtagval)|.name+" "+.tags[$loctag]'
+        jq -r --arg vmtag "$1" --arg vmtagval "$2" --arg loctag "${LOC_TAG}" \
+            '.data[]|select(.tags[$vmtag]==$vmtagval)|"\(.name) \(.tags[$loctag])"'
     )
     splog "storpoolVmVolumes($1,$2) $vmVolumes"
 }
