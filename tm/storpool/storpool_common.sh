@@ -2303,18 +2303,21 @@ forceDetachOther()
         fi
     fi
     if [ -z "$vmVolumes" ]; then
-        splog "Error: vmVolumes is empty!"
+        splog "forceDetachOther($*): vmVolumes is empty!"
         return 1
-    fi
-    if boolTrue "DEBUG_forceDetachOther"; then
-        splog "forceDetachOther($1,$2${3:+,$3}) $vmVolumes"
     fi
     local jqStr=
     for vol in $vmVolumes; do
         [ -z "$jqStr" ] || jqStr+=" or "
         jqStr+=".volume==\"$vol\""
     done
+    if boolTrue "DEBUG_forceDetachOther"; then
+        splog "forceDetachOther($1,$2${3:+,$3}) $vmVolumes"
+    fi
     while read -u 6 client volume; do
+        if boolTrue "DDEBUG_forceDetachOther"; then
+            splog "forceDetachOther($*) DST=${SP_CLIENT} ${client} ${volume}"
+        fi
         if [ $client -ne $SP_CLIENT ]; then
             storpoolRetry detach volume "$volume" client "$client" force yes >/dev/null
         fi

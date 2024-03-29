@@ -73,8 +73,10 @@ fi
 
 SP_LINK="/dev/storpool/$SP_VOL"
 SP_TEMPLATE="${SOURCE%%/*}"
-
-log "vm $VM_ID moving $SRC to $DST"
+LCM_STATE_TXT="${LCM_STATE}(${LcmState[$LCM_STATE]})"
+STATE_TXT="${VMSTATE}(${VmState[$VMSTATE]})"
+msg="VM ${VM_ID} STATE=${STATE_TXT} LCM_STATE=${LCM_STATE_TXT}"
+splog "${msg}"
 
 # is checkpoint on storpool enabled?
 case "$SP_CHECKPOINT" in
@@ -166,7 +168,10 @@ case "$LCM_STATE" in
         DO_SYMLINK="yes"
     ;;
     *)
-        splog ">>> STATE=$VMSTATE(${VmState[$VMSTATE]}) LCM_STATE=$LCM_STATE(${LcmState[$LCM_STATE]}) <<<"
+        errmsg="ERROR: VM ${VM_ID} unhandled STATE=${STATE_TXT} LCM_STATE=${LCM_STATE_TXT}"
+        log "${errmsg}"
+        splog "${errmsg}"
+        exit 1
     ;;
 esac
 
