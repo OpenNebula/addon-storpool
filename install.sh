@@ -20,7 +20,7 @@ set -e
 
 PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
 
-CP_ARG=${CP_ARG:--uv}
+CP_ARG=${CP_ARG:--v}
 
 ONE_ETC=${ONE_ETC:-/etc/one}
 ONE_USER=${ONE_USER:-oneadmin}
