@@ -72,56 +72,81 @@ if vcpu_element is None:
     vcpu_element.text = '1'
 vcpu = int(vcpu_element.text)
 
-#if vcpu%2 > 0:
-#    print("VCPU % 2 = {v} != 0".format(v=vcpu%2), file=stderr)
-#    exit(1)
+vcpu_current = int(vcpu_element.text)
+if vcpu_element.get('current') is not None:
+    vcpu_current = int(vcpu_element.attrib['current'])
 
-cpu = root.find('./cpu')
-if cpu is None:
-    cpu = ET.SubElement(root, 'cpu')
-
+cpu_element = root.find('./cpu')
+if cpu_element is None:
+    cpu_element = ET.SubElement(root, 'cpu')
 
 threads = int(os.getenv('T_CPU_THREADS', 1))
-cpu_threads = vm.find('.//USER_TEMPLATE/T_CPU_THREADS')
-if cpu_threads is not None:
+vm_cpu_threads = vm.find('.//USER_TEMPLATE/T_CPU_THREADS')
+if vm_cpu_threads is not None:
     try:
-        threads = int(cpu_threads.text)
+        threads = int(vm_cpu_threads.text)
         if threads < 1:
             threads = 1
     except Exception as e:
-        print("USER_TEMPLATE/CPU_THREADS is '{0}' Error:{1}".format(
-                                        cpu_threads.text,e),file=stderr)
+        print("USER_TEMPLATE/T_CPU_THREADS is '{0}' Error:{1}".format(
+                                        vm_cpu_threads.text, e), file=stderr)
         exit(1)
 
 sockets = int(os.getenv('T_CPU_SOCKETS', 0))
-cpu_sockets = vm.find('.//USER_TEMPLATE/T_CPU_SOCKETS')
-if cpu_sockets is not None:
+vm_cpu_sockets = vm.find('.//USER_TEMPLATE/T_CPU_SOCKETS')
+if vm_cpu_sockets is not None:
     try:
-        sockets = int(cpu_sockets.text)
+        sockets = int(vm_cpu_sockets.text)
     except Exception as e:
         print("USER_TEMPLATE/CPU_SOCKETS is '{0}' Error:{1}".format(
-                                        cpu_sockets.text,e),file=stderr)
+                                        vm_cpu_sockets.text,e),file=stderr)
 
 if sockets > 0:
     socket_cpu_threads = int(vcpu / sockets)
     socket_cores = int(socket_cpu_threads / threads)
 
-    topology = ET.SubElement(cpu, 'topology', {
+    topology_element = cpu_element.find('./topology')
+    if topology_element is not None:
+        cpu_element.remove(topology_element)
+    topology_element = ET.SubElement(cpu_element, 'topology', {
             'sockets' : '{0}'.format(sockets),
               'cores' : '{0}'.format(socket_cores),
             'threads' : '{0}'.format(threads),
         })
 
     changed = 1
-
-    numa = ET.SubElement(cpu, 'numa')
-    for i in range(sockets):
-        cpuStart = socket_cpu_threads * i
-        cpuEnd = (socket_cpu_threads * (i+1)) -1
+    numa_element = cpu_element.find('./numa')
+    if numa_element is not None:
+        cpu_element.remove(numa_element)
+    numa_element = ET.SubElement(cpu_element, 'numa')
+    cpumap = {}
+    vcpus_element = ET.SubElement(root, 'vcpus')
+    scount=0
+    vcpu_enabled = 'yes'
+    vcpu_hotpluggable = 'no'
+    for idx in range(vcpu):
+        if idx >= vcpu_current:
+            vcpu_enabled = 'no'
+        vcpu_sub_element = ET.SubElement(vcpus_element, 'vcpu', {
+            'id' : str(idx),
+            'enabled' : vcpu_enabled,
+            'hotpluggable' : vcpu_hotpluggable
+            })
+        vcpu_hotpluggable = 'yes'
+        if scount not in cpumap:
+            cpumap[scount] = []
+        cpumap[scount].append(str(idx))
+        scount = (scount + 1) % sockets
+    for idx in range(sockets):
+        cpuStart = socket_cpu_threads * idx
+        cpuEnd = (socket_cpu_threads * (idx + 1)) - 1
         cpuMem = int(memory / sockets)
-        cell = ET.SubElement(numa, 'cell', {
-                'id' : '{0}'.format(i),
-              'cpus' : '{0}-{1}'.format(cpuStart, cpuEnd),
+        cpus = '{0}-{1}'.format(cpuStart, cpuEnd)
+        if threads == 1 and cpumap[idx]:
+            cpus = ','.join(cpumap[idx])
+        cell = ET.SubElement(numa_element, 'cell', {
+                'id' : '{0}'.format(idx),
+              'cpus' : '{0}'.format(cpus),
             'memory' : '{0}'.format(cpuMem),
             })
 
@@ -130,15 +155,18 @@ vm_cpu_features = vm.find('.//USER_TEMPLATE/T_CPU_FEATURES')
 if vm_cpu_features is not None:
     cpu_features = vm_cpu_features.text
 if cpu_features is not None:
-    for f in cpu_features.split(','):
-        arr = f.split(':')
+    for feature in cpu_features.split(','):
+        arr = feature.split(':')
         name = arr[0]
-        feature = ET.SubElement(cpu, 'feature' , {
+        feature_element = cpu_element.find("./feature[@name='{}']".format(name))
+        if feature_element is not None:
+            cpu_element.remove(feature_element)
+        feature_element = ET.SubElement(cpu_element, 'feature' , {
                 'name' : name
             })
         if len(arr) > 1:
-            if arr[1] in ['force','require','optional','disable','forbid']:
-                feature.set('policy', arr[1])
+            if arr[1] in ['force', 'require', 'optional', 'disable', 'forbid']:
+                feature_element.set('policy', arr[1])
         changed = 1
 
 
@@ -147,25 +175,27 @@ vm_cpu_model = vm.find('.//USER_TEMPLATE/T_CPU_MODEL')
 if vm_cpu_model is not None:
     cpu_model = vm_cpu_model.text
 if cpu_model is not None:
-    model = cpu.find('./model')
+    model_element = cpu_element.find('./model')
     if cpu_model.lower() == 'delete':
-        if model is not None:
-            cpu.remove(model)
+        # T_CPU_MODEL=delete
+        if model_element is not None:
+            cpu_element.remove(model_element)
             changed = 1
     else:
-        m = cpu_model.split(':')
-        cpu_model = m[0]
+        # T_CPU_MODEL=model:fallback
+        model_split = cpu_model.split(':')
+        model = model_split[0]
         fallback = None
-        if model is None:
-            model = ET.SubElement(cpu, 'model')
-        model.text = cpu_model
-        if len(m) > 1:
-            fallback = m[1]
+        if model_element is None:
+            model_element = ET.SubElement(cpu_element, 'model')
+        model_element.text = model
+        if len(model_split) > 1:
+            fallback = model_split[1]
         if fallback is not None:
-            model.set('fallback', fallback)
+            model_element.set('fallback', fallback)
         else:
-            if model.get('fallback') is not None:
-                del model.atrrib['fallback']
+            if model_element.get('fallback') is not None:
+                del model_element.atrrib['fallback']
         changed = 1
 
 cpu_vendor = os.getenv('T_CPU_VENDOR', None)
@@ -173,12 +203,12 @@ vm_cpu_vendor = vm.find('.//USER_TEMPLATE/T_CPU_VENDOR')
 if vm_cpu_vendor is not None:
     cpu_vendor = vm_cpu_vendor.text
 if cpu_vendor is not None:
-    model = cpu.find('./model')
-    if model is not None:
-        vendor = cpu.find('.//vendor')
-        if vendor is None:
-            vendor = ET.SubElement(cpu, 'vendor')
-        vendor.text = cpu_vendor
+    model_element = cpu_element.find('./model')
+    if model_element is not None:
+        vendor_element = cpu_element.find('.//vendor')
+        if vendor_element is None:
+            vendor_element = ET.SubElement(cpu_element, 'vendor')
+        vendor_element.text = cpu_vendor
         changed = 1
 
 cpu_check = os.getenv('T_CPU_CHECK', None)
@@ -187,12 +217,12 @@ if vm_cpu_check is not None:
     cpu_check = vm_cpu_check.text
 if cpu_check is not None:
     if cpu_check.lower() == 'delete':
-        if cpu.get('check') is not None:
-            del cpu.attrib['check']
+        if cpu_element.get('check') is not None:
+            del cpu_element.attrib['check']
             changed = 1
     else:
-        if cpu_check in ['none','partial','full']:
-            cpu.set('check', cpu_check)
+        if cpu_check in ['none', 'partial', 'full']:
+            cpu_element.set('check', cpu_check)
             changed = 1
 
 cpu_match = os.getenv('T_CPU_MATCH', None)
@@ -201,12 +231,12 @@ if vm_cpu_match is not None:
     cpu_match = vm_cpu_match.text
 if cpu_match is not None:
     if cpu_match.lower() == 'delete':
-        if cpu.get('match') is not None:
-            del cpu.attrib['match']
+        if cpu_element.get('match') is not None:
+            del cpu_element.attrib['match']
             changed = 1
     else:
-        if cpu_match in ['minimum','exact','strict']:
-            cpu.set('match', cpu_match)
+        if cpu_match in ['minimum', 'exact', 'strict']:
+            cpu_element.set('match', cpu_match)
             changed = 1
 
 cpu_mode = os.getenv('T_CPU_MODE', None)
@@ -215,12 +245,12 @@ if vm_cpu_mode is not None:
     cpu_mode = vm_cpu_mode.text
 if cpu_mode is not None:
     if cpu_mode.lower() == 'delete':
-        if cpu.get('mode') is not None:
-            del cpu.attrib['mode']
+        if cpu_element.get('mode') is not None:
+            del cpu_element.attrib['mode']
             changed = 1
     else:
-        if cpu_match in ['custom','host-model','host-passthrough']:
-            cpu.set('mode', cpu_mode)
+        if cpu_match in ['custom', 'host-model', 'host-passthrough']:
+            cpu_element.set('mode', cpu_mode)
             changed = 1
 
 if changed:
