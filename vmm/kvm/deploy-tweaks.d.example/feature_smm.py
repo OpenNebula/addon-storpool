@@ -93,15 +93,16 @@ if t_smm_e is not None:
     if smm_e is not None:
         features_e.remove(smm_e)
     smm_e = ET.SubElement(features_e, 'smm', get_attributes(attr))
-    if value is not '':
-        f_e.text = '{}'.format(value)
+#    if value != '':
+#        f_e.text = '{}'.format(value)
     changed = 1
     t_tseg_e = vm.find('.//USER_TEMPLATE/T_FEATURE_SMM_TSEG')
     if t_tseg_e is not None:
         value, attr = t_tseg_e.text.split(':')
         tseg_e = ET.SubElement(smm_e, 'tseg', get_attributes(attr))
-        if value is not '':
-            tseg_e.text = '{}'.format(value)
+        if value == '':
+            value = 0
+        tseg_e.text = '{}'.format(value)
 
 if changed:
     indent(root)
