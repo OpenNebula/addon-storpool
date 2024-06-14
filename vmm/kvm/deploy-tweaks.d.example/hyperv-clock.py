@@ -57,12 +57,18 @@ if root.find("./features/hyperv") is not None:
         clock = ET.SubElement(root, 'clock', {
             'offset' : 'utc',
             })
-
+    timer = {
+        'hypervclock': ["present", "yes"],
+        'rtc': ["tickpolicy", "catchup"],
+        'pit': ["tickpolicy", "delay"],
+        'hpet': ["present", "no"],
+    }
     # improve clock settings for windows based hosts
-    clock.append(ET.Element("timer", name = 'hypervclock', present = "yes"))
-    clock.append(ET.Element("timer", name = 'rtc', tickpolicy = 'catchup'))
-    clock.append(ET.Element("timer", name = 'pit', tickpolicy = 'delay'))
-    clock.append(ET.Element("timer", name = 'hpet', present = 'no'))
+    for name, data in timer.items():
+        timer_element = clock.find("./timer[@name='{}']".format(name))
+        if timer_element is not None:
+            clock.remove(timer_element)
+        clock.append(ET.Element("timer", {'name': name, data[0]: data[1]}))
 
     indent(root)
     doc.write(xmlDomain)
