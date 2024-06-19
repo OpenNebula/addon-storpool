@@ -424,3 +424,49 @@ Will generate the following element in the domain XML:
   </sysinfo>
 ```
 
+#### persistent-cdrom.py
+
+Enable IDE CDROM image attach/detach by replacing the corresponding actions with insert/eject.
+
+The virtual machine could work with up to 4 CDROM devices, usually one is occupied by the CONTEXTUALIZATION CDROM, though.
+
+##### system configuration
+
+* activate persistent-cdrom.py
+
+```
+su - oneadmin
+cd ~oneadmin/remotes/vmm/kvm/deploy-tweaks.d
+ln -s ../deploy-tweaks.d.example/persistent-cdrom.py
+```
+
+* edit the opennebula configuration to use the alternate (local) scripts for `attach_disk` and `detach_disk`, restart the opennebula service and propagate the changes to the hosts:
+
+```
+vi /etc/one/oned.conf
+---
+VM_MAD = [
+   ...
+   ARGUMENTS      = "-l ...,attach_disk=attach_disk.storpool,detach_disk=detach_disk.storpool,... "
+   ...
+]
+---
+
+systemctl restart opennebula
+
+su - oneadmin -c 'onehost sync -f'
+```
+
+* configure the number of CDROM devices globally in the addon-storpoolrc file:
+
+```
+T_PERSISTENT_CDROM=4
+```
+
+or per VM in the VM attributes(a.k.a. _USER_TEMPLATE_)
+
+```
+USER_TEMPLATE/T_PERSISTENT_CDROM="4"
+```
+
+Note: The value per VM overrides the global definition, so to disable the function for a VM when there is a global definition, just set `T_PERSISTENT_CDROM=0`.
