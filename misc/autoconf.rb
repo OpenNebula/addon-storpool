@@ -46,7 +46,7 @@ class Hash
     # @example Merging two hashes
     #   h1 = {:a => 3, {:b => 3, :c => 7}}
     #   h2 = {:a => 22, c => 4, {:b => 5}}
-    #   
+    #
     #   h1.deep_merge(h2) #=> {:a => 22, c => 4, {:b => 5, :c => 7}}
     def deep_merge(other_hash)
         target = dup
@@ -134,16 +134,7 @@ default_config = {
                     "DS_MIGRATE" => "\"yes\"",
                     "DRIVER" => "\"raw\"",
                     "ALLOW_ORPHANS" => "\"yes\"",
-                    "TM_MAD_SYSTEM" => "\"ssh,shared,qcow2\"",
-                    "LN_TARGET_SSH" => "\"NONE\"",
-                    "CLONE_TARGET_SSH" => "\"SELF\"",
-                    "DISK_TYPE_SSH" => "\"NONE\"",
-                    "LN_TARGET_SHARED" => "\"NONE\"",
-                    "CLONE_TARGET_SHARED" => "\"SELF\"",
-                    "DISK_TYPE_SHARED" => "\"NONE\"",
-                    "LN_TARGET_QCOW2" => "\"NONE\"",
-                    "CLONE_TARGET_QCOW2" => "\"SELF\"",
-                    "DISK_TYPE_QCOW2" => "\"NONE\"",
+                    "TM_MAD_SYSTEM" => "\"\"",
                 },
             },
             "vm_restricted_attr" => {
@@ -152,15 +143,6 @@ default_config = {
                 :arguments => {
                     "DISKSNAPSHOT_LIMIT" => "DISKSNAPSHOT_LIMIT",
                     "VMSNAPSHOT_LIMIT" => "VMSNAPSHOT_LIMIT",
-#                    "T_CPU_THREADS" => "T_CPU_THREADS",
-#                    "T_CPU_SOCKETS" => "T_CPU_SOCKETS",
-#                    "T_CPU_FEATURES" => "T_CPU_FEATURES",
-#                    "T_CPU_MODE" => "T_CPU_MODE",
-#                    "T_CPU_MODEL" => "T_CPU_MODEL",
-#                    "T_CPU_VENDOR" => "T_CPU_VENDOR",
-#                    "T_CPU_CHECK" => "T_CPU_CHECK",
-#                    "T_CPU_MATCH" => "T_CPU_MATCH",
-#                    "T_VF_MACS" => "T_VF_MACS",
                     "VC_POLICY" => "VC_POLICY",
                     "SP_QOSCLASS" => "SP_QOSCLASS",
                 },
