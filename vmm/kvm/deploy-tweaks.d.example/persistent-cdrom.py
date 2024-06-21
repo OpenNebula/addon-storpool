@@ -93,7 +93,7 @@ for cdrom_element in cdrom_elements:
     info["source"] = source_element.get(info["source_entry"])
     info["disk_id"] = int(info["source"].rsplit('disk.')[1])
     target_element = cdrom_element.find('./target')
-    
+
     target_dev = target_element.get('dev')
     info["target_dev"] = target_dev
     if target_dev[0:2] == 'hd':
@@ -102,6 +102,14 @@ for cdrom_element in cdrom_elements:
     dom_cdroms[info["disk_id"]] = info
 
 dom_cdroms_count = len(dom_cdroms)
+
+cdrom_bus = 'ide'
+os_type_element = root.find('./os/type')
+if os_type_element is not None:
+    machine = os_type_element.get('machine')
+    if machine is not None:
+        if 'q35' in machine:
+            cdrom_bus = 'sata'
 
 #find devices element
 devices_element = root.findall('.//devices')[0]
@@ -113,7 +121,7 @@ if pers_cdroms_count_env.isnumeric():
 t_pers_cdrom_element = vm_root.find('.//USER_TEMPLATE/T_PERSISTENT_CDROM')
 if t_pers_cdrom_element is not None:
     if t_pers_cdrom_element.text.isnumeric():
-        pers_cdroms_count = int(t_pers_cdrom_element.text)    
+        pers_cdroms_count = int(t_pers_cdrom_element.text)
 
 disk_cdrom_type = "block"
 t_pers_cdrom_type_element = vm_root.find('.//USER_TEMPLATE/T_PERSISTENT_CDROM_TYPE')
@@ -158,7 +166,7 @@ if pers_cdroms_count > 0:
                 devices_element,
                 'disk',
                 {
-                "type": disk_cdrom_type, 
+                "type": disk_cdrom_type,
                 "device": "cdrom",
                 },
             )
@@ -167,7 +175,7 @@ if pers_cdroms_count > 0:
             "target",
             {
                 "dev": dev,
-                "bus": "ide",
+                "bus": cdrom_bus,
             },
         )
         driver_element = ET.SubElement(
@@ -182,7 +190,7 @@ if pers_cdroms_count > 0:
         )
         readolny_element = ET.SubElement(disk_element, "readonly", {})
         changed = 1
-        log_inf(f"added cdrom device: {dev} type:{disk_cdrom_type}")
+        log_inf(f"added cdrom device: {dev} type:{disk_cdrom_type} bus:{cdrom_bus}")
 
 if changed:
     indent(root)
