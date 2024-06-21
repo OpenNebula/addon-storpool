@@ -30,7 +30,7 @@ function splog()
     logger -t "vmm_sp_${0##*/}" "[$$] ${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
 }
 
-if boolTrue "DEBUG_ATTACH_DISK"; then
+if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     splog "[D] $0 $1 $2 $3 $4 ${5:0:8}"
 fi
 
@@ -53,9 +53,9 @@ T_PERSISTENT_CDROM="$(echo ${DRV_ACTION} | base64 -d | \
 
 PERSISTENT_CDROM=${T_PERSISTENT_CDROM:-${PERSISTENT_CDROM}}
 
-if boolTrue "DEBUG_ATTACH_DISK"; then
+if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     splog "[D] KVMHOST=${KVMHOST} TM_MAD=${TM_MAD} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} PERSISTENT_CDROM=${PERSISTENT_CDROM}"
-    if boolTrue "DDDEBUG_ATTACH_DISK"; then
+    if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
         echo "${DRV_ACTION}" >/tmp/atach_disk.b64
     fi
 fi
@@ -89,7 +89,7 @@ if [ "${TM_MAD:0:8}" == "storpool" ]; then
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v ${NEW_TYPE} |\
                    base64 -w 0)"
-        if boolTrue "DDDEBUG_ATTACH_DISK"; then
+        if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
             echo "${DRV_ACTION}" >/tmp/atach_disk_out.b64
         fi
     fi
