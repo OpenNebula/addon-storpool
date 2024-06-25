@@ -65,6 +65,16 @@ except Exception as e:
     print('Cant get memory info from domain XML "{0}"'.format(e), file=stderr)
     exit(1)
 
+cpu_alt_numa = os.getenv('T_CPU_ALT_NUMA', None)
+t_cpu_alt_numa = vm.find('.//USER_TEMPLATE/T_CPU_ALT_NUMA')
+if t_cpu_alt_numa is not None:
+    cpu_alt_numa = t_cpu_alt_numa.text
+
+yes_list = ['1', 'y', 'yes', 'on', 'enable', 'enabled']
+if cpu_alt_numa is not None and cpu_alt_numa.lower() in yes_list:
+    cpu_alt_numa = True
+else:
+    cpu_alt_numa = False
 
 vcpu_element = root.find('./vcpu')
 if vcpu_element is None:
@@ -142,7 +152,7 @@ if sockets > 0:
         cpuEnd = (socket_cpu_threads * (idx + 1)) - 1
         cpuMem = int(memory / sockets)
         cpus = '{0}-{1}'.format(cpuStart, cpuEnd)
-        if threads == 1 and cpumap[idx]:
+        if cpu_alt_numa and threads == 1 and cpumap[idx]:
             cpus = ','.join(cpumap[idx])
         cell = ET.SubElement(numa_element, 'cell', {
                 'id' : '{0}'.format(idx),
@@ -168,7 +178,6 @@ if cpu_features is not None:
             if arr[1] in ['force', 'require', 'optional', 'disable', 'forbid']:
                 feature_element.set('policy', arr[1])
         changed = 1
-
 
 cpu_model = os.getenv('T_CPU_MODEL', None)
 vm_cpu_model = vm.find('.//USER_TEMPLATE/T_CPU_MODEL')
