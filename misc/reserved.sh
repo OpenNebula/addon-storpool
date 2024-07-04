@@ -78,7 +78,12 @@ root_cpuset="${root_arr[1]}"
 cg_cpus=$(count_cpus "$cg_cpuset")
 root_cpus=$(count_cpus "$root_cpuset")
 
-echo "RESERVED_CPU=$(((root_cpus-cg_cpus)*100))"
+if [[ -f /var/tmp/one/addon-storpoolrc ]]; then
+    source /var/tmp/one/addon-storpoolrc
+fi
+
+[[ -n "${SKIP_RESERVED_CPU}" ]] || echo "RESERVED_CPU=$(((root_cpus-cg_cpus)*100))"
+
 echo "RESERVED_MEM=$(((mem[1]-cg_arr[0])/1024))"
 
 storpool_confshow SP_OURID 2>/dev/null
