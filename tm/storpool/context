@@ -186,7 +186,8 @@ if boolTrue "FORCE_DETACH_OTHER_CONTEXT"; then
 fi
 
 if [ -n "$T_OS_NVRAM" ]; then
-    NVRAM_TEMPLATE="${T_OS_NVRAM##*=}"
+    t_os_nvram=(${T_OS_NVRAM#*:})
+    NVRAM_TEMPLATE="${t_os_nvram[0]#*=}"
     t_arr=(${NVRAM_TEMPLATE//\// })
     if [ "${NVRAM_TEMPLATE#*/}" = "$NVRAM_TEMPLATE" ]; then
         NVRAM_TEMPLATE="${OVMF_PATH:-/var/lib/one/remotes/OVMF}/${NVRAM_TEMPLATE}"
@@ -216,7 +217,7 @@ if [ -n "$T_OS_NVRAM" ]; then
             storpoolVolumeAttach "$SP_VOL" "$DST_HOST"
         fi
     else
-        splog "NVRAM_TEMPLATE=$NVRAM_TEMPLATE not found!"
+        splog "NVRAM_TEMPLATE='$NVRAM_TEMPLATE' not found!"
     fi
 fi
 
