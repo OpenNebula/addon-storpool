@@ -248,7 +248,7 @@ fi
 
 echo "*** Registering the vc-policy hook"
 if onehook list -x >"${TMPDIR}/onehook.xml" 2>/dev/null; then
-    vc_policy="$(xmlstarlet sel -t -m //HOOK -v NAME -o " COMMAND=" -v TEMPLATE/COMMAND -n "${TMPDIR}/onehook.xml" | grep vc-policy)"
+    vc_policy="$(xmlstarlet sel -t -m //HOOK -v NAME -o " COMMAND=" -v TEMPLATE/COMMAND -n "${TMPDIR}/onehook.xml" | grep vc-policy || true)"
     if [[ -n "${vc_policy}" ]]; then
         echo "--- already registered HOOK=${vc_policy}"
     else
