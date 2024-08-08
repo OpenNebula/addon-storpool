@@ -86,8 +86,10 @@ Common element atributes:
 | attribute | description |
 | --------- | ----------- |
 | `template=/path/to/template/OVMF_VARS.fd` | optional, path to the template OVMF_VARS file |
+| `type=[file|block]` | optional, type of the nvram element |
 
 To define which file to use as a template for the UEFI nvram (The file must be available in /var/lib/one/remotes/OVMF/ folder).
+The `type` attribute will trigger the generation of the "new style" XML that follow the XML definition syntax of any ordinary disk (libvirt 8.5+)
 For OpenNebula VM Templates the variables should be set as "*Tags*" named *T_OS_LOADER*
 
 #### Usage
@@ -95,6 +97,31 @@ For OpenNebula VM Templates the variables should be set as "*Tags*" named *T_OS_
 ```
 T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
 T_OS_NVRAM = "storpool:template=OVMF_VARS.fd"
+```
+
+will generate the following domain XML:
+
+```
+  <os>
+    <loader readonly="yes" type="pflash">/var/tmp/one/OVMF/OVMF_CODE.secboot.fd</loader>
+    <nvram>/dev/storpool/one-sys-42-NVRAM</nvram>
+  </os>
+```
+
+```
+T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
+T_OS_NVRAM = "storpool:template=OVMF_VARS.fd type=block"
+```
+
+will generate the following domain XML:
+
+```
+  <os>
+    <loader readonly="yes" type="pflash">/var/tmp/one/OVMF/OVMF_CODE.secboot.fd</loader>
+    <nvram type="block">
+      <source dev="/dev/storpool/one-sys-42-NVRAM" />
+    </nvram>
+  </os>
 ```
 
 For UEFI + Secure Boot
