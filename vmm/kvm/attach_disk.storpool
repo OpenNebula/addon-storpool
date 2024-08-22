@@ -19,8 +19,8 @@
 WORKDIR=$(dirname "$0")
 source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 source "${WORKDIR}/../../scripts_common.sh"
-if [[ -f "${WORKDIR}/addon-storpoolrc" ]]; then
-    source "${WORKDIR}/addon-storpoolrc"
+if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
+    source "${WORKDIR}/../../addon-storpoolrc"
 fi
 
 set -o pipefail
@@ -48,10 +48,10 @@ DEV_PREFIX="$(echo ${DRV_ACTION} | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DEV_PREFIX)"
 DISK_ID="$(echo ${DRV_ACTION} | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_ID)"
-T_PERSISTENT_CDROM="$(echo ${DRV_ACTION} | base64 -d | \
+T_PERSISTENT_CDROMx="$(echo ${DRV_ACTION} | base64 -d | \
               xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM)"
 
-PERSISTENT_CDROM=${T_PERSISTENT_CDROM:-${PERSISTENT_CDROM}}
+PERSISTENT_CDROM=${T_PERSISTENT_CDROMx:-${T_PERSISTENT_CDROM}}
 
 if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     splog "[D] KVMHOST=${KVMHOST} TM_MAD=${TM_MAD} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} PERSISTENT_CDROM=${PERSISTENT_CDROM}"

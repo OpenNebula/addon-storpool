@@ -19,6 +19,9 @@
 WORKDIR=$(dirname "$0")
 source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 source "${WORKDIR}/../../scripts_common.sh"
+if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
+    source "${WORKDIR}/../../addon-storpoolrc"
+fi
 
 function splog()
 {
