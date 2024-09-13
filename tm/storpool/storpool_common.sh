@@ -370,7 +370,7 @@ function oneHostInfo()
         splog "$errmsg"
         exit $ret
     fi
-    onehost show $ONE_ARGS -x "$_name" >"$tmpXML"
+    oneCallXml onehost show "$_name" >"$tmpXML"
     ret=$?
     if [[ ${ret} -ne 0 ]]; then
         errmsg="(oneHostInfo) Error: Can't get info for host '${_name}'! $(head -n 1 "${tmpXML}") (ret:${ret})"
@@ -1299,7 +1299,7 @@ function oneVmInfo()
         splog "$errmsg"
         exit $ret
     fi
-    onevm show $ONE_ARGS -x "$_VM_ID" >"$tmpXML"
+    oneCallXml onevm show "$_VM_ID" >"$tmpXML"
     ret=$?
     if [ $ret -ne 0 ]; then
         errmsg="(oneVmInfo) Error: Can't get info! $(head -n 1 "$tmpXML") (ret:$ret)"
@@ -1465,7 +1465,7 @@ function oneDatastoreInfo()
 
     if [ -n "$_DS_POOL_FILE" ]; then
         if [ ! -f "$_DS_POOL_FILE" ]; then
-            onedatastore list $ONE_ARGS -x >"$_DS_POOL_FILE"
+            oneCallXml onedatastore list >"$_DS_POOL_FILE"
             ret=$?
             if boolTrue "DEBUG_oneDatastoreInfo"; then
                 splog "($ret) onedatastore list $ONE_ARGS -x >$_DS_POOL_FILE"
@@ -1479,7 +1479,7 @@ function oneDatastoreInfo()
         xmllint -xpath "/DATASTORE_POOL/DATASTORE[ID=$_DS_ID]" "$_DS_POOL_FILE" >"$tmpXML"
         ret=$?
     else
-        onedatastore show $ONE_ARGS -x "$_DS_ID" >"$tmpXML"
+        oneCallXml onedatastore show "$_DS_ID" >"$tmpXML"
         ret=$?
     fi
 
@@ -1943,7 +1943,7 @@ oneVmVolumes()
             xmllint -xpath "/VM_POOL/VM[ID=$VM_ID]" "$VM_POOL_FILE" >"$tmpXML"
             ret=$?
         else
-            onevm show $ONE_ARGS -x "$VM_ID" >"$tmpXML"
+            oneCallXml onevm show "$VM_ID" >"$tmpXML"
             ret=$?
         fi
         if [ $ret -ne 0 ]; then
