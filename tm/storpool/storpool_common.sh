@@ -778,7 +778,7 @@ storpoolVolumeCheck()
 function storpoolVolumeCreate()
 {
     local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3"
-    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} create >/dev/null
 }
 
 function storpoolVolumeStartswith()
@@ -838,7 +838,7 @@ function storpoolVolumeDelete()
             else
                 local msg="Unsupported format in DELAY_DELETE='$DELAY_DELETE'!"
                 local newName="${_sp_vol}_DELETE$(date +%s)"
-                storpoolRetry volume "$_SP_VOL" rename "$newName" >/dev/null
+                storpoolRetry volume "$_SP_VOL" rename "$newName" update >/dev/null
                 _ret=$?
                 if [ $_ret -ne 0 ]; then
                     storpoolRetry volume "$newName" freeze >/dev/null
@@ -873,7 +873,7 @@ function storpoolVolumeDelete()
 function storpoolVolumeRename()
 {
     local _SP_OLD="$1" _SP_NEW="$2" _SP_TEMPLATE="$3" _SP_TAG="$4"
-    storpoolRetry volume "$_SP_OLD" rename "$_SP_NEW" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+    storpoolRetry volume "$_SP_OLD" rename "$_SP_NEW" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} update >/dev/null
 }
 
 function storpoolVolumeClone()
@@ -887,7 +887,7 @@ function storpoolVolumeResize()
 {
     local _SP_VOL="$1" _SP_SIZE="$2" _SP_SHRINKOK="$3"
 
-    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}"${_SP_SHRINKOK:+ shrinkOk} >/dev/null
+    storpoolRetry volume "$_SP_VOL" size "${_SP_SIZE}"${_SP_SHRINKOK:+ shrinkOk} update >/dev/null
 }
 
 function storpoolVolumeAttach()
@@ -1047,7 +1047,7 @@ function storpoolVolumeTag()
         tagCmd+="tag ${tagKey}=${tagVals[i]//[[:space:]]/} "
     done
     if [ -n "$tagCmd" ]; then
-        storpoolRetry volume "$_SP_VOL" $tagCmd >/dev/null
+        storpoolRetry volume "$_SP_VOL" $tagCmd update >/dev/null
     fi
 }
 
