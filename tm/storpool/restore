@@ -1,0 +1,161 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2024, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+DRIVER_PATH="$(dirname "$0")"
+
+source "${DRIVER_PATH}/../../scripts_common.sh"
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+
+DST_HOST=${1%%:*}
+SYSTEM_DS_PATH=${1#*:}
+VM_ID=$2
+IMG_ID=$3
+INC_ID=$4
+DISK_ID=$5
+
+#splog "$* //${#DRV_ACTION}"
+
+oneVmInfo "${VM_ID}" "${DISK_ID}"
+VM_XML="${TMPDIR}/onevm-${VM_ID}.XML"
+
+oneBackupImageInfo "${IMG_ID}"
+BACKUP_IMG_XML="${TMPDIR}/oneimage-${IMG_ID}.XML"
+
+oneDatastoreInfo "${B_DATASTORE_ID}"
+BACKUP_DS_XML="${TMPDIR}/onedatastore-${B_DATASTORE_ID}.XML"
+
+MSG="VM ${VM_ID} BackupID ${IMG_ID} '${B_IMAGE_NAME}'"
+if [[ ${INC_ID} != "-1" ]]; then
+    MSG+=" Incremental ${INC_ID}"
+fi
+if [[ ${DISK_ID} != "-1" ]]; then
+    MSG+=" Disk ${DISK_ID} (size ${SIZE}M)"
+else
+    MSG+=" All disks"
+    if boolTrue "B_BACKUP_VOLATILE"; then
+        MSG+=" + volatile"
+    else
+        MSG+=" w/o volatile"
+    fi
+fi
+splog "${MSG}"
+
+DS_DRIVER_ACTION="${TMPDIR}/ds_driver_action.XML"
+
+cat >"${DS_DRIVER_ACTION}" <<EOF
+<DS_DRIVER_ACTION_DATA>
+$(cat "${BACKUP_DS_XML}"||true)
+$(cat "${VM_XML}"||true)
+$(cat "${BACKUP_IMG_XML}"||true)
+</DS_DRIVER_ACTION_DATA>
+EOF
+
+BACKUP_MAD_LS="${DRIVER_PATH}/../../datastore/${DS_DS_MAD}/ls"
+
+declare -A disksUrl disksMap
+
+while IFS=' ' read -ru 5 did url; do
+    disksUrl["${did}"]="${url}"
+done 5< <(cat "${DS_DRIVER_ACTION}" | \
+          "${BACKUP_MAD_LS}" -i "${INC_ID}" |\
+          jq -r 'to_entries[]|"\(.key) \(.value)"'||true)
+
+oneVmVolumes "${VM_ID}" "" "${VM_XML}"
+for entry in ${vmDisksMap}; do
+    disksMap["${entry##*:}"]="${entry%:*}"
+done
+_TMP_NAME=$(mktemp --dry-run tmRestoreXXXXXXXX)
+ERROR=0
+RET=0
+for did in ${!disksUrl[*]}; do
+    if [[ ${DISK_ID} != "-1" ]]; then
+        if [[ ${DISK_ID} != "${did}" ]]; then
+            continue
+        fi
+    fi
+    BACKUP_URL="${disksUrl[${did}]}"
+    SP_NAME="${disksMap[${did}]}"
+    TMP_NAME="${SP_NAME}-${_TMP_NAME}"
+    SP_LINK="/dev/storpool/${SP_NAME}"
+    COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp "${BACKUP_URL}" -"
+    storpoolVolumeInfo "${SP_NAME}"
+    if [[ -z ${V_SIZE} ]]; then
+        splog "VM ${VM_ID} volume ${SP_NAME} not found"
+        ERROR=1
+        break
+    fi
+    storpoolVolumeRename "${SP_NAME}" "${TMP_NAME}"
+    RET=$?
+    if [[ ${RET} -eq 0 ]]; then # 1
+        storpoolVolumeCreate "${SP_NAME}" "${V_SIZE}" "${V_TEMPLATE_NAME}"
+        RET=$?
+        if [[ ${RET} -eq 0 ]]; then # 2
+            storpoolVolumeTag "${SP_NAME}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG};${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
+            storpoolVolumeAttach "${SP_NAME}" "${DST_HOST}"
+            if [[ ${RET} -eq 0 ]]; then # 3
+                splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct"
+                multiline_exec_and_log "set -e -o pipefail; eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct" \
+                     "Error restoring ${BACKUP_URL} to ${DST_HOST}:${SP_LINK}"
+                RET=$?
+                if [[ ${RET} -ne 0 ]]; then # 4
+                    ERROR=4
+                    break
+                fi
+            else
+                ERROR=3
+                break
+            fi
+        else
+            ERROR=2
+            break
+        fi
+    else
+        ERROR=1
+        break
+    fi
+done
+
+for did in ${!disksUrl[*]}; do
+    if [[ ${DISK_ID} != "-1" ]]; then
+        if [[ ${DISK_ID} != "${did}" ]]; then
+            continue
+        fi
+    fi
+    BACKUP_URL="${disksUrl[${did}]}"
+    SP_NAME="${disksMap[${did}]}"
+    TMP_NAME="${SP_NAME}-${_TMP_NAME}"
+    if [[ ${ERROR} -eq 0 ]]; then
+        splog "VM ${VM_ID} Restore success, cleaning up ${TMP_NAME}"
+        storpoolVolumeDelete "${TMP_NAME}" "force" "" "${REMOTE_BACKUP_DELETE}"
+    else
+        splog "VM ${VM_ID} Error:${ERROR} Restore failed, trying to rollback"
+        case "${ERROR}" in
+            3|4)
+                storpoolVolumeDelete "${SP_NAME}" "force"
+                ;&
+            2)
+                storpoolVolumeRename "${TMP_NAME}" "${SP_NAME}"
+                ;;
+            *)
+                storpoolVolumeInfo "${SP_NAME}"
+        esac
+    fi
+done
+
+splog "END ${VM_ID}"
+exit "${RET}"

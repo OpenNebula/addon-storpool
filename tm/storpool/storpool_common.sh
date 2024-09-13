@@ -1274,6 +1274,43 @@ EOF
     fi
 }
 
+function oneBackupImageInfo()
+{
+    local _IMAGE_ID="$1"
+    local _TMP_XML="${TMPDIR}/oneimage-${_IMAGE_ID}.XML"
+
+    local _XPATH="$(lookup_file "datastore/xpath.rb" "${TM_PATH}")"
+
+    oneCallXml oneimage show "${_IMAGE_ID}" "${_TMP_XML}"
+
+    unset i XPATH_ELEMENTS
+
+    while IFS= read -u 5 -r -d '' element; do
+        XPATH_ELEMENTS[i++]="$element"
+    done 5< <(cat "$_TMP_XML" | $_XPATH --stdin \
+                      /IMAGE/NAME \
+                      /IMAGE/TYPE \
+                      /IMAGE/SOURCE \
+                      /IMAGE/DATASTORE_ID \
+                      %m%/IMAGE/BACKUP_DISK_IDS/ID)
+    unset i
+    B_IMAGE_NAME="${XPATH_ELEMENTS[i++]}"
+    B_IMAGE_TYPE="${XPATH_ELEMENTS[i++]}"
+    B_IMAGE_SOURCE="${XPATH_ELEMENTS[i++]}"
+    B_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+    _BACKUP_DISK_IDS="${XPATH_ELEMENTS[i++]}"
+    BACKUP_DISK_IDS=(${_BACKUP_DISK_IDS})
+
+    boolTrue "DEBUG_oneBackupImageInfo" || return 0
+
+    splog "[oneBackupImageInfo]\
+B_IMAGE_NAME:'${B_IMAGE_NAME}' \
+B_IMAGE_TYPE:${B_IMAGE_TYPE} \
+B_IMAGE_SOURCE:${B_IMAGE_SOURCE} \
+DATASTORE_ID:${B_DATASTORE_ID} \
+BACKUP_DISK_IDS:${BACKUP_DISK_IDS[*]}"
+}
+
 function oneImageInfo()
 {
     local _IMAGE_ID="$1"
@@ -1335,6 +1372,14 @@ function oneVmInfo()
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/SIZE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/ORIGINAL_SIZE \
                             /VM/TEMPLATE/DISK[DISK_ID=$_DISK_ID]/DATASTORE_ID \
+                            /VM/BACKUPS/BACKUP_CONFIG/KEEP_LAST \
+                            /VM/BACKUPS/BACKUP_CONFIG/BACKUP_VOLATILE \
+                            /VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE \
+                            /VM/BACKUPS/BACKUP_CONFIG/MODE \
+                            /VM/BACKUPS/BACKUP_CONFIG/LAST_DATASTORE_ID \
+                            /VM/BACKUPS/BACKUP_CONFIG/LAST_BACKUP_ID \
+                            /VM/BACKUPS/BACKUP_CONFIG/LAST_BACKUP_SIZE \
+                            /VM/BACKUPS/BACKUP_CONFIG/ACTIVE_FLATTEN \
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/TM_MAD \
                             /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
                             /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
@@ -1368,6 +1413,14 @@ function oneVmInfo()
     SIZE="${XPATH_ELEMENTS[i++]}"
     ORIGINAL_SIZE="${XPATH_ELEMENTS[i++]}"
     IMAGE_DS_ID="${XPATH_ELEMENTS[i++]}"
+    B_KEEP_LAST="${XPATH_ELEMENTS[i++]}"
+    B_BACKUP_VOLATILE="${XPATH_ELEMENTS[i++]}"
+    B_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
+    B_MODE="${XPATH_ELEMENTS[i++]}"
+    B_LAST_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
+    B_LAST_BACKUP_ID="${XPATH_ELEMENTS[i++]}"
+    B_LAST_BACKUP_SIZE="${XPATH_ELEMENTS[i++]}"
+    B_ACTIVE_FLATTEN="${XPATH_ELEMENTS[i++]}"
     VM_TM_MAD="${XPATH_ELEMENTS[i++]}"
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
     _TMP="${XPATH_ELEMENTS[i++]}"
@@ -1443,6 +1496,15 @@ ${SP_QOSCLASS:+SP_QOSCLASS='$SP_QOSCLASS' }\
 ${VC_POLICY:+VC_POLICY='$VC_POLICY' }\
 ${T_OS_NVRAM:+T_OS_NVRAM='$T_OS_NVRAM' }\
 ${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES' }\
+${B_KEEP_LAST:+B_KEEP_LAST=${B_KEEP_LAST} }\
+${B_BACKUP_VOLATILE:+B_BACKUP_VOLATILE=${B_BACKUP_VOLATILE} }\
+${B_FS_FREEZE:+B_FS_FREEZE=${B_FS_FREEZE} }\
+${B_KEEP_LAST:+B_KEEP_LAST=${B_KEEP_LAST} }\
+${B_MODE:+B_MODE=${B_MODE} }\
+${B_LAST_DATASTORE_ID:+B_LAST_DATASTORE_ID=${B_LAST_DATASTORE_ID} }\
+${B_LAST_BACKUP_ID:+B_LAST_BACKUP_ID=${B_LAST_BACKUP_ID} }\
+${B_LAST_BACKUP_SIZE:+B_LAST_BACKUP_SIZE=${B_LAST_BACKUP_SIZE} }\
+${B_ACTIVE_FLATTEN:+B_ACTIVE_FLATTEN=${B_ACTIVE_FLATTEN} }\
 "
     _MSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=$HOTPLUG_SAVE_AS }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=$HOTPLUG_SAVE_AS_ACTIVE }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=$HOTPLUG_SAVE_AS_SOURCE }"
     [ -n "$_MSG" ] && splog "$_MSG"
@@ -1497,11 +1559,17 @@ function oneDatastoreInfo()
                             /DATASTORE/NAME \
                             /DATASTORE/TYPE \
                             /DATASTORE/DISK_TYPE \
+                            /DATASTORE/DS_MAD \
                             /DATASTORE/TM_MAD \
                             /DATASTORE/BASE_PATH \
                             /DATASTORE/CLUSTER_ID \
+                            %m%/DATASTORE/CLUSTERS/ID \
                             /DATASTORE/TEMPLATE/SHARED \
                             /DATASTORE/TEMPLATE/TYPE \
+                            /DATASTORE/TEMPLATE/RSYNC_HOST \
+                            /DATASTORE/TEMPLATE/RSYNC_USER \
+                            /DATASTORE/TEMPLATE/RESTIC_SFTP_SERVER \
+                            /DATASTORE/TEMPLATE/RESTIC_SFTP_USER \
                             /DATASTORE/TEMPLATE/BRIDGE_LIST \
                             /DATASTORE/TEMPLATE/EXPORT_BRIDGE_LIST \
                             /DATASTORE/TEMPLATE/SP_REPLICATION \
@@ -1525,11 +1593,18 @@ function oneDatastoreInfo()
     DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_DISK_TYPE="${XPATH_ELEMENTS[i++]}"
+    DS_DS_MAD="${XPATH_ELEMENTS[i++]}"
     DS_TM_MAD="${XPATH_ELEMENTS[i++]}"
     DS_BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DS_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
+    _DS_CLUSTERS_ID="${XPATH_ELEMENTS[i++]}"
+    DS_CLUSTERS_ID=(${_DS_CLUSTERS_ID})
     DS_SHARED="${XPATH_ELEMENTS[i++]}"
     DS_TEMPLATE_TYPE="${XPATH_ELEMENTS[i++]}"
+    DS_RSYNC_HOST="${XPATH_ELEMENTS[i++]}"
+    DS_RSYNC_USER="${XPATH_ELEMENTS[i++]}"
+    DS_RESTIC_SFTP_SERVER="${XPATH_ELEMENTS[i++]}"
+    DS_RESTIC_SFTP_USER="${XPATH_ELEMENTS[i++]}"
     BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     EXPORT_BRIDGE_LIST="${XPATH_ELEMENTS[i++]}"
     SP_REPLICATION="${XPATH_ELEMENTS[i++]}"
@@ -1567,15 +1642,18 @@ function oneDatastoreInfo()
     boolTrue "DEBUG_oneDatastoreInfo" || return 0
 
     _MSG="[oneDatastoreInfo]${DS_TYPE:+DS_TYPE=$DS_TYPE }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=$DS_TEMPLATE_TYPE }"
-    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_TM_MAD:+DS_TM_MAD=$DS_TM_MAD }"
+    _MSG+="${DS_DISK_TYPE:+DISK_TYPE=$DS_DISK_TYPE }${DS_DS_MAD:+DS_DS_MAD=$DS_DS_MAD }${DS_TM_MAD:+DS_TM_MAD=$DS_TM_MAD }"
     _MSG+="${DS_BASE_PATH:+BASE_PATH=$DS_BASE_PATH }${DS_CLUSTER_ID:+CLUSTER_ID=$DS_CLUSTER_ID }"
+    _MSG+="${DS_CLUSTERS_ID:+DS_CLUSTERS_ID=[${DS_CLUSTERS_ID[*]}] }"
     _MSG+="${DS_SHARED:+SHARED=$DS_SHARED }"
     _MSG+="${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }${SP_CLONE_GW:+SP_CLONE_GW=$SP_CLONE_GW }"
     _MSG+="${EXPORT_BRIDGE_LIST:+EXPORT_BRIDGE_LIST=$EXPORT_BRIDGE_LIST }"
-    _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT} ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT }"
+    _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT }${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT }"
     _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
     _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }"
     _MSG+="${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }"
+    _MSG+="${DS_RSYNC_HOST:+DS_RSYNC_HOST=${DS_RSYNC_HOST} }${DS_RSYNC_USER:+DS_RSYNC_USER=${DS_RSYNC_USER} }"
+    _MSG+="${DS_RESTIC_SFTP_SERVER:+DS_RESTIC_SFTP_SERVER=${DS_RESTIC_SFTP_SERVER} }${DS_RESTIC_SFTP_USER:+DS_RESTIC_SFTP_USER=${DS_RESTIC_SFTP_USER} }"
     splog "$_MSG"
 }
 
