@@ -38,7 +38,6 @@ Details could be found in [Support Life Cycles for OpenNebula Environments](http
 * If the node is used as Bridge Node - the OpenNebula admin account `oneadmin` must be member of the 'disk' system group to have access to the StorPool block device during image create/import operations.
 * If it is Bridge Node only - it must be configured as host in OpenNebula but configured to not run VMs.
 * The Bridge node must have qemu-img available - used by the addon during imports to convert various source image formats to StorPool backed RAW images.
-* (Recommended) Installed `qemu-kvm-ev` package from `centos-release-qemu-ev` repository for CentOS7
 
 Same requirements are applied for nodes that are used as Bridge nodes.
 
@@ -75,15 +74,17 @@ Standard OpenNebula datastore operations:
 * (optional) replace the "VM snapshot" interface scripts to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations)
 * (optional) replace the <devices/video> element in the domain XML
 * (optional) support for [UEFI Normal/Secure boot](docs/uefi_boot.md) with persistent UEFI NVRAM stored on StorPool backed block device
+* (optional) support CDROM hotplug
+* (optional) use cpu tune parameters instead/or in addition/ of cpu shares
 
 
 ## Limitations
 
-1. OpenNebula has hard-coded definition of the volatile disks as type `FILE` in the VMs domain XML. Latest libvirt forbid the live migration without the `--unsafe` flag set. Generally enabling the `--unsafe` flag is not recommended so feature request OpenNebula/one#3245 was made to address the issue upstream.
 1. OpenNebula temporary keep the VM checkpoint file on the Host and then (optionally) transfer it to the storage. An workaround was added on the base of OpenNebula/one#3272.
 1. When SYSTEM datastore integration is enabled the reported free/used/total space of the Datastore is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space).
 1. VM snapshotting is not possible because it is handled internally by libvirt which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
-1. Tested only with KVM hypervisor and CentOS/Alma Linux. Should work on other Linux OS.
+1. Only FULL opennebula backups are supported.
+1. Tested only with KVM hypervisor and Alma Linux 8. Should work on other Linux OS.
 
 ## Installation
 
@@ -106,7 +107,7 @@ dnf -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar libxml2 python
 ```
 
 ```bash
-# Ubuntu 22.04 front-end
+# Ubuntu 22.04/24.04 front-end
 apt -y install tar jq xmlstarlet netcat pigz python3-lxml libxml2-utils
 ```
 
@@ -125,7 +126,7 @@ dnf -y install --enablerepo=epel jq pigz python3-lxml xmlstarlet tar
 ```
 
 ```bash
-# Ubuntu 22.04 node-kvm
+# Ubuntu 22.04/24.04 node-kvm
 apt -y install jq xmlstarlet pigz python3-lxml libxml2-utils tar
 ```
 
@@ -251,7 +252,7 @@ VM_MAD = [
     NAME           = "kvm",
     SUNSTONE_NAME  = "KVM",
     EXECUTABLE     = "one_vmm_exec",
-    ARGUMENTS      = "-l deploy=deploy-tweaks -t 15 -r 0 kvm",
+    ARGUMENTS      = "-l deploy=deploy-tweaks -t 15 -r 0 i -p kvm",
     ...
 ```
   Optionally add _attach_disk_, _tmsave_ and _tmrestore_:
@@ -261,14 +262,14 @@ VM_MAD = [
     NAME           = "kvm",
     SUNSTONE_NAME  = "KVM",
     EXECUTABLE     = "one_vmm_exec",
-    ARGUMENTS      = "-l deploy=deploy-tweaks,attach_disk=attach_disk.storpool,save=tmsave,restore=tmrestore -t 15 -r 0 kvm",
+    ARGUMENTS      = "-l deploy=deploy-tweaks,attach_disk=attach_disk.storpool,save=tmsave,restore=tmrestore -t 15 -r 0 -p kvm",
     ...
 ```
 
 * Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool
 
 ```
-TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "ssh,shared,qcow2", LN_TARGET_SSH = "NONE", CLONE_TARGET_SSH = "SELF", DISK_TYPE_SSH = "NONE", LN_TARGET_SHARED = "NONE", CLONE_TARGET_SHARED = "SELF", DISK_TYPE_SHARED = "NONE", LN_TARGET_QCOW2 = "NONE", CLONE_TARGET_QCOW2 = "SELF", DISK_TYPE_QCOW2 = "NONE" ]
+TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "" ]
 ```
 
 * Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool

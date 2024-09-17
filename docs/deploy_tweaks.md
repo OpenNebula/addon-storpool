@@ -470,3 +470,27 @@ USER_TEMPLATE/T_PERSISTENT_CDROM="4"
 ```
 
 Note: The value per VM overrides the global definition, so to disable the function for a VM when there is a global definition, just set `T_PERSISTENT_CDROM=0`.
+
+### cputune.py
+
+Use libvirt vCPU tune paramenters insted of cpu/shares (or in addition to the cpushares). Refer libvirt documentation for details.
+
+The following parameters could be set as a global defaults in the addon-storpoolrc file and as overrides per VM in the VM Attributes:
+
+```
+T_CPUTUNE_PERIOD
+T_CPUTUNE_QUOTA
+T_CPUTUNE_GLOBAL_PERIOD
+T_CPUTUNE_GLOBAL_QUOTA
+T_CPUTUNE_EMULATOR_PERIOD
+T_CPUTUNE_EMULATOR_QUOTA
+T_CPUTUNE_IOTHREAD_PERIOD
+T_CPUTUNE_IOTHREAD_QUOTA
+```
+
+By default, the script removes the cpu/shares when a cpu tune parameter iis defined. To keep the cpu/shares define as a global variable or as VM attribute the following variable
+
+```
+T_CPUTUNE_SHARES_KEEP=1
+```
+
