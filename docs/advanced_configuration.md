@@ -205,7 +205,7 @@ See  [Deploy tweaks](deploy_tweaks.md)
 
 ## Delayed delete of VM disks
 
-When a VM is terminated or non-persistent image is detached from a given VM the corresponding StorPool volume is Deleted. To prevent from accidental volume delete (wrong detach/termination) there is an option to rename to volume to an "anonymous" snapshot and mark for deletion by StorPool after a given time. 
+When a VM is terminated, non-persistent image is detached or VM backup restored the corresponding StorPool volume is Deleted. To prevent from accidental volume delete (wrong detach/termination) there is an option to rename the volume to an "anonymous" snapshot and mark for deletion by StorPool after a given time.
 
 ```bash
 # For example to set the delay to 12 hours
@@ -213,4 +213,8 @@ echo 'DELAY_DELETE="12h"' >> /var/lib/one/remotes/addon-storpoolrc
 # and propagate the changes
 su - oneadmin -c "onehost sync --force"
 ```
+
+Notes:
+ * There is no configuration option to disable _DELAY_DELETE_ but defining a relatively small time, like `DELAY_DELETE=1s` should work as an alternative.
+ * In case of need to recover the data immediately contact the StorPool support for assistance.
 
