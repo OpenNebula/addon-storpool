@@ -163,14 +163,16 @@ cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
 mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
 pushd "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
-for tweak in volatile2dev.py; do
+for tweak in volatile2dev.py persistent-cdrom.py; do
     ln -vsf "../deploy-tweaks.d.example/$tweak"
 done
 popd
 
-echo "*** Copy attach_disk.storpool to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp -a $CP_ARG "$CWD/vmm/kvm/attach_disk.storpool" "${ONE_VAR}/remotes/vmm/kvm/"
-chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/attach_disk.storpool"
+echo "*** Copy {attach,detach}_disk.{storpool,cdrom} to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+for vmm in {attach,detach}_disk.{storpool,cdrom}; do
+    cp -a $CP_ARG "$CWD/vmm/kvm/${vmm}" "${ONE_VAR}/remotes/vmm/kvm/"
+    chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/${vmm}"
+done
 
 echo "*** Copy tmsaverestore script ant symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"tm* "${ONE_VAR}/remotes/vmm/kvm/"
