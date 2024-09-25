@@ -16,8 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-# Global env: PERSISTENT_CDROM=4
+# Global env:
+# T_PERSISTENT_CDROM=4
+# T_PERSISTENT_CDROM_TYPE="block"
+# # The IDE devices are limited to 4
+# # MAX_CDROM_DEVICES=4
+# VM Attribute:
 # .//USER_TEMPLATE/T_PERSISTENT_CDROM = 4
+# .//USER_TEMPLATE/T_PERSISTENT_CDROM_TYPE = block
 
 from __future__ import print_function
 import os
@@ -124,6 +130,9 @@ if t_pers_cdrom_element is not None:
         pers_cdroms_count = int(t_pers_cdrom_element.text)
 
 disk_cdrom_type = "block"
+pers_cdroms_type_env = os.getenv('T_PERSISTENT_CDROM_TYPE', 'block')
+if pers_cdroms_type_env.lower() in ['file', 'block']:
+    pers_cdroms_type = pers_cdroms_type_env.lower()
 t_pers_cdrom_type_element = vm_root.find('.//USER_TEMPLATE/T_PERSISTENT_CDROM_TYPE')
 if t_pers_cdrom_type_element is not None:
     if t_pers_cdrom_type_element.text.lower() in ['file', 'block']:

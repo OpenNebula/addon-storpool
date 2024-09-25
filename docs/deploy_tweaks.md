@@ -471,6 +471,12 @@ USER_TEMPLATE/T_PERSISTENT_CDROM="4"
 
 Note: The value per VM overrides the global definition, so to disable the function for a VM when there is a global definition, just set `T_PERSISTENT_CDROM=0`.
 
+* To define the persistent CDROM devices to be backed with file based images set
+
+```
+T_PERSISTENT_CDROM_TYPE="file"
+```
+
 ### cputune.py
 
 Use libvirt vCPU tune paramenters insted of cpu/shares (or in addition to the cpushares). Refer libvirt documentation for details.
