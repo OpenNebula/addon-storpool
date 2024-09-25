@@ -54,7 +54,7 @@ T_PERSISTENT_CDROMx="$(echo ${DRV_ACTION} | base64 -d | \
 PERSISTENT_CDROM=${T_PERSISTENT_CDROMx:-${T_PERSISTENT_CDROM}}
 
 if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
-    splog "[D] KVMHOST=${KVMHOST} TM_MAD=${TM_MAD} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} PERSISTENT_CDROM=${PERSISTENT_CDROM}"
+    splog "[D] KVMHOST=${KVMHOST} TM_MAD=${TM_MAD} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} PERSISTENT_CDROM=${PERSISTENT_CDROM} DEV_PREFIX=${DEV_PREFIX}"
     if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
         echo "${DRV_ACTION}" >/tmp/atach_disk.b64
     fi
@@ -68,6 +68,8 @@ if [[ -n "${PERSISTENT_CDROM}" ]]; then
             ret=$?
             splog "($ret) ${SSH} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
             exit "${ret}"
+        else
+            splog "VM ${VM_ID} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' != 'hd'"
         fi
     fi
 fi

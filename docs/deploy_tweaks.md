@@ -426,7 +426,7 @@ Will generate the following element in the domain XML:
 
 #### persistent-cdrom.py
 
-Enable IDE CDROM image attach/detach by replacing the corresponding actions with insert/eject.
+Enable IDE CDROM image attach/detach by replacing the corresponding actions with insert/eject (`DEV_PREFIX=hd`).
 
 The virtual machine could work with up to 4 CDROM devices, usually one is occupied by the CONTEXTUALIZATION CDROM, though.
 
