@@ -880,7 +880,7 @@ function storpoolVolumeClone()
 {
     local _SP_PARENT="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
 
-    storpoolRetry volume "$_SP_VOL" baseOn "$_SP_PARENT" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} >/dev/null
+    storpoolRetry volume "$_SP_VOL" baseOn "$_SP_PARENT" ${_SP_TEMPLATE:+template "$_SP_TEMPLATE"} create >/dev/null
 }
 
 function storpoolVolumeResize()
