@@ -43,7 +43,7 @@ fi
 TARGET_DEVICE=""
 declare -A available
 while read -ru 4 target_dev source_x; do
-    splog "${DOMAIN} target/@dev=${target_dev} source=${source_x}'"
+    splog "${DOMAIN} target/@dev=${target_dev} source=${source_x}"
     if [[ "${source_x##*/}" == "" ]]; then
         available[${target_dev}]="${target_dev}"
     fi
