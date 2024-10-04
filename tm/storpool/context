@@ -119,8 +119,8 @@ oneVmInfo "$VM_ID" 0
 
 if boolTrue "INCLUDE_CONTEXT_PACKAGES"; then
     if [ -d /usr/share/one/context ]; then
-        exec_and_set_error "cp -f /usr/share/one/context/* $ISO_DIR/" \
-            "Error copying /usr/share/one/context to $ISO_DIR"
+        exec_and_set_error "rsync -a --exclude='*.iso' /usr/share/one/context/* '${ISO_DIR}'/" \
+            "Error copying /usr/share/one/context to ${ISO_DIR}"
     fi
 fi
 
