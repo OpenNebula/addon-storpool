@@ -117,7 +117,7 @@ function alterVcPolicy()
         v="${spdata[0]}"
         vcp="${spdata[1]}"
         qc="${spdata[2]}"
-        if [ -n "${vols[$v]}" ]; then
+        if [ -n "${vols[$v]+found}" ]; then
             vcpNew="${VC_POLICY//[[:space:]]/}"
             if [ "$vcpNew" != "$vcp" ]; then
                 splog "VM $vmId DISK ${vols[$v]} volume $v current vc-policy:$vcp new:$vcpNew"
