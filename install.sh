@@ -20,10 +20,11 @@ set -e
 
 PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
 
-CP_ARG=${CP_ARG:--v}
+CP_ARG=${CP_ARG:--vLf}
 
 ONE_ETC=${ONE_ETC:-/etc/one}
 ONE_USER=${ONE_USER:-oneadmin}
+ONE_GROUP=${ONE_GROUP:-oneadmin}
 ONE_VAR=${ONE_VAR:-/var/lib/one}
 ONE_LIB=${ONE_LIB:-/usr/lib/one}
 ONE_DS=${ONE_DS:-/var/lib/one/datastores}

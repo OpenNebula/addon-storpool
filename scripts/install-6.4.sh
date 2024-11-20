@@ -48,57 +48,6 @@ function patch_hook()
     fi
 }
 
-end_msg=
-if ! boolTrue "SUNSTONE"; then
-    echo "*** Skipping opennebula-sunstone integration patch"
-    echo "Hint: export SUNSTONE=1; bash install.sh"
-else
-    # patch sunstone's datastores-tab.js
-    SUNSTONE_PUBLIC=${SUNSTONE_PUBLIC:-$ONE_LIB/sunstone/public}
-    patch_err=
-    set +e
-    pushd "$SUNSTONE_PUBLIC" &>/dev/null
-    ts="$(date "+%Y%m%d%H%M%S")"
-    SUNSTONE_BACKUP="${SUNSTONE_PUBLIC}-bak-${ts}"
-    echo "*** Backing up sunstone/public to $SUNSTONE_BACKUP ..."
-    cp -a "$SUNSTONE_PUBLIC" "$SUNSTONE_BACKUP"
-    if [ -d ${CWD}/patches/sunstone/${ONE_VER} ]; then
-        for p in `ls ${CWD}/patches/sunstone/${ONE_VER}/*.patch`; do
-            do_patch "$p" "backup"
-            if [ -n "$DO_PATCH" ] && [ "$DO_PATCH" = "done" ]; then
-                REBUILD_JS=1
-            fi
-        done
-    else
-        echo "*** No sunstone patches available."
-        REBUILD_JS=
-    fi
-    bin_err=
-    if [ -n "$REBUILD_JS" ]; then
-        if [ -L dist/main.js ]; then
-            echo "*** Backing up dist/main.js ..."
-            mv -vf dist/main.js main.js-tmp
-        fi
-        echo "*** Running ./build.sh -d ..."
-        ./build.sh -d
-        export PATH=$PATH:$PWD/node_modules/.bin
-        echo "*** Running ./build.sh ..."
-        ./build.sh
-        if [ -L main.js-tmp ]; then
-            if [ -L dist/main.js ]; then
-                echo "*** Removing backup of dist/main.js ..."
-                rm -vf main.js-tmp
-            else
-                echo "*** Restoring dist/main.js ..."
-                mv -vf main.js-tmp dist/main.js
-            fi
-        fi
-        end_msg="opennebula-sunstone"
-    fi
-    popd &>/dev/null
-    set -e
-fi
-
 if ! boolTrue "ONED"; then
     echo "*** Skipping oned integration"
     [ -n "$end_msg" ] && echo "*** Please restart $end_msg service"
@@ -164,7 +113,8 @@ chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
 mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
 pushd "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
 for tweak in volatile2dev.py persistent-cdrom.py; do
-    ln -vsf "../deploy-tweaks.d.example/$tweak"
+    [[ -L "./${tweak}" ]] && rm -vf "./${tweak}" || true
+    cp ${CP_ARG} "../deploy-tweaks.d.example/${tweak}" "./${tweak}"
 done
 popd
 
@@ -174,8 +124,8 @@ for vmm in {attach,detach}_disk.{storpool,cdrom}; do
     chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/${vmm}"
 done
 
-echo "*** Copy tmsaverestore script ant symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp -a $CP_ARG "$CWD/vmm/kvm/"tm* "${ONE_VAR}/remotes/vmm/kvm/"
+echo "*** Copy tmsaverestore script and symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+cp $CP_ARG "$CWD/vmm/kvm/"tm* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"tm*
 
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
@@ -239,8 +189,27 @@ else
     $CWD/misc/autoconf.rb -v -w $AUTOCONF
 fi
 
-echo "*** chown -R $ONE_USER ${ONE_VAR}/remotes ..."
-chown -R "$ONE_USER" "${ONE_VAR}/remotes"
+if [[ -f /var/lib/one/remotes/addon-storpoolrc ]]; then
+    source /var/lib/one/remotes/addon-storpoolrc
+fi
+
+echo "*** Refresh deploy-tweaks"
+read -ra DEPLOY_TWEAKS_A <<<"${DEPLOY_TWEAKS} $(ls -1 "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/" | tr '\n' ' ')";
+declare -A KNOWN_TWEAKS
+for tweak in "${DEPLOY_TWEAKS_A[@]}"; do
+    [[ -z "${KNOWN_TWEAKS[${tweak//[^[:alnum:]]/}]}" ]] || continue
+    KNOWN_TWEAKS[${tweak//[^[:alnum:]]/}]="${tweak}"
+    if [[ -L "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/${tweak}" ]]; then
+        rm -vf "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/${tweak}"
+    fi
+    src_tweak="${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d.example/${tweak}"
+    if [[ -f "${src_tweak}" ]]; then
+        cp ${CP_ARG} "${src_tweak}" "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/"
+    fi
+done
+
+echo "*** chown -R ${ONE_USER}:${ONE_GROUP} ${ONE_VAR}/remotes ..."
+chown -R "${ONE_USER}:${ONE_GROUP}" "${ONE_VAR}/remotes"
 
 if boolTrue "STORPOOL_EXTRAS"; then
     if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
