@@ -257,29 +257,29 @@ function trapReset()
         splog "trapReset:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
     fi
     # shellcheck disable=SC2064
-    trap "${TRAP_CMD}" TERM INT QUIT HUP EXIT 
+    trap "${TRAP_CMD}" TERM INT QUIT EXIT
 }   
 function trapAdd()
 {
     local _trap_cmd="$1"
     if boolTrue "DEBUG_TRAPS"; then
-        splog "trapAdd:$*"
+        splog "trapAdd:'$*'"
     fi
 
     [[ -n ${TRAP_CMD} ]] || TRAP_CMD="rm -rf \"${TMPDIR}\";"
     
-    if [[ ${_trap_cmd} == APPEND ]]; then
+    if [[ ${_trap_cmd} == "PREPEND" ]]; then
         _trap_cmd="$2"
-        export TRAP_CMD="${_trap_cmd};${TRAP_CMD}"
-    else
         export TRAP_CMD="${TRAP_CMD}${_trap_cmd};"
+    else
+        export TRAP_CMD="${_trap_cmd};${TRAP_CMD}"
     fi
         
     if boolTrue "DDEBUG_TRAPS"; then
         splog "trapAdd:[${TRAP_CMD}]"
     fi
     # shellcheck disable=SC2064
-    trap "${TRAP_CMD}" TERM INT QUIT HUP EXIT
+    trap "${TRAP_CMD}" TERM INT QUIT EXIT
 }
 function trapDel()
 {
@@ -294,7 +294,7 @@ function trapDel()
             splog "trapDel:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
         fi
         # shellcheck disable=SC2064
-        trap "${TRAP_CMD}" TERM INT QUIT HUP EXIT
+        trap "${TRAP_CMD}" TERM INT QUIT EXIT
     else
         trapReset
     fi

@@ -73,8 +73,8 @@ SP_LINK="/dev/storpool/$SP_VOL"
 
 storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all"
 
-trapAdd "storpoolVolumeAttach \"$SP_VOL\" \"$SRC_HOST\""
 trapAdd "oneSymlink \"$SRC_HOST\" \"$SP_LINK\" \"$SRC_PATH\""
+trapAdd "storpoolVolumeAttach \"$SP_VOL\" \"$SRC_HOST\""
 
 storpoolVolumeInfo "$SP_VOL"
 OLD_SIZE_M=$((V_SIZE/1024/1024))
