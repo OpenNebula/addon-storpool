@@ -652,12 +652,13 @@ function storpoolWrapper()
 }
 
 function splogFile() {
+    local logfile="$1"
     if boolTrue "DEBUG_splogFile"; then
         splog "splogFile $*"
     fi
-    while read -u 8 l; do
-        splog "stderr: $l"
-    done 8< <(cat "$1" 2>&1)
+    while read -ru 8 line; do
+        splog "splogFile: ${line}"
+    done 8< <(cat "${logfile}" 2>&1)
     [ -z "$2" ] || rm -f "$1"
 }
 
