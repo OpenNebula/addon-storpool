@@ -859,7 +859,7 @@ function storpoolVolumeDelete()
             _ret=$?
         fi
     else
-        splog "volume $_SP_VOL not found "
+        splog "storpoolVolumeDelete: volume $_SP_VOL not found"
     fi
     if [ $_ret -eq 0 ]; then
         if [ "${_SNAPSHOTS:0:5}" = "snaps" ]; then
