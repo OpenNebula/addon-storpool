@@ -86,6 +86,10 @@ Standard OpenNebula datastore operations:
 1. Only FULL opennebula backups are supported.
 1. Tested only with KVM hypervisor and Alma Linux 8. Should work on other Linux OS.
 
+## Known issues
+
+Check [docs/known_issues.md](docs/known_issues.md) for details.
+
 ## Installation
 
 The installation instructions are for OpenNebula 6.4+.
