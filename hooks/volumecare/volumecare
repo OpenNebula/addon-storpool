@@ -121,7 +121,7 @@ function alterVcPolicy()
             vcpNew="${VC_POLICY//[[:space:]]/}"
             if [ "$vcpNew" != "$vcp" ]; then
                 splog "VM $vmId DISK ${vols[$v]} volume $v current vc-policy:$vcp new:$vcpNew"
-                storpoolRetry volume "$v" tag "vc-policy"="$vcpNew"
+                storpoolRetry volume "$v" tag "vc-policy"="$vcpNew" update
             elif boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "VM $vmId DISK ${vols[$v]} volume $v current vc-policy:$vcp"
             fi
@@ -132,7 +132,7 @@ function alterVcPolicy()
             qcNew="${qcNew:-${DEFAULT_QOSCLASS}}"
             if [ "$qcNew" != "$qc" ]; then
                 splog "VM $vmId DISK ${vols[$v]} volume $v current qc:$qc new:$qcNew"
-                storpoolRetry volume "$v" tag "qc"="$qcNew"
+                storpoolRetry volume "$v" tag "qc"="$qcNew" update
             elif boolTrue "DDEBUG_alterVcPolicy"; then
                 splog "VM $vmId DISK ${vols[$v]} volume $v current qc:$qc"
             fi
