@@ -17,9 +17,10 @@
 #--------------------------------------------------------------------------- #
 
 from __future__ import print_function
-from sys import argv, stderr
 from xml.etree import ElementTree as ET
 from hashlib import md5
+import sys
+import os
 
 ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
        'one': "http://opennebula.org/xmlns/libvirt/1.0"
@@ -45,13 +46,22 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
+
+xmlDomain = sys.argv[1]
 doc = ET.parse(xmlDomain)
 root = doc.getroot()
 
-xmlVm = argv[2]
+xmlVm = sys.argv[2]
 vm_element = ET.parse(xmlVm)
 vm = vm_element.getroot()
+
+t_diskserial = os.getenv('T_DISKSERIAL', "None").upper()
+t_diskserial_e = vm.find('.//USER_TEMPLATE/T_DISKSERIAL')
+if t_diskserial_e is not None:
+    t_diskserial = t_diskserial_e.text.upper()
+if t_diskserial == "DISABLED":
+    print("Disabled, exit 0.", file=sys.stderr)
+    sys.exit(0)
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
@@ -59,6 +69,9 @@ for prefix, uri in ns.items():
 changed = 0
 for disk in root.findall('./devices/disk'):
     try:
+        if 'device' in disk.attrib:
+            if disk.attrib["device"] != "disk":
+                continue
         source = disk.find('./source')
         if 'file' in source.attrib:
             diskPath = source.attrib['file']
@@ -66,15 +79,34 @@ for disk in root.findall('./devices/disk'):
             diskPath = source.attrib['dev']
         else:
             print("Unknown source attribute:{a}".format(a=source.attrib),
-                  file=stderr)
+                  file=sys.stderr)
             continue
+        hashtxt = diskPath
+        if t_diskserial != "HASHPATH":
+            diskId = diskPath.split('.')[-1]
+            image_clone_e = vm.find(
+                './TEMPLATE/DISK[DISK_ID="{i}"]/CLONE'.format(i=diskId)
+            )
+            if image_clone_e is None:
+                # volatile image
+                hashtxt = f"volatile-{diskId}"
+            else:
+                if image_clone_e.text.upper() == "YES":
+                    vm_id_e = vm.find('./ID')
+                    hashtxt = f"{vm_id_e.text}-{diskId}"
+                else:
+                    image_id_e = vm.find(
+                        './TEMPLATE/DISK[DISK_ID="{i}"]/IMAGE_ID'.format(
+                            i=diskId)
+                    )
+                    hashtxt = f"persistent-{image_id_e.text}"
         serial = disk.find('./serial')
         if serial is None:
             serial = ET.SubElement(disk, 'serial')
-        serial.text = md5(diskPath.encode()).hexdigest()[0:20]
-        changed =1
+        serial.text = md5(hashtxt.encode()).hexdigest()[0:20]
+        changed = 1
     except Exception as e:
-        print("Error: {e}".format(e=e), file=stderr)
+        print("Error: {e}".format(e=e), file=sys.stderr)
 
 if changed:
     indent(root)
