@@ -39,7 +39,6 @@ def indent(elem, level=0, ind="  "):
     else:
         if not level:
             return
-        print(f"{elem=} {elem.text=}")
         if not elem.text or not elem.text.strip():
             elem.text = None
         if not elem.tail or not elem.tail.strip():
