@@ -91,6 +91,10 @@ for cronfile in "/etc/cron.d/addon-storpool" "/etc/cron.d/vc-policy"; do
     fi
 done
 
+echo "*** Create tmpfiles.d configuration to handle /var/cache/addon-storpoolrc-monitor folder"
+cp -v "${CWD}/misc/etc/tmpfiles.d/addon-storpool-monitor.conf" /etc/tmpfiles.d/
+systemd-tmpfiles --create
+
 echo "*** Processing the systemd timers"
 for sName in monitor_helper-sync vc-policy; do
     for sType in service timer; do

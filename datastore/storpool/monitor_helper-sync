@@ -23,7 +23,7 @@ function splog() { logger -t "ds_sp_${0##*/}" "[$$] $*"; }
 set -o pipefail
 
 SP_JSON_PATH="/tmp"
-SP_FE_JSON_PATH="/tmp/monitor"
+SP_FE_JSON_PATH="/var/cache/addon-storpool-monitor"
 ONE_HOME="${ONE_HOME:-/var/lib/one}"
 
 
