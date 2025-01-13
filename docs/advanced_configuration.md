@@ -145,7 +145,7 @@ SP_JSON_PATH="/tmp/"
 
 # Path to the json files on the front-end
 # (must be writable by the oneadmin user)
-SP_FE_JSON_PATH="/tmp/monitor"
+SP_FE_JSON_PATH="/var/cache/addon-storpool-monitor"
 
 # datastores stats JSON and the command that generate them
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"

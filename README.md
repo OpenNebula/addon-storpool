@@ -227,6 +227,13 @@ systemctl daemon-reload
 systemctl enable --now monitor_helper-sync.timer
 ```
 
+* Create tmpfiles configuration to create /var/cache/addon-storpool-monitor
+
+```bash
+cp -v addon-storpool/misc/etc/tmpfiles.d/addon-storpool-monitor.conf /etc/tmpfiles.d/
+systemd-tmpfiles --create
+```
+
 ### addon-storpool configuration
 
 The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-storpoolrc` file.
