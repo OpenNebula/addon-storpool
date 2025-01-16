@@ -1,5 +1,5 @@
 [Unit]
-Description=Create cached StorPool data JSONs in /tmp/monitor
+Description=Create cached StorPool data JSONs in /var/cache/addon-storpool-monitor
 Wants=monitor_helper-sync.timer
 
 [Service]

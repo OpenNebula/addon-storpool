@@ -40,7 +40,6 @@ def indent(elem, level=0, ind="  "):
     else:
         if not level:
             return
-        print(f"{elem=} {elem.text=}")
         if not elem.text or not elem.text.strip():
             elem.text = None
         if not elem.tail or not elem.tail.strip():
@@ -55,7 +54,7 @@ xmlVm = sys.argv[2]
 vm_element = ET.parse(xmlVm)
 vm = vm_element.getroot()
 
-t_diskserial = os.getenv('T_DISKSERIAL', "None").upper()
+t_diskserial = os.getenv('T_DISKSERIAL', "DISABLED").upper()
 t_diskserial_e = vm.find('.//USER_TEMPLATE/T_DISKSERIAL')
 if t_diskserial_e is not None:
     t_diskserial = t_diskserial_e.text.upper()
