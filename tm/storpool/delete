@@ -177,7 +177,14 @@ if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     fi
 fi
 
-RM_CMD="rm -rf '$DST_PATH'*"
+RM_CMD=$(cat <<EOF
+if [[ -f "${DST_PATH}.monitor" ]]; then
+  rm -f "${DST_PATH}.monitor"
+fi
+rm -f "${DST_PATH}"
+EOF
+)
+
 if hostReachable "$DST_HOST"; then
     splog "run RM_CMD on $DST_HOST ($DST_PATH)"
     ssh_exec_and_log "$DST_HOST" "$RM_CMD" \
