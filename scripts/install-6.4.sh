@@ -109,7 +109,7 @@ systemctl daemon-reload
 
 echo "*** Activating systemd timers ..."
 systemctl enable monitor_helper-sync.timer --now
-systemctl enable vc-policy.timer
+systemctl enable vc-policy.timer --now
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 cp -a $CP_ARG "$CWD/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"

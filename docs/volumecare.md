@@ -20,7 +20,7 @@ onehook create addon-storpool/misc/volumecare.hook
 # Set the regular housekeeping task via a systemd timer
 cp -v addon-storpool/misc/etc/systemd/system/vc-policy* /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable vc-policy.timer
+systemctl enable --now vc-policy.timer
 ```
 
 ## Configuration
