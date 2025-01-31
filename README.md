@@ -190,13 +190,13 @@ cp -a ~/addon-storpool/vmm/kvm/snapshot_* /var/lib/one/remotes/vmm/kvm/
 cp -a ~/addon-storpool/vmm/kvm/deploy-tweaks* /var/lib/one/remotes/vmm/kvm/
 mkdir -p /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
 cd /var/lib/one/remotes/vmm/kvm/deploy-tweaks.d
-ln -s ../deploy-tweaks.d.example/volatile2dev.py
+cp ../deploy-tweaks.d.example/volatile2dev.py .
 
 # the local attach_disk script
 cp -a ~/addon-storpool/vmm/kvm/attach_disk.storpool /var/lib/one/remotes/vmm/kvm/
 
 # the tmsave/tmrestore scripts
-cp -a ~/addon-storpool/vmm/kvm/tm* /var/lib/one/remotes/vmm/kvm/
+cp -L ~/addon-storpool/vmm/kvm/tm* /var/lib/one/remotes/vmm/kvm/
 ```
 
 * copy _reserved.sh_ helper tool to _/var/lib/one/remotes/_
@@ -217,6 +217,13 @@ cp -a ~/addon-storpool/misc/storpool_probe.sh /var/lib/one/remotes/im/kvm-probes
 chown -R oneadmin.oneadmin /var/lib/one/remotes/vmm/kvm
 ```
 
+* Create tmpfiles configuration to create /var/cache/addon-storpool-monitor
+
+```bash
+cp -v addon-storpool/misc/etc/tmpfiles.d/addon-storpool-monitor.conf /etc/tmpfiles.d/
+systemd-tmpfiles --create
+```
+
 * Create a systemd timer for stats polling (alter the file paths if needed)
 
 ```bash
@@ -225,13 +232,6 @@ cp -v addon-storpool/misc/systemd/system/monitor_helper-sync* /etc/systemd/syste
 systemctl daemon-reload
 
 systemctl enable --now monitor_helper-sync.timer
-```
-
-* Create tmpfiles configuration to create /var/cache/addon-storpool-monitor
-
-```bash
-cp -v addon-storpool/misc/etc/tmpfiles.d/addon-storpool-monitor.conf /etc/tmpfiles.d/
-systemd-tmpfiles --create
 ```
 
 ### addon-storpool configuration
@@ -283,7 +283,7 @@ VM_MAD = [
 TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "" ]
 ```
 
-* Edit `/etc/one/oned.conf` and append DS_MAD_CONF definition for StorPool
+* Edit `/etc/one/oned.conf` and append `DS_MAD_CONF` definition for StorPool
 
 ```
 DS_MAD_CONF = [ NAME = "storpool", REQUIRED_ATTRS = "DISK_TYPE", PERSISTENT_ONLY = "NO", MARKETPLACE_ACTIONS = "export" ]
@@ -306,28 +306,12 @@ _EOF_
 LIVE_DISK_SNAPSHOTS="kvm-qcow2 kvm-ceph kvm-storpool"
 ```
 
-* RAFT_LEADER_IP
+* `RAFT_LEADER_IP`
 
 The driver will try to autodetect the leader IP address from oned configuration but if it fail set it manually in addon-storpoolrc
 
 ```bash
 echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
-```
-
-* DS_CP_REPORT_FORMAT
-
-OpenNebula 6.0 introduces changes in the Image import function
-
-For OpenNebula up to _5.12.*_(included):
-
-```bash
-echo "DS_CP_REPORT_FORMAT=0" >> /var/lib/one/remotes/addon-storpoolrc
-```
-
-For OpenNebula 6+:
-
-```bash
-echo "DS_CP_REPORT_FORMAT=1" >> /var/lib/one/remotes/addon-storpoolrc
 ```
 
 * If you plan to do live disk snapshots with _fsfreeze_ via _qemu-guest-agent_ but `SCRIPTS_REMOTE_DIR` is not the default one (if it is changed in `/etc/one/oned.conf`), define `SCRIPTS_REMOTE_DIR` in the drivers configuration.
@@ -357,7 +341,7 @@ Make sure that the OpenNebula shell tools are working without additional argumen
 
 ### Configuring hosts
 
-StorPool uses resource separation utilizing the cgroup subsystem. The reserved resources should be updated in the 'Overcommitment' section on each host (RESERVED_CPU and RESERVED_MEM in pre ONE-5.4). There is a helper script that report the values that should be set on each host. The script should be available after a host is added to OpenNebula.
+StorPool uses resource separation utilizing the cgroup subsystem. The reserved resources should be updated in the 'Overcommitment' section on each host. There is a helper script that report the values that should be set on each host. The script should be available after a host is added to OpenNebula.
 
 ```bash
 # for each host do as oneadmin user
@@ -365,7 +349,7 @@ ssh hostN /var/tmp/one/reserved.sh >reserved.tmpl
 onehost update 'hostN' --append reserved.tmpl
 ```
 
-or execute this scriptlet
+or, execute this scriptlet
 
 ``bash
 su - oneadmin
@@ -460,6 +444,7 @@ $ cat >/tmp/ds.conf <<_EOF_
 NAME = "StorPool SYSTEM"
 TM_MAD = "storpool"
 TYPE = "SYSTEM_DS"
+BRIDGE_LIST = "node1 node2 node3"
 _EOF_
 
 # Create datastore
@@ -479,7 +464,7 @@ $ onedatastore list
 Create a StorPool template for the datastore with ID 101:
 
 ```bash
-storpool template one-ds-101 replication 3 placeHead hdd placeAll hdd placeTail ssd
+storpool template ${ONE_PX}-ds-${DATASTORE_ID} replication 3 placeHead hdd placeAll hdd placeTail ssd
 ```
 
 #### Advanced addon configuration
@@ -497,7 +482,7 @@ Please follow the  [configuration tips](docs/configuration_tips.md) for suggesti
     1. Stop all opennebula services
     2. Upgrade the opennebula packages. But do not reconfigure anything yet
     3. Upgrade the addon (checkout/clone latest from github and run _AUTOCONF=1 bash install.sh_)
-    4. Follow the addon configuration chapter in README.md to (re)configure the deriver
+    4. Follow the addon configuration chapter in README.md to (re)configure the driver
     5. Continue (re)configuring OpenNebula following the upstream docs
 
 * After upgrade please run misc/tagVolumes.sh to update/apply the common tags for volumes/snapshots
@@ -518,15 +503,7 @@ Please follow the [naming convention](docs/naming_convention.md) for details on 
 
 * In release 19.03.2 the volume names of the attached CDROM images was changed. A separate volume with a unique name is created for each attachment. This could lead to errors when using restore with the alternate VM snapshot interface enabled. The workaround is to manually create/or rename/ a snapshot of the desired CDROM volume following the new naming convention. The migration to the new CDROM's volume naming convention is integrated so there is no manual operations needed.
 
-* Recent version of libvirt has more strict checks of the domain XML and do not allow live migration when there are file backed VM disks that are not on shared filesystem. The definition of the volatile disks that OpenNebula create are with hard-coded type 'file' that conflict with libvirt. There is a fix for this in addon-storpool 19.04.3+ but it will not alter the currently running VM's. A workaround is to patch _vmm/kvm/migrate_ and add a check that enable `--unsafe` option if all disks are with disabled cache (`cache="none"`).
-The following line just before the line that do the VM migration could leverage this issue:
-
-```bash
-(virsh --connect $LIBVIRT_URI dumpxml $deploy_id 2>/dev/null || echo '<a><disk device="disk"><driver cache="writeback"/></disk></a>') | xmllint --xpath '(//disk[@device="disk"]/driver[not(@cache="none")])' - >/dev/null 2>&1 || MIGRATE_OPTIONS+=" --unsafe"
-```
-
 ## More information
 
 [Tips](docs/tips.md)
-
 
