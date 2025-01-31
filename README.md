@@ -351,7 +351,7 @@ onehost update 'hostN' --append reserved.tmpl
 
 or, execute this scriptlet
 
-``bash
+```bash
 su - oneadmin
 while read -ru 4 hst; do echo "$hst"; ssh "$hst" /var/tmp/one/reserved.sh | tee "$hst.template"; onehost update "$hst" --append "$hst.template"; done 4< <(onehost list -x | xmlstarlet sel -t -m .//HOST -v NAME -n)
 ```
