@@ -117,6 +117,9 @@ done
 
 oneVmInfo "$VM_ID" 0
 
+SP_QOSCLASS="${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+debug_sp_qosclass
+
 if boolTrue "INCLUDE_CONTEXT_PACKAGES"; then
     if [ -d /usr/share/one/context ]; then
         exec_and_set_error "rsync -a --exclude='*.iso' /usr/share/one/context/* '${ISO_DIR}'/" \

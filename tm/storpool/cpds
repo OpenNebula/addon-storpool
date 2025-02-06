@@ -48,7 +48,7 @@ DISK_ID=$(echo $SRC | awk -F. '{print $NF}')
 
 oneVmInfo "$VM_ID" "$DISK_ID"
 
-SP_QOSCLASS_IMG=$(oneImageQc "${IMAGE_ID}")
+oneImageQc "${IMAGE_ID}"
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
@@ -56,7 +56,8 @@ SP_QOSCLASS_IMG=$(oneImageQc "${IMAGE_ID}")
 
 oneDatastoreInfo "$DS_ID"
 
-SP_QOSCLASS=${SP_QOSCLASS:-${DEFAULT_SP_QOSCLASS:-${SP_QOSCLASS_IMG}}}
+SP_QOSCLASS=${DS_SP_QOSCLASS:-${DEFAULT_SP_QOSCLASS:-${IMAGE_SP_QOSCLASS}}}
+debug_sp_qosclass
 
 #-------------------------------------------------------------------------------
 # Compute the destination image name

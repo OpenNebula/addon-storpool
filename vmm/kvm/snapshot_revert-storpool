@@ -49,19 +49,22 @@ fi
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "$VM_ID"
     oneDatastoreInfo "$VM_DS_ID"
-
-    declare -A vmVolumesMap diskVolumes
+    
+    declare -A vmVolumesMap diskVolumes vmVolumesQcMap
     for v in $vmVolumes; do
-        diskVolumes["$v"]="$v"
+        diskVolumes["$v"]="$v"  # diskVolumes[VOLUME_NAME]=VOLUME_NAME
     done
     for disk in $vmDisksMap; do
-        vmVolumesMap["${disk%:*}"]="${disk##*:}"
+        vmVolumesMap["${disk%:*}"]="${disk##*:}"  # vmVolumesMap[DISK_ID]=VOLUME_NAME
     done
 
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
         MEM_VOL="${ONE_PX}-sys-${VM_ID}"
         diskVolumes["$MEM_VOL"]="$MEM_VOL"
     fi
+    for v in $vmVolumesQc; do
+        vmVolumesQcMap["${v%%:*}"]="${v##*:}"  # vmVolumesQcMap[VOLUME_NAME]=QOSCLASS
+    done
 
     rCMD=$(cat <<EOF
     [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
@@ -152,6 +155,12 @@ EOF
             splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
         fi
         storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
+        
+        VM_DISK_SP_QOSCLASS="${vmVolumesQcMap[$volume]}"
+
+        SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
+        debug_sp_qosclass
+
         storpoolVolumeTag "$volume" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG};$VM_TAG;${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
         tmpVolumes+=("$tmpVolume")
         te=$(date +%s%N)
