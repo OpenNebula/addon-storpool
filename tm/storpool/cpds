@@ -43,16 +43,20 @@ SRC_PATH=`arg_path $SRC`
 DISK_ID=$(echo $SRC | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
+# Get Image information
+#-------------------------------------------------------------------------------
+
+oneVmInfo "$VM_ID" "$DISK_ID"
+
+SP_QOSCLASS_IMG=$(oneImageQc "${IMAGE_ID}")
+
+#-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
 
 oneDatastoreInfo "$DS_ID"
 
-#-------------------------------------------------------------------------------
-# Get Image information
-#-------------------------------------------------------------------------------
-
-oneVmInfo "$VM_ID" "$DISK_ID"
+SP_QOSCLASS=${SP_QOSCLASS:-${DEFAULT_SP_QOSCLASS:-${SP_QOSCLASS_IMG}}}
 
 #-------------------------------------------------------------------------------
 # Compute the destination image name
@@ -97,6 +101,8 @@ if boolTrue "DISK_SAVEAS_FSFREEZE"; then
     oneFsthaw "$SRC_HOST" "$DEPLOY_ID"
     trapReset
 fi
+
+storpoolVolumeTag "$SP_VOL" ";;${SP_QOSCLASS}" "$VM_TAG;vc-policy;qc"
 
 splog "END $VM_ID"
 exit 0
