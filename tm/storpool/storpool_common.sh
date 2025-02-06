@@ -1442,17 +1442,15 @@ function oneVmInfo()
     fi
     SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
     IFS=';' read -ra SP_QOSCLASS_A <<<"${SP_QOSCLASS_LINE}"
-    local _IMAGE_QC=""
+    unset DISKS_QC VM_DISK_SP_QOSCLASS VM_SP_QOSCLASS IMAGE_SP_QOSCLASS
     if [[ "${CLONE^^}" == "NO" ]]; then
-        _IMAGE_QC="$(oneImageQc "${IMAGE_ID}")"
+        oneImageQc "${IMAGE_ID}"
     fi
-    SP_QOSCLASS="${DEFAULT_QOSCLASS:-}"
-    unset DISKS_QC
     declare -gA DISKS_QC
     for qc in "${SP_QOSCLASS_A[@]}"; do
         IFS=':' read -ra tmparr <<<"${qc}"
         if [[ ${#tmparr[@]} -eq 1 ]]; then
-            SP_QOSCLASS="${qc}"
+            VM_SP_QOSCLASS="${qc}"
         elif [[ ${#tmparr[@]} -eq 2 ]]; then
             did="${tmparr[0]//[^[:digit:]]/}"
             if [[ -n ${did} ]]; then
@@ -1461,9 +1459,7 @@ function oneVmInfo()
         fi
     done
     if [[ -n "${DISKS_QC[$_DISK_ID]+found}" ]]; then
-        SP_QOSCLASS="${DISKS_QC[$_DISK_ID]}"
-    elif [[ -n ${_IMAGE_QC} ]]; then
-        SP_QOSCLASS="${_IMAGE_QC}"
+        VM_DISK_SP_QOSCLASS="${DISKS_QC[$_DISK_ID]:-}"
     fi
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
 
@@ -1493,7 +1489,8 @@ ${VM_TM_MAD:+VM_TM_MAD=$VM_TM_MAD }\
 ${VM_DS_ID:+VM_DS_ID=$VM_DS_ID }\
 ${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT='$VMSNAPSHOT_LIMIT' }\
 ${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT='$DISKSNAPSHOT_LIMIT' }\
-${SP_QOSCLASS:+SP_QOSCLASS='$SP_QOSCLASS' }\
+${VM_SP_QOSCLASS:+VM_SP_QOSCLASS='$VM_SP_QOSCLASS' }\
+${VM_DISK_SP_QOSCLASS:+VM_DISK_SP_QOSCLASS='$VM_DISK_SP_QOSCLASS' }\
 ${VC_POLICY:+VC_POLICY='$VC_POLICY' }\
 ${T_OS_NVRAM:+T_OS_NVRAM='$T_OS_NVRAM' }\
 ${INCLUDE_CONTEXT_PACKAGES:+INCLUDE_CONTEXT_PACKAGES='$INCLUDE_CONTEXT_PACKAGES' }\
@@ -1635,7 +1632,7 @@ function oneDatastoreInfo()
     if [ -n "$_TMP" ] && [ "${_tmp//[[:digit:]]/}" = "" ] ; then
         DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
-    SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
+    DS_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     REMOTE_BACKUP_DELETE="${XPATH_ELEMENTS[i++]}"
 
     [ -n "$SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
@@ -1654,7 +1651,7 @@ function oneDatastoreInfo()
     _MSG+="${DS_NAME:+NAME='$DS_NAME' }${VMSNAPSHOT_LIMIT:+VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT }${DISKSNAPSHOT_LIMIT:+DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT }"
     _MSG+="${SP_REPLICATION:+SP_REPLICATION=$SP_REPLICATION }"
     _MSG+="${SP_PLACEALL:+SP_PLACEALL=$SP_PLACEALL }${SP_PLACETAIL:+SP_PLACETAIL=$SP_PLACETAIL }${SP_PLACEHEAD:+SP_PLACEHEAD=$SP_PLACEHEAD }"
-    _MSG+="${SP_QOSCLASS:+SP_QOSCLASS=$SP_QOSCLASS }"
+    _MSG+="${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=$DS_SP_QOSCLASS }"
     _MSG+="${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }"
     _MSG+="${DS_RSYNC_HOST:+DS_RSYNC_HOST=${DS_RSYNC_HOST} }${DS_RSYNC_USER:+DS_RSYNC_USER=${DS_RSYNC_USER} }"
     _MSG+="${DS_RESTIC_SFTP_SERVER:+DS_RESTIC_SFTP_SERVER=${DS_RESTIC_SFTP_SERVER} }${DS_RESTIC_SFTP_USER:+DS_RESTIC_SFTP_USER=${DS_RESTIC_SFTP_USER} }"
@@ -1702,10 +1699,10 @@ function oneTemplateInfo()
     _VM_PREV_STATE=${XPATH_ELEMENTS[i++]}
     _CONTEXT_DISK_ID=${XPATH_ELEMENTS[i++]}
     T_OS_NVRAM="${XPATH_ELEMENTS[i++]}"
-    _SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
+    TEMPLATE_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
-        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY _SP_QOSCLASS=$_SP_QOSCLASS"
+        splog "VM_ID=$_VM_ID VM_STATE=$_VM_STATE(${VmState[$_VM_STATE]}) VM_LCM_STATE=$_VM_LCM_STATE(${LcmState[$_VM_LCM_STATE]}) VM_PREV_STATE=$_VM_PREV_STATE(${VmState[$_VM_PREV_STATE]}) CONTEXT_DISK_ID=$_CONTEXT_DISK_ID VC_POLICY=$VC_POLICY TEMPLATE_SP_QOSCLASS=$TEMPLATE_SP_QOSCLASS"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath_multi.py" "${TM_PATH}")"
@@ -1799,6 +1796,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_CLONE_GW \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_SYSTEM \
+                    /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_QOSCLASS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS \
                     /DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW \
@@ -1808,6 +1806,7 @@ function oneDsDriverAction()
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1 \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER \
                     /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/FORMAT \
+                    /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SP_QOSCLASS \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PATH \
                     /DS_DRIVER_ACTION_DATA/IMAGE/PERSISTENT \
                     /DS_DRIVER_ACTION_DATA/IMAGE/SHAREABLE \
@@ -1853,6 +1852,7 @@ function oneDsDriverAction()
     if [ -n "$_TMP" ] ; then
         SP_SYSTEM="${_TMP}"
     fi
+    DS_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     _TMP="${XPATH_ELEMENTS[i++]}"
     if [ -n "$_TMP" ] ; then
         SP_TEMPLATE_PROPAGATE="${_TMP}"
@@ -1865,6 +1865,7 @@ function oneDsDriverAction()
     SHA1="${XPATH_ELEMENTS[i++]}"
     DRIVER="${XPATH_ELEMENTS[i++]}"
     FORMAT="${XPATH_ELEMENTS[i++]}"
+    IMAGE_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     IMAGE_PATH="${XPATH_ELEMENTS[i++]}"
     PERSISTENT="${XPATH_ELEMENTS[i++]}"
     SHAREABLE="${XPATH_ELEMENTS[i++]}"
@@ -1932,6 +1933,8 @@ ${SP_SYSTEM:+SP_SYSTEM=$SP_SYSTEM }\
 ${SP_TEMPLATE_PROPAGATE:+SP_TEMPLATE_PROPAGATE=$SP_TEMPLATE_PROPAGATE }\
 ${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=$REMOTE_BACKUP_DELETE }\
 ${MONITOR_VM_DISKS:+MONITOR_VM_DISKS=$MONITOR_VM_DISKS }\
+${IMAGE_SP_QOSCLASS:+IMAGE_SP_QOSCLASS=$IMAGE_SP_QOSCLASS }\
+${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=$DS_SP_QOSCLASS }\
 "
     splog "$_MSG"
 }
@@ -1994,13 +1997,11 @@ ${SP_AUTH_TOKEN:+SP_AUTH_TOKEN=available }\
 oneImageQc()
 {
     local _IMAGE_ID="$1"
-    local _SP_QOSCLASS=""
-    _SP_QOSCLASS="$(oneCallXml oneimage show "${_IMAGE_ID}" | \
+    export IMAGE_SP_QOSCLASS="$(oneCallXml oneimage show "${_IMAGE_ID}" | \
                 xmlstarlet sel -t -m '//TEMPLATE' -v SP_QOSCLASS 2>/dev/null \
                 || true)"
-    echo "${_SP_QOSCLASS}"
     if boolTrue "DEBUG_oneImageQc"; then
-        splog "oneImageQc(${_IMAGE_ID}) SP_QOSCLASS=${_SP_QOSCLASS}"
+        splog "oneImageQc(${_IMAGE_ID}) IMAGE_SP_QOSCLASS=${IMAGE_SP_QOSCLASS}"
     fi
 }
 
@@ -2063,6 +2064,7 @@ oneVmVolumes()
         /VM/TEMPLATE/DISK/TM_MAD \
         /VM/TEMPLATE/DISK/TARGET \
         /VM/TEMPLATE/DISK/IMAGE_ID \
+        /VM/TEMPLATE/DISK/DATASTORE_ID \
         /VM/TEMPLATE/SNAPSHOT/SNAPSHOT_ID \
         /VM/USER_TEMPLATE/VMSNAPSHOT_LIMIT \
         /VM/USER_TEMPLATE/DISKSNAPSHOT_LIMIT \
@@ -2088,6 +2090,7 @@ oneVmVolumes()
     local TM_MAD="${XPATH_ELEMENTS[i++]}"
     local TARGET="${XPATH_ELEMENTS[i++]}"
     local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
+    local DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     local SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
     local _TMP=
     _TMP="${XPATH_ELEMENTS[i++]}"
@@ -2119,17 +2122,22 @@ oneVmVolumes()
     TM_MAD_A=($TM_MAD)
     TARGET_A=($TARGET)
     IMAGE_ID_A=($IMAGE_ID)
+    DATASTORE_ID_A=($DATASTORE_ID)
     SNAPSHOT_ID_A=($SNAPSHOT_ID)
     SP_QOSCLASS_A=(${SP_QOSCLASS_LINE})
     IFS=$_OFS
-    vmVolumesQc=""
+    vmDisksQcMap=""  # VOLUME_NAME:[VM_DISK_QOSCLASS]
+    persistentDisksQcMap=""  # VOLUME_NAME:PERSISTENT_IMAGE_QOSCLASS
+    vmDisksDsMap=""  # VOLUME_NAME:DATASTORE_ID
+    vmDisksMap=""  # VOLUME_NAME:DISK_ID
+    vmVolumes=""  # VOLUME_NAME
     unset DISKS_QC
     declare -gA DISKS_QC
-    SP_QOSCLASS="${DEFAULT_QOSCLASS:-}"
+    VM_SP_QOSCLASS=""
     for qc in "${SP_QOSCLASS_A[@]}"; do
         IFS=':' read -ra arr <<<"${qc}"
         if [[ ${#arr[@]} -eq 1 ]]; then
-            SP_QOSCLASS="${qc}"
+            VM_SP_QOSCLASS="${qc}"
         elif [[ ${#arr[@]} -eq 2 ]]; then
             did="${arr[0]//[^[:digit:]]/}"
             if [[ -n ${did} ]]; then
@@ -2139,6 +2147,7 @@ oneVmVolumes()
     done
     for idx in ${!DISK_ID_A[@]}; do
         IMAGE_ID="${IMAGE_ID_A[$idx]}"
+        DATASTORE_ID="${DATASTORE_ID_A[$idx]}"
         CLONE="${CLONE_A[$idx]}"
         FORMAT="${FORMAT_A[$idx]}"
         TYPE="${TYPE_A[$idx]}"
@@ -2176,13 +2185,14 @@ oneVmVolumes()
         if boolTrue "DEBUG_oneVmVolumes"; then
             splog "oneVmVolumes() VM_ID:$VM_ID disk.$DISK_ID $IMG"
         fi
+        vmDisksDsMap+="$IMG:${DATASTORE_ID:-${VM_DS_ID}} "
         vmVolumes+="$IMG "
         if [[ -n "${DISKS_QC[$DISK_ID]+found}" ]]; then
-            vmVolumesQc+="${IMG}:${DISKS_QC[$DISK_ID]} "
+            vmDisksQcMap+="${IMG}:${DISKS_QC[$DISK_ID]} "
         elif [[ "${CLONE^^}" == "NO" ]]; then
-            imageQc="$(oneImageQc "${IMAGE_ID}")"
-            if [[ -n "${imageQc}" ]]; then
-                vmVolumesQc+="${IMG}:${imageQc} "
+            oneImageQc "${IMAGE_ID}"
+            if [[ -n "${IMAGE_SP_QOSCLASS}" ]]; then
+                persistentDisksQcMap+="${IMG}:${IMAGE_SP_QOSCLASS} "
             fi
         fi
         vmDisks=$((vmDisks+1))
@@ -2211,8 +2221,19 @@ oneVmVolumes()
         vmDisksMap+="$IMG: "
     fi
     if boolTrue "DEBUG_oneVmVolumes"; then
-        splog "oneVmVolumes() VM_ID:$VM_ID STATE:$VM_STATE VM_DS_ID=$VM_DS_ID${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${SP_QOSCLASS:+ SP_QOSCLASS=$SP_QOSCLASS}{VC_POLICY:+ VC_POLICY=$VC_POLICY}${VMSNAPSHOT_WITH_CHECKPOINT:+ VMSNAPSHOT_WITH_CHECKPOINT=$VMSNAPSHOT_WITH_CHECKPOINT}${BACKUP_VOLATILE:+ BACKUP_VOLATILE=$BACKUP_VOLATILE}${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=$BACKUP_FS_FREEZE}${BACKUP_MODE:+ BACKUP_MODE=$BACKUP_MODE}"
+        splog "[D]oneVmVolumes() VM_ID:$VM_ID STATE:$VM_STATE VM_DS_ID=$VM_DS_ID vmDisks=$vmDisks ${VMSNAPSHOT_LIMIT:+ VMSNAPSHOT_LIMIT=$VMSNAPSHOT_LIMIT}${DISKSNAPSHOT_LIMIT:+ DISKSNAPSHOT_LIMIT=$DISKSNAPSHOT_LIMIT}${T_OS_NVRAM:+ T_OS_NVRAM=$T_OS_NVRAM}${VM_SP_QOSCLASS:+ VM_SP_QOSCLASS=$VM_SP_QOSCLASS}${VC_POLICY:+ VC_POLICY=$VC_POLICY}${VMSNAPSHOT_WITH_CHECKPOINT:+ VMSNAPSHOT_WITH_CHECKPOINT=$VMSNAPSHOT_WITH_CHECKPOINT}${BACKUP_VOLATILE:+ BACKUP_VOLATILE=$BACKUP_VOLATILE}${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=$BACKUP_FS_FREEZE}${BACKUP_MODE:+ BACKUP_MODE=$BACKUP_MODE}"
     fi
+    if boolTrue "DDDEBUG_oneVmVolumes"; then
+        splog "[DDD]oneVmVolumes() vmVolumes:'$vmVolumes'"
+        splog "[DDD]oneVmVolumes() vmDisksMap:'$vmDisksMap'"
+        splog "[DDD]oneVmVolumes() vmDisksQcMap:'$vmDisksQcMap'"
+        splog "[DDD]oneVmVolumes() vmDisksDsMap:'$vmDisksDsMap'"
+        splog "[DDD]oneVmVolumes() persistentDisksQcMap:'$persistentDisksQcMap'"
+    fi
+    if boolTrue "DDEBUG_oneVmVolumes"; then
+        splog "[DD]oneVmVolumes() VM_ID:$VM_ID vmVolumesQc:'$vmVolumesQc' DISKS_QC:'${!DISKS_QC[@]}'='${DISKS_QC[@]}' SP_QOSCLASS_LINE:'$SP_QOSCLASS_LINE'"
+    fi
+
 }
 
 oneVmDiskSnapshots()
@@ -2636,4 +2657,23 @@ function remove_off_hosts {
         echo "${LOOKUP_HOSTS_ARRAY[*]}"
     fi
     return "${_RET}"
+}
+
+function debug_sp_qosclass()
+{
+    local msg=""
+    if boolTrue "DEBUG_SP_QOSCLASS"; then
+        msg="[DEBUG_SP_QOSCLASS] ${SP_QOSCLASS:+SP_QOSCLASS=$SP_QOSCLASS } ["
+        msg+="${VM_DISK_SP_QOSCLASS:+VM_DISK_SP_QOSCLASS=$VM_DISK_SP_QOSCLASS }"
+        msg+="${IMAGE_SP_QOSCLASS:+IMAGE_SP_QOSCLASS=$IMAGE_SP_QOSCLASS }"
+        msg+="${SP_QOSCLASS_IMG:+SP_QOSCLASS_IMG=$SP_QOSCLASS_IMG }"
+        msg+="${VM_SP_QOSCLASS:+VM_SP_QOSCLASS=$VM_SP_QOSCLASS }"
+        msg+="${SYSTEM_DS_SP_QOSCLASS:+SYSTEM_DS_SP_QOSCLASS=$SYSTEM_DS_SP_QOSCLASS }"
+        msg+="${IMAGE_DS_SP_QOSCLASS:+IMAGE_DS_SP_QOSCLASS=$IMAGE_DS_SP_QOSCLASS }"
+        if [[ -z "${SYSTEM_DS_SP_QOSCLASS}${IMAGE_DS_SP_QOSCLASS}" ]]; then
+            msg+="${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=$DS_SP_QOSCLASS }"
+        fi
+        msg+="${DEFAULT_QOSCLASS:+DEFAULT_QOSCLASS=$DEFAULT_QOSCLASS }"
+        splog "$msg]"
+    fi
 }

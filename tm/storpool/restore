@@ -39,6 +39,9 @@ BACKUP_IMG_XML="${TMPDIR}/oneimage-${IMG_ID}.XML"
 oneDatastoreInfo "${B_DATASTORE_ID}"
 BACKUP_DS_XML="${TMPDIR}/onedatastore-${B_DATASTORE_ID}.XML"
 
+SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
+debug_sp_qosclass
+
 MSG="VM ${VM_ID} BackupID ${IMG_ID} '${B_IMAGE_NAME}'"
 if [[ ${INC_ID} != "-1" ]]; then
     MSG+=" Incremental ${INC_ID}"

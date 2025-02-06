@@ -91,6 +91,9 @@ if [ -n "$DRIVER" ] && [ "${DRIVER,,}" != "raw" ]; then
     exit 1
 fi
 
+SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
+debug_sp_qosclass
+
 #-------------------------------------------------------------------------------
 # Create image
 #-------------------------------------------------------------------------------

@@ -62,16 +62,24 @@ DST_DIR=`dirname $DST_PATH`
 DISK_ID=$(echo "$DST_PATH" | $AWK -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
-# Get IMAGE Datastore information
-#-------------------------------------------------------------------------------
-
-oneDatastoreInfo "$DS_ID"
-
-#-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
 oneVmInfo "$VM_ID" "$DISK_ID"
+
+#-------------------------------------------------------------------------------
+# Get System Datastore information
+#-------------------------------------------------------------------------------
+
+oneDatastoreInfo "$VM_DS_ID"
+SYSTEM_DS_SP_QOSCLASS="$DS_SP_QOSCLASS"
+
+#-------------------------------------------------------------------------------
+# Get Image Datastore information
+#-------------------------------------------------------------------------------
+
+oneDatastoreInfo "$DS_ID"
+IMAGE_DS_SP_QOSCLASS="$DS_SP_QOSCLASS"
 
 SP_VOL="${SOURCE##*/}"
 if boolTrue "NO_VOLUME_TEMPLATE"; then
@@ -79,6 +87,9 @@ if boolTrue "NO_VOLUME_TEMPLATE"; then
 else
     SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
 fi
+
+SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${IMAGE_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${SYSTEM_DS_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}}}"
+debug_sp_qosclass
 
 splog "SP_VOL=${SP_VOL} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}"
 
