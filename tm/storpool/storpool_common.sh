@@ -982,7 +982,7 @@ function storpoolVolumeDetach()
 function storpoolVolumeTemplate()
 {
     local _SP_VOL="$1" _SP_TEMPLATE="$2"
-    storpoolRetry volume "$_SP_VOL" template "$_SP_TEMPLATE" >/dev/null
+    storpoolRetry volume "$_SP_VOL" template "$_SP_TEMPLATE" update >/dev/null
 }
 
 function storpoolSnapshotInfo()
