@@ -263,7 +263,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                 fi
             fi
             if [ "$SRC_PATH" != "$DST_PATH" ]; then
-                storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+                if ! boolTrue "NO_VOLUME_TEMPLATE"; then
+                    storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+                fi
             fi
         fi
         # NVRAM volume
@@ -286,7 +288,9 @@ if [ "$DS_TEMPLATE_TYPE" = "SYSTEM_DS" ]; then
                  fi
             fi
             if [ "$SRC_PATH" != "$DST_PATH" ]; then
-                storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+                if ! boolTrue "NO_VOLUME_TEMPLATE"; then
+                    storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+                fi
             fi
         fi
         # other files in the VM home
@@ -416,7 +420,9 @@ EOF
                     fi
                 fi
                 if [ "$SRC_PATH" != "$DST_PATH" ]; then
-                    storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+                    if ! boolTrue "NO_VOLUME_TEMPLATE"; then
+                        storpoolVolumeTemplate "$SP_VOL" "${ONE_PX}-ds-$DS_ID"
+                    fi
                 fi
             fi
         done
