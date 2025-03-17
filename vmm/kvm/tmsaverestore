@@ -17,36 +17,42 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
-ACTION=${0##*tm}
-FILE=$1
-HVHOST=$2
-DEPLOY_ID=$3
-VM_ID=$4
+DRIVER_PATH=$(dirname "$0")
+ACTION="${0##*tm}"
+FILE="$1"
+HVHOST="$2"
+DEPLOY_ID="$3"
+VM_ID="$4"
+DS_ID="$5"
 
-if [ "$ACTION" = "save" ]; then
-    DEPLOY_ID=$1
-    FILE=$2
-    HVHOST=$3
-    VM_ID=$4
-    DS_ID=$5
+if [[ "${ACTION}" == "save" ]]; then
+    DEPLOY_ID="$1"
+    FILE="$2"
+    HVHOST="$3"
+    VM_ID="$4"
+    DS_ID="$5"
+    export DEPLOY_ID FILE DS_ID
 fi
 
 # There is data in stdin, read it
 DRV_ACTION="$(cat)"
 
 #-------------------------------------------------------------------------------
-
-source $(dirname $0)/../../scripts_common.sh
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-LOG_PREFIX=vmm
+export LOG_PREFIX=vmm
 
-XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-IFS= read -r -d '' TM_MAD < <(echo "$DRV_ACTION" | base64 -d | \
-                               $XPATH /VMM_DRIVER_ACTION_DATA/DATASTORE/TM_MAD)
+_XPATH="${DRIVER_PATH}/../../datastore/xpath.rb"
+declare -a _XPATH_A _XPATH_QUERY
+_XPATH_A=("${_XPATH}" "--stdin")
+_XPATH_QUERY=("/VMM_DRIVER_ACTION_DATA/DATASTORE/TM_MAD")
+IFS='' read -r -d '' TM_MAD < <(echo "${DRV_ACTION}" | base64 -d | \
+                               "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
 
-VMM_MAD="$(basename "$DRIVER_PATH")"
+VMM_MAD="$(basename "${DRIVER_PATH}")"
 PRE_SCRIPT="${DRIVER_PATH}/../../tm/${TM_MAD}/pre${ACTION}"
 POST_SCRIPT="${DRIVER_PATH}/../../tm/${TM_MAD}/post${ACTION}"
 
@@ -55,19 +61,19 @@ POST_SCRIPT="${DRIVER_PATH}/../../tm/${TM_MAD}/post${ACTION}"
 splog "$*"
 
 # execute tm/prerestore if exist
-if [ -f "$PRE_SCRIPT" ] && [ -x "$PRE_SCRIPT" ]; then
-    splog "calling $PRE_SCRIPT $*"
-    echo "$DRV_ACTION" | $PRE_SCRIPT "$@" || exit $?
+if [[ -f "${PRE_SCRIPT}" && -x "${PRE_SCRIPT}" ]]; then
+    splog "calling ${PRE_SCRIPT} $*"
+    echo "${DRV_ACTION}" | "${PRE_SCRIPT}" "$@" || exit $?
 fi
 
 # execute vmm/save on remote host
-echo "$DRV_ACTION" | \
-       $SSH "$HVHOST" "/var/tmp/one/vmm/${VMM_MAD}/${ACTION}" "$@" || exit $?
+echo "${DRV_ACTION}" | \
+       "${SSH:-ssh}" "${HVHOST}" "/var/tmp/one/vmm/${VMM_MAD}/${ACTION}" "$@" || exit $?
 
 # execute tm/postsave if exist
-if [ -f "$POST_SCRIPT" ] && [ -x "$POST_SCRIPT" ]; then
-    splog "calling $POST_SCRIPT $*"
-    echo "$DRV_ACTION" | $POST_SCRIPT "$@" || exit $?
+if [[ -f "${POST_SCRIPT}" && -x "${POST_SCRIPT}" ]]; then
+    splog "calling ${POST_SCRIPT} $*"
+    echo "${DRV_ACTION}" | "${POST_SCRIPT}" "$@" || exit $?
 fi
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

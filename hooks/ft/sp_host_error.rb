@@ -60,7 +60,7 @@ def splog(message)
 end
 
 if !(host_id=ARGV[0])
-    exit -1
+    exit 255
 end
 
 mode   = nil  # By default, recreate VMs following the v4 workaround
@@ -107,7 +107,7 @@ begin
 rescue Exception => e
     splog("unknown(#{host_id}) ERROR: Can't get Client object")
     puts "Error: #{e}"
-    exit -1
+    exit 255
 end
 
 # Retrieve hostname
@@ -115,7 +115,7 @@ host  =  OpenNebula::Host.new_with_id(host_id, client)
 rc = host.info
 if OpenNebula.is_error?(rc)
     splog("unknown(#{host_id}) ERROR: Can't get host info for host_id:#{host_id}")
-    exit -1
+    exit 255
 end
 host_name = host.name
 
@@ -149,7 +149,7 @@ if repeat
         end
     else
         splog("#{host_name}(#{host_id}) ERROR: Can't get MONITORING_INTERVAL! (host.state:#{hstate})")
-        exit -1
+        exit 255
     end
 end
 
@@ -158,7 +158,7 @@ vms = VirtualMachinePool.new(client)
 rc = vms.info_all
 if OpenNebula.is_error?(rc)
     splog("#{host_name}(#{host_id}) ERROR: Can't get VM info")
-    exit -1
+    exit 255
 end
 
 state = "STATE=3"

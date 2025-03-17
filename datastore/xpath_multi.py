@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2024, StorPool (storpool.com)                               #
 #                                                                            #
@@ -26,6 +26,7 @@
 #  cat XMLfile | xpath_mylti.py -s XPATH
 #  cat base64XMLfile | xpath_mylti.py -s -b XPATH
 #--------------------------------------------------------------------------- #
+"""
 
 from __future__ import print_function
 
@@ -38,20 +39,20 @@ b64 = False
 stdIn = False
 fileIn = False
 
-opts, args = getopt( argv[1:], "bsf", ["--base64", "--stdin", "--file"] )
+opts, args = getopt(argv[1:], "bsf", ["--base64", "--stdin", "--file"])
 
 for k, v in opts:
-    if k in ( "-b", "--base64" ):
+    if k in ("-b", "--base64"):
         b64 = True
-    elif k in ( "-s", "--stdin" ):
+    elif k in ("-s", "--stdin"):
         stdIn = True
-    elif k in ( "-f", "--file" ):
+    elif k in ("-f", "--file"):
         fileIn = True
 
 if stdIn:
     xmlData = stdin.read()
 else:
-    xmlData = args.pop( 0 )
+    xmlData = args.pop(0)
 
 if fileIn:
     f = open(xmlData, "r")
@@ -59,20 +60,20 @@ if fileIn:
     f.close()
 
 if b64:
-    xmlData = b64decode( xmlData )
+    xmlData = b64decode(xmlData)
 
-eRoot = ET.fromstring( xmlData )
+eRoot = ET.fromstring(xmlData)
 
 for arg in args:
-    aList = arg.split( '/' )
+    aList = arg.split('/')
     a = aList.pop()
-    p = '/'.join( aList[2:] )
+    p = '/'.join(aList[2:])
     out = []
-    for e in eRoot.findall( ".//{0}".format( p ) ):
-        eAll = e.findall( a )
-        if len( eAll ) > 1:
+    for e in eRoot.findall(".//{0}".format(p)):
+        eAll = e.findall(a)
+        if len(eAll) > 1:
             for entry in eAll:
-                out.append( '{0}'.format( entry.text ) )
+                out.append("{0}".format(entry.text))
         else:
-            out.append( '{0}'.format( e.findtext( a, '' ) ) )
-    print( ";".join( out ) )
+            out.append("{0}".format(e.findtext(a, "")))
+    print(";".join(out))

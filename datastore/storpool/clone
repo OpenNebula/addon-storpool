@@ -26,26 +26,31 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
-if [ -n "${ONE_LOCATION}" ]; then
-    LIB_LOCATION=$ONE_LOCATION/lib
+# shellcheck disable=SC2034
+
+if [[ -n "${ONE_LOCATION}" ]]; then
+    LIB_LOCATION="${ONE_LOCATION}/lib"
 else
-    LIB_LOCATION=/usr/lib/one
+    LIB_LOCATION="/usr/lib/one"
 fi
 
-. $LIB_LOCATION/sh/scripts_common.sh
+# shellcheck source=/dev/null
+. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH=$(dirname $0)
-source ${DRIVER_PATH}/../libfs.sh
+DRIVER_PATH="$(dirname "$0")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
-LOG_PREFIX="ds"
+export LOG_PREFIX="ds"
 
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Get clone and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-if [ -n "$2" ]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -53,137 +58,155 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "$DRIVER_PATH"
+oneDsDriverAction "${DRIVER_PATH}"
+IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
-SP_VOL="${ONE_PX}-img-${ID}"
+SP_VOL="${ONE_PX:-one}-img-${ID}"
 SP_PARENT="${IMAGE_PATH##*/}"
-SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX:-one}-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
-echo "$SP_DST"
+echo "${SP_DST}"
 
 #-------------------------------------------------------------------------------
 # Clone Image
 #-------------------------------------------------------------------------------
 
-SRC_DS_ID=${IMAGE_PATH%%/*}
-SRC_DS_ID=${SRC_DS_ID##*-}
+SRC_DS_ID="${IMAGE_PATH%%/*}"
+SRC_DS_ID="${SRC_DS_ID##*-}"
 
-if [ "$SRC_DS_ID" -ne "$DATASTORE_ID" ]; then
-    DST_BRIDGE_LIST="$SP_BRIDGE_LIST"
-    DST_SP_API_HTTP_HOST="$SP_API_HTTP_HOST"
-    DST_SP_API_HTTP_PORT="$SP_API_HTTP_PORT"
-    DST_SP_AUTH_TOKEN="$SP_AUTH_TOKEN"
-    DST_SP_REPLICATION="$SP_REPLICATION"
-    DST_SP_PLACEALL="$SP_PLACEALL"
-    DST_SP_PLACETAIL="$SP_PLACETAIL"
-    DST_SP_PLACEHEAD="$SP_PLACEHEAD"
-    DST_SP_IOPS="$SP_IOPS"
-    DST_SP_BW="$SP_BW"
-    DST_TM_MAD="$TM_MAD"
+if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
+    DST_BRIDGE_LIST="${SP_BRIDGE_LIST:-}"  # TBD: refactor to not use BRIDGE_LIST use the hosts if available
+    DST_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
+    DST_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
+    DST_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"
+    DST_SP_REPLICATION="${SP_REPLICATION}"
+    DST_SP_PLACEALL="${SP_PLACEALL}"
+    DST_SP_PLACETAIL="${SP_PLACETAIL}"
+    DST_SP_PLACEHEAD="${SP_PLACEHEAD}"
+    DST_SP_IOPS="${SP_IOPS}"
+    DST_SP_BW="${SP_BW}"
+    DST_TM_MAD="${TM_MAD}"
 
 #    env >/tmp/ds_clone-$ID.dst
-    oneDatastoreInfo "$SRC_DS_ID"
+    oneDatastoreInfo "${SRC_DS_ID}"
 #    env >/tmp/ds_clone-$ID.src
-    SRC_BRIDGE_LIST="$SP_BRIDGE_LIST"
-    SRC_SP_API_HTTP_HOST="$SP_API_HTTP_HOST"
-    SRC_SP_API_HTTP_PORT="$SP_API_HTTP_PORT"
-    SRC_SP_AUTH_TOKEN="$SP_AUTH_TOKEN"
-    SRC_SP_REPLICATION="$SP_REPLICATION"
-    SRC_SP_PLACEALL="$SP_PLACEALL"
-    SRC_SP_PLACETAIL="$SP_PLACETAIL"
-    SRC_SP_PLACEHEAD="$SP_PLACEHEAD"
-    SRC_SP_IOPS="$SP_IOPS"
-    SRC_SP_BW="$SP_BW"
+    SRC_BRIDGE_LIST="${SP_BRIDGE_LIST}"
+    SRC_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
+    SRC_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
+    SRC_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"
+    SRC_SP_REPLICATION="${SP_REPLICATION}"
+    SRC_SP_PLACEALL="${SP_PLACEALL}"
+    SRC_SP_PLACETAIL="${SP_PLACETAIL}"
+    SRC_SP_PLACEHEAD="${SP_PLACEHEAD}"
+    SRC_SP_IOPS="${SP_IOPS}"
+    SRC_SP_BW="${SP_BW}"
 
-    if [ "$DS_TM_MAD" != "$TM_MAD" ]; then
-        splog "Clone from $TM_MAD to $DS_TM_MAD is not supported!"
-        log "Clone from $TM_MAD to $DS_TM_MAD is not supported!"
-        exit -1
+    if [[ "${DS_TM_MAD}" != "${TM_MAD}" ]]; then
+        splog "Clone from ${TM_MAD} to ${DS_TM_MAD} is not supported!"
+        log "Clone from ${TM_MAD} to ${DS_TM_MAD} is not supported!"
+        exit 255
     fi
 
-    if [ "$SRC_SP_AUTH_TOKEN" != "$DST_SP_AUTH_TOKEN" ]; then
+    if [[ "${SRC_SP_AUTH_TOKEN}" != "${DST_SP_AUTH_TOKEN}" ]]; then
         #attach SRC volume to BRIDGE_LIST or here
-        if [ -n "$BRIDGE_LIST" ]; then
-            SRC_HOST=`get_destination_host $ID`
-            if [ "$SRC_HOST" = "" ]; then
-                error_message "Can't get datastore host from BRIDGE_LIST:$BRIDGE_LIST"
-                exit -1
+        if [[ -n "${BRIDGE_LIST}" ]]; then
+            SRC_HOST="$(get_destination_host "${ID}")"
+            if [[ -z "${SRC_HOST}" ]]; then
+                error_message "Can't get datastore host from BRIDGE_LIST:${BRIDGE_LIST}"
+                exit 255
             fi
         fi
-        if [ -n "$SP_CLONE_GW"  ]; then
-            SRC_SP_CLONE_GW="$SP_CLONE_GW"
+        if [[ -n "${SP_CLONE_GW}" ]]; then
+            SRC_SP_CLONE_GW="${SP_CLONE_GW}"
         else
-            SRC_SP_CLONE_GW="$SRC_HOST"
+            SRC_SP_CLONE_GW="${SRC_HOST}"
         fi
-        CLONE_GW="$SRC_SP_CLONE_GW"
-        storpoolVolumeAttach "$SP_PARENT" "$SRC_SP_CLONE_GW" "ro"
+        CLONE_GW="${SRC_SP_CLONE_GW}"
+        storpoolVolumeAttach "${SP_PARENT}" "${SRC_SP_CLONE_GW}" "ro"
 
-        oneDsDriverAction "$DRIVER_PATH"
+        oneDsDriverAction "${DRIVER_PATH}"
+        IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
-        if [ -n "$BRIDGE_LIST" ]; then
-            DST_HOST=`get_destination_host $ID`
-            if [ "$DST_HOST" = "" ]; then
-                error_message "Can't get datastore host from BRIDGE_LIST:$BRIDGE_LIST"
-                exit -1
+        if [[ -n "${BRIDGE_LIST}" ]]; then
+            DST_HOST="$(get_destination_host "${ID}")"
+            if [[ -z "${DST_HOST}" ]]; then
+                error_message "Can't get datastore host from BRIDGE_LIST:${BRIDGE_LIST}"
+                exit 255
             fi
         fi
-        if [ -n "$SP_CLONE_GW" ]; then
-            DST_SP_CLONE_GW="$SP_CLONE_GW"
+        if [[ -n "${SP_CLONE_GW}" ]]; then
+            DST_SP_CLONE_GW="${SP_CLONE_GW}"
         else
-            DST_SP_CLONE_GW="$DST_HOST"
+            DST_SP_CLONE_GW="${DST_HOST}"
         fi
-        CLONE_GW="$DST_SP_CLONE_GW"
+        CLONE_GW="${DST_SP_CLONE_GW}"
 
         #create DST volume with the given SIZE
         storpoolTemplate "${ONE_PX}-ds-${DATASTORE_ID}"
-        storpoolVolumeCreate "$SP_VOL" "${SIZE}"M "${ONE_PX}-ds-${DATASTORE_ID}"
+        storpoolVolumeCreate "${SP_VOL}" "${SIZE}"M "${ONE_PX}-ds-${DATASTORE_ID}"
         #attach DST volume to BRIDGE_LIST or here
-        storpoolVolumeAttach "$SP_VOL" "$DST_SP_CLONE_GW"
+        storpoolVolumeAttach "${SP_VOL}" "${DST_SP_CLONE_GW}"
 
         # SRC_HOST  dd if=SRC_VOL | ssh DST_HOST dd of=DST_VOL
-        DST_CMD="dd of=/dev/storpool/$SP_VOL bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
-        if [ -n "$DST_SP_CLONE_GW" ]; then
-            DST_CMD="ssh ${CLONE_COMPRESSION:+-C} $DST_SP_CLONE_GW '$DST_CMD'"
+        DST_CMD="dd of=/dev/storpool/${SP_VOL} bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
+        if [[ -n "${DST_SP_CLONE_GW}" ]]; then
+            DST_CMD="${SSH:-ssh} ${CLONE_COMPRESSION:+-C} ${DST_SP_CLONE_GW} '${DST_CMD}'"
         fi
-        SRC_CMD="dd if=/dev/storpool/$SP_PARENT bs=1M status=none | $DST_CMD"
-        if [ -n "$SRC_SP_CLONE_GW" ]; then
-            ssh $SRC_SP_CLONE_GW "eval $SRC_CMD"
-            splog "ssh $SRC_SP_CLONE_GW 'eval $SRC_CMD' ($?)"
+        SRC_CMD="dd if=/dev/storpool/${SP_PARENT} bs=1M status=none | ${DST_CMD}"
+        if [[ -n "${SRC_SP_CLONE_GW}" ]]; then
+            ${SSH:-ssh} "${SRC_SP_CLONE_GW}" "eval '${SRC_CMD}'"
+            splog "ssh ${SRC_SP_CLONE_GW} 'eval ${SRC_CMD}' ($?)"
         else
-            eval $SRC_CMD
-            splog "$SRC_CMD ($?)"
+            eval "${SRC_CMD}"
+            splog "${SRC_CMD} ($?)"
         fi
 
         #detach DST_VOL
-        storpoolVolumeDetach "$SP_VOL" "" "$DST_SP_CLONE_GW"
+        storpoolVolumeDetach "${SP_VOL}" "" "${DST_SP_CLONE_GW}"
 
-        storpoolVolumeTag "$SP_VOL" "one;${LOC_TAG_VAL}" "virt;${LOC_TAG}"
+        SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+        debug_sp_qosclass
+
+        storpoolVolumeTag "${SP_VOL}" "one;${LOC_TAG_VAL};${SP_QOSCLASS}" "virt;${LOC_TAG:-nloc};qc"
 
         #detach SRC_VOL
 
-        [ -n "$SRC_SP_API_HTTP_HOST" ] && export SP_API_HTTP_HOST=$SRC_SP_API_HTTP_HOST || unset SP_API_HTTP_HOST
-        [ -n "$SRC_SP_API_HTTP_PORT" ] && export SP_API_HTTP_PORT=$SRC_SP_API_HTTP_PORT || unset SP_API_HTTP_PORT
-        [ -n "$SRC_SP_AUTH_TOKEN" ] && export SP_AUTH_TOKEN=$SRC_SP_AUTH_TOKEN || unset SP_AUTH_TOKEN
-        CLONE_GW="$SRC_SP_CLONE_GW"
-        storpoolVolumeDetach "$SP_PARENT" "" "$SRC_SP_CLONE_GW"
+        if [[ -n "${SRC_SP_API_HTTP_HOST}" ]]; then
+            export SP_API_HTTP_HOST="${SRC_SP_API_HTTP_HOST}"
+        else
+            unset SP_API_HTTP_HOST
+        fi
+        if [[ -n "${SRC_SP_API_HTTP_PORT}" ]]; then
+            export SP_API_HTTP_PORT="${SRC_SP_API_HTTP_PORT}"
+        else
+            unset SP_API_HTTP_PORT
+        fi
+        if [[ -n "${SRC_SP_AUTH_TOKEN}" ]]; then
+            export SP_AUTH_TOKEN="${SRC_SP_AUTH_TOKEN}"
+        else
+            unset SP_AUTH_TOKEN
+        fi
+        CLONE_GW="${SRC_SP_CLONE_GW}"
+        storpoolVolumeDetach "${SP_PARENT}" "" "${SRC_SP_CLONE_GW}"
 
-        exit
+        exit 0
     else
         # reset environment and fallback to default routine
-        oneDsDriverAction "$DRIVER_PATH"
+        oneDsDriverAction "${DRIVER_PATH}"
+        IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
     fi
 fi
 
-storpoolVolumeCheck "$SP_VOL"
+storpoolVolumeCheck "${SP_VOL}"
 
-storpoolTemplate "$SP_TEMPLATE"
+storpoolTemplate "${SP_TEMPLATE}"
 
-storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
+storpoolVolumeClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
 
-SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "$SP_VOL" "one;${LOC_TAG_VAL};${SP_QOSCLASS}" "virt;${LOC_TAG};qc"
+storpoolVolumeTag "${SP_VOL}" "one;${LOC_TAG_VAL};${SP_QOSCLASS}" "virt;${LOC_TAG:-nloc};qc"
 
-splog "END $SP_DST"
+splog "END ${SP_DST}"

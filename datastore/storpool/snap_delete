@@ -26,26 +26,29 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
-if [ -n "${ONE_LOCATION}" ]; then
-    LIB_LOCATION=$ONE_LOCATION/lib
+if [[ -n "${ONE_LOCATION}" ]]; then
+    LIB_LOCATION="${ONE_LOCATION}/lib"
 else
-    LIB_LOCATION=/usr/lib/one
+    LIB_LOCATION="/usr/lib/one"
 fi
 
-. $LIB_LOCATION/sh/scripts_common.sh
+# shellcheck source=/dev/null
+. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH=$(dirname $0)
-source ${DRIVER_PATH}/../libfs.sh
+DRIVER_PATH="$(dirname "$0")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
-LOG_PREFIX="ds"
+export LOG_PREFIX="ds"
 
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-if [ -n "$2" ]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -53,10 +56,10 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "$DRIVER_PATH"
+oneDsDriverAction "${DRIVER_PATH}"
 
 SP_SNAP="${SOURCE##*/}-snap${TARGET_SNAPSHOT}"
 
-storpoolSnapshotDelete "$SP_SNAP"
+storpoolSnapshotDelete "${SP_SNAP}"
 
 splog "END"

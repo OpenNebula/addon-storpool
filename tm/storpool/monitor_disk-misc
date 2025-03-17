@@ -27,13 +27,16 @@ VM_ID="$3"
 
 BLOCKDEV_GET_SIZE='blockdev -q --getsize64'
 
-if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
-    source "${DRIVER_PATH}/../../addon-storpoolrc"
-elif [ -f "${DRIVER_PATH}/../../../addon-storpoolrc" ]; then
-    source "${DRIVER_PATH}/../../../addon-storpoolrc"
+if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
+	source "${DRIVER_PATH}/../../addon-storpoolrc"
+elif [[ -f "${DRIVER_PATH}/../../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
+	source "${DRIVER_PATH}/../../../addon-storpoolrc"
 fi
-if [ -f "/etc/storpool/addon-storpool.conf" ]; then
-    source "/etc/storpool/addon-storpool.conf"
+if [[ -f "/etc/storpool/addon-storpool.conf" ]]; then
+    # shellcheck source=/dev/null
+	source "/etc/storpool/addon-storpool.conf"
 fi
 
 function boolTrue()
@@ -50,47 +53,50 @@ function boolTrue()
 DRIVER_PATH="${0%/*}"
 
 DISK_ID="${DISK##*\.}"
-DISK_LINK="$(readlink "$DISK")"
-DISK_DEV="$(readlink -f "$DISK")"
+DISK_LINK="$(readlink "${DISK}" || true)"
+DISK_DEV="$(readlink -f "${DISK}" || true)"
 
 if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
-	splog "$PWD $DISK $DS_ID $VM_ID $DISK_DEV $DISK_LINK"
+	splog "[DD] ${PWD} ${DISK} ${DS_ID} ${VM_ID} ${DISK_DEV} ${DISK_LINK}"
 fi
 
-if [ -b "$DISK_DEV" ]; then
-	disk_size="$($BLOCKDEV_GET_SIZE "$DISK_DEV")"
-	if [ -n "$disk_size" ]; then
+if [[ -b "${DISK_DEV}" ]]; then
+	disk_size="$(${BLOCKDEV_GET_SIZE} "${DISK_DEV}" || true)"
+	if [[ -n "${disk_size}" ]]; then
 		if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
-			splog "$DISK ID:$DISK_ID SIZE:$disk_size in MiB:$((disk_size/1024/1024))"
+			splog "[DD] ${DISK} ID:${DISK_ID} SIZE:${disk_size} in MiB:$((disk_size/1024/1024))"
 		fi
 		disk_size="$((disk_size/1024/1024))"
-		
+
 		echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 	fi
-elif [ -f "$DISK_DEV" ]; then
+elif [[ -f "${DISK_DEV}" ]]; then
 	# borrowed from ../shared/monitor
-	vmdir="$(basename "$DISK")"
-	disk_size="$(du -mL --apparent-size "$DISK_DEV" | awk '{print $1}')"
-	
+	vmdir="$(basename "${DISK}")"
+	disk_size="$(du -mL --apparent-size "${DISK_DEV}" | awk '{print $1}' || true)"
+
 	if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
-		splog "$DISK ID:$DISK_ID SIZE:$disk_size"
+		splog "[DD] ${DISK} ID:${DISK_ID} SIZE:${disk_size}"
 	fi
 	echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
-	
+
 	disk="${DISK##*/}"
 	snap_dir="${vmdir}/${disk}.snap"
-	if [ -e "$snap_dir" ]; then
-		snaps="$(ls "$snap_dir" | grep '^[0-9]$')"
-		
-		for snap in $snaps; do
-			snap_size="$(du -mL --apparent-size "${snap_dir}/${snap}" | awk '{print $1}')"
-			[ -z "$snap_size" ] && continue
-			
+	if [[ -e "${snap_dir}" ]]; then
+		# snaps="$(ls "${snap_dir}" | grep '^[0-9]$')"
+		declare -a snap_files
+		for snapfile in "${snap_dir}"/[0-9]+; do
+			[[ -f "${snapfile}" ]] || snap_files+=("${snapfile}")
+		done
+		for snapfile in "${snap_files[@]}"; do
+			snap_size="$(du -mL --apparent-size "${snapfile}" | awk '{print $1}' || true)"
+			[[ -z "${snap_size:-}" ]] && continue
+
 			if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
-				splog "$DISK SNAP_ID:$snap ID:$DISK_ID SIZE:$disk_size"
+				splog "[DD] ${DISK} SNAP_ID:${snapfile} ID:${DISK_ID} SIZE:${snap_size}"
 			fi
-			
-			echo -n " SNAPSHOT_SIZE=[ID=${snap},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
+
+			echo -n " SNAPSHOT_SIZE=[ID=${snapfile##*/},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
 		done
 	fi
 fi

@@ -24,9 +24,10 @@
 # The oned log could be regularly parsed and nics stats pushed to an external db
 # for further processing
 
-PATH=/bin:/sbin/:/usr/bin:/usr/sbin:$PATH
+PATH=/bin:/sbin/:/usr/bin:/usr/sbin:${PATH}
 
-if [ -f "../../addon-storpoolrc" ]; then
+if [[ -f "../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
     source "../../addon-storpoolrc"
 fi
 
@@ -48,36 +49,38 @@ function splog()
 
 function report()
 {
-    [ -n "$2" ] || return 0
-    if [ -d "${0%/*}/../../kvm-probes.d" ]; then
-        echo "VM=[ID=${1},MONITOR=\"$(echo "$2"|tr ' ' '\n'|base64 -w 0)\"]"
+    [[ -n "${2}" ]] || return 0
+    if [[ -d "${0%/*}/../../kvm-probes.d" ]]; then
+        echo "VM=[ID=${1},MONITOR=\"$(echo "${2}" | tr ' ' '\n' | base64 -w 0 || true)\"]"
         if boolTrue "DEBUG_NICSTATS"; then
-            splog "VM=[ID=${1},MONITOR=\"$(echo "$2"|tr ' ' '\n'|base64 -w 0)\"]"
+            splog "[D] VM=[ID=${1},MONITOR=\"$(echo "${2}" | tr ' ' '\n' | base64 -w 0 || true)\"]"
         fi
     else
-        echo "VM=[ID=${1},POLL=\"$2\"]"
+        echo "VM=[ID=${1},POLL=\"${2}\"]"
         if boolTrue "DEBUG_NICSTATS"; then
-            splog "VM=[ID=${1},POLL=\"$2\"]"
+            splog "[D] VM=[ID=${1},POLL=\"${2}\"]"
         fi
     fi
 }
 
-
-#27: one-135-0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master onebr.616 state UNKNOWN mode DEFAULT group default qlen 1000\    link/ether fe:00:70:30:4a:06 brd ff:ff:ff:ff:ff:ff\    RX: bytes  packets  errors  dropped overrun mcast   \    179604395  177435   0       0       0       0       \    TX: bytes  packets  errors  dropped carrier collsns \    135264059  1235572  0       0       0       0       
-poll=
-while read -u 4 l; do
-	a=($l)
-	nic="${a[1]%:}"
-	nica=(${nic//-/ })
-	vid="${nica[1]}"
-	nid="${nica[2]}"
-	if [ "$vid" != "$vidold" ]; then
-        report "$vidold" "$poll"
-		poll=
+#27: one-135-0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master onebr.616 state UNKNOWN mode DEFAULT group default qlen 1000\    link/ether fe:00:70:30:4a:06 brd ff:ff:ff:ff:ff:ff\    RX: bytes  packets  errors  dropped overrun mcast   \    179604395  177435   0       0       0       0       \    TX: bytes  packets  errors  dropped carrier collsns \    135264059  1235572  0       0       0       0
+poll=""
+vmidold=""
+while read -r -u "${nicfd}" line; do
+	IFS=' ' read -r -a array <<< "${line}"
+	nic="${array[1]%:}"
+	read -r -a nica <<< "${nic//-/ }"
+	vmid="${nica[1]}"
+	nicid="${nica[2]}"
+	if [[ "${vmid:-}" != "${vmidold:-}" ]]; then
+        report "${vmidold:-}" "${poll:-}"
+		poll=""
 	fi
-	vidold="$vid"
-	[ -n "$poll" ] && poll+=" "
-	poll+="NIC_STATS=[ID=${nid},RX=${a[41]},TX=${a[28]}]"
-done 4< <(ip -o -s link | grep one- | sort -k 2)
+	vmidold="${vmid}"
+    [[ -z "${poll}" ]] || poll+=" "
+	poll+="NIC_STATS=[ID=${nicid:-0},RX=${array[41]:-0},TX=${array[28]:-0}]"
+done {nicfd}< <(ip -o -s link | grep one- | sort -k 2 || true)
 
-report "$vidold" "$poll"
+if [[ -n "${vmidold}" ]] && [[ -n "${poll}" ]]; then
+    report "${vmidold}" "${poll}"
+fi

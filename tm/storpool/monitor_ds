@@ -23,12 +23,14 @@ DS_DIR="$1"
 
 DRIVER_PATH="${0%/*}"
 
-if [ -f "$DRIVER_PATH/../../addon-storpoolrc" ]; then
-    source "$DRIVER_PATH/../../addon-storpoolrc"
+if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
+	source "${DRIVER_PATH}/../../addon-storpoolrc"
 fi
 
-DS_ID=$(basename "$DS_DIR")
-DS_NAME="${ONE_PX:-one}-ds-$DS_ID"
+DS_ID=$(basename "${DS_DIR}" || true)
+DS_NAME="${ONE_PX:-one}-ds-${DS_ID}"
+export DS_NAME  # TBD: remove
 
 function boolTrue()
 {
@@ -42,68 +44,80 @@ function boolTrue()
 }
 
 if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
-    parent=$PPID
-    splog "$PWD::$0 parent $parent::$(readlink -f /proc/$parent/exe)::$(cat /proc/$parent/cmdline)"
-    echo "su - oneadmin -c 'cd $PWD && $0 $*'" >>"/tmp/tm_monitor_ds-$DS_ID.sh"
+    parent="${PPID:-}"
+    splog "[DDD] ${PWD}::${0} parent ${parent}::$(readlink -f "/proc/${parent}/exe" || true)::$(cat "/proc/${parent}/cmdline" || true)"
+    echo "su - oneadmin -c 'cd ${PWD} && ${0} $*'" >>"/tmp/tm_monitor_ds-${DS_ID}.sh"
 fi
 
-if [ -d "${0%/*}/../../im/kvm-probes.d/vm" ]; then
-    if [ -f "$DS_DIR/.monitor" ]; then
-        rm -f "$DS_DIR/.monitor"
-        splog "rm -f $DS_DIR/.monitor ($?) // Legacy monitoring leftover"
+if [[ -d "${0%/*}/../../im/kvm-probes.d/vm" ]]; then
+    if [[ -f "${DS_DIR}/.monitor" ]]; then
+        rm -f "${DS_DIR}/.monitor"
+        splog "rm -f ${DS_DIR}/.monitor ($?) // Legacy monitoring leftover"
     fi
     if boolTrue "DDEBUG_TM_MONITOR_DS"; then
-        splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR will be monitored from FE. Exit"
+        splog "[DD] PWD:${PWD} DS_ID:${DS_ID} DS_DIR:${DS_DIR} will be monitored from FE. Exit"
     fi
     exit 0
 fi
 
 if boolTrue "DEBUG_TM_MONITOR_DS"; then
-	splog "PWD:$PWD DS_ID:$DS_ID DS_DIR:$DS_DIR"
+	splog "[D] PWD:${PWD} DS_ID:${DS_ID} DS_DIR:${DS_DIR}"
 fi
 
-if [ -f "$DS_DIR/.monitor" ]; then
-	DS_DRIVER="$(<"$DS_DIR/.monitor")"
+if [[ -f "${DS_DIR}/.monitor" ]]; then
+	DS_DRIVER="$(<"${DS_DIR}/.monitor")"
 	HAS_DOT_MONITOR=1
 else
 	if boolTrue "DDEBUG_TM_MONITOR_DS"; then
-		splog "File $DS_DIR/.monitor not found. Using default DS_DERIVER=storpool"
+		splog "[DD] File ${DS_DIR}/.monitor not found. Using default DS_DRIVER=storpool"
 	fi
 	DS_DRIVER="storpool"
 fi
 
-for VM_ID in `ls $DS_DIR/ | grep '^[0-9]\+$'`; do
-	VM_DIR="$DS_DIR/$VM_ID"
+declare -a vm_ids
+for vmdir in "${DS_DIR}"/*; do
+	[[ -d "${vmdir}" ]] || continue
+	vm_ids+=("${vmdir##*/}")
+done
+
+for VM_ID in "${vm_ids[@]}"; do
+	VM_DIR="${DS_DIR}/${VM_ID}"
 #	splog "VM_ID=$VM_ID VM_DIR=$VM_DIR"
-	test -d "$VM_DIR" || continue
-	
+	[[ -d "${VM_DIR}" ]] || continue
+
+    declare -a vm_disks=()
+    for disk in "${VM_DIR}"/disk.[[:digit:]]*; do
+        [[ -f "${disk}" ]] || continue
+        vm_disks+=("${disk}")
+    done
+
     vm_data=
 	DRIVER_RUN=
-	for DISK in `ls $VM_DIR/disk.[[:digit:]]* 2>/dev/null | grep '/disk\.[0-9]\+$'`; do
+	for DISK in "${vm_disks[@]}"; do
 #		splog "DISK=$DISK"
-		if [ -n "$HAS_DOT_MONITOR" ]; then
-			[ -e "$DISK" ] || continue
+		if [[ -n "${HAS_DOT_MONITOR:-}" ]]; then
+			[[ -e "${DISK}" ]] || continue
 		fi
-		
-		[ -n "$DRIVER_RUN" ] || echo -n "VM=[ID=$VM_ID,POLL=\""
-		
-		if [ -f "${DISK}.monitor" ]; then
+
+		[[ -n "${DRIVER_RUN:-}" ]] || echo -n "VM=[ID=${VM_ID},POLL=\""
+
+		if [[ -f "${DISK}.monitor" ]]; then
 			DRIVER="$(<"${DISK}.monitor")"
 		fi
-		DRIVER="${DRIVER:-$DS_DRIVER}"
-		
-		if [ -x "$DRIVER_PATH/../$DRIVER/monitor_disk" ]; then
-			DRIVER_RUN="$DRIVER_PATH/../$DRIVER/monitor_disk"
+		DRIVER="${DRIVER:-${DS_DRIVER}}"
+
+		if [[ -x "${DRIVER_PATH}/../${DRIVER}/monitor_disk" ]]; then
+			DRIVER_RUN="${DRIVER_PATH}/../${DRIVER}/monitor_disk"
 		else
-			DRIVER_RUN="$DRIVER_PATH/monitor_disk"
+			DRIVER_RUN="${DRIVER_PATH}/monitor_disk"
 		fi
 		if boolTrue "DDEBUG_TM_MONITOR_DS"; then
-			splog "run $DRIVER_RUN $DISK $DS_ID $VM_ID $DRIVER"
+			splog "[DD] run ${DRIVER_RUN} ${DISK} ${DS_ID} ${VM_ID} ${DRIVER}"
 		fi
-		vm_data+="$("$DRIVER_RUN" "$DISK" "$DS_ID" "$VM_ID" "$DRIVER")"
+		vm_data+="$("${DRIVER_RUN}" "${DISK}" "${DS_ID}" "${VM_ID}" "${DRIVER}" || true)"
 	done
-    if [ -n "${vm_data:0:1}" ]; then
-        echo "$vm_data"
+    if [[ -n "${vm_data:0:1}" ]]; then
+        echo "${vm_data}"
     fi
-	[ -z "$DRIVER_RUN" ] || echo "\"]"
+	[[ -z "${DRIVER_RUN:-}" ]] || echo "\"]"
 done

@@ -31,34 +31,35 @@ DST="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname $0)"
+TM_PATH="$(dirname "${0}")"
 source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=$SRC DST=$DST VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=${SRC} DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
 #-------------------------------------------------------------------------------
 # Compute the destination image name
 #-------------------------------------------------------------------------------
 
-SRC_HOST=`arg_host $SRC`
-SRC_PATH=`arg_path $SRC`
+SRC_HOST="$(arg_host "${SRC}")"
+SRC_PATH="$(arg_path "${SRC}")"
 SRC_DIR="${SRC_PATH%/*}"
-DST_HOST=`arg_host $SRC`
-DST_PATH=`arg_path $SRC`
-
-DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
+DST_HOST="$(arg_host "${SRC}")"
+DST_PATH="$(arg_path "${SRC}")"
+export SRC_DIR DST_PATH  #  TBD: remove
+DISK_ID="$(echo "${SRC_PATH}" | awk -F. '{print $NF}')"
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
 
-oneDatastoreInfo "$DS_ID"
+oneDatastoreInfo "${DS_ID}"
+IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-oneVmInfo "$VM_ID" "$DISK_ID"
+oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 SP_VOL="${SOURCE##*/}"
 if boolTrue "CLONE"; then
@@ -66,36 +67,36 @@ if boolTrue "CLONE"; then
 fi
 
 SP_NEW="${DST##*/}"
-if [ "$SP_VOL" != "$SP_NEW" ]; then
+if [[ "${SP_VOL}" != "${SP_NEW}" ]]; then
     DEFERRED=1
 fi
 
 if boolTrue "NO_VOLUME_TEMPLATE"; then
     SP_TEMPLATE=
 else
-    SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
+    SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
 fi
 
 oneImageQc "${IMAGE_ID}"
 
-SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-splog "SRC_HOST=$SRC_HOST $SP_VOL ${DEFERRED:+DEFERRED SP_NEW=$SP_NEW SP_TEMPLATE=$SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}${SHAREABLE:+ SHAREABLE=$SHAREABLE}"
+splog "SRC_HOST=${SRC_HOST} ${SP_VOL} ${DEFERRED:+DEFERRED} SP_NEW=${SP_NEW} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}${SHAREABLE:+ SHAREABLE=${SHAREABLE}}"
 
 #-------------------------------------------------------------------------------
 # Detach and if it is deferred OpenNebula snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
 if boolTrue "SHAREABLE"; then
-    shareableDetach "$SRC_HOST" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}"
+    shareableDetach "${SRC_HOST}" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}"
 else
-    storpoolVolumeDetach "$SP_VOL" "force" "$SRC_HOST" "all" "$READONLY"
+    storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "all" "${READONLY}"
 
-    storpoolVolumeTag "$SP_VOL" ";;${SP_QOSCLASS}" "$VM_TAG;vc-policy;qc"
+    storpoolVolumeTag "${SP_VOL}" ";;${SP_QOSCLASS}" "${VM_TAG};vc-policy;qc"
 
     if boolTrue "DEFERRED"; then
-        storpoolVolumeRename "$SP_VOL" "$SP_NEW" "$SP_TEMPLATE"
+        storpoolVolumeRename "${SP_VOL}" "${SP_NEW}" "${SP_TEMPLATE}"
     fi
 
     if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
@@ -103,9 +104,9 @@ else
     fi
 fi
 
-splog "deleting $SRC_PATH on $SRC_HOST"
-ssh_exec_and_log "$SRC_HOST" "rm -vf ${SRC_PATH}*" \
-            "Error deleting $SRC_PATH on $SRC_HOST"
+splog "deleting ${SRC_PATH} on ${SRC_HOST}"
+ssh_exec_and_log "${SRC_HOST}" "rm -vf ${SRC_PATH}*" \
+            "Error deleting ${SRC_PATH} on ${SRC_HOST}"
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

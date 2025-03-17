@@ -16,7 +16,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-export PATH="/bin:/sbin:/usr/bin:/usr/sbin:$PATH"
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin:${PATH}"
 
 function splog() { logger -t "ds_sp_${0##*/}" "[$$] $*"; }
 
@@ -29,39 +29,39 @@ ONE_HOME="${ONE_HOME:-/var/lib/one}"
 
 # datastores stats
 SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
-SP_TEMPLATE_STATUS_RUN="storpool -j template status"
+SP_TEMPLATE_STATUS_RUN="storpool -B -j template status"
 SP_TEMPLATE_STATUS_MINUTES=60
 
 # VM disks stats
 SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
-SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
+SP_VOLUME_SPACE_RUN="storpool -B -j volume usedSpace"
 SP_VOLUME_SPACE_MINUTES=60
 
 # VM disks snapshots stats
 SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
-SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
+SP_SNAPSHOT_SPACE_RUN="storpool -B -j snapshot space"
 SP_SNAPSHOT_SPACE_MINUTES=65
 
 # Disabled by default
 # volume status
 SP_VOLUME_STATUS_JSON="storpool_volume_status.json"
-#SP_VOLUME_STATUS_RUN="storpool -j volume status"
+#SP_VOLUME_STATUS_RUN="storpool -B -j volume status"
 SP_VOLUME_STATUS_MINUTES=5
 
 # Disabled by default
 # volume list
 SP_VOLUME_LIST_JSON="storpool_volume_list.json"
-#SP_VOLUME_LIST_RUN="storpool -j volume list"
+#SP_VOLUME_LIST_RUN="storpool -B -j volume list"
 SP_VOLUME_LIST_MINUTES=1
 
 # Disabled by default
 # snapshot list
 SP_SNAPSHOT_LIST_JSON="storpool_snapshot_list.json"
-#SP_SNAPSHOT_LIST_RUN="storpool -j snapshot list"
+#SP_SNAPSHOT_LIST_RUN="storpool -B -j snapshot list"
 SP_SNAPSHOT_LIST_MINUTES=1
 
 ONE_VM_POOL_RUN="onevm list -x"
-ONE_VM_POOL_XML="one.pool"
+ONE_VM_POOL_XML="onevm.pool.xml"
 ONE_VM_POOL_MINUTES=5
 
 # Do sync to remote hosts
@@ -78,10 +78,13 @@ PROPAGATE_YES=1
 
 # load config
 driverPath="${0%/*}"
-if [ -f "${driverPath}/../../addon-storpoolrc" ]; then
+if [[ -f "${driverPath}/../../addon-storpoolrc" ]]; then
+	# shellcheck source=addon-storpoolrc
 	source "${driverPath}/../../addon-storpoolrc"
 fi
-if [ -f "${driverPath}/../../${0##*/}rc" ]; then
+if [[ -f "${driverPath}/../../${0##*/}rc" ]]; then
+	# /var/lib/one/remotes/monitor_helper-syncrc
+	# shellcheck source=/dev/null
 	source "${driverPath}/../../${0##*/}rc"
 fi
 
@@ -89,8 +92,8 @@ umask -S u=rwx,g=rwx,o= >/dev/null
 
 ONE_PX="${ONE_PX:-one}"
 
-if [ -d /opt/storpool/python3/bin ]; then
-    export PATH="/opt/storpool/python3/bin:$PATH"
+if [[ -d "/opt/storpool/python3/bin" ]]; then
+    export PATH="/opt/storpool/python3/bin:${PATH}"
 fi
 
 function boolTrue()
@@ -106,61 +109,62 @@ function boolTrue()
 
 # locking...
 lockFile="/var/lock/one/${0##*/}.lock"
-if [ -f "$lockFile" ]; then
-	pid=$(<"$lockFile")
-	mTime=$(stat -c %Y "$lockFile")
-	if [ -d "/proc/$pid/" ]; then
-		cmdline="$(</proc/$pid/cmdline)"
-		if [ "${cmdline/${0##*/}/}" = "$cmdline" ]; then
-			splog "Found $lockFile with PID $pid. Last modified $mTime (stale file)"
+if [[ -f "${lockFile}" ]]; then
+	pid=$(<"${lockFile}")
+	mTime=$(stat -c %Y "${lockFile}")
+	if [[ -d "/proc/${pid}/" ]]; then
+		cmdline="$(<"/proc/${pid}/cmdline")"
+		if [[ "${cmdline//${0##*/}/}" == "${cmdline}" ]]; then
+			splog "Found ${lockFile} with PID ${pid}. Last modified ${mTime} (stale file)"
 		else
-			splog "Found $lockFile with PID $pid. Last modified $mTime (still running)"
+			splog "Found ${lockFile} with PID ${pid}. Last modified ${mTime} (still running)"
 			exit 0
 		fi
 	else
-		splog "Can't find process info for PID $pid. Assuming stale lock $lockFile"
+		splog "Can't find process info for PID ${pid}. Assuming stale lock ${lockFile}"
 	fi
 fi
 
 # check that the oned process is sunning
 if pgrep 'oned' >/dev/null; then
 	if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-		splog "The oned process is running."
+		splog "[D] The oned process is running."
 	fi
 else
 	if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-		splog "There is no oned process running. Exit."
+		splog "[D] There is no oned process running. Exit."
 	fi
 	exit 0
 fi
 
 # try detecting RAFT_LEADER_IP from opennebula's config
-if [ -z "$RAFT_LEADER_IP" ] && [ -f "$ONE_HOME/config" ]; then
+ONE_CONFIG="${ONE_HOME:-/var/lib/one}/config"
+if [[ -z "${RAFT_LEADER_IP}" ]] && [[ -f "${ONE_CONFIG}" ]]; then
 	#RAFT_LEADER_HOOK=ARGUMENTS=leader vlan11 10.163.1.250,COMMAND=raft/vip.sh
-	RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "$ONE_HOME/config" | tail -n 1)"
-	if [ -n "$RAFT_IP" ]; then
+	RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "${ONE_CONFIG}" | tail -n 1 || true)"
+	if [[ -n "${RAFT_IP}" ]]; then
 		RAFT_LEADER_IP="${RAFT_IP%%/*}"
 		RAFT_LEADER_IP="${RAFT_LEADER_IP%%,*}"
 	fi
 fi
 
-if [ -n "${RAFT_LEADER_IP#disabled}" ]; then
-	tmp="$(ip route get "$RAFT_LEADER_IP" 2>/dev/null | head -n 1)"
-	if [ "${tmp:0:5}" = "local" ]; then
+if [[ -n "${RAFT_LEADER_IP#disabled}" ]]; then
+	tmp="$(ip route get "${RAFT_LEADER_IP}" 2>/dev/null | head -n 1)"
+	if [[ "${tmp:0:5}" == "local" ]]; then
 		if boolTrue "DDEBUG_MOINTOR_HELPER_SYNC"; then
-			splog "Found leader IP ($RAFT_LEADER_IP)."
+			splog "[DD]Found leader IP (${RAFT_LEADER_IP})."
 		fi
 	else
 		if boolTrue "DDEBUG_MOINTOR_HELPER_SYNC"; then
-			splog "There is no leader IP found ($RAFT_LEADER_IP). Exit."
+			splog "[DD] There is no leader IP found (${RAFT_LEADER_IP}). Exit."
 		fi
-#		[ -n "$SP_FE_JSON_PATH" ] && rm -f "${SP_FE_JSON_PATH}/*json*"
 		exit 0
 	fi
 fi
 
-echo $$ >"$lockFile"
-trap "rm -f \"$lockFile\"" TERM INT QUIT HUP EXIT
+echo "$$" >"${lockFile}"
+# shellcheck disable=SC2064
+trap "rm -f \"${lockFile}\"" TERM INT QUIT EXIT
 
 # Global arrays ...
 declare -a template_data
@@ -169,114 +173,122 @@ declare -A jFiles
 function doExpand()
 {
 	local _name="$1" _val
-	eval "_val=\$$_name"
-	_val="${_val//_DATASTORE_ID_/$DS_ID}"
-	_val="${_val//_CLUSTER_ID_/$CLUSTER_ID}"
-	_val="${_val//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
-	_val="${_val//_SP_JSON_PATH_/$SP_JSON_PATH}"
-	_val="${_val//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
-	eval "$_name=$_val"
+	eval "_val=\$${_name}"
+	_val="${_val//_DATASTORE_ID_/${DS_ID}}"
+	_val="${_val//_CLUSTER_ID_/${CLUSTER_ID}}"
+	_val="${_val//_SP_API_HTTP_HOST_/${SP_API_HTTP_HOST}}"
+	_val="${_val//_SP_JSON_PATH_/${SP_JSON_PATH}}"
+	_val="${_val//_SP_FE_JSON_PATH_/${SP_FE_JSON_PATH}}"
+	eval "${_name}=${_val}"
 }
 
 function run_task()
 {
 	local _run="$1" _jsonFile="$2" _cacheTime="$3" _reloadCache="$4" _runonly="$5"
-	local sp_api_http_host=${SP_API_HTTP_HOST:-0.0.0.0}
-	local cached=0 ret=1
-	
+	local _sp_api_http_host="${SP_API_HTTP_HOST:-0.0.0.0}"
+	local _cached=0 _ret=1
+
 	mkdir -p "${_jsonFile%/*}"
-	
-	if [ "${sp_api_list/|${_run}$sp_api_http_host|/}" = "$sp_api_list" ] || boolTrue "_reloadCache"; then
-		sp_api_list+="|${_run}$sp_api_http_host|"
-		if [ -f "${_jsonFile}${sp_api_http_host}" ]; then
-			if [ -n "${_cacheTime}" ] && [ "${_cacheTime//[[:digit:]]/}" = "" ]; then
+
+	if [[ "${sp_api_list/|${_run}${_sp_api_http_host}|/}" == "${sp_api_list}" ]] || boolTrue "_reloadCache"; then
+		sp_api_list+="|${_run}${_sp_api_http_host}|"
+		if [[ -f "${_jsonFile}${_sp_api_http_host}" ]]; then
+			if [[ -n "${_cacheTime}" ]] && [[ "${_cacheTime//[[:digit:]]/}" == "" ]]; then
 				seconds=$((_cacheTime * 60))
-				mTime=$(stat -c %Y "${_jsonFile}${sp_api_http_host}")
+				mTime=$(stat -c %Y "${_jsonFile}${_sp_api_http_host}")
 				dTime=$((mTime + seconds))
 				cTime=$(date +%s)
-				if [ $cTime -lt $dTime ]; then
-					cached=$((cTime-dTime))
+				if [[ "${cTime}" -lt "${dTime}" ]]; then
+					_cached=$((cTime-dTime))
  				fi
 			fi
 			if boolTrue "_reloadCache"; then
-				splog "run_task: Force cache reset. Cache time was $cached"
-				cached=0
+				splog "run_task: Force cache reset. Cache time was ${_cached}"
+				_cached=0
 			fi
 		else
-            if [ -z "$_runonly" ]; then
-                splog "File not found! ${_jsonFile}${sp_api_http_host}"
+            if [[ -z "${_runonly}" ]]; then
+                splog "File not found! ${_jsonFile}${_sp_api_http_host}"
             fi
 		fi
-		if [ $cached -ge 0 ]; then
-			eval ${_run} 2>/dev/null >"${_jsonFile}New"
-			ret=$?
-			if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [ $ret -ne 0 ]; then
-				splog "run_task:($ret) ${_run} > ${_jsonFile}New [$cached]"
-				if [ $ret -ne 0 ]; then
-					return $ret
+		if [[ "${_cached}" -ge 0 ]]; then
+			eval "${_run}" 2>/dev/null >"${_jsonFile}New"
+			_ret=$?
+			if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [[ "${_ret}" -ne 0 ]]; then
+				splog "[D] run_task:(${_ret}) ${_run} > ${_jsonFile}New [${_cached}]"
+				if [[ "${_ret}" -ne 0 ]]; then
+					return "${_ret}"
 				fi
 			fi
 			mv -f "${_jsonFile}New" "${_jsonFile}"
-			ret=$?
-			if [ $ret -ne 0 ]; then
+			_ret=$?
+			if [[ "${_ret}" -ne 0 ]]; then
 				splog "Can't move ${_jsonFile}New to ${_jsonFile}"
-				return $ret
+				return "${_ret}"
 			fi
-            if [ -n "$_runonly" ]; then
+            if [[ -n "${_runonly}" ]]; then
                 return 0
             fi
-			cp -f "${_jsonFile}" "${_jsonFile}${sp_api_http_host}"
+			cp -f "${_jsonFile}" "${_jsonFile}${_sp_api_http_host}"
 			_ret=$?
-			if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [ $_ret -ne 0 ]; then
-				splog "run_task:($_ret) cp ${_jsonFile} ${_jsonFile}${sp_api_http_host}"
+			if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [[ "${_ret}" -ne 0 ]]; then
+				splog "[D] run_task:(${_ret}) cp ${_jsonFile} ${_jsonFile}${_sp_api_http_host}"
 			fi
 		fi
 	fi
-	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
-		ln -sf "${_jsonFile}${sp_api_http_host}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
-		ret=$?
-		if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [ $ret -ne 0 ] ; then
-			splog "($ret) ln -sf ${_jsonFile}${sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/} cached:$cached sec"
+	if [[ -d "${SP_MONITOR_CACHE_CLUSTER}" ]]; then
+		ln -sf "${_jsonFile}${_sp_api_http_host}" "${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/}"
+		_ret=$?
+		if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [[ "${_ret}" -ne 0 ]]; then
+			splog "[D] (${_ret}) ln -sf ${_jsonFile}${_sp_api_http_host} ${SP_MONITOR_CACHE_CLUSTER}/${_jsonFile##*/} cached:${_cached} seconds"
 		fi
 	else
-		splog "directory not found $SP_MONITOR_CACHE_CLUSTER"
+		splog "directory not found ${SP_MONITOR_CACHE_CLUSTER}"
 	fi
 	jFiles[${_jsonFile}]="${_jsonFile##*/}"
-	return $ret
+	return "${_ret}"
 }
 
-XPATH="${driverPath}/../xpath_multi.py"
-
-[ -d "$SP_FE_JSON_PATH" ] || mkdir -p "$SP_FE_JSON_PATH"
-
-onedatastore list $ONE_ARGS -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
+if [[ ! -d "${SP_FE_JSON_PATH}" ]]; then
+	mkdir -p "${SP_FE_JSON_PATH}"
+fi
+# shellcheck disable=SC2086
+onedatastore list ${ONE_ARGS:-} -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
 ret=$?
-if [ $ret -ne 0 ]; then
-	splog "Error: Can't get datastore XML! $(head -n 1 "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}") (ret:$ret)"
-	exit $ret
+if [[ "${ret}" -ne 0 ]]; then
+	splog "Error: Can't get datastore XML! $(head -n 1 "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" || true) (ret:${ret})"
+	exit "${ret}"
 fi
 
-unset i XPATH_ELEMENTS
-while IFS= read -u 5 element; do
-	XPATH_ELEMENTS[i++]="$element"
-done 5< <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | $XPATH -s \
-        /DATASTORE_POOL/DATASTORE/ID \
-        /DATASTORE_POOL/DATASTORE/STATE \
-        /DATASTORE_POOL/DATASTORE/CLUSTER_ID \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/TM_MAD \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_REPLICATION \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACEALL \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACETAIL \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACEHEAD \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_IOPS \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_BW \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_AUTO_TEMPLATE \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_HOST \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_PORT \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_AUTH_TOKEN \
-        /DATASTORE_POOL/DATASTORE/TEMPLATE/SP_SKIP_MONITOR)
+_XPATH="${driverPath}/../xpath_multi.py"
+declare -a _XPATH_A _XPATH_QUERY
+_XPATH_A=(
+    "${_XPATH}"
+    "-s"
+)
+_XPATH_QUERY=(
+    "/DATASTORE_POOL/DATASTORE/ID"
+    "/DATASTORE_POOL/DATASTORE/STATE"
+    "/DATASTORE_POOL/DATASTORE/CLUSTER_ID"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/TM_MAD"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_REPLICATION"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACEALL"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACETAIL"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_PLACEHEAD"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_IOPS"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_BW"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_AUTO_TEMPLATE"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_HOST"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_API_HTTP_PORT"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_AUTH_TOKEN"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_SKIP_MONITOR"
+)
 
+unset i XPATH_ELEMENTS
+while IFS='' read -r -u "${xpathfd}" element; do
+	XPATH_ELEMENTS[i++]="${element}"
+done {xpathfd}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 unset i
 _DS_ID="${XPATH_ELEMENTS[i++]}"
 _DS_STATE="${XPATH_ELEMENTS[i++]}"
@@ -295,290 +307,317 @@ _SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
 _SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
 _SP_SKIP_MONITOR="${XPATH_ELEMENTS[i++]}"
 
-_OLDIFS=$IFS
-IFS=";"
-DS_ID_ARRAY=($_DS_ID)
-DS_STATE_ARRAY=($_DS_STATE)
-DS_CLUSTER_ID_ARRAY=($_DS_CLUSTER_ID)
-DS_TM_MAD_ARRAY=($_DS_TM_MAD)
-SP_REPLICATION_ARRAY=($_SP_REPLICATION)
-SP_PLACEALL_ARRAY=($_SP_PLACEALL)
-SP_PLACETAIL_ARRAY=($_SP_PLACETAIL)
-SP_PLACEHEAD_ARRAY=($_SP_PLACEHEAD)
-SP_IOPS_ARRAY=($_SP_IOPS)
-SP_BW_ARRAY=($_SP_BW)
-SP_AUTO_TEMPLATE_ARRAY=($_SP_AUTO_TEMPLATE)
-SP_TEMPLATE_PROPAGATE_ARRAY=($_SP_TEMPLATE_PROPAGATE)
-SP_API_HTTP_HOST_ARRAY=($_SP_API_HTTP_HOST)
-SP_API_HTTP_PORT_ARRAY=($_SP_API_HTTP_PORT)
-SP_AUTH_TOKEN_ARRAY=($_SP_AUTH_TOKEN)
-SP_SKIP_MONITOR_ARRAY=($_SP_SKIP_MONITOR)
-IFS=$_OLDIFS
+IFS=';' read -ra DS_ID_ARRAY <<<"${_DS_ID}"
+IFS=';' read -ra DS_STATE_ARRAY <<<"${_DS_STATE}"
+IFS=';' read -ra DS_CLUSTER_ID_ARRAY <<<"${_DS_CLUSTER_ID}"
+IFS=';' read -ra DS_TM_MAD_ARRAY <<<"${_DS_TM_MAD}"
+IFS=';' read -ra SP_REPLICATION_ARRAY <<<"${_SP_REPLICATION}"
+IFS=';' read -ra SP_PLACEALL_ARRAY <<<"${_SP_PLACEALL}"
+IFS=';' read -ra SP_PLACETAIL_ARRAY <<<"${_SP_PLACETAIL}"
+IFS=';' read -ra SP_PLACEHEAD_ARRAY <<<"${_SP_PLACEHEAD}"
+IFS=';' read -ra SP_IOPS_ARRAY <<<"${_SP_IOPS}"
+IFS=';' read -ra SP_BW_ARRAY <<<"${_SP_BW}"
+IFS=';' read -ra SP_AUTO_TEMPLATE_ARRAY <<<"${_SP_AUTO_TEMPLATE}"
+IFS=';' read -ra SP_TEMPLATE_PROPAGATE_ARRAY <<<"${_SP_TEMPLATE_PROPAGATE}"
+IFS=';' read -ra SP_API_HTTP_HOST_ARRAY <<<"${_SP_API_HTTP_HOST}"
+IFS=';' read -ra SP_API_HTTP_PORT_ARRAY <<<"${_SP_API_HTTP_PORT}"
+IFS=';' read -ra SP_AUTH_TOKEN_ARRAY <<<"${_SP_AUTH_TOKEN}"
+IFS=';' read -ra SP_SKIP_MONITOR_ARRAY <<<"${_SP_SKIP_MONITOR}"
 
 tmpDir="$(mktemp --tmpdir -d one-sp-XXXXXXXX)"
-trap "rm -rf \"$lockFile\" \"$tmpDir\"" TERM INT QUIT HUP EXIT
+# shellcheck disable=SC2064
+trap "rm -rf \"${lockFile}\" \"${tmpDir}\"" TERM INT QUIT HUP EXIT
 
 
-for i in ${!DS_ID_ARRAY[@]}; do
-	[ "${DS_TM_MAD_ARRAY[i]}" = "storpool" ] || continue
-	
+for i in "${!DS_ID_ARRAY[@]}"; do
+	[[ "${DS_TM_MAD_ARRAY[i]}" == "storpool" ]] || continue
+
 	cmd=
 	comment=
 	DS_ID=${DS_ID_ARRAY[i]}
 	template_name="${ONE_PX}-ds-${DS_ID}"
 	sp_token="${SP_AUTH_TOKEN_ARRAY[i]}"
-	[ -n "$sp_token" ] && export SP_AUTH_TOKEN="$sp_token" || unset SP_AUTH_TOKEN
+	if [[ -n "${sp_token}" ]]; then
+		export SP_AUTH_TOKEN="${sp_token}"
+	else
+		unset SP_AUTH_TOKEN
+	fi
 	sp_host="${SP_API_HTTP_HOST_ARRAY[i]}"
-	[ -n "$sp_host" ] && export SP_API_HTTP_HOST="$sp_host" || unset SP_API_HTTP_HOST
+	if [[ -n "${sp_host}" ]]; then
+		export SP_API_HTTP_HOST="${sp_host}"
+	else
+		unset SP_API_HTTP_HOST
+	fi
 	sp_port="${SP_API_HTTP_PORT_ARRAY[i]}"
-	[ -n "$sp_port" ] && export SP_API_HTTP_PORT="$sp_port" || unset SP_API_HTTP_PORT
-	SP_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]}:-$SP_TEMPLATE_PROPAGATE"
+	if [[ -n "${sp_port}" ]]; then
+		export SP_API_HTTP_PORT="${sp_port}"
+	else
+		unset SP_API_HTTP_PORT
+	fi
+	export SP_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]:-${SP_TEMPLATE_PROPAGATE:-}}"
 	if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-		if [ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]; then
-			splog "API_TOKEN:${SP_AUTH_TOKEN:+DEFINED} API_HOST:${SP_API_HTTP_HOST} API_PORT:${SP_API_HTTP_PORT}"
+		if [[ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]]; then
+			splog "[D] API_TOKEN:${SP_AUTH_TOKEN:+DEFINED} API_HOST:${SP_API_HTTP_HOST} API_PORT:${SP_API_HTTP_PORT}"
 		fi
 	fi
-	
+
 	if boolTrue "SP_SKIP_MONITOR_ARRAY[i]"; then
-		splog "DS_ID $DS_ID Skipped (SP_SKIP_MONITOR=${SP_SKIP_MONITOR_ARRAY[i]})"
+		splog "DS_ID ${DS_ID} Skipped (SP_SKIP_MONITOR=${SP_SKIP_MONITOR_ARRAY[i]})"
 		continue
 	fi
-    if [ "${DS_STATE_ARRAY[i]}" != "0" ]; then
+    if [[ "${DS_STATE_ARRAY[i]}" != "0" ]]; then
 	    if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-            splog "Skipped Datastore $DS_ID STATE=${DS_STATE_ARRAY[i]}"
+            splog "[D] Skipped Datastore ${DS_ID} STATE=${DS_STATE_ARRAY[i]}"
         fi
         continue
     fi
-	
+
 	#old style
-	CLUSTER_IDS=( ${DS_CLUSTER_ID_ARRAY[i]} )
-	if [ ${#CLUSTER_IDS[@]} -eq 0 ]; then
+	read -ra CLUSTER_IDS <<<"${DS_CLUSTER_ID_ARRAY[i]}"
+	if [[ ${#CLUSTER_IDS[@]} -eq 0 ]]; then
 		#new style
+		_XPATH="${driverPath}/../xpath.rb"
+		_XPATH_A=(
+			"${_XPATH}"
+			"--stdin"
+		)
+		_XPATH_QUERY=(
+			"%m%/DATASTORE_POOL/DATASTORE[ID=${DS_ID}]/CLUSTERS/ID"
+		)
 		unset j
-		while IFS= read -u 5 element; do
-			CLUSTER_IDS[j++]="$element"
-		done 5< <(cat "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" | "${driverPath}"/../xpath.rb -s \
-			        %m%/DATASTORE_POOL/DATASTORE[ID=$DS_ID]/CLUSTERS/ID)
+		while IFS='' read -r -u "${xpathfd}" -d '' _element; do
+			CLUSTER_IDS[j++]="${_element}"
+		done {xpathfd}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 	fi
-#	if [ -n "$DEBUG_MOINTOR_HELPER_SYNC" ]; then
-#		splog ">>>DS_ID=$DS_ID ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_IDS:${CLUSTER_IDS[@]}"
-#	fi
-	
+	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC:-}" ]]; then
+		splog "[DD] DS_ID=${DS_ID} ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_IDS:${CLUSTER_IDS[*]}"
+	fi
+
 	# create/update the template in StorPool
 	# or update ONE datastore
-	
-	tmp="$(storpool -B -j template list 2>"$tmpDir/error.log"| jq -r ".data|map(select(.name==\"$template_name\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw,.placeHead]|@csv")" #"
+
+	tmp="$(storpool -B -j template list 2>"${tmpDir}/error.log"| jq -r ".data|map(select(.name==\"${template_name}\"))|.[]|[.replication,.placeAll,.placeTail,.iops,.bw,.placeHead]|@csv" || true)"
 	ret=$?
-	if [ -z "$tmp" ]; then
-		if [ $ret -ne 0 ] && [ -s "$tmpDir/error.log" ]; then
-			while read -u 5 line; do
-				splog "($ret) Error:$line"
-			done 5< <(cat "$tmpDir/error.log")
+	if [[ -z "${tmp}" ]]; then
+		if [[ ${ret} -ne 0 ]] && [[ -s "${tmpDir}/error.log" ]]; then
+			while read -r -u "${errorfd}" line; do
+				splog "(${ret}) Error:${line}"
+			done {errorfd}< <(cat "${tmpDir}/error.log" || true)
 		fi
-		splog "Missing StorPool template '$template_name' for datastore $DS_ID"
+		splog "Missing StorPool template '${template_name}' for datastore ${DS_ID}"
 		reload_template=1
 		clusters=
 	else
 		reload_template=""
 	fi
-	
-	tmpFile="$tmpDir/${DS_ID}.update"
-	
-	template_data=(${tmp//,/ })
+
+	tmpFile="${tmpDir}/${DS_ID}.update"
+
+	read -ra template_data <<<"${tmp//,/ }"
 	old="${template_data[0]//\"/}"
 	new="${SP_REPLICATION_ARRAY[i]}"
-	if [ "$old" != "$new" ]; then
+	if [[ "${old}" != "${new}" ]]; then
 		if boolTrue "AUTO_TEMPLATE"; then
-			if [ -n "${new:-3}" ]; then
-				cmd+="replication $new "
-				comment+=" replication:$old"
+			if [[ -n "${new:-3}" ]]; then
+				cmd+="replication ${new} "
+				comment+=" replication:${old}"
 			fi
 		else
-			if [ -n "$old" ]; then
-				echo "SP_REPLICATION=$old" >>"$tmpFile"
-				splog "DS_ID $DS_ID update SP_REPLICATION=$old"
+			if [[ -n "${old}" ]]; then
+				echo "SP_REPLICATION=${old}" >>"${tmpFile}"
+				splog "DS_ID ${DS_ID} update SP_REPLICATION=${old}"
 			fi
 		fi
 	fi
 	old="${template_data[1]//\"/}"
 	new="${SP_PLACEALL_ARRAY[i]}"
-	if [ "$old" != "$new" ]; then
+	if [[ "${old}" != "${new}" ]]; then
 		if boolTrue "AUTO_TEMPLATE"; then
-			if [ -n "$new" ]; then
-				cmd+="placeAll $new "
-				comment+=" placeAll:$old"
+			if [[ -n "${new}" ]]; then
+				cmd+="placeAll ${new} "
+				comment+=" placeAll:${old}"
 			fi
 		else
-			if [ -n "$old" ]; then
-				echo "SP_PLACEALL=$old" >>"$tmpFile"
-				splog "DS_ID $DS_ID update SP_PLACEALL=$old"
+			if [[ -n "${old}" ]]; then
+				echo "SP_PLACEALL=${old}" >>"${tmpFile}"
+				splog "DS_ID ${DS_ID} update SP_PLACEALL=${old}"
 			fi
 		fi
 	fi
 	old="${template_data[2]//\"/}"
 	new="${SP_PLACETAIL_ARRAY[i]}"
-	if [ "$old" != "$new" ]; then
+	if [[ "${old}" != "${new}" ]]; then
 		if boolTrue "AUTO_TEMPLATE"; then
-			if [ -n "$new" ]; then
-				cmd+="placeTail $new "
-				comment+=" placeTail:$old"
+			if [[ -n "${new}" ]]; then
+				cmd+="placeTail ${new} "
+				comment+=" placeTail:${old}"
 			fi
 		else
-			if [ -n "$old" ]; then
-				echo "SP_PLACETAIL=$old" >>"$tmpFile"
-				splog "DS_ID $DS_ID update SP_PLACETAIL=$old"
+			if [[ -n "${old}" ]]; then
+				echo "SP_PLACETAIL=${old}" >>"${tmpFile}"
+				splog "DS_ID ${DS_ID} update SP_PLACETAIL=${old}"
 			fi
 		fi
 	fi
 	old="${template_data[3]//\"/}"
 	new="${SP_IOPS_ARRAY[i]:--}"
-	if [ "$old" != "$new" ]; then
+	if [[ "${old}" != "${new}" ]]; then
 		if boolTrue "AUTO_TEMPLATE"; then
-			if [ -n "$new" ]; then
-				cmd+="iops $new "
-				comment+=" iops:$old"
+			if [[ -n "${new}" ]]; then
+				cmd+="iops ${new} "
+				comment+=" iops:${old}"
 			fi
 		else
-			if [ -n "$old" ]; then
-				echo "SP_IOPS=$old" >>"$tmpFile"
-				splog "DS_ID $DS_ID update SP_IOPS=$old"
+			if [[ -n "${old}" ]]; then
+				echo "SP_IOPS=${old}" >>"${tmpFile}"
+				splog "DS_ID ${DS_ID} update SP_IOPS=${old}"
 			fi
 		fi
 	fi
 	old="${template_data[4]//\"/}"
 	new="${SP_BW_ARRAY[i]:--}"
-	if [ "$old" != "$new" ]; then
+	if [[ "${old}" != "${new}" ]]; then
 		if boolTrue "AUTO_TEMPLATE"; then
-			if [ -n "$new" ]; then
-				cmd+="bw $new "
-				comment+=" bw:$old"
+			if [[ -n "${new}" ]]; then
+				cmd+="bw ${new} "
+				comment+=" bw:${old}"
 			fi
 		else
-			if [ -n "$old" ]; then
-				echo "SP_BW=$old" >>"$tmpFile"
-				splog "DS_ID $DS_ID update SP_BW=$old"
+			if [[ -n "${old}" ]]; then
+				echo "SP_BW=${old}" >>"${tmpFile}"
+				splog "DS_ID ${DS_ID} update SP_BW=${old}"
 			fi
 		fi
 	fi
 	old="${template_data[5]//\"/}"
 	new="${SP_PLACEHEAD_ARRAY[i]}"
-	if [ "$old" != "$new" ]; then
+	if [[ "${old}" != "${new}" ]]; then
 		if boolTrue "AUTO_TEMPLATE"; then
-			if [ -n "$new" ]; then
-				cmd+="placeHead $new "
-				comment+=" placeHead:$old"
+			if [[ -n "${new}" ]]; then
+				cmd+="placeHead ${new} "
+				comment+=" placeHead:${old}"
 			fi
 		else
-			if [ -n "$old" ]; then
-				echo "SP_PLACEHEAD=$old" >>"$tmpFile"
-				splog "DS_ID $DS_ID update SP_PLACEHEAD=$old"
+			if [[ -n "${old}" ]]; then
+				echo "SP_PLACEHEAD=${old}" >>"${tmpFile}"
+				splog "DS_ID ${DS_ID} update SP_PLACEHEAD=${old}"
 			fi
 		fi
 	fi
 	old="${AUTO_TEMPLATE:-0}"
 	new="${SP_AUTO_TEMPLATE_ARRAY[i]}"
-	if [ "$old" != "$new" ]; then
-		echo "SP_AUTO_TEMPLATE=$old" >>"$tmpFile"
-		splog "DS_ID $DS_ID update SP_AUTO_TEMPLATE=$old"
+	if [[ "${old}" != "${new}" ]]; then
+		echo "SP_AUTO_TEMPLATE=${old}" >>"${tmpFile}"
+		splog "DS_ID ${DS_ID} update SP_AUTO_TEMPLATE=${old}"
 	fi
-	
+
 	if boolTrue "AUTO_TEMPLATE"; then
-		if [ -n "$cmd" ]; then
-			storpool -B template "$template_name" $cmd
-			splog "($?) template $template_name $cmd OLD:$comment API:$SP_API_HTTP_HOST"
+		if [[ -n "${cmd}" ]]; then
+			# shellcheck disable=SC2086
+			storpool -B template "${template_name}" ${cmd}
+			splog "($?) template ${template_name} ${cmd} OLD:${comment} API:${SP_API_HTTP_HOST}"
 			if boolTrue "SP_PROPAGATE"; then
-				storpool -B template "$template_name" propagate ${PROPAGATE_YES:+yes} 2>&1 >/dev/null
-				splog "($?) template $template_name propagate ${PROPAGATE_YES:+yes}"
+				storpool -B template "${template_name}" propagate ${PROPAGATE_YES:+yes} >/dev/null 2>&1
+				splog "($?) template ${template_name} propagate ${PROPAGATE_YES:+yes}"
 			fi
 		fi
 	fi
-	if [ -s "$tmpFile" ]; then
-		onedatastore update $ONE_ARGS "$DS_ID" --append "$tmpFile"
-		splog "($?) onedatastore update $ONE_ARGS $DS_ID --append $tmpFile"
+	if [[ -s "${tmpFile}" ]]; then
+		# shellcheck disable=SC2086
+		onedatastore update ${ONE_ARGS:-} "${DS_ID}" --append "${tmpFile}"
+		splog "($?) onedatastore update ${ONE_ARGS} ${DS_ID} --append ${tmpFile}"
 	fi
-	
-	for CLUSTER_ID in ${CLUSTER_IDS[@]}; do
+
+	for CLUSTER_ID in "${CLUSTER_IDS[@]}"; do
 		if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-			splog "CLUSTER_ID:$CLUSTER_ID DS_ID:$DS_ID API:$SP_API_HTTP_HOST clusters:$clusters"
+			splog "[D] CLUSTER_ID:${CLUSTER_ID} DS_ID:${DS_ID} API:${SP_API_HTTP_HOST} clusters:${clusters}"
 		fi
-		if [ "${clusters/|$CLUSTER_ID|/}" = "$clusters" ]; then
-			clusters+="|$CLUSTER_ID|"
-			
+		if [[ "${clusters/|${CLUSTER_ID}|/}" == "${clusters}" ]]; then
+			clusters+="|${CLUSTER_ID}|"
+
 			SP_MONITOR_CACHE_CLUSTER="${SP_FE_JSON_PATH}/${CLUSTER_ID}"
-			if [ ! -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
+			if [[ ! -d "${SP_MONITOR_CACHE_CLUSTER}" ]]; then
 				mkdir -p "${SP_MONITOR_CACHE_CLUSTER}"
-				splog "($?) mkdir $SP_MONITOR_CACHE_CLUSTER"
+				splog "($?) mkdir ${SP_MONITOR_CACHE_CLUSTER}"
 			fi
-			
-			if [ -n "$SP_TEMPLATE_STATUS_RUN" ]; then
+
+			if [[ -n "${SP_TEMPLATE_STATUS_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_TEMPLATE_STATUS_RUN" "$rFile" "$SP_TEMPLATE_STATUS_MINUTES" "$reload_template"
+				run_task "${SP_TEMPLATE_STATUS_RUN}" "${rFile}" "${SP_TEMPLATE_STATUS_MINUTES}" "${reload_template}"
 			fi
-			if [ -n "$SP_VOLUME_SPACE_RUN" ]; then
+			if [[ -n "${SP_VOLUME_SPACE_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_SPACE_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_VOLUME_SPACE_RUN" "$rFile" "$SP_VOLUME_SPACE_MINUTES"
+				run_task "${SP_VOLUME_SPACE_RUN}" "${rFile}" "${SP_VOLUME_SPACE_MINUTES}"
 			fi
-			if [ -n "$SP_SNAPSHOT_SPACE_RUN" ]; then
+			if [[ -n "${SP_SNAPSHOT_SPACE_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_SPACE_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_SNAPSHOT_SPACE_RUN" "$rFile" "$SP_SNAPSHOT_SPACE_MINUTES"
+				run_task "${SP_SNAPSHOT_SPACE_RUN}" "${rFile}" "${SP_SNAPSHOT_SPACE_MINUTES}"
 			fi
-			if [ -n "$SP_VOLUME_STATUS_RUN" ]; then
+			if [[ -n "${SP_VOLUME_STATUS_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_STATUS_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_VOLUME_STATUS_RUN" "$rFile" "$SP_VOLUME_STATUS_MINUTES"
+				run_task "${SP_VOLUME_STATUS_RUN}" "${rFile}" "${SP_VOLUME_STATUS_MINUTES}"
 			fi
-			if [ -n "$SP_VOLUME_LIST_RUN" ]; then
+			if [[ -n "${SP_VOLUME_LIST_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_VOLUME_LIST_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_VOLUME_LIST_RUN" "${SP_FE_JSON_PATH}/${SP_VOLUME_LIST_JSON##*/}" "$SP_VOLUME_LIST_MINUTES"
+				run_task "${SP_VOLUME_LIST_RUN}" "${SP_FE_JSON_PATH}/${SP_VOLUME_LIST_JSON##*/}" "${SP_VOLUME_LIST_MINUTES}"
 			fi
-			if [ -n "$SP_SNAPSHOT_LIST_RUN" ]; then
+			if [[ -n "${SP_SNAPSHOT_LIST_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}"
 				doExpand "rFile"
-				run_task "$SP_SNAPSHOT_LIST_RUN" "${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}" "$SP_SNAPSHOT_LIST_MINUTES"
+				run_task "${SP_SNAPSHOT_LIST_RUN}" "${SP_FE_JSON_PATH}/${SP_SNAPSHOT_LIST_JSON##*/}" "${SP_SNAPSHOT_LIST_MINUTES}"
 			fi
-			if [ -n "$ONE_VM_POOL_RUN" ]; then
+			if [[ -n "${ONE_VM_POOL_RUN}" ]]; then
 				rFile="${SP_FE_JSON_PATH}/${ONE_VM_POOL_XML##*/}"
 				doExpand "rFile"
-				run_task "$ONE_VM_POOL_RUN" "$rFile" "$ONE_VM_POOL_MINUTES" "" "runonly"
+				run_task "${ONE_VM_POOL_RUN}" "${rFile}" "${ONE_VM_POOL_MINUTES}" "" "runonly"
 			fi
 		fi
 	done
-#	if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-#		splog "jFiles:${jFiles[@]}"
+#	if boolTrue "DDDEBUG_MOINTOR_HELPER_SYNC"; then
+#		splog "[DDD] jFiles:${jFiles[@]}"
 #	fi
 done
-rm -rf "$tmpDir"
-trap "rm -f \"$lockFile\"" TERM INT QUIT HUP EXIT
+rm -rf "${tmpDir}"
+# shellcheck disable=SC2064
+trap "rm -f \"${lockFile}\"" TERM INT QUIT HUP EXIT
 
 # hosts processing
 
 tmpXML="$(mktemp --tmpdir onHostList-$$-XXXXXX)"
 ret=$?
-if [ $ret -ne 0 ]; then
-    splog "(oneHostList) Error: Can't create temp file! (ret:$ret)"
-    exit $ret
+if [[ ${ret} -ne 0 ]]; then
+    splog "(oneHostList) Error: Can't create temp file! (ret:${ret})"
+    exit "${ret}"
 fi
-onehost list -x >"$tmpXML"
+onehost list -x >"${tmpXML}"
 ret=$?
-if [ $ret -ne 0 ]; then
-    splog "(oneHostList) Error: Can't get info! $(head -n1 "$tmpXML") (ret:$ret)"
-    exit $ret
+if [[ ${ret} -ne 0 ]]; then
+    splog "(oneHostList) Error: Can't get info! $(head -n1 "${tmpXML}" || true) (ret:${ret})"
+    exit "${ret}"
 fi
 
+_XPATH="${driverPath}/../xpath_multi.py"
+_XPATH_A=(
+    "${_XPATH}"
+    "-s"
+)
+_XPATH_QUERY=(
+    "/HOST_POOL/HOST/ID"
+    "/HOST_POOL/HOST/NAME"
+    "/HOST_POOL/HOST/STATE"
+    "/HOST_POOL/HOST/CLUSTER_ID"
+    "/HOST_POOL/HOST/SP_JSON_PATH"
+)
 unset i XPATH_ELEMENTS
-while IFS= read -u 5 element; do
-	XPATH_ELEMENTS[i++]="$element"
-done 5< <(cat "$tmpXML" | $XPATH -s \
-  /HOST_POOL/HOST/ID \
-  /HOST_POOL/HOST/NAME \
-  /HOST_POOL/HOST/STATE \
-  /HOST_POOL/HOST/CLUSTER_ID \
-  /HOST_POOL/HOST/SP_JSON_PATH)
-rm -f "$tmpXML"
+while IFS='' read -r -u "${xpathfd}" element; do
+	XPATH_ELEMENTS[i++]="${element}"
+done {xpathfd}< <("${_XPATH_A[@]}" <"${tmpXML}" "${_XPATH_QUERY[@]}" || true)
+rm -f "${tmpXML}"
 unset i
 _HOST_ID="${XPATH_ELEMENTS[i++]}"
 _HOST_NAME="${XPATH_ELEMENTS[i++]}"
@@ -586,82 +625,80 @@ _HOST_STATE="${XPATH_ELEMENTS[i++]}"
 _HOST_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
 _HOST_SP_JSON_PATH="${XPATH_ELEMENTS[i++]}"
 
-
 if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-	splog "$_HOST_ID|$_HOST_NAME|$_HOST_CLUSTER_ID|$_HOST_STATE"
+	splog "[D] ${_HOST_ID}|${_HOST_NAME}|${_HOST_CLUSTER_ID}|${_HOST_STATE}"
 fi
 
-_OLDIFS=$IFS
-IFS=";"
-HOST_ID_ARRAY=($_HOST_ID)
-HOST_NAME_ARRAY=($_HOST_NAME)
-HOST_STATE_ARRAY=($_HOST_STATE)
-HOST_CLUSTER_ID_ARRAY=($_HOST_CLUSTER_ID)
-HOST_SP_JSON_PATH_ARRAY=($_HOST_SP_JSON_PATH)
-IFS=$_OLDIFS
+IFS=';' read -ra HOST_ID_ARRAY <<<"${_HOST_ID}"
+IFS=';' read -ra HOST_NAME_ARRAY <<<"${_HOST_NAME}"
+IFS=';' read -ra HOST_STATE_ARRAY <<<"${_HOST_STATE}"
+IFS=';' read -ra HOST_CLUSTER_ID_ARRAY <<<"${_HOST_CLUSTER_ID}"
+IFS=';' read -ra HOST_SP_JSON_PATH_ARRAY <<<"${_HOST_SP_JSON_PATH}"
 
-_lHost="$(hostname -s)"
-for i in ${!HOST_ID_ARRAY[@]}; do
-	if [ "${HOST_ID_ARRAY[i]}" = "" ]; then
+_lHost="$(hostname -s || true)"
+for i in "${!HOST_ID_ARRAY[@]}"; do
+	if [[ "${HOST_ID_ARRAY[i]}" == "" ]]; then
 		if boolTrue "DDEBUG_MOINTOR_HELPER_SYNC"; then
-			splog "Skip empty host ID $i:${HOST_ID_ARRAY[i]}"
+			splog "[DD] Skip empty host ID ${i}:${HOST_ID_ARRAY[i]}"
 		fi
 		continue
 	fi
 	_rHost="${HOST_NAME_ARRAY[i]}"
 	_cluster_id="${HOST_CLUSTER_ID_ARRAY[i]}"
-	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-$SP_JSON_PATH}"
+	_destDir="${HOST_SP_JSON_PATH_ARRAY[i]:-${SP_JSON_PATH}}"
 	_state="${HOST_STATE_ARRAY[i]}"
-	if [ "${_state}" = "" ] || [ ${_state} -ge 4 ]; then
+	if [[ "${_state}" == "" ]] || [[ ${_state} -ge 4 ]]; then
 		if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-			splog "Skip host ${_rHost} state:${_state}"
+			splog "[D] Skip host ${_rHost} state:${_state}"
 		fi
 		continue
 	fi
 	SP_MONITOR_CACHE_CLUSTER="${SP_FE_JSON_PATH}/${_cluster_id}"
-	
-	if [ -d "$SP_MONITOR_CACHE_CLUSTER" ]; then
-		for _jFile in ${jFiles[@]}; do
-			if [ "${_rHost}" = "${_lHost}" ]; then
-				[ -d "${_destDir}" ] || mkdir -p "${_destDir}" && cp -L "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" "${_destDir}"/
+
+	if [[ -d "${SP_MONITOR_CACHE_CLUSTER}" ]]; then
+		for _jFile in "${jFiles[@]}"; do
+			if [[ "${_rHost}" == "${_lHost}" ]]; then
+				[[ -d "${_destDir}" ]] || mkdir -p "${_destDir}" && cp -L "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" "${_destDir}"/
 				ret=$?
-				if [ $ret -ne 0 ]; then
+				if [[ ${ret} -ne 0 ]]; then
 					splog "${_rHost} copy ${_jFile} returned ${ret}"
 				else
 					if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-						splog "${_rHost} (localhost) ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+						splog "[D] ${_rHost} (localhost) ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
 					fi
 				fi
-			elif boolTrue "MONITOR_SYNC_REMOTE"; then
-                if [ -f "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" ]; then
-                    cat "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" | \
-                        ssh -o ConnectTimeout="${sshConnectTimeout:-3}" \
+			elif boolTrue "MONITOR_SYNC_REMOTE" "${MONITOR_SYNC_REMOTE}"; then
+                if [[ -f "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" ]]; then
+                    ssh -o ConnectTimeout="${sshConnectTimeout:-3}" \
                         -o ConnectionAttempts="${sshConnectionAttempts:-3}" \
-                        ${_rHost} "[ -d \"${_destDir}\" ] || mkdir -p \"${_destDir}\" && cat >\"${_destDir}/${_jFile}\"" 2>/dev/null >/dev/null
+                        "${_rHost}" "[ -d \"${_destDir}\" ] || mkdir -p \"${_destDir}\" && cat >\"${_destDir}/${_jFile}\"" \
+							< "${SP_MONITOR_CACHE_CLUSTER}/${_jFile}" \
+						2>/dev/null >/dev/null
+
                     ret=$?
-                    if [ $ret -ne 0 ]; then
+                    if [[ ${ret} -ne 0 ]]; then
                         splog "${_rHost}:${_destDir}/${_jFile} returned ${ret}"
                     else
                         if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-                            splog "${_rHost} ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
+                            splog "[D] ${_rHost} ${SP_MONITOR_CACHE_CLUSTER}/${_jFile} copied to ${_destDir} (cluster_id:${_cluster_id})"
                         fi
                     fi
                 else
                     if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-                        splog "File '${SP_MONITOR_CACHE_CLUSTER}/${_jFile}' not found!"
+                        splog "[D] File '${SP_MONITOR_CACHE_CLUSTER}/${_jFile}' not found!"
                     fi
                 fi
 			fi
 		done
 	else
 		if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-			splog "${_rHost} not on StorPopol cluster? ${SP_MONITOR_CACHE_CLUSTER}"
+			splog "[D] ${_rHost} not on StorPopol cluster? ${SP_MONITOR_CACHE_CLUSTER}"
 		fi
 	fi
 done
 
-rm -f "$lockFile"
+rm -f "${lockFile}"
 
 if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
-	splog "END"
+	splog "[D] END"
 fi

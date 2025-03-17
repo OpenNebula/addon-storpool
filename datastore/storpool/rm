@@ -26,26 +26,28 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
-if [ -n "${ONE_LOCATION}" ]; then
-    LIB_LOCATION=$ONE_LOCATION/lib
+if [[ -n "${ONE_LOCATION}" ]]; then
+    LIB_LOCATION="${ONE_LOCATION}/lib"
 else
-    LIB_LOCATION=/usr/lib/one
+    LIB_LOCATION="/usr/lib/one"
 fi
+# shellcheck source=/dev/null
+. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-. $LIB_LOCATION/sh/scripts_common.sh
+DRIVER_PATH="$(dirname "$0")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
-DRIVER_PATH=$(dirname $0)
-source ${DRIVER_PATH}/../libfs.sh
+export LOG_PREFIX="ds"
 
-LOG_PREFIX="ds"
-
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Get rm and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-if [ -n "$2" ]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -53,23 +55,23 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "$DRIVER_PATH"
+oneDsDriverAction "${DRIVER_PATH}"
 
 #-------------------------------------------------------------------------------
 # Remove Image from Datastore
 #-------------------------------------------------------------------------------
 
-SP_VOL="${ONE_PX}-img-$ID"
+SP_VOL="${ONE_PX:-one}-img-${ID}"
 
-storpoolVolumeDelete "$SP_VOL" "force" "snaps" "$REMOTE_BACKUP_DELETE"
+storpoolVolumeDelete "${SP_VOL}" "force" "snaps" "${REMOTE_BACKUP_DELETE}"
 
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
 fi
 
 # Remove the temp volume in case of stale broken import
-SP_TEMP_VOL="${SP_VOL}-$(echo "$SP_VOL" | md5sum | awk '{print $1}')"
-storpoolVolumeDelete "$SP_TEMP_VOL" "force"
+SP_TEMP_VOL="${SP_VOL}-$(echo "${SP_VOL}" | md5sum | awk '{print $1}' || true)"
+storpoolVolumeDelete "${SP_TEMP_VOL}" "force"
 
-splog "END $SP_VOL"
+splog "END ${SP_VOL}"
 exit 0

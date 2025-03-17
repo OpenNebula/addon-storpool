@@ -35,116 +35,113 @@ DS_ID="$5"
 TEMPLATE="$6"
 SYSTEM_MAD="$7"
 
-TM_PATH="$(dirname $0)"
-for _PATH in "$TM_PATH/"{,..,../..,../../..}/storpool; do
-    if [ -f "${_PATH}/storpool_common.sh" ]; then
-        source "${_PATH}/storpool_common.sh"
-        break;
-    fi
-done
+TM_PATH="$(dirname "${0}")"
+#shellcheck source=tm/storpool/storpool_common.sh
+source "${TM_PATH}/storpool_common.sh"
 
-if [ ! -t 0 ]; then
-    tmpxml="$(mktemp -t postmigrate-${VM_ID}-XXXXXXXX)"
-    trapAdd "rm -rf \"$tmpxml\""
-    cat > "$tmpxml"
-    if [ -s "$tmpxml" ]; then
+if [[ ! -t 0 ]]; then
+    tmpxml="$(mktemp -t "postmigrate-${VM_ID}-XXXXXXXX")"
+    trapAdd "rm -rf \"${tmpxml}\""
+    cat > "${tmpxml}"
+    if [[ -s "${tmpxml}" ]]; then
         SYSTEM_MAD="$6"
-        TEMPLATE="$tmpxml"
+        TEMPLATE="${tmpxml}"
     fi
 fi
 
-if [ "${SYSTEM_MAD:0:8}" = "storpool" ]; then
+if [[ "${SYSTEM_MAD:0:8}" == "storpool" ]]; then
     if boolTrue "DEBUG_MIGRATE_LIVE"; then
-        splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD (exit)"
+        splog "[D] SRC_HOST=${SRC_HOST} DST_HOST=${DST_HOST} VM_PATH=${VM_PATH} VM_ID=${VM_ID} DS_ID=${DS_ID} SYSTEM_MAD=${SYSTEM_MAD} (exit)"
     fi
     exit 0
 fi
 
-splog "SRC_HOST=$SRC_HOST DST_HOST=$DST_HOST VM_PATH=$VM_PATH VM_ID=$VM_ID DS_ID=$DS_ID SYSTEM_MAD=$SYSTEM_MAD"
+splog "SRC_HOST=${SRC_HOST} DST_HOST=${DST_HOST} VM_PATH=${VM_PATH} VM_ID=${VM_ID} DS_ID=${DS_ID} SYSTEM_MAD=${SYSTEM_MAD}"
 
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information
 #-------------------------------------------------------------------------------
-oneDatastoreInfo "$DS_ID"
+oneDatastoreInfo "${DS_ID}"
 
 #-------------------------------------------------------------------------------
 # Get VM information
 #-------------------------------------------------------------------------------
-oneTemplateInfo "$TEMPLATE"
+oneTemplateInfo "${TEMPLATE}"
 
 #-------------------------------------------------------------------------------
 # Detach storpool volumes
 #-------------------------------------------------------------------------------
 json=
 shareable_detach=
-for i in ${!DISK_ID_ARRAY[@]}; do
-    if [ "${DISK_TM_MAD_ARRAY[i]}" = "storpool" ]; then
+for i in "${!DISK_ID_ARRAY[@]}"; do
+    if [[ "${DISK_TM_MAD_ARRAY[i]}" == "storpool" ]]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
-        if [ -n "$DISK_SOURCE" ]; then
-            DST_PATH="$VM_PATH/disk.${DISK_ID}"
+        if [[ -n "${DISK_SOURCE}" ]]; then
+            DST_PATH="${VM_PATH}/disk.${DISK_ID}"
             SP_VOL="${DISK_SOURCE##*/}"
             if boolTrue "DISK_CLONE_ARRAY[i]"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
-            elif [ "${DISK_TYPE_ARRAY[i]}" = "CDROM" ]; then
+            elif [[ "${DISK_TYPE_ARRAY[i]}" == "CDROM" ]]; then
                 # backward compatibility /clean up/
-                storpoolVolumeDetach "$SP_VOL" "" "$SRC_HOST" "none" "${DISK_READONLY_ARRAY[i]}"
+                storpoolVolumeDetach "${SP_VOL}" "" "${SRC_HOST}" "none" "${DISK_READONLY_ARRAY[i]}"
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
             fi
-            [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
+            [[ -n "${SRC_CLIENT}" ]] || SRC_CLIENT="$(storpoolClientId "${SRC_HOST}" "${COMMON_DOMAIN}")"
             if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
                 IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
                 IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
                 shareable_detach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL} "
             else
-                [ -z "$json" ] || json+=","
-                json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
+                [[ -z "${json:-}" ]] || json+=","
+                json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${SRC_CLIENT}" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
             fi
 
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
-                splog "skip volatile disk for $DS_ID/$VM_ID/disk.${DISK_ID}"
+                splog "[D] skip volatile disk for ${DS_ID}/${VM_ID}/disk.${DISK_ID}"
             fi
         fi
     fi
 done
 
-if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
+if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     #-------------------------------------------------------------------------------
     # Detach volatile disk volumes
     #-------------------------------------------------------------------------------
-    for i in ${!DISK_ID_ARRAY[@]}; do
-        if [ "${DISK_TM_MAD_ARRAY[i]}" = "" ] || [ "${DISK_SOURCE_ARRAY[i]}" = "" ]; then
+    for i in "${!DISK_ID_ARRAY[@]}"; do
+        if [[ -z "${DISK_TM_MAD_ARRAY[i]}" ]] || [[ -z "${DISK_SOURCE_ARRAY[i]}" ]]; then
             FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
-            if [ ${DISK_TYPE_ARRAY[i]} = "swap" ]; then
+            if [[ "${DISK_TYPE_ARRAY[i]}" == "swap" ]]; then
                 FORMAT="swap"
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
-            [ -z "$json" ] || json+=","
-            [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
-            json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force")"
+            export DST_PATH  #  TBD: remove
+            [[ -n "${SRC_CLIENT}" ]] || SRC_CLIENT="$(storpoolClientId "${SRC_HOST}" "${COMMON_DOMAIN}")"
+            [[ -z "${json:-}" ]] || json+=","
+            json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${SRC_CLIENT}" "detach" "force")"
          fi
     done
 
     #-------------------------------------------------------------------------------
     # Detach context ISO volume
     #-------------------------------------------------------------------------------
-    if [ -n "$_CONTEXT_DISK_ID" ]; then
+    if [[ -n "${_CONTEXT_DISK_ID}" ]]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-        [ -z "$json" ] || json+=","
-        [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
-        json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force")"
+        [[ -n "${SRC_CLIENT}" ]] || SRC_CLIENT="$(storpoolClientId "${SRC_HOST}" "${COMMON_DOMAIN}")"
+        [[ -z "${json:-}" ]] || json+=","
+        json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${SRC_CLIENT}" "detach" "force")"
     fi
 
     #-------------------------------------------------------------------------------
     # Detach NVRAM volume
     #-------------------------------------------------------------------------------
-    if [ -n "$T_OS_NVRAM" ]; then
+    if [[ -n "${T_OS_NVRAM}" ]]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-        [ -z "$json" ] || json+=","
-        [ -n "$SRC_CLIENT" ] || SRC_CLIENT="$(storpoolClientId "$SRC_HOST" "$COMMON_DOMAIN")"
-        json+="$(storpoolVolumeJsonHelper "$SP_VOL" "$SRC_CLIENT" "detach" "force")"
+        [[ -n "${SRC_CLIENT}" ]] || SRC_CLIENT="$(storpoolClientId "${SRC_HOST}" "${COMMON_DOMAIN}")"
+        [[ -z "${json:-}" ]] || json+=","
+        json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${SRC_CLIENT}" "detach" "force")"
     fi
 
     #-------------------------------------------------------------------------------
@@ -155,25 +152,24 @@ if [ "${DS_TM_MAD:0:8}" = "storpool" ]; then
     fi
 fi
 
-storpoolRetry groupDetach "$json"
+storpoolRetry groupDetach "${json}"
 
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED"; then
-    MONITOR_TM_MAD="$DS_TM_MAD"
+    MONITOR_TM_MAD="${DS_TM_MAD}"
 fi
 
 #-------------------------------------------------------------------------------
 # Cleanup src VM files from the src host
 #-------------------------------------------------------------------------------
-if [ ${DS_TM_MAD:0:8} = "storpool" ] && [ "${SP_SYSTEM^^}" = "SSH" ]; then
-    CMD="$SSH $SRC_HOST 'rm -rf $VM_PATH'"
-    splog "$CMD"
-    exec_and_log "eval $CMD" "Error removing $VM_PATH"
+if [[ "${DS_TM_MAD:0:8}" == "storpool" ]] && [[ "${SP_SYSTEM^^}" == "SSH" ]]; then
+    CMD="${SSH:-ssh} ${SRC_HOST} 'rm -rf ${VM_PATH}'"
+    splog "${CMD}"
+    exec_and_log "eval ${CMD}" "Error removing ${VM_PATH}"
 fi
 
-if [ -n "$shareable_detach" ]; then
-    shareableDetach $SRC_HOST "$shareable_detach"
+if [[ -n "${shareable_detach}" ]]; then
+    shareableDetach "${SRC_HOST}" "${shareable_detach}"
 fi
 
-splog "END $VM_ID"
-exit 0
+splog "END ${VM_ID}"

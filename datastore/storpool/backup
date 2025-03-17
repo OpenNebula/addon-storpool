@@ -16,19 +16,21 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
-LOG_PREFIX="ds"
+DRIVER_PATH="$(dirname "$0")"
+export LOG_PREFIX="ds"
 
-source $DRIVER_PATH/../../scripts_common.sh
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 splog "$*"
 
 cat >"/tmp/${0##*/}-$3-$4-$5.input"
 
 msg="${0##*/}: Operation not supported"
-error_message "$msg"
-splog "$msg"
+error_message "${msg}"
+splog "${msg}"
 
 splog "END"
 

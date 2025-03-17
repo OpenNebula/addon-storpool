@@ -17,9 +17,12 @@
 #--------------------------------------------------------------------------- #
 
 WORKDIR=$(dirname "$0")
+# shellcheck source=/dev/null
 source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
+# shellcheck source=/dev/null
 source "${WORKDIR}/../../scripts_common.sh"
 if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
     source "${WORKDIR}/../../addon-storpoolrc"
 fi
 
@@ -36,22 +39,22 @@ fi
 
 DRV_ACTION="$5"
 
-KVMHOST="$(echo ${DRV_ACTION} | base64 -d | \
+KVMHOST="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//HISTORY[last()]' -v HOSTNAME)"
-TM_MAD="$(echo ${DRV_ACTION} | base64 -d | \
+TM_MAD="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TM_MAD)"
-DISK_TYPE="$(echo ${DRV_ACTION} | base64 -d | \
+DISK_TYPE="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_TYPE)"
-TYPE="$(echo ${DRV_ACTION} | base64 -d | \
+TYPE="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TYPE)"
-DEV_PREFIX="$(echo ${DRV_ACTION} | base64 -d | \
+DEV_PREFIX="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DEV_PREFIX)"
-DISK_ID="$(echo ${DRV_ACTION} | base64 -d | \
+DISK_ID="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_ID)"
-T_PERSISTENT_CDROMx="$(echo ${DRV_ACTION} | base64 -d | \
+T_PERSISTENT_CDROM_VM="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM)"
 
-PERSISTENT_CDROM=${T_PERSISTENT_CDROMx:-${T_PERSISTENT_CDROM}}
+PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
 
 if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     splog "[D] KVMHOST=${KVMHOST} TM_MAD=${TM_MAD} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} PERSISTENT_CDROM=${PERSISTENT_CDROM} DEV_PREFIX=${DEV_PREFIX}"
@@ -64,18 +67,18 @@ if [[ -n "${PERSISTENT_CDROM}" ]]; then
     if [[ "${TYPE^^}" == "CDROM" ]]; then
         if [[ "${DEV_PREFIX,,}" == "hd" ]]; then
             set -o pipefail
-            ${SSH} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom" "$@"
+            ${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom" "$@"
             ret=$?
-            splog "($ret) ${SSH} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
+            splog "(${ret}) ${SSH:-ssh} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
             exit "${ret}"
         else
-            splog "VM ${VM_ID} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' != 'hd'"
+            splog "VM ${VM_ID:-} DISK_ID=${DISK_ID:-} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' != 'hd'"
         fi
     fi
 fi
 
-if [ "${TM_MAD:0:8}" == "storpool" ]; then
-    if [ "${DISK_TYPE^^}" == "BLOCK" ] && [ "${TYPE^^}" == "BLOCK" ]; then
+if [[ "${TM_MAD:0:8}" == "storpool" ]]; then
+    if [[ "${DISK_TYPE^^}" == "BLOCK" && "${TYPE^^}" == "BLOCK" ]]; then
         splog "Disk $1 $2 $3 DISK_TYPE '${DISK_TYPE}', TYPE '${TYPE}'"
     else
         case "${TYPE^^}" in
@@ -89,13 +92,12 @@ if [ "${TM_MAD:0:8}" == "storpool" ]; then
         splog "Replacing $1 $2 $3 DISK_TYPE '${DISK_TYPE}' to BLOCK and TYPE '${TYPE}' to ${NEW_TYPE}"
         DRV_ACTION="$(echo "${DRV_ACTION}" | base64 -d | \
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
-                   xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v ${NEW_TYPE} |\
-                   base64 -w 0)"
+                   xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v "${NEW_TYPE}" |\
+                   base64 -w 0 || true)"
         if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
             echo "${DRV_ACTION}" >/tmp/atach_disk_out.b64
         fi
     fi
 fi
 
-${SSH} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk $1 $2 $3 $4 ${DRV_ACTION}"
-
+${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk $1 $2 $3 $4 ${DRV_ACTION}"

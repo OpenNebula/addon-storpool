@@ -31,37 +31,39 @@ NEWSIZE="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname $0)"
+TM_PATH="$(dirname "$0")"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=$SRC NEWSIZE=$NEWSIZE VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=${SRC} NEWSIZE=${NEWSIZE} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
 #-------------------------------------------------------------------------------
 # Compute the destination image name
 #-------------------------------------------------------------------------------
 
-SRC_HOST=`arg_host $SRC`
-SRC_PATH=`arg_path $SRC`
+SRC_HOST=$(arg_host "${SRC}")
+SRC_PATH=$(arg_path "${SRC}")
 SRC_DIR="${SRC_PATH%/*}"
+export SRC_HOST SRC_DIR  # TBD: remove
 
-DISK_ID=$(echo $SRC_PATH | awk -F. '{print $NF}')
+DISK_ID="$(echo "${SRC_PATH}" | awk -F. '{print $NF}')"
 
-oneDatastoreInfo "$DS_ID"
+oneDatastoreInfo "${DS_ID}"
 
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-oneVmInfo "$VM_ID" "$DISK_ID"
+oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 SP_VOL="${SOURCE##*/}"
 if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
-if [ "$SP_VOL" = "" ] && [ "${FORMAT,,}" = "raw" ]; then
+if [[ -z "${SP_VOL}" ]] && [[ "${FORMAT,,}" == "raw" ]]; then
     FORMAT="raw"
-    if [ "${TYPE,,}" = "swap" ]; then
+    if [[ "${TYPE,,}" == "swap" ]]; then
         FORMAT="swap"
     fi
     SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT}"
@@ -71,7 +73,7 @@ fi
 # Resize the volume
 #-------------------------------------------------------------------------------
 
-storpoolVolumeResize "$SP_VOL" "$NEWSIZE"M
+storpoolVolumeResize "${SP_VOL}" "${NEWSIZE}M"
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

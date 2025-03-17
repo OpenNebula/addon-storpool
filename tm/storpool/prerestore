@@ -16,35 +16,38 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
+DRIVER_PATH=$(dirname "$0")
 
 DRV_ACTION="$(cat)"
 
+#shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
+#shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-FILE=$1
-HVHOST=$2
-DEPLOY_ID=$3
-VM_ID=$4
-HVHOST2=$5
+FILE="$1"
+HVHOST="$2"
+DEPLOY_ID="$3"
+VM_ID="$4"
+HVHOST2="$5"
+export HVHOST2  #  TBD: remove
 
 splog "$*"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-    DS_ID_A=( ${FILE//\// } )
+    read -ra DS_ID_A <<< "${FILE//\// }"
     DS_ID="${DS_ID_A[-3]}"
-    oneDatastoreInfo "$DS_ID"
+    oneDatastoreInfo "${DS_ID}"
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "$SP_VOL"; then
-        storpoolVolumeAttach "$SP_VOL" "${HVHOST}"
-        $SSH "$HVHOST" "ln -sf \"/dev/storpool/$SP_VOL\" \"$FILE\""
-        splog "$SSH $HVHOST ln -sf '/dev/storpool/$SP_VOL' '$FILE' ($?)"
+    if storpoolVolumeExists "${SP_VOL}"; then
+        storpoolVolumeAttach "${SP_VOL}" "${HVHOST}"
+        "${SSH:-ssh}" "${HVHOST}" "ln -sf \"/dev/storpool/${SP_VOL}\" \"${FILE}\""
+        splog "${SSH:-ssh} ${HVHOST} ln -sf '/dev/storpool/${SP_VOL}' '${FILE}' ($?)"
     fi
 
 fi
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

@@ -16,38 +16,41 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
+DRIVER_PATH=$(dirname "$0")
 
 DRV_ACTION="$(cat)"
 
+#shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
-source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+#shellcheck source=tm/storpool/storpool_common.sh
+source "/var/lib/one/remotes/tm/storpool/storpool_common.sh"
 
-FILE=$1
-HVHOST=$2
-DEPLOY_ID=$3
-VM_ID=$4
-HVHOST2=$5
+FILE="$1"
+HVHOST="$2"
+DEPLOY_ID="$3"
+VM_ID="$4"
+HVHOST2="$5"
+export DEPLOY_ID HVHOST2  #  TBD: remove
 
 splog "$*"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-    DS_ID_A=( ${FILE//\// } )
+    read -ra DS_ID_A <<< "${FILE//\// }"
     DS_ID="${DS_ID_A[-3]}"
-    oneDatastoreInfo "$DS_ID"
+    oneDatastoreInfo "${DS_ID}"
 
-    SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
+    SP_VOL="${ONE_PX:-one}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "$SP_VOL"; then
-        DELAY_DELETE=
-        storpoolVolumeDelete "$SP_VOL" "force"
-        splog "Delete $SP_VOL ($?)"
+    if storpoolVolumeExists "${SP_VOL}"; then
+        export DELAY_DELETE=
+        storpoolVolumeDelete "${SP_VOL}" "force"
+        splog "Delete ${SP_VOL} ($?)"
     fi
 
-    $SSH "$HVHOST" "rm -f \"$FILE\""
-    splog "$SSH $HVHOST rm -f '$FILE' ($?)"
+    "${SSH:-ssh}" "${HVHOST}" "rm -f \"${FILE}\""
+    splog "${SSH:-ssh} ${HVHOST} rm -f '${FILE}' ($?)"
 
 fi
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

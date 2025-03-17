@@ -50,34 +50,34 @@ hookdir="$(dirname "$0")/${me}.d"
 
 haveStdin=
 
-if [ ! -t 0 ]; then
+if [[ ! -t 0 ]]; then
   stdin="$(cat)"
   haveStdin=1
 fi
 
-if [ -d "$hookdir" ]; then
-  while read -u 4 hook; do
-    if [ "${hook%.remote}" = "$hook" ]; then
-      echo "Running $hook $* ${haveStdin:+(with stdin)}" >&2
-      if [ -n "$haveStdin" ]; then
-        echo "$stdin" | $hook "$@"
+if [[ -d "${hookdir}" ]]; then
+  while read -r -u 4 hook; do
+    if [[ "${hook%.remote}" == "${hook}" ]]; then
+      echo "Running ${hook} $* ${haveStdin:+(with stdin)}" >&2
+      if [[ -n "${haveStdin}" ]]; then
+        echo "${stdin}" | "${hook}" "$@"
       else
-        $hook "$@"
+        "${hook}" "$@"
       fi
     else
-      if [ -n "$haveStdin" ]; then
+      if [[ -n "${haveStdin}" ]]; then
         hookRemote="${hook/\/var\/lib\/one\/remotes//var/tmp/one}"
-        if [ -z "$REMOTEHOST" ]; then
-          REMOTEHOST="$(echo "$stdin"|base64 -i -d|xmllint -xpath '//HISTORY[last()]/HOSTNAME/text()' -)"
+        if [[ -z "${REMOTEHOST}" ]]; then
+          REMOTEHOST="$(echo "${stdin}" | base64 -i -d | xmllint -xpath '//HISTORY[last()]/HOSTNAME/text()' - || true)"
         fi
-        echo "Running $REMOTEHOST:$hookRemote $* (with stdin)" >&2
-        echo "$stdin" | ssh "$REMOTEHOST" ${hookRemote} "$@"
+        echo "Running ${REMOTEHOST}:${hookRemote} $* (with stdin)" >&2
+        echo "${stdin}" | "${SSH:-ssh}" "${REMOTEHOST}" "${hookRemote}" "$@"
       else
-        echo "Error calling $hook: Remote hook require \$TEMPLATE on STDIN!" >&2
+        echo "Error calling ${hook}: Remote hook require \$TEMPLATE on STDIN!" >&2
       fi
     fi
-  done 4< <(find "$hookdir" -maxdepth 1 -executable -type f -o -type l)
+  done 4< <(find "${hookdir}" -maxdepth 1 -executable -type f -o -type l || true)
 else
-  echo "Error: Missing $hookdir" >&2
+  echo "Error: Missing ${hookdir}" >&2
   exit 1
 fi

@@ -16,17 +16,19 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
+DRIVER_PATH="$(dirname "$0")"
 
+#shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
-source "${DRIVER_PATH}/storpool_common.sh"
+#shellcheck source=tm/storpool/storpool_common.sh
+source "${ONE_LOCATION:-/var/lib/one/remotes}/tm/storpool/storpool_common.sh"
 
 splog "$*"
 
-if [ -t 0 ]; then
+if [[ -t 0 ]]; then
     msg="Interactive mode not supported"
-    splog "$msg"
-    error_message "$msg"
+    splog "${msg}"
+    error_message "${msg}"
     exit 1
 fi
 
@@ -36,90 +38,91 @@ DISKS="$2"
 DEPLOY_ID="$3"
 VM_ID="$4"
 SYSDS_ID="$5"
-if [ -n "$6" ]; then
+if [[ -n "$6" ]]; then
     BJ_ID="$4"
     VM_ID="$5"
     SYSDS_ID="$6"
 fi
+export BJ_ID  #  TBD: remove
 
-B_DIR="$VMDIR/backup"
+B_DIR="${VMDIR}/backup"
 
-oneHostInfo "$KVMHOST"
+oneHostInfo "${KVMHOST}"
 
-oneDatastoreInfo "$SYSDS_ID"
+oneDatastoreInfo "${SYSDS_ID}"
 
 umask 077
 
-VM_XML="$(mktemp -t prebackup-${VM_ID}-XXXXXXXX)"
-trapAdd "rm -f \"$VM_XML\""
-cat > "$VM_XML"
+VM_XML="$(mktemp -t "prebackup-${VM_ID}-XXXXXXXX")"
+trapAdd "rm -f \"${VM_XML}\""
+cat > "${VM_XML}"
 
-oneVmVolumes "$VM_ID" "" "$VM_XML" "$DISKS"
+oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
 
-if [ -d "$B_DIR" ]; then
-    splog "pre-clean $B_DIR ..."
-    snapshots_list="$B_DIR/.storpool_snapshots"
-    if [ -f "$snapshots_list" ]; then
-        for snp in $(cat "$snapshots_list"); do
-            storpoolVolumeDetach "$snp" "force" "" "all"
-            storpoolSnapshotDelete "$snp"
-        done
+if [[ -d "${B_DIR}" ]]; then
+    splog "pre-clean ${B_DIR} ..."
+    snapshots_list="${B_DIR}/.storpool_snapshots"
+    if [[ -f "${snapshots_list}" ]]; then
+        while read -r -u "${snpfd}" snp; do
+            storpoolVolumeDetach "${snp}" "force" "" "all"
+            storpoolSnapshotDelete "${snp}"
+        done {snpfd}< <(cat "${snapshots_list}" || true)
     fi
-    rm -rf "$B_DIR"
+    rm -rf "${B_DIR}"
     splog "pre-clean competed ($?)"
 fi
 
-mkdir -p "$B_DIR"
-splog "mkdir -p $B_DIR"
+mkdir -p "${B_DIR}"
+splog "mkdir -p ${B_DIR}"
 
-base64 -w 60 "$VM_XML" >"$B_DIR/vm.xml"
-splog "base64 VM XML to $B_DIF/vm.xml ($?)"
+base64 -w 60 "${VM_XML}" >"${B_DIR}/vm.xml"
+splog "base64 VM XML to ${B_DIR}/vm.xml ($?)"
 
-rm -f "$VM_XML" 
-trapDel "rm -f \"$VM_XML\""
+rm -f "${VM_XML}"
+trapDel "rm -f \"${VM_XML}\""
 
 declare -A D_ARR
 for disk in ${DISKS//:/ }; do
-    D_ARR["$disk"]="$disk"
+    D_ARR["${disk}"]="${disk}"
 done
 
 B_SUFFIX="ONEBACKUP-$(date +%s)"
-echo "$B_SUFFIX" >"$B_DIR/.snapshot_suffix"
+echo "${B_SUFFIX}" >"${B_DIR}/.snapshot_suffix"
 list=()
-backups=
-for map in $vmDisksMap; do
+backups=()
+for map in "${vmDisksMap[@]}"; do
     img="${map%:*}"
     did="${map#*:}"
-    if [ -n "${D_ARR["$did"]}" ]; then
+    if [[ -n "${D_ARR["${did}"]}" ]]; then
         snapshot="${img}-${B_SUFFIX}"
-        list+=(${img} ${snapshot})
-        backups+="${snapshot}:${did} "
-        echo "$snapshot" >>"$B_DIR/.storpool_snapshots"
+        list+=("${img}" "${snapshot}")
+        backups+=("${snapshot}:${did}")
+        echo "${snapshot}" >>"${B_DIR}/.storpool_snapshots"
     fi
 done
 
-storpoolRetry groupSnapshot "tag:$VM_TAG=${VM_ID}" "tag:${LOC_TAG}=${LOC_TAG_VAL}" "tag:virt=one" ${list[@]}
+storpoolRetry groupSnapshot "tag:${VM_TAG:-nvm}=${VM_ID}" "tag:${LOC_TAG:-nloc}=${LOC_TAG_VAL}" "tag:virt=one" "${list[@]}"
 
-for b in $backups; do
+for b in "${backups[@]}"; do
     snap="${b%:*}"
     did="${b#*:}"
-    json="{\"snapshot\":\"$snap\",\"ro\":[$HOST_SP_OURID]}"
-    storpoolRetry groupAttach "$json"
-    snapPath="/dev/storpool/$snap"
-    dstFile="$B_DIR/disk.${did}.0"
+    json="{\"snapshot\":\"${snap}\",\"ro\":[\"${HOST_SP_OURID}\"]}"
+    storpoolRetry groupAttach "${json}"
+    snapPath="/dev/storpool/${snap}"
+    dstFile="${B_DIR}/disk.${did}.0"
     RCMD=$(cat <<EOF
 umask 077
-mkdir -p "$B_DIR"
-qemu-img convert -T none -t none -O qcow2 "$snapPath" "$dstFile"
+mkdir -p "${B_DIR}"
+qemu-img convert -T none -t none -O qcow2 "${snapPath}" "${dstFile}"
 EOF
 )
-    splog "$KVMHOST::$RCMD ..."
-    ssh_forward ssh_exec_and_log "$KVMHOST" "$RCMD" "Error extracting $RCMD on $KVMHOST"
-    json="{\"snapshot\":\"$snap\",\"detach\":\"all\",\"force\":true}"
-    storpoolRetry groupDetach "$json"
+    splog "${KVMHOST}::${RCMD}"
+    ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" "Error extracting ${RCMD} on ${KVMHOST}"
+    json="{\"snapshot\":\"${snap}\",\"detach\":\"all\",\"force\":true}"
+    storpoolRetry groupDetach "${json}"
 done
 
-rsync -a "$B_DIR"/ "$KVMHOST:$B_DIR"/
-splog "rsync -a $B_DIR/ $KVMHOST:$B_DIR/ ($?)"
+rsync -a "${B_DIR}/" "${KVMHOST}:${B_DIR}/"
+splog "rsync -a ${B_DIR}/ ${KVMHOST}:${B_DIR}/ ($?)"
 
 splog "END"
