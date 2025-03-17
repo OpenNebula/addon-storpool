@@ -18,20 +18,28 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
+DRIVER_PATH=$(dirname "$0")
 
-[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
+if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
+    # shellcheck source=/dev/null
+    source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+else
+    # shellcheck source=/dev/null
+    source "${DRIVER_PATH}/kvmrc"
+fi
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-#one-88 /var/lib/one//datastores/101/88/checkpoint s06 88 s06
-DEPLOY_ID=$1
-FILE=$2
-HVHOST=$3
-VM_ID=$4
-DS_ID=$5
+# one-88 /var/lib/one//datastores/101/88/checkpoint s06 88 s06
+DEPLOY_ID="$1"
+FILE="$2"
+HVHOST="$3"
+VM_ID="$4"
+DS_ID="$5"
 
-LOG_PREFIX=vmm
+export LOG_PREFIX="vmm"
 
 splog "$*"
 
@@ -41,24 +49,24 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "$SP_VOL"; then
-        storpoolVolumeDelete "$SP_VOL" "force"
+    if storpoolVolumeExists "${SP_VOL}"; then
+        storpoolVolumeDelete "${SP_VOL}" "force"
     fi
-    DS_ID=( ${FILE//\// } )
-    DS_ID="${DS_ID[-3]}"
+    read -r -a DS_ID_A <<< "${FILE//\// }"
+    DS_ID="${DS_ID_A[-3]}"
     XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-    VM_MEMORY=$(echo "$DRV_MESSAGE" | $XPATH /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
-    storpoolVolumeCreate "$SP_VOL" "$((VM_MEMORY*2))M" "${ONE_PX}-ds-${DS_ID}"
-    trapAdd "storpoolVolumeDelete \"$volume\" \"force\""
+    VM_MEMORY=$(echo "${DRV_MESSAGE}" | "${XPATH}" /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
+    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*2))M" "${ONE_PX}-ds-${DS_ID}"
+    trapAdd "storpoolVolumeDelete \"${SP_VOL}\" \"force\""
 
-    storpoolVolumeAttach "$SP_VOL" "${HVHOST}"
+    storpoolVolumeAttach "${SP_VOL}" "${HVHOST}"
     trapReset
 
-    ln -sf "/dev/storpool/$SP_VOL" "$FILE"
-    splog "ln -sf /dev/storpool/$SP_VOL $FILE ($?)"
+    ln -sf "/dev/storpool/${SP_VOL}" "${FILE}"
+    splog "ln -sf /dev/storpool/${SP_VOL} ${FILE} ($?)"
 
     oneVmInfo "${VM_ID}"
 
-    storpoolVolumeTag "$SP_VOL" "one;${LOC_TAG_VAL};$VM_ID;${VC_POLICY}" "virt;${LOC_TAG};$VM_TAG;${VC_POLICY:+vc-policy}"
+    storpoolVolumeTag "${SP_VOL}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}"
 
 fi

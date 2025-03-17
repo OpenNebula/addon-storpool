@@ -38,10 +38,12 @@ SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_CMD_SNAPSHOT_SPACE="cat _SP_JSON_PATH_/_SP_SNAPSHOT_SPACE_JSON_"
 
 
-if [ -f "../../addon-storpoolrc" ]; then
+if [[ -f "../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
     source "../../addon-storpoolrc"
 fi
-if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+if [[ -f "/etc/storpool/addon-storpool.conf" ]]; then
+    # shellcheck source=/dev/null
     source "/etc/storpool/addon-storpool.conf"
 fi
 
@@ -57,13 +59,13 @@ function boolTrue()
 }
 
 
-if [ -f "$SP_MONITOR_DS" ]; then
-#    if [ "$DEBUG_IM_MONITOR_DS" = "1" ]; then
-#        splog "[DBG]$PWD $0 $* (ds:$ds)"
+if [[ -f "${SP_MONITOR_DS}" ]]; then
+#    if [[ "$DEBUG_IM_MONITOR_DS" == "1" ]]; then
+#        splog "[D] $PWD $0 $* (ds:$ds)"
 #    fi
-    if [ -d "$SP_DS_TMP" ]; then
+    if [[ -d "${SP_DS_TMP}" ]]; then
         if boolTrue "DDEBUG_IM_MONITOR_DS"; then
-            splog "found SP_DS_TMP:$SP_DS_TMP"
+            splog "[DD] found SP_DS_TMP:${SP_DS_TMP}"
         fi
     else
         SP_DS_TMP="$(mktemp --tmpdir -d sp-tmp-XXXXXXXX)"
@@ -72,113 +74,116 @@ if [ -f "$SP_MONITOR_DS" ]; then
         if boolTrue "DEBUG_IM_MONITOR_DS"; then
             START_TIME="$(date +%s)"
             export START_TIME
-            splog "mktemp $SP_DS_TMP returned $_ret, START_TIME=$START_TIME"
+            splog "[D] mktemp ${SP_DS_TMP} returned ${_ret}, START_TIME=${START_TIME}"
         fi
         function sp_trap()
         {
             local _ret=$?
-            if [ $_ret -ne 0 ]; then
+            if [[ ${_ret} -ne 0 ]]; then
                 splog "(${_ret}) $0 $*"
             fi
-            if [ -d "$SP_DS_TMP" ]; then
-                rm -rf "$SP_DS_TMP"
+            if [[ -d "${SP_DS_TMP}" ]]; then
+                rm -rf "${SP_DS_TMP}"
                 if boolTrue "DDEBUG_IM_MONITOR_DS"; then
-                    splog "rm -rf $SP_DS_TMP"
+                    splog "[DD] rm -rf ${SP_DS_TMP}"
                 fi
             fi
-            if [ -n "$START_TIME" ]; then
-                local end_time="$(date +%s)"
+            if [[ -n "${START_TIME}" ]]; then
+                local end_time=""
+                end_time="$(date +%s)"
                 splog "'$0' runtime:$((end_time - START_TIME))sec"
             fi
             if boolTrue "DDEBUG_IM_MONITOR_DS"; then
-                splog "$0 do exit $_ret"
+                splog "[DD] ${0} do exit ${_ret}"
             fi
-            exit $_ret
+            exit "${_ret}"
         }
         trap sp_trap TERM INT QUIT HUP EXIT
 
-        if [ $_ret -eq 0 ]; then
+        if [[ ${_ret} -eq 0 ]]; then
             if boolTrue "DEBUG_IM_MONITOR_DS"; then
-                splog "generating disk space data cache $SP_DS_TMP/sizes"
+                splog "[D]generating disk space data cache ${SP_DS_TMP}/sizes"
             fi
-            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
-            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
-            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/${SP_VOLUME_SPACE_JSON}}"
+            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/${SP_JSON_PATH}}"
+            SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/${CLUSTER_ID}}"
             #splog "eval $SP_CMD_VOLUME_SPACE"
-            eval $SP_CMD_VOLUME_SPACE 2>"$SP_DS_TMP/ERROR-volume-eval" |\
-              jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"$SP_DS_TMP/ERROR-volume" |\
-                sort >"$SP_DS_TMP/sizes"
-            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
-            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
-            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
+            eval "${SP_CMD_VOLUME_SPACE}" 2>"${SP_DS_TMP}/ERROR-volume-eval" |\
+              jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"${SP_DS_TMP}/ERROR-volume" |\
+                sort >"${SP_DS_TMP}/sizes" || true
+            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/${SP_SNAPSHOT_SPACE_JSON}}"
+            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/${SP_JSON_PATH}}"
+            SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/${CLUSTER_ID}}"
             #splog "eval $SP_CMD_SNAPSHOT_SPACE"
-            eval $SP_CMD_SNAPSHOT_SPACE 2>"$SP_DS_TMP/ERROR-snapshot-eval" |\
-              jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"$SP_DS_TMP/ERROR-snapshot" |\
-                sort >>"$SP_DS_TMP/sizes"
+            eval "${SP_CMD_SNAPSHOT_SPACE}" 2>"${SP_DS_TMP}/ERROR-snapshot-eval" |\
+              jq -r ".data[]|[.name,.storedSize,.spaceUsed]|@csv" 2>"${SP_DS_TMP}/ERROR-snapshot" |\
+                sort >>"${SP_DS_TMP}/sizes" || true
         fi
     fi
 
-    SP_DS_SIZES="$(bash $SP_MONITOR_DS system $ds 2>/dev/null)"
+    SP_DS_SIZES="$(bash "${SP_MONITOR_DS}" system "${ds:-?}" 2>/dev/null)"
 
-    if [ -n "$SP_DS_SIZES" ]; then
+    if [[ -n "${SP_DS_SIZES}" ]]; then
         if boolTrue "DEBUG_IM_MONITOR_DS"; then
-            splog "SP_DS_SIZES=$SP_DS_SIZES"
+            splog "[D] SP_DS_SIZES=${SP_DS_SIZES}"
         fi
 
-        SP_SIZES=($SP_DS_SIZES)
-        SP_USED_MB=${SP_SIZES["0"]:-0}
-        SP_TOTAL_MB=${SP_SIZES["1"]:-0}
-        SP_FREE_MB=${SP_SIZES["2"]:-0}
+        read -ra SP_SIZES <<<"${SP_DS_SIZES}"
+        SP_USED_MB="${SP_SIZES[0]:-0}"
+        SP_TOTAL_MB="${SP_SIZES[1]:-0}"
+        SP_FREE_MB="${SP_SIZES[2]:-0}"
 
-        if [ $SP_USED_MB -gt 0 ] && [ $SP_FREE_MB -gt 0 ]; then
+        if [[ ${SP_USED_MB} -gt 0 ]] && [[ ${SP_FREE_MB} -gt 0 ]]; then
 
             if boolTrue "DEBUG_IM_MONITOR_DS"; then
                 if boolTrue "DDEBUG_IM_MONITOR_DS"; then
-                    splog "DS_ID $ds (StorPool) SPUSED=$SP_USED_MB SPTOTAL=$SP_TOTAL_MB SPFREE=$SP_FREE_MB USED=$USED_MB TOTAL=$TOTAL_MB FREE=$FREE_MB $dir"
+                    splog "[DD] DS_ID ${ds:-?} (StorPool) SPUSED=${SP_USED_MB} SPTOTAL=${SP_TOTAL_MB} SPFREE=${SP_FREE_MB} USED=${USED_MB:-} TOTAL=${TOTAL_MB:-} FREE=${FREE_MB:-} ${dir:-?}"
                 else
-                    splog "DS ID=$ds USED_MB=$SP_USED_MB TOTAL_MB=$SP_TOTAL_MB FREE_MB=$SP_FREE_MB"
+                    splog "[D] DS ID=${ds:-?} USED_MB=${SP_USED_MB} TOTAL_MB=${SP_TOTAL_MB} FREE_MB=${SP_FREE_MB}"
                 fi
             fi
 
             echo "DS = ["
-            echo "  ID = $ds,"
-            echo "  USED_MB = $SP_USED_MB,"
-            echo "  TOTAL_MB = $SP_TOTAL_MB,"
-            echo "  FREE_MB = $SP_FREE_MB"
+            echo "  ID = ${ds},"
+            echo "  USED_MB = ${SP_USED_MB},"
+            echo "  TOTAL_MB = ${SP_TOTAL_MB},"
+            echo "  FREE_MB = ${SP_FREE_MB}"
             echo "]"
 
-            if [ "${ONE_VERSION:0:1}" = "4" ]; then
+            if [[ "${ONE_VERSION:0:1}" == "4" ]]; then
                 # hijacking the loop in im/monitor_ds.sh
+                # shellcheck disable=SC2105
                 continue
             fi
 
             # Report VM DISKS if marked for remote monitoring
-            if [ -e "${dir}/.monitor" ]; then
+            if [[ -e "${dir}/.monitor" ]]; then
                 DRIVER=$(<"${dir}/.monitor")
                 # default tm DRIVER is ssh
-                SCRIPT_PATH="${REMOTES_DIR}/tm/${DRIVER:-ssh}/monitor_ds"
-                if [ -e "$SCRIPT_PATH" ]; then
+                SCRIPT_PATH="${REMOTES_DIR:-/var/tmp/one}/tm/${DRIVER:-ssh}/monitor_ds"
+                if [[ -e "${SCRIPT_PATH}" ]]; then
                     if boolTrue "DEBUG_IM_MONITOR_DS"; then
-                        splog "run $SCRIPT_PATH $dir (set DEBUG_TM_MONITOR_DS=1)"
+                        splog "[D] run ${SCRIPT_PATH} ${dir} (set DEBUG_TM_MONITOR_DS=1)"
                         export DEBUG_TM_MONITOR_DS=1
                     fi
-                    "$SCRIPT_PATH" "$dir"
+                    "${SCRIPT_PATH}" "${dir}"
                 else
-                    splog "$SCRIPT_PATH Not found!"
+                    splog "${SCRIPT_PATH} Not found!"
                 fi
             else
                 if boolTrue "DDEBUG_IM_MONITOR_DS"; then
-                    splog "${dir}/.monitor not found. Shared filesystem?"
+                    splog "[DD] ${dir}/.monitor not found. Shared filesystem?"
                 fi
             fi
             # hijacking the loop in im/monitor_ds.sh
+            # shellcheck disable=SC2105
             continue
         fi
     else
         if boolTrue "DEBUG_IM_MONITOR_DS"; then
-            splog "Datastore $ds is not on StorPool"
+            splog "[D] Datastore ${ds} is not on StorPool"
         fi
     fi
 else
-    splog "$SP_MONITOR_DS not found"
+    splog "${SP_MONITOR_DS} not found"
 fi

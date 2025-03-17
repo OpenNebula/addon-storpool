@@ -33,7 +33,7 @@ source "$ONE_PATH/tm/storpool/storpool_common.sh"
 
 function splog()
 {
-    echo ">>>$*"    
+    echo ">>>$*"
 }
 function boolTrue()
 {
@@ -61,8 +61,7 @@ oneVmVolumes()
     unset XPATH_ELEMENTS i
     while read -u 5 element; do
         XPATH_ELEMENTS[i++]="$element"
-    done 5< <(cat "$tmpXML" |\
-        ${ONE_PATH}/datastore/xpath_multi.py -s \
+    done 5< <("${ONE_PATH}/datastore/xpath_multi.py" -s <"$tmpXML" \
         /VM/HISTORY_RECORDS/HISTORY[last\(\)]/DS_ID \
         /VM/TEMPLATE/CONTEXT/DISK_ID \
         /VM/TEMPLATE/DISK/DISK_ID \
@@ -216,7 +215,7 @@ _IMAGE_ID=${x[i++]}
 _IMAGE_SIZE=${x[i++]}
 _IMAGE_TYPE=${x[i++]}
 _OLDIFS=$IFS
-IFS=";"
+IFS=';'
 IMAGE_ID_A=($_IMAGE_ID)
 IMAGE_SIZE_A=($_IMAGE_SIZE)
 IMAGE_TYPE_A=($_IMAGE_TYPE)
@@ -338,4 +337,3 @@ done 4< <( jq -r --arg p "$ONE_PX" '.data[]|
            + " " + (.parentName|tostring)
            ' "$spSnaps" )
 echo "SNAPSHOTS: $snapSum // $((snapSum/1024**3)) GiB"
-

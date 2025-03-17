@@ -26,26 +26,29 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
-if [ -n "${ONE_LOCATION}" ]; then
-    LIB_LOCATION=$ONE_LOCATION/lib
+if [[ -n "${ONE_LOCATION}" ]]; then
+    LIB_LOCATION="${ONE_LOCATION}/lib"
 else
-    LIB_LOCATION=/usr/lib/one
+    LIB_LOCATION="/usr/lib/one"
 fi
 
-. $LIB_LOCATION/sh/scripts_common.sh
+# shellcheck source=/dev/null
+. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH=$(dirname $0)
-source ${DRIVER_PATH}/../libfs.sh
+DRIVER_PATH="$(dirname "$0")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
-LOG_PREFIX="ds"
+export LOG_PREFIX="ds"
 
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-if [ -n "$2" ]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -53,52 +56,52 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "$DRIVER_PATH"
+oneDsDriverAction "${DRIVER_PATH}"
 
 SIZE=0
 
 #-------------------------------------------------------------------------------
-# Test file 
+# Test file
 #-------------------------------------------------------------------------------
-[ -r "$IMAGE_PATH" ] || splog "Not readable file: $IMAGE_PATH"
-[ -w "$IMAGE_PATH" ] || splog "Not writable file: $IMAGE_PATH"
-[ -s "$IMAGE_PATH" ] || splog "Zero size file: $IMAGE_PATH"
+[[ -r "${IMAGE_PATH}" ]] || splog "Not readable file: ${IMAGE_PATH}"
+[[ -w "${IMAGE_PATH}" ]] || splog "Not writable file: ${IMAGE_PATH}"
+[[ -s "${IMAGE_PATH}" ]] || splog "Zero size file: ${IMAGE_PATH}"
 
 #-------------------------------------------------------------------------------
-# Compute the size 
+# Compute the size
 #-------------------------------------------------------------------------------
 
 case "${IMAGE_PATH,,}" in
     *vmdk|*vhdx)
-        SIZE=$($QEMU_IMG info "${IMAGE_PATH}" | sed -n 's/.*(\([0-9]*\) bytes).*/\1/p')
-        if [ $? -ne 0 ]; then
+        if ! SIZE=$(${QEMU_IMG:-qemu-img} info "${IMAGE_PATH}" | sed -n 's/.*(\([0-9]*\) bytes).*/\1/p' || true); then
             SIZE=0
         else
-            SIZE=$(echo $SIZE | tr -d "\r")
-            SIZE=$((($SIZE+1048575)/1048576))
+            SIZE=$(echo "${SIZE}" | tr -d "\r")
+            SIZE=$(((SIZE+1048575)/1048576))
         fi
         ;;
     *)
-        SIZE=`fs_size $IMAGE_PATH`
-        [ $? -eq 0 ] || SIZE=0
+        if ! SIZE=$(fs_size "${IMAGE_PATH}" || true); then
+            SIZE=0
+        fi
         ;;
 esac
 
-if [ "$SIZE" = "0" ]; then
+if [[ "${SIZE}" == "0" ]]; then
     oneSnapshotLookup "${IMAGE_PATH##*/}"
-    if [ -n "$SNAPSHOT_NAME" ]; then
-        storpoolSnapshotInfo "$SNAPSHOT_NAME"
+    if [[ -n "${SNAPSHOT_NAME}" ]]; then
+        storpoolSnapshotInfo "${SNAPSHOT_NAME}"
         SIZE="${SNAPSHOT_INFO[0]}"
         SIZE=$((SIZE/1024**2))
-        splog "$SNAPSHOT_NAME SIZE:$SIZE"
+        splog "${SNAPSHOT_NAME} SIZE:${SIZE}"
     fi
 fi
 
-if [ "$SIZE" = "0" ]; then
-    log_error "Cannot determine size for $IMAGE_PATH"
-    splog "Cannot determine size for $IMAGE_PATH"
-    exit -1
+if [[ "${SIZE}" == "0" ]]; then
+    log_error "Cannot determine size for ${IMAGE_PATH}"
+    splog "Cannot determine size for ${IMAGE_PATH}"
+    exit 255
 fi
 
-splog "END:$SIZE"
-echo "$SIZE"
+splog "END:${SIZE}"
+echo "${SIZE}"

@@ -31,32 +31,34 @@ SNAP_ID="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname $0)"
+TM_PATH="$(dirname "$0")"
+#shellcheck source=tm/storpool/storpool_common.sh
 source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=$SRC SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
-SRC_HOST=`arg_host $SRC`
-SRC_PATH=`arg_path $SRC`
+SRC_HOST=$(arg_host "${SRC}")
+SRC_PATH=$(arg_path "${SRC}")
 
-DISK_ID=$(echo ${SRC##*/} | awk -F. '{print $NF}')
+DISK_ID=$(echo "${SRC##*/}" | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
 
-oneDatastoreInfo "$(basename "$(dirname "$(dirname "$SRC_PATH")")")"
+oneDatastoreInfo "$(basename "$(dirname "$(dirname "${SRC_PATH}")")")"
 
-oneDatastoreInfo "$DS_ID"
+oneDatastoreInfo "${DS_ID}"
 
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-oneVmInfo "$VM_ID" "$DISK_ID"
+oneVmInfo "${VM_ID}" "${DISK_ID}"
 
-if [ "$TYPE" = "CDROM" ]; then
-    source "$TM_PATH/../../scripts_common.sh"
+if [[ "${TYPE}" == "CDROM" ]]; then
+    # shellcheck source=/dev/null
+    source "${TM_PATH}/../../scripts_common.sh"
     error_message "${0##*/}: CDROM snapshot operation not supported"
     exit 1
 fi
@@ -71,21 +73,22 @@ if boolTrue "CLONE"; then
 fi
 
 SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
-DST_HOST=$SRC_HOST
-DST_PATH="$SRC_PATH"
-
+DST_HOST="${SRC_HOST}"
+DST_PATH="${SRC_PATH}"
+export DST_PATH  #  TBD: remove
 #-------------------------------------------------------------------------------
 # Check snapshots limits
 #-------------------------------------------------------------------------------
 
-if [ -n "$DISKSNAPSHOT_LIMIT" ] && [ "${DISKSNAPSHOT_LIMIT//[[:digit:]]/}" = "" ]; then
-    if [ $DISKSNAPSHOT_LIMIT -ge 0 ] ; then
-        oneVmDiskSnapshots "$VM_ID" "$DISK_ID"
-        if [ ${#DISK_SNAPSHOTS[@]} -gt $DISKSNAPSHOT_LIMIT ]; then
-            source "$TM_PATH/../../scripts_common.sh"
-            msg="DISKSNAPSHOT_LIMIT of $DISKSNAPSHOT_LIMIT snaphosts exceeded!"
-            splog "$msg"
-            error_message "$msg"
+if [[ -n "${DISKSNAPSHOT_LIMIT}" ]] && [[ -z "${DISKSNAPSHOT_LIMIT//[[:digit:]]/}" ]]; then
+    if [[ "${DISKSNAPSHOT_LIMIT}" -ge 0 ]]; then
+        oneVmDiskSnapshots "${VM_ID}" "${DISK_ID}"
+        if [[ "${#DISK_SNAPSHOTS[@]}" -gt "${DISKSNAPSHOT_LIMIT}" ]]; then
+            # shellcheck source=/dev/null
+            source "${TM_PATH}/../../scripts_common.sh"
+            msg="DISKSNAPSHOT_LIMIT of ${DISKSNAPSHOT_LIMIT} snaphosts exceeded!"
+            splog "${msg}"
+            error_message "${msg}"
             exit 1
         fi
     fi
@@ -96,16 +99,16 @@ fi
 #-------------------------------------------------------------------------------
 
 if boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
-    oneFsfreeze "$DST_HOST" "$DEPLOY_ID"
-    trapAdd "oneFsthaw \"$DST_HOST\" \"$DEPLOY_ID\""
+    oneFsfreeze "${DST_HOST}" "${DEPLOY_ID}"
+    trapAdd "oneFsthaw \"${DST_HOST}\" \"${DEPLOY_ID}\""
 fi
 
-storpoolSnapshotCreate "$SP_SNAP" "$SP_VOL"
+storpoolSnapshotCreate "${SP_SNAP}" "${SP_VOL}"
 
 if boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
-    oneFsthaw "$DST_HOST" "$DEPLOY_ID"
+    oneFsthaw "${DST_HOST}" "${DEPLOY_ID}"
     trapReset
 fi
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

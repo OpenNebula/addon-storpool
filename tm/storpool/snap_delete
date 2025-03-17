@@ -31,27 +31,28 @@ SNAP_ID="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname $0)"
+TM_PATH="$(dirname "$0")"
+#shellcheck source=tm/storpool/storpool_common.sh
 source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=$SRC SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
-SRC_HOST=`arg_host $SRC`
-SRC_PATH=`arg_path $SRC`
+SRC_HOST=$(arg_host "${SRC}")
+SRC_PATH=$(arg_path "${SRC}")
 
-DISK_ID=$(echo ${SRC##*/} | awk -F. '{print $NF}')
+DISK_ID=$(echo "${SRC##*/}" | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
 #-------------------------------------------------------------------------------
 
-oneDatastoreInfo "$DS_ID"
+oneDatastoreInfo "${DS_ID}"
 
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-oneVmInfo "$VM_ID" "$DISK_ID"
+oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 #-------------------------------------------------------------------------------
 # Compute the source image
@@ -63,14 +64,14 @@ if boolTrue "CLONE"; then
 fi
 
 SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
-DST_HOST=$SRC_HOST
-DST_PATH="$SRC_PATH"
-
+DST_HOST="${SRC_HOST}"
+DST_PATH="${SRC_PATH}"
+export DST_PATH  #  TBD: remove
 #-------------------------------------------------------------------------------
 # Delete snapshot
 #-------------------------------------------------------------------------------
 
-storpoolSnapshotDelete "$SP_SNAP"
+storpoolSnapshotDelete "${SP_SNAP}"
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

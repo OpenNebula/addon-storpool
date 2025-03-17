@@ -18,15 +18,18 @@
 
 DRIVER_PATH="$(dirname "$0")"
 
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-DST_HOST=${1%%:*}
-SYSTEM_DS_PATH=${1#*:}
-VM_ID=$2
-IMG_ID=$3
-INC_ID=$4
-DISK_ID=$5
+DST_HOST="${1%%:*}"
+SYSTEM_DS_PATH="${1#*:}"
+VM_ID="${2}"
+IMG_ID="${3}"
+INC_ID="${4}"
+DISK_ID="${5}"
+export SYSTEM_DS_PATH  # TBD: remove
 
 #splog "$* //${#DRV_ACTION}"
 
@@ -72,11 +75,10 @@ BACKUP_MAD_LS="${DRIVER_PATH}/../../datastore/${DS_DS_MAD}/ls"
 
 declare -A disksUrl disksMap
 
-while IFS=' ' read -ru 5 did url; do
+while IFS=' ' read -r -u "${jqfd}" did url; do
     disksUrl["${did}"]="${url}"
-done 5< <(cat "${DS_DRIVER_ACTION}" | \
-          "${BACKUP_MAD_LS}" -i "${INC_ID}" |\
-          jq -r 'to_entries[]|"\(.key) \(.value)"'||true)
+done {jqfd}< <("${BACKUP_MAD_LS}" -i "${INC_ID}" <"${DS_DRIVER_ACTION}" |\
+          jq -r 'to_entries[]|"\(.key) \(.value)"' || true)
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}"
 for entry in ${vmDisksMap}; do
@@ -95,7 +97,7 @@ for did in ${!disksUrl[*]}; do
     SP_NAME="${disksMap[${did}]}"
     TMP_NAME="${SP_NAME}-${_TMP_NAME}"
     SP_LINK="/dev/storpool/${SP_NAME}"
-    COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp "${BACKUP_URL}" -"
+    COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp \"${BACKUP_URL}\" -"
     storpoolVolumeInfo "${SP_NAME}"
     if [[ -z ${V_SIZE} ]]; then
         splog "VM ${VM_ID} volume ${SP_NAME} not found"
@@ -108,7 +110,7 @@ for did in ${!disksUrl[*]}; do
         storpoolVolumeCreate "${SP_NAME}" "${V_SIZE}" "${V_TEMPLATE_NAME}"
         RET=$?
         if [[ ${RET} -eq 0 ]]; then # 2
-            storpoolVolumeTag "${SP_NAME}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG};${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
+            storpoolVolumeTag "${SP_NAME}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}"
             storpoolVolumeAttach "${SP_NAME}" "${DST_HOST}"
             if [[ ${RET} -eq 0 ]]; then # 3
                 splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct"

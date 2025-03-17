@@ -31,196 +31,205 @@ SNAP_ID="$2"
 VM_ID="$3"
 VMHOST="$4"
 
-DRIVER_PATH="$(dirname $0)"
+DRIVER_PATH="$(dirname "$0")"
 VMSNAPSHOT_TAG="ONESNAP"
 VMSNAPSHOT_OVERRIDE=1
 DS_PATH="/var/lib/one/datastores"
+export DS_PATH
 
-[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
+if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
+    # shellcheck source=/dev/null
+    source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+else
+    # shellcheck source=/dev/null
+    source "${DRIVER_PATH}/kvmrc"
+fi
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-LOG_PREFIX="vmm"
+export LOG_PREFIX="vmm"
 
 if boolTrue "DEBUG_VMSNAPSHOT"; then
-    splog "$0 $*"
+    splog "[D] $0 $*"
 fi
 
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
-    oneVmVolumes "$VM_ID"
-    oneDatastoreInfo "$VM_DS_ID"
-    
+    oneVmVolumes "${VM_ID}"
+    oneDatastoreInfo "${VM_DS_ID}"
+
     declare -A vmVolumesMap diskVolumes vmVolumesQcMap
-    for v in $vmVolumes; do
-        diskVolumes["$v"]="$v"  # diskVolumes[VOLUME_NAME]=VOLUME_NAME
+    for volume in ${vmVolumes}; do
+        diskVolumes["${volume}"]="${volume}"  # diskVolumes[VOLUME_NAME]=VOLUME_NAME
     done
-    for disk in $vmDisksMap; do
+    for disk in ${vmDisksMap}; do
         vmVolumesMap["${disk%:*}"]="${disk##*:}"  # vmVolumesMap[DISK_ID]=VOLUME_NAME
     done
 
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
         MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-        diskVolumes["$MEM_VOL"]="$MEM_VOL"
+        diskVolumes["${MEM_VOL}"]="${MEM_VOL}"
     fi
-    for v in $vmVolumesQc; do
-        vmVolumesQcMap["${v%%:*}"]="${v##*:}"  # vmVolumesQcMap[VOLUME_NAME]=QOSCLASS
+    for volume in ${vmVolumesQc:-}; do
+        vmVolumesQcMap["${volume%%:*}"]="${volume##*:}"  # vmVolumesQcMap[VOLUME_NAME]=QOSCLASS
     done
 
     rCMD=$(cat <<EOF
-    [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-	while read -u 4 out; do
-        logger -t vmm_sp_snapshot_revert_r "virsh: \$out"
-    done 4< <(virsh --connect \$LIBVIRT_URI destroy "$DOMAIN" 2>&1)
-    logger -t vmm_sp_snapshot_revert_r "virsh destroy $DOMAIN ret:\$?"
+    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+	while read -r -u "\${virshfd}" out; do
+        logger -t vmm_sp_snapshot_revert_r "virsh: \${out}"
+    done {virshfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" destroy "${DOMAIN}" 2>&1)
+    logger -t vmm_sp_snapshot_revert_r "virsh destroy ${DOMAIN} ret:\$?"
 EOF
 )
-    $SSH "$VMHOST" "$rCMD" 2>/dev/null >/dev/null
-    splog "VM $VM_ID host:$VMHOST DOMAIN_ID:$DOMAIN destroyed"
+    ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>/dev/null >/dev/null
+    splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed"
     sleep .5
-    SP_TMP="SPTMP-$(date +%s)-$(mktemp --dry-run XXXXXXXX)"
+    SP_TMP="SPTMP-$(date +%s||true)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-    while read -u 5 snap vmtag loctagval; do
+    while read -r -u "${spfd}" snap vmtag loctagval; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
-            splog "$snap vmtag:$vmtag loctagval:$loctagval"
+            splog "[DD] ${snap} vmtag:${vmtag} loctagval:${loctagval}"
         fi
-        snapVol="${snap%-${VMSNAPSHOT_TAG}*}"
-        if [ "$snapVol" = "$MEM_VOL" ]; then
-            MEM_SNAP="$snap"
+        snapVol="${snap%"-${VMSNAPSHOT_TAG}"*}"
+        if [[ "${snapVol}" == "${MEM_VOL}" ]]; then
+            MEM_SNAP="${snap}"
             continue
         fi
-        if [ -n "${vmtag/null/}" ]; then
-            if [ "${VM_ID}" != "$vmtag" ]; then
+        if [[ -n "${vmtag/null/}" ]]; then
+            if [[ "${VM_ID}" != "${vmtag}" ]]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
-                    splog "Skip $snap (${VM_ID} != $vmtag, VM_TAG=$VM_TAG)"
+                    splog "[D] Skip ${snap} (${VM_ID} != ${vmtag}, VM_TAG=${VM_TAG})"
                 fi
                 continue
             fi
-            if [ -n "${loctagval/null/}" ]; then
-                if [ "$loctagval" != "$LOC_TAG_VAL" ]; then
+            if [[ -n "${loctagval/null/}" ]]; then
+                if [[ "${loctagval}" != "${LOC_TAG_VAL}" ]]; then
                     if boolTrue "DEBUG_VMSNAPSHOT"; then
-                        splog "Skip $snap (loctagval $loctagval != $LOC_TAG_VAL)"
+                        splog "[D] Skip ${snap} (loctagval ${loctagval} != ${LOC_TAG_VAL})"
                     fi
                     continue
                 fi
             fi
-        elif [ -z "${diskVolumes["$snapVol"]}" ]; then
+        elif [[ -z "${diskVolumes["${snapVol}"]}" ]]; then
             if boolTrue "DEBUG_VMSNAPSHOT"; then
-                splog "Skip $snap (not in diskVolumes:$diskVolumes)"
+                splog "[D] Skip ${snap} (not in diskVolumes:${!diskVolumes})"
             fi
             continue
         fi
-        snapList+=("$snap")
-    done 5< <(storpoolRetry -j snapshot list |\
-                  jq -r --arg snp "$SNAP_ID" --arg vmtag "$VM_TAG" --arg loctag "$LOC_TAG" \
-                      '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]')
+        snapList+=("${snap}")
+    done {spfd}< <(storpoolRetry -j snapshot list |\
+                  jq -r --arg snp "${SNAP_ID}" --arg vmtag "${VM_TAG:-nvm}" --arg loctag "${LOC_TAG:-nloc}" \
+                      '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]' || true)
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
-        if [ -z "$MEM_SNAP" ]; then
+        if [[ -z "${MEM_SNAP}" ]]; then
            splog "Error: VMSNAPSHOT_WITH_CHECKPOINT is set but checkpoint snapshot not found"
            exit 1
         fi
     fi
-    splog "snapList: ${snapList[@]}"
+    splog "snapList: ${snapList[*]}"
     finish=1
-    for snap in ${snapList[@]}; do
+    for snap in "${snapList[@]}"; do
         tb=$(date +%s%N)
-        splog "BEGIN snapshot $snap ($tb)"
-        volume="${snap%-$SNAP_ID}"
-        [ "${volume%-iso}" = "$volume" ] && mode="rw" || mode="$READONLY_MODE"
-        storpoolVolumeDetach "$volume" "force" "$VMHOST" "all"
-        storpoolVolumeInfo "$volume"
+        splog "BEGIN snapshot ${snap} (${tb})"
+        volume="${snap%"-${SNAP_ID}"}"
+        [[ "${volume%-iso}" == "${volume}" ]] && mode="rw" || mode="${READONLY_MODE}"
+        storpoolVolumeDetach "${volume}" "force" "${VMHOST}" "all"
+        storpoolVolumeInfo "${volume}"
         OLD_SIZE_M=$((V_SIZE/1024/1024))
-        if [ "$V_TYPE" = "CDROM"  ]; then
-            mode="$READONLY_MODE"
+        if [[ "${V_TYPE}" == "CDROM" ]]; then
+            mode="${READONLY_MODE}"
         fi
         tmpVolume="${volume}-${SP_TMP}"
-        storpoolRetry volume "$volume" rename "$tmpVolume" >/dev/null || finish=0
-        storpoolSnapshotClone "$snap" "$volume" "$V_TEMPLATE_NAME" || finish=0
-        storpoolVolumeInfo "$volume"
+        storpoolRetry volume "${volume}" rename "${tmpVolume}" >/dev/null || finish=0
+        storpoolSnapshotClone "${snap}" "${volume}" "${V_TEMPLATE_NAME}" || finish=0
+        storpoolVolumeInfo "${volume}"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
-        if [ $OLD_SIZE_M -ne $NEW_SIZE_M ]; then
+        if [[ "${OLD_SIZE_M}" -ne "${NEW_SIZE_M}" ]]; then
             if boolTrue "UPDATE_ONE_DISK_SIZE"; then
-                if [ -n "${vmVolumesMap["$volume"]}" ]; then
-                    DISK_ID="${vmVolumesMap[$volume]}"
-                    onedb change-body vm --id $VM_ID "/VM/TEMPLATE/DISK[DISK_ID=$DISK_ID]/SIZE" $NEW_SIZE_M
-                    splog "onedb change VM_ID:$VM_ID DISK_ID:$DISK_ID SIZE:$NEW_SIZE_M (OLD_SIZE:$OLD_SIZE_M)($?)"
+                if [[ -n "${vmVolumesMap["${volume}"]}" ]]; then
+                    DISK_ID="${vmVolumesMap[${volume}]}"
+                    onedb change-body vm --id "${VM_ID}" "/VM/TEMPLATE/DISK[DISK_ID=${DISK_ID}]/SIZE" "${NEW_SIZE_M}"
+                    splog "onedb change VM_ID:${VM_ID} DISK_ID:${DISK_ID} SIZE:${NEW_SIZE_M} (OLD_SIZE:${OLD_SIZE_M})($?)"
                 else
-                    splog "vmVolumesMap[$volume] not found"
+                    splog "vmVolumesMap[${volume}] not found"
                 fi
-            elif [ $OLD_SIZE_M -gt $NEW_SIZE_M ]; then
+            elif [[ "${OLD_SIZE_M}" -gt "${NEW_SIZE_M}" ]]; then
                 splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than snapshot. Inflating..."
-                storpoolVolumeResize "$volume" "${OLD_SIZE_M}M"
+                storpoolVolumeResize "${volume}" "${OLD_SIZE_M}M"
             fi
         else
-            splog "$tmpVolume=$OLD_SIZE_M $volume=$NEW_SIZE_M"
+            splog "${tmpVolume}=${OLD_SIZE_M} ${volume}=${NEW_SIZE_M}"
         fi
-        storpoolVolumeAttach "$volume" "$VMHOST" "$mode"
-        
-        VM_DISK_SP_QOSCLASS="${vmVolumesQcMap[$volume]}"
+        storpoolVolumeAttach "${volume}" "${VMHOST}" "${mode}"
+
+        VM_DISK_SP_QOSCLASS="${vmVolumesQcMap[${volume}]}"
 
         SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
         debug_sp_qosclass
 
-        storpoolVolumeTag "$volume" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG};$VM_TAG;${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
-        tmpVolumes+=("$tmpVolume")
+        storpoolVolumeTag "${volume}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
+        tmpVolumes+=("${tmpVolume}")
         te=$(date +%s%N)
-        splog "END snapshot $snap ($te dt:$((te-tb)))"
+        splog "END snapshot ${snap} (${te} dt:$((te-tb)))"
     done
-    if boolTrue "finish"; then
-        for volume in ${tmpVolumes[@]}; do
-            storpoolVolumeDelete "$volume" "force" "snaps"
+    if boolTrue "finish" "${finish}"; then
+        for volume in "${tmpVolumes[@]}"; do
+            storpoolVolumeDelete "${volume}" "force" "snaps"
         done
     fi
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
         RET=$?
-        storpoolVolumeAttach "$MEM_SNAP" "$VMHOST" "ro" "snapshot"
-        MEM_LNK="/dev/storpool/$MEM_SNAP"
+        storpoolVolumeAttach "${MEM_SNAP}" "${VMHOST}" "ro" "snapshot"
+        MEM_LNK="/dev/storpool/${MEM_SNAP}"
         TDIR="$(mktemp -d)"
         VM_XML="${TDIR}/restore-${VM_ID}.xml"
         rCMD=$(cat <<EOF
- mkdir "$TDIR"
+ mkdir "${TDIR}"
  RET=\$?
- logger -t "${0##*/}_r[$$]" -- "mkdir $TDIR(\$RET)"
- [ \$RET -eq 0 ] || exit \$RET
- [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
- virsh --connect \$LIBVIRT_URI save-image-dumpxml "$MEM_LNK" >"$VM_XML"
+ logger -t "${0##*/}_r[$$]" -- "mkdir ${TDIR} (\$RET)"
+ [[ \${RET} -eq 0 ]] || exit \${RET}
+ [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+ virsh --connect \${LIBVIRT_URI:-qemu:///system} save-image-dumpxml "${MEM_LNK}" >"${VM_XML}"
  RET=\$?
- logger -t "${0##*/}_r[$$]" -- "virsh save-image-dumpxml $MEM_LNK >$VM_XML (\$RET)"
- [ \$RET -eq 0 ] || exit \$RET
+ logger -t "${0##*/}_r[$$]" -- "virsh save-image-dumpxml ${MEM_LNK} >${VM_XML} (\$RET)"
+ [[ \${RET} -eq 0 ]] || exit \${RET}
  for i in 0 1 2; do
-   virsh --connect \$LIBVIRT_URI restore "$MEM_LNK" --xml $VM_XML &>>"$TDIR/restore-${VM_ID}-\${i}.log"
+   virsh --connect \${LIBVIRT_URI:-qemu:///system} restore "${MEM_LNK}" --xml "${VM_XML}" &>>"${TDIR}/restore-${VM_ID}-\${i}.log"
    RET=\$?
-   logger -t "${0##*/}_r[$$]" -- "[\$i] virsh restore $MEM_LNK --xml $VM_XML (\$RET)"
-   if [ \$RET -ne 0 ]; then
-       logger -t "${0##*/}_r[$$]" -- "[\$i] Error: \$(cat "$TDIR/restore-${VM_ID}-\${i}.log")"
+   logger -t "${0##*/}_r[$$]" -- "[\$i] virsh restore ${MEM_LNK} --xml ${VM_XML} (\$RET)"
+   if [[ \${RET} -ne 0 ]]; then
+       logger -t "${0##*/}_r[$$]" -- "[\$i] Error: \$(cat "${TDIR}/restore-${VM_ID}-\${i}.log")"
    else
        break
    fi
    sleep 0.5
  done
- rm -rf "$TDIR"
- logger -t "${0##*/}_r[$$]" -- "END $VM_ID (\$RET)"
- exit \$RET
+ rm -rf "${TDIR}"
+ logger -t "${0##*/}_r[$$]" -- "END ${VM_ID} (\$RET)"
+ exit "\${RET}"
 EOF
 )
-        splog "ssh $VMHOST virsh restore ..."
-        if $SSH "$VMHOST" "$rCMD" >"$TDIR/ssh.out" 2>"$TDIR/ssh.err"; then
-            splog "OK ssh $VMHOST ($?)"
+        splog "ssh ${VMHOST} virsh restore ..."
+        if ${SSH:-ssh} "${VMHOST}" "${rCMD}" >"${TDIR}/ssh.out" 2>"${TDIR}/ssh.err"; then
+            splog "OK ssh ${VMHOST} ($?)"
             RET=0
         else
-            splog "ssh $VMHOST failed! ($?)"
-            splog "DEBUG_OUT:$(cat "$TDIR/ssh.out")"
-            splog "DEBUG_ERR:$(cat "$TDIR/ssh.err")"
+            splog "ssh ${VMHOST} failed! ($?)"
+            splog "DEBUG_OUT:$(cat "${TDIR}/ssh.out"||true)"
+            splog "DEBUG_ERR:$(cat "${TDIR}/ssh.err"||true)"
             RET=1
         fi
-        storpoolVolumeDetach "$MEM_SNAP" "" "$VMHOST"
-        if [ $RET -ne 0 ]; then
-            splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID Failed! ($RET)"
-            exit $RET
+        storpoolVolumeDetach "${MEM_SNAP}" "" "${VMHOST}"
+        if [[ "${RET}" -ne 0 ]]; then
+            splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID} Failed! (${RET})"
+            exit "${RET}"
         fi
-        rm -rf "$TDIR"
+        rm -rf "${TDIR}"
     fi
-    splog "END VM_ID=$VM_ID VMHOST=$VMHOST SNAP_ID=$SNAP_ID"
+    splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID}"
     exit 0
 else
     splog "[CONTINUE]"

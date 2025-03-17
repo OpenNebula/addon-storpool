@@ -20,24 +20,26 @@
 
 # ------------ Set up the environment to source common tools ------------
 
-if [ -z "${ONE_LOCATION}" ]; then
+if [[ -z "${ONE_LOCATION:-}" ]]; then
     LIB_LOCATION=/usr/lib/one
 else
-    LIB_LOCATION=$ONE_LOCATION/lib
+    LIB_LOCATION="${ONE_LOCATION}/lib"
 fi
+# shellcheck source=/dev/null
+. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-. $LIB_LOCATION/sh/scripts_common.sh
+DRIVER_PATH="$(dirname "${0}")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
-DRIVER_PATH=$(dirname $0)
-source ${DRIVER_PATH}/../libfs.sh
+export LOG_PREFIX="ds"
 
-LOG_PREFIX="ds"
-
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 # -------- Get tm and datastore arguments from OpenNebula core ------------
 
-if [ -n "$2" ]; then
+if [[ -n "${2:-}" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -45,30 +47,32 @@ else
     ID="$1"
 fi
 
-dumpTemplate "$DRV_ACTION"
+export DRV_ACTION
 
-oneDsDriverAction "$DRIVER_PATH"
+dumpTemplate "${DRV_ACTION}"
 
-if [ -n "$EXPORT_BRIDGE_LIST" ]; then
-    BRIDGE_LIST="$EXPORT_BRIDGE_LIST"
+oneDsDriverAction "${DRIVER_PATH}"
+
+if [[ -n "${EXPORT_BRIDGE_LIST:-}" ]]; then
+    BRIDGE_LIST="${EXPORT_BRIDGE_LIST}"
 fi
 
-DST_HOST=`get_destination_host $ID`
+DST_HOST="$(get_destination_host "${ID}")"
 
-if [ -z "$DST_HOST" ]; then
+if [[ -z "${DST_HOST:-}" ]]; then
     msg="Error: Datastore template missing 'BRIDGE_LIST' attribute."
-    splog "$msg"
-    error_message "$msg"
-    exit -1
+    splog "${msg}"
+    error_message "${msg}"
+    exit 255
 fi
 
 SP_VOL="${SOURCE#*/}"
-SP_SNAPSHOT="$SP_VOL-export-$(mktemp --dry-run XXXXXX)"
-SP_LINK="/dev/storpool/$SP_SNAPSHOT"
+SP_SNAPSHOT="${SP_VOL}-export-$(mktemp --dry-run XXXXXX)"
+SP_LINK="/dev/storpool/${SP_SNAPSHOT}"
 
 DISPOSE="YES"
 
-if [ -n "$EXPORT_FILE_FORMAT" ]; then
+if [[ -n "${EXPORT_FILE_FORMAT:-}" ]]; then
     case "${EXPORT_FILE_FORMAT,,}" in
         raw)
             EXPORT_FILE_FORMAT=raw
@@ -77,84 +81,84 @@ if [ -n "$EXPORT_FILE_FORMAT" ]; then
             EXPORT_FILE_FORMAT="${EXPORT_FILE_FORMAT,,}"
             ;;
         *)
-            msg="Error: Unsupported configuration! EXPORT_FILE_FORMAT '$EXPORT_FILE_FORMAT' but raw,qcow or nudefined variable expected"
-            splog "$msg"
-            error_message "$msg"
-            exit -1
+            msg="Error: Unsupported configuration! EXPORT_FILE_FORMAT '${EXPORT_FILE_FORMAT}' but raw,qcow or nudefined variable expected"
+            splog "${msg}"
+            error_message "${msg}"
+            exit 255
             ;;
     esac
 fi
 
 EXPORT_DELETE="${ONE_LOCATION:-/var/lib/one}/remotes/datastore/storpool/export.delete"
 
-storpoolVolumeInfo "$SP_VOL"
+storpoolVolumeInfo "${SP_VOL}"
 
-if [ -n "$V_SIZE" ]; then
+if [[ -n "${V_SIZE}" ]]; then
     SIZE="$((V_SIZE/1024/1024))"
 else
-    msg="Error: Can't get the SIZE of volume $SP_VOL "
-    splog "$msg"
-    error_message "$msg"
-    exit -1
+    msg="Error: Can't get the SIZE of volume ${SP_VOL}"
+    splog "${msg}"
+    error_message "${msg}"
+    exit 255
 fi
 
-storpoolSnapshotCreate "$SP_SNAPSHOT" "$SP_VOL"
+storpoolSnapshotCreate "${SP_SNAPSHOT}" "${SP_VOL}"
 
-storpoolVolumeAttach "$SP_SNAPSHOT" "$DST_HOST" "ro" "snapshot"
+storpoolVolumeAttach "${SP_SNAPSHOT}" "${DST_HOST}" "ro" "snapshot"
 
-if [ -n "$EXPORT_FILE_FORMAT" ]; then
-    FORMAT="$EXPORT_FILE_FORMAT"
-    EXPORT_FILE="${STAGING_DIR:-/var/tmp}/$SP_SNAPSHOT"
+if [[ -n "${EXPORT_FILE_FORMAT}" ]]; then
+    FORMAT="${EXPORT_FILE_FORMAT}"
+    EXPORT_FILE="${STAGING_DIR:-/var/tmp}/${SP_SNAPSHOT}"
     CMD=$(cat <<EOF
 set -o pipefail
-logger -t "ds_sp_export_r[$$]" -- "Begin $EXPORT_FILE (\$?)"
-$QEMU_IMG convert $EXPORT_QEMU_IMG_ARGS -O $FORMAT $SP_LINK $EXPORT_FILE 2>&1 >"/tmp/export$$.log"
-logger -t "ds_sp_export_r[$$]" -- "$QEMU_IMG convert $EXPORT_QEMU_IMG_ARGS -O $FORMAT $SP_LINK $EXPORT_FILE (\$?)"
+logger -t "ds_sp_export_r[$$]" -- "Begin ${EXPORT_FILE} (\$?)"
+${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} 2>&1 >"/tmp/export$$.log"
+logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$?)"
 while read -u 4 l; do
   logger -t "ds_sp_export_r[$$]" -- "LOG:\$l"
 done 4< <("cat /tmp/export$$.log")
 rm -f "/tmp/export$$.log"
-${DU} -Lm "${EXPORT_FILE}" | cut -f1
+${DU:-du} -Lm "${EXPORT_FILE}" | cut -f1
 EOF
 )
-    splog "CMD=$CMD"
-    QCOW_SIZE=$(ssh_monitor_and_log "$DST_HOST" "$CMD" "export file convert ")
-    splog "$EXPORT_FILE SIZE=$SIZE QCOW_SIZE=$QCOW_SIZE ($?)"
-    storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
-    storpoolSnapshotDelete "$SP_SNAPSHOT"
-    DISPOSE_CMD="$EXPORT_DELETE $DST_HOST $EXPORT_FILE"
+    splog "CMD=${CMD}"
+    QCOW_SIZE=$(ssh_monitor_and_log "${DST_HOST}" "${CMD}" "export file convert ")
+    splog "${EXPORT_FILE} SIZE=${SIZE} QCOW_SIZE=${QCOW_SIZE} ($?)"
+    storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"
+    storpoolSnapshotDelete "${SP_SNAPSHOT}"
+    DISPOSE_CMD="${EXPORT_DELETE} ${DST_HOST} ${EXPORT_FILE}"
 else
     FORMAT="raw"
-    EXPORT_FILE="$SP_LINK"
-    DISPOSE_CMD="$EXPORT_DELETE $DST_HOST $EXPORT_FILE"
+    EXPORT_FILE="${SP_LINK}"
+    DISPOSE_CMD="${EXPORT_DELETE} ${DST_HOST} ${EXPORT_FILE}"
 fi
 
-splog "$EXPORT_FILE calculating checksum ..."
-CHECKSUM=$($SSH "$DST_HOST" "set -o pipefail&&openssl dgst -md5 $EXPORT_FILE | cut -d' ' -f2")
+splog "${EXPORT_FILE} calculating checksum ..."
+CHECKSUM=$(${SSH:-ssh} "${DST_HOST}" "set -o pipefail&&openssl dgst -md5 ${EXPORT_FILE} | cut -d' ' -f2")
 RET=$?
-splog "$EXPORT_FILE CHECKSUM $CHECKSUM ($RET)"
-if [ $RET -ne 0 ]; then
-    msg="Error: Can't calculate MD5 checksum for $EXPORT_FILE"
-    splog "$msg"
-    error_message "$msg"
-    if [ -z "$EXPORT_FILE_FORMAT" ]; then
-        storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
-        storpoolSnapshotDelete "$SP_SNAPSHOT"
+splog "${EXPORT_FILE} CHECKSUM ${CHECKSUM} (${RET})"
+if [[ "${RET}" -ne 0 ]]; then
+    msg="Error: Can't calculate MD5 checksum for ${EXPORT_FILE}"
+    splog "${msg}"
+    error_message "${msg}"
+    if [[ -z "${EXPORT_FILE_FORMAT:-}" ]]; then
+        storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"
+        storpoolSnapshotDelete "${SP_SNAPSHOT}"
     fi
-    exit -1
+    exit 255
 fi
 
-IMPORT_SOURCE="${EXPORT_TRANSPORT:-ssh}://$DST_HOST:$EXPORT_FILE"
+IMPORT_SOURCE="${EXPORT_TRANSPORT:-ssh}://${DST_HOST}:${EXPORT_FILE}"
 
-splog "IMPORT_SOURCE=$IMPORT_SOURCE MD5=$CHECKSUM SIZE=$SIZE${QCOW_SIZE:+ QCOW_SIZE=$QCOW_SIZE} FORMAT=$FORMAT${EXPORT_FILE_FORMAT:+ EXPORT_FILE_FORMAT=$EXPORT_FILE_FORMAT} DISPOSE=$DISPOSE DISPOSE_CMD=$DISPOSE_CMD"
+splog "IMPORT_SOURCE=${IMPORT_SOURCE} MD5=${CHECKSUM} SIZE=${SIZE}${QCOW_SIZE:+ QCOW_SIZE=${QCOW_SIZE}} FORMAT=${FORMAT}${EXPORT_FILE_FORMAT:+ EXPORT_FILE_FORMAT=${EXPORT_FILE_FORMAT}} DISPOSE=${DISPOSE} DISPOSE_CMD=${DISPOSE_CMD}"
 
 cat <<EOF
 <IMPORT_INFO>
-    <IMPORT_SOURCE><![CDATA[$IMPORT_SOURCE]]></IMPORT_SOURCE>
-    <MD5><![CDATA[$CHECKSUM]]></MD5>
-    <SIZE><![CDATA[$SIZE]]></SIZE>
-    <FORMAT><![CDATA[$FORMAT]]></FORMAT>
-    <DISPOSE><![CDATA[$DISPOSE]]></DISPOSE>
-    <DISPOSE_CMD><![CDATA[$DISPOSE_CMD]]></DISPOSE_CMD>
+    <IMPORT_SOURCE><![CDATA[${IMPORT_SOURCE}]]></IMPORT_SOURCE>
+    <MD5><![CDATA[${CHECKSUM}]]></MD5>
+    <SIZE><![CDATA[${SIZE}]]></SIZE>
+    <FORMAT><![CDATA[${FORMAT}]]></FORMAT>
+    <DISPOSE><![CDATA[${DISPOSE}]]></DISPOSE>
+    <DISPOSE_CMD><![CDATA[${DISPOSE_CMD}]]></DISPOSE_CMD>
 </IMPORT_INFO>
 EOF

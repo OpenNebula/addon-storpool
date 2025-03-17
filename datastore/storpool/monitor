@@ -19,13 +19,15 @@
 
 function splog() { logger -t "ds_sp_${0##*/}" "[$$] $*"; }
 
-if [ -n "$2" ]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     DS_ID="$2"
 else
     DRV_ACTION="$(cat)"
     DS_ID="$1"
 fi
+
+export DRV_ACTION
 
 DRIVER_PATH="${0%/*}"
 SP_JSON_PATH="/tmp"
@@ -34,31 +36,36 @@ SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
 SP_CMD_TEMPLATE_STATUS="cat _SP_JSON_PATH_/_SP_TEMPLATE_STATUS_JSON_"
 SP_CMD_TEMPLATE_STATUS_IMAGE="cat _SP_FE_JSON_PATH_/_CLUSTER_ID_/_SP_TEMPLATE_STATUS_JSON_"
 # alternate calculation of the Free space
-ALT_STATS=
+ALT_STATS=""
 
-if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
+if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
+	# shellcheck source=addon-storpoolrc
     source "${DRIVER_PATH}/../../addon-storpoolrc"
 fi
-if [ -f "/etc/storpool/addon-storpool.conf" ]; then
+if [[ -f "/etc/storpool/addon-storpool.conf" ]]; then
+    # shellcheck source=/dev/null
     source "/etc/storpool/addon-storpool.conf"
 fi
 
-if [ -f "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh" ]; then
-	LOG_PREFIX="ds"
+if [[ -f "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh" ]]; then
+	export LOG_PREFIX="ds"
+	# shellcheck source=tm/storpool/storpool_common.sh
 	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 else
 	splog "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh not found!"
 fi
 
-DS_NAME="${ONE_PX}-ds-$DS_ID"
+export ALT_STATS
+
+DS_NAME="${ONE_PX:-one}-ds-${DS_ID}"
 
 if boolTrue "DEBUG_DS_MONITOR"; then
-	splog "$PWD datastore $DS_ID ${DRV_ACTION:0:6}"
+	splog "[D] ${PWD} datastore ${DS_ID} ${DRV_ACTION:0:6}"
 fi
 
-if [ "${DRV_ACTION:0:6}" = "system" ]; then
-	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_SYSTEM:-$SP_CMD_TEMPLATE_STATUS}"
-	if [ -f "${SP_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON}" ]; then
+if [[ "${DRV_ACTION:0:6}" == "system" ]]; then
+	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_SYSTEM:-${SP_CMD_TEMPLATE_STATUS}}"
+	if [[ -f "${SP_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON}" ]]; then
 		:
 	else
 		echo "{[]}" >"${SP_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON}"
@@ -67,29 +74,29 @@ if [ "${DRV_ACTION:0:6}" = "system" ]; then
 #	echo "bash -x $PWD/$0 $*" >/tmp/monitor_system.sh
 else
 	oneDsDriverAction "${DRIVER_PATH}"
-	if [ -n "$CLUSTERS_ID" ]; then
-		CLUSTERS_ID_ARRAY=($CLUSTERS_ID)
-		CLUSTER_ID=${CLUSTERS_ID_ARRAY[0]}
+	if [[ -n "${CLUSTERS_ID}" ]]; then
+		read -r -a CLUSTERS_ID_ARRAY <<<"${CLUSTERS_ID}"
+		CLUSTER_ID="${CLUSTERS_ID_ARRAY[0]}"
 	fi
 #	echo "bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
-	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-$SP_CMD_TEMPLATE_STATUS}"
+	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-${SP_CMD_TEMPLATE_STATUS}}"
 fi # DRV_ACTION
 
 # expand the template variables
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_DATASTORE_ID_/$DS_ID}"
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_CLUSTER_ID_/$CLUSTER_ID}"
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/$SP_JSON_PATH}"
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/$SP_FE_JSON_PATH}"
-SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/$SP_TEMPLATE_STATUS_JSON}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/${SP_TEMPLATE_STATUS_JSON}}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_DATASTORE_ID_/${DS_ID}}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_CLUSTER_ID_/${CLUSTER_ID}}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_API_HTTP_HOST_/${SP_API_HTTP_HOST}}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_JSON_PATH_/${SP_JSON_PATH}}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_FE_JSON_PATH_/${SP_FE_JSON_PATH}}"
+SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS//_SP_TEMPLATE_STATUS_JSON_/${SP_TEMPLATE_STATUS_JSON}}"
 
 if boolTrue "DDEBUG_DS_MONITOR"; then
-	splog "SP_CMD_TEMPLATE_STATUS:$SP_CMD_TEMPLATE_STATUS"
+	splog "[DD] SP_CMD_TEMPLATE_STATUS:${SP_CMD_TEMPLATE_STATUS}"
 fi
 
-while IFS=',' read -u 5 name storedCapacity storedFree u2 u3; do
-	if [ "${name//\"/}" = "$DS_NAME" ]; then
+while IFS=',' read -r -u "${spfd}" name storedCapacity storedFree u2 u3; do
+	if [[ "${name//\"/}" == "${DS_NAME}" ]]; then
 		if boolTrue "ALT_STATS"; then
 			storedFree=$(( storedFree + u2 + u3 ))
 		fi
@@ -106,8 +113,9 @@ while IFS=',' read -u 5 name storedCapacity storedFree u2 u3; do
 				;;
 		esac
 		if boolTrue "DEBUG_DS_MONITOR"; then
-			splog "$DS_ID ${DS_TYPE} used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024)) u2:$((u2/1024**2)) u3:$((u3/1024**2))"
+			splog "[D] ${DS_ID} ${DS_TYPE} used:$((used/1024/1024)) storedCapacity:$((storedCapacity/1024/1024)) storedFree:$((storedFree/1024/1024)) u2:$((u2/1024**2)) u3:$((u3/1024**2))"
 		fi
 		break
 	fi
-done 5< <(eval $SP_CMD_TEMPLATE_STATUS 2>/dev/null | jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv')
+done {spfd}< <(eval "${SP_CMD_TEMPLATE_STATUS}" 2>/dev/null | \
+jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv' || true)

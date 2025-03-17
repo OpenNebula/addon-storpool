@@ -17,9 +17,12 @@
 #--------------------------------------------------------------------------- #
 
 WORKDIR=$(dirname "$0")
+# shellcheck source=/dev/null
 source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
+# shellcheck source=/dev/null
 source "${WORKDIR}/../../scripts_common.sh"
 if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
     source "${WORKDIR}/../../addon-storpoolrc"
 fi
 
@@ -35,12 +38,14 @@ TARGET="$3"
 DISK_ID="$4"
 VM_ID="$5"
 KVMHOST="$6"
+export DOMAIN SOURCE TARGET DISK_ID VM_ID
 
 if [[ -n "${DEBUG_DETACH_DISK}" ]]; then
-    splog "$0 $*"
+    splog "[D] $0 $*"
 fi
 
-${SSH} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM}"
+export T_PERSISTENT_CDROM
+${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM}"
 ret=$?
-splog "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM} (ret:$ret)"
+splog "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM} (ret:${ret})"
 exit "${ret}"

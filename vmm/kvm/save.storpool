@@ -18,21 +18,28 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH="$(dirname $0)"
+DRIVER_PATH="$(dirname "$0")"
 
-
-[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ] && source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" || source "${DRIVER_PATH}/kvmrc"
+if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
+    # shellcheck source=/dev/null
+    source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+else
+    # shellcheck source=/dev/null
+    source "${DRIVER_PATH}/kvmrc"
+fi
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-#one-88 /var/lib/one//datastores/101/88/checkpoint s06 88 s06
-DEPLOY_ID=$1
-FILE=$2
-HVHOST=$3
-VM_ID=$4
-DS_ID=$5
-
-LOG_PREFIX=vmm
+# one-88 /var/lib/one//datastores/101/88/checkpoint s06 88 s06
+DEPLOY_ID="$1"
+FILE="$2"
+HVHOST="$3"
+VM_ID="$4"
+DS_ID="$5"
+export FILE DS_ID
+export LOG_PREFIX="vmm"
 
 splog "$*"
 
@@ -40,9 +47,9 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "$SP_VOL"; then
-        storpoolVolumeDetach "$SP_VOL" "" "${HVHOST}"
-        splog "Detach $SP_VOL from $HVHOST ($?)"
+    if storpoolVolumeExists "${SP_VOL}"; then
+        storpoolVolumeDetach "${SP_VOL}" "" "${HVHOST}"
+        splog "Detach ${SP_VOL} from ${HVHOST} ($?)"
     fi
 
 fi

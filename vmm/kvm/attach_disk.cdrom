@@ -17,9 +17,12 @@
 #--------------------------------------------------------------------------- #
 
 WORKDIR=$(dirname "$0")
+# shellcheck source=/dev/null
 source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
+# shellcheck source=/dev/null
 source "${WORKDIR}/../../scripts_common.sh"
 if [[ -f "${WORKDIR}/addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
     source "${WORKDIR}/addon-storpoolrc"
 fi
 
@@ -35,6 +38,7 @@ SOURCE="$2"
 TARGET="$3"
 TARGET_INDEX="$4"
 DRV_ACTION="$5"
+export DRV_ACTION TARGET_INDEX
 
 if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     splog "[D] $0 $1 $2 $3 $4 ${5:0:8}"
@@ -42,18 +46,18 @@ fi
 
 TARGET_DEVICE=""
 declare -A available
-while read -ru 4 target_dev source_x; do
+while read -r -u "${domfd}" target_dev source_x; do
     splog "${DOMAIN} target/@dev=${target_dev} source=${source_x}"
     if [[ "${source_x##*/}" == "" ]]; then
         available[${target_dev}]="${target_dev}"
     fi
-done 4< <(virsh --connect ${LIBVIRT_URI} dumpxml "${DOMAIN}" | \
+done {domfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
     xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
 
 if [[ -n ${available[${TARGET}]} ]]; then
     TARGET_DEVICE="${TARGET}"
 else
-    keys=( "${!available[@]}" )
+    read -ra keys <<< "${!available[@]}"
     TARGET_DEVICE="${keys[0]}"
 fi
 
@@ -72,8 +76,8 @@ if [[ -b "${ISO_PATH}" ]]; then
 fi
 
 ATTACH_CMD=$(cat <<EOF
-virsh --connect ${LIBVIRT_URI} \
-    change-media ${DOMAIN} ${TARGET_DEVICE} ${ISO_PATH} ${OPTIONS}
+virsh --connect "${LIBVIRT_URI:-qemu:///system}" \
+    change-media "${DOMAIN}" "${TARGET_DEVICE}" "${ISO_PATH}" ${OPTIONS}
 EOF
 )
 if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
@@ -84,9 +88,9 @@ multiline_exec_and_log "${ATTACH_CMD}" \
     "Could not ${OPTIONS} ${ISO_PATH} (${TARGET_DEVICE}) to ${DOMAIN}"
 ret=$?
 
-while read -u 4 q t f l; do
-    splog "${q} locked:${l} tray_open:${t} file:${f} // ${TARGET_DEVICE} (ret:${ret})"
-done 4< <(virsh --connect ${LIBVIRT_URI} qemu-monitor-command "${DOMAIN}" --cmd '{"execute":"query-block"}' |\
+while read -r -u "${virshfd}" qdev tray_open inserted_file locked; do
+    splog "${qdev} locked:${locked} tray_open:${tray_open} inserted_file:${inserted_file} // ${TARGET_DEVICE} (ret:${ret})"
+done {virshfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" qemu-monitor-command "${DOMAIN}" --cmd '{"execute":"query-block"}' |\
     jq -r '.return[]|select(.removable)|.qdev+" "+(.tray_open|tostring)+" "+(.inserted.file|tostring)+" "+(.locked|tostring)' || true)
 
 exit "${ret}"

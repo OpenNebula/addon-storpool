@@ -32,38 +32,40 @@ SNAP_ID="$3"
 VM_ID="$4"
 DS_ID="$5"
 
-TM_PATH="$(dirname $0)"
+TM_PATH="$(dirname "$0")"
+# shellcheck source=tm/storpool/storpool_common.sh
 source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=$SRC DST=$DST SNAP_ID=$SNAP_ID VM_ID=$VM_ID DS_ID=$DS_ID"
+splog "SRC=${SRC} DST=${DST} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
-SRC_HOST=`arg_host $SRC`
-SRC_PATH=`arg_path $SRC`
+SRC_HOST="$(arg_host "${SRC}")"
+SRC_PATH="$(arg_path "${SRC}")"
 
-DISK_ID=$(echo $SRC | awk -F. '{print $NF}')
+DISK_ID="$(echo "${SRC}" | awk -F. '{print $NF}')"
 
 #-------------------------------------------------------------------------------
 # Get Image information
 #-------------------------------------------------------------------------------
 
-oneVmInfo "$VM_ID" "$DISK_ID"
+oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 oneImageQc "${IMAGE_ID}"
 
 #-------------------------------------------------------------------------------
-# Get Datastore information
+# Get Image Datastore information
 #-------------------------------------------------------------------------------
 
-oneDatastoreInfo "$DS_ID"
+oneDatastoreInfo "${DS_ID}"
+IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
-SP_QOSCLASS=${DS_SP_QOSCLASS:-${DEFAULT_SP_QOSCLASS:-${IMAGE_SP_QOSCLASS}}}
+SP_QOSCLASS="${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}"
 debug_sp_qosclass
 
 #-------------------------------------------------------------------------------
 # Compute the destination image name
 #-------------------------------------------------------------------------------
 
-SP_SRC=${SRC_PATH##*/}
+SP_SRC="${SRC_PATH##*/}"
 SP_DST="${SP_SRC}-${VM_ID}-${DISK_ID}"
 
 SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
@@ -75,35 +77,35 @@ fi
 if boolTrue "NO_VOLUME_TEMPLATE"; then
 	SP_TEMPLATE=
 else
-	SP_TEMPLATE="${ONE_PX}-ds-$DS_ID"
+	SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
 fi
 
-splog "DISK_ID=$DISK_ID SP_DST=$SP_DST SP_VOL=$SP_VOL SP_PARENT=$SP_PARENT${SP_TEMPLATE:+ SP_TEMPLATE=$SP_TEMPLATE}"
+splog "DISK_ID=${DISK_ID} SP_DST=${SP_DST} SP_VOL=${SP_VOL} SP_PARENT=${SP_PARENT}${SP_TEMPLATE:+ SP_TEMPLATE=${SP_TEMPLATE}}"
 
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDelete "$SP_VOL" "force" "snaps"
+storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
 
 if boolTrue "DISK_SAVEAS_FSFREEZE"; then
-    oneFsfreeze "$SRC_HOST" "$DEPLOY_ID"
-    trapAdd "oneFsthaw \"$SRC_HOST\" \"$DEPLOY_ID\""
+    oneFsfreeze "${SRC_HOST}" "${DEPLOY_ID}"
+    trapAdd "oneFsthaw \"${SRC_HOST}\" \"${DEPLOY_ID}\""
 fi
 
-if [ "$SNAP_ID" = "-1" ]; then
-    storpoolVolumeClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
+if [[ "${SNAP_ID}" == "-1" ]]; then
+    storpoolVolumeClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
 else
     SP_PARENT="${SP_PARENT}-snap${SNAP_ID}"
-    storpoolSnapshotClone "$SP_PARENT" "$SP_VOL" "$SP_TEMPLATE"
+    storpoolSnapshotClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
 fi
 
 if boolTrue "DISK_SAVEAS_FSFREEZE"; then
-    oneFsthaw "$SRC_HOST" "$DEPLOY_ID"
+    oneFsthaw "${SRC_HOST}" "${DEPLOY_ID}"
     trapReset
 fi
 
-storpoolVolumeTag "$SP_VOL" ";;${SP_QOSCLASS}" "$VM_TAG;vc-policy;qc"
+storpoolVolumeTag "${SP_VOL}" ";;${SP_QOSCLASS}" "${VM_TAG:-nvm};vc-policy;qc"
 
-splog "END $VM_ID"
+splog "END ${VM_ID}"
 exit 0

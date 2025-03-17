@@ -18,30 +18,33 @@
 
 set -e
 
-PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
+PATH="/bin:/usr/bin:/sbin:/usr/sbin:${PATH}"
 
-CP_ARG=${CP_ARG:--vLf}
+CP_ARG="${CP_ARG:-"-v -L -f"}"
+export CP_ARG
+read -r -a CP_ARGS <<<"${CP_ARG}"
 
-ONE_ETC=${ONE_ETC:-/etc/one}
-ONE_USER=${ONE_USER:-oneadmin}
-ONE_GROUP=${ONE_GROUP:-oneadmin}
-ONE_VAR=${ONE_VAR:-/var/lib/one}
-ONE_LIB=${ONE_LIB:-/usr/lib/one}
-ONE_DS=${ONE_DS:-/var/lib/one/datastores}
+export ONE_ETC=${ONE_ETC:-/etc/one}
+export ONE_USER=${ONE_USER:-oneadmin}
+export ONE_GROUP=${ONE_GROUP:-oneadmin}
+export ONE_VAR=${ONE_VAR:-/var/lib/one}
+export ONE_LIB=${ONE_LIB:-/usr/lib/one}
+export ONE_DS=${ONE_DS:-/var/lib/one/datastores}
 
-if [ -n "$ONE_LOCATION" ]; then
-    ONE_ETC="$ONE_LOCATION/etc"
-    ONE_VAR="$ONE_LOCATION/var"
-    ONE_LIB="$ONE_LOCATION/lib"
-    ONE_DS="$ONE_LOCATION/var/datastores"
+if [[ -n "${ONE_LOCATION:-}" ]]; then
+    ONE_ETC="${ONE_LOCATION}/etc"
+    ONE_VAR="${ONE_LOCATION}/var"
+    ONE_LIB="${ONE_LOCATION}/lib"
+    ONE_DS="${ONE_LOCATION}/var/datastores"
 fi
 
 
 #----------------------------------------------------------------------------#
 
-[ "${0/\//}" != "$0" ] && cd ${0%/*}
+[[ "${0/\//}" != "$0" ]] && cd "${0%/*}"
 
 CWD=$(pwd)
+export CWD
 
 function boolTrue()
 {
@@ -64,12 +67,13 @@ function do_patch()
     else
         if patch --dry-run --forward --strip=0 --input="${_patch}" 2>/dev/null >/dev/null; then
             echo "   *** Apply patch ${_patch##*/}"
-            if [ -n "$_backup" ]; then
+            if [[ -n "${_backup}" ]]; then
                 _backup="--backup --version-control=numbered"
             else
                 _backup="--no-backup-if-mismatch"
             fi
-            if patch ${_backup} --strip=0 --forward --input="${_patch}"; then
+            read -ra _backup_a <<<"${_backup:-}"
+            if patch "${_backup_a[@]}" --strip=0 --forward --input="${_patch}"; then
                 DO_PATCH="done"
             else
                 DO_PATCH="failed"
@@ -79,6 +83,7 @@ function do_patch()
             echo "   *** Note! Can't apply patch ${_patch}! Please merge manually."
             patch_err="${_patch}"
         fi
+        export patch_err DO_PATCH
     fi
 }
 
@@ -86,25 +91,25 @@ function patch_hook()
 {
     local _hook="$1"
     local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
-    local _is_sh=0 _is_patched=0 _backup= _is_bash=
+    local _is_sh=0 _is_patched=0 _backup="" _is_bash=""
     grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
     grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
-    if [ "$(grep -v -E '^#|^$' "${_hook}")" = "exit 0" ]; then
-        if [ "${_is_patched}" = "1" ]; then
+    if [[ "$(grep -v -E '^#|^$' "${_hook}" || true)" == "exit 0" ]]; then
+        if [[ "${_is_patched}" == "1" ]]; then
             echo "*** ${_hook} already patched"
         else
             _backup="${_hook}.backup$(date +%s)"
             echo "*** Create backup of ${_hook} as ${_backup}"
-            cp $CP_ARG "${_hook}" "${_backup}"
-            if [ "${_is_sh}" = "1" ]; then
+            cp "${CP_ARGS[@]}" "${_hook}" "${_backup}"
+            if [[ "${_is_sh}" == "1" ]]; then
                 grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
-                if [ "${_is_bash}" = "1" ]; then
+                if [[ "${_is_bash}" == "1" ]]; then
                     echo "*** ${_hook} already bash script"
                 else
                     sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
                 fi
             fi
-            sed -i -e "s|^exit 0|$_hook_line\nexit 0|" "${_hook}"
+            sed -i -e "s|^exit 0|${_hook_line}\nexit 0|" "${_hook}"
         fi
     else
         echo "*** ${_hook} file not empty!"
@@ -112,7 +117,7 @@ function patch_hook()
         echo " **"
         echo " ** ${_hook_line//\\&/&}"
         echo " **"
-        if [ "${_is_sh}" = "1" ]; then
+        if [[ "${_is_sh}" == "1" ]]; then
             echo " ** Note! Set script to bash:"
             echo " **   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
         fi
@@ -121,77 +126,47 @@ function patch_hook()
 
 function findFile()
 {
-    local c f d="$1" csum="$2"
-    while read -u 5 c f; do
-        if [ "$c" = "$csum" ]; then
-            echo $f
+    local c="" f="" d="$1" csum="$2"
+    while read -r -u "${ffh}" c f; do
+        if [[ "${c}" == "${csum}" ]]; then
+            echo "${f}"
             break
         fi
-    done 5< <(md5sum $d/* 2>/dev/null)
-}
-
-function tmResetMigrate()
-{
-    local current_csum=$(md5sum "${M_DIR}/${MIGRATE}" | awk '{print $1}')
-    local csum comment found orig_csum
-    while read -u 5 csum comment; do
-        [ "$comment" = "orig" ] && orig_csum="$csum"
-        if [ "$current_csum" = "$csum" ]; then
-            found="$comment"
-            break;
-        fi
-    done 5< <(cat "tm/${TM_MAD}-${MIGRATE}.md5sums")
-    case "$found" in
-         orig)
-            ;;
-         4.10)
-            true
-            ;&
-         4.14)
-            orig=$(findFile "$M_DIR" "$orig_csum" )
-            if [ -n "$orig" ]; then
-                echo "***   $found variant of $TM_MAD/$MIGRATE"
-                mv "${M_DIR}/${MIGRATE}" "${M_DIR}/${MIGRATE}.backup$(date +%s)"
-                echo "***   restoring from original ${orig##*/}"
-                cp $CP_ARG "$orig" "${M_DIR}/${MIGRATE}"
-            fi
-            ;;
-         5.00)
-            continue
-            ;;
-            *)
-            echo " ** Can't determine the variant of $TM_MAD/$MIGRATE"
-    esac
+    done {ffh}< <(md5sum "${d}"/* 2>/dev/null || true)
 }
 
 oneVersion(){
-    local arr=(${1//\./ })
+    local arr=()
+    read -ra arr <<<"${1//\./ }"
     export ONE_MAJOR="${arr[0]}"
     export ONE_MINOR="${arr[1]}"
     export ONE_VERSION=$((arr[0]*10000 + arr[1]*100 + arr[2]))
-    if [ ${#arr[*]} -eq 4 ] || [ $ONE_VERSION -lt 51200 ]; then
+    if [[ ${#arr[*]} -eq 4 || ${ONE_VERSION} -lt 51200 ]]; then
         export ONE_EDITION="CE${arr[3]}"
     else
         export ONE_EDITION="EE"
     fi
 }
 
-if [ -f "$ONE_VAR/remotes/VERSION" ]; then
-    [ -n "$ONE_VER" ] || ONE_VER="$(< "$ONE_VAR/remotes/VERSION")"
+if [[ -f "${ONE_VAR}/remotes/VERSION" ]]; then
+    [[ -n "${ONE_VER:-}" ]] || ONE_VER="$(< "${ONE_VAR}/remotes/VERSION")"
 fi
 
-oneVersion "$ONE_VER"
+oneVersion "${ONE_VER}"
 
 TMPDIR="$(mktemp -d addon-storpool-install-XXXXXXXX)"
 export TMPDIR
+# shellcheck disable=SC2064
 trap "rm -rf \"${TMPDIR}\"" EXIT QUIT TERM
 
-if [ -f "scripts/install-${ONE_VER}.sh" ]; then
+if [[ -f "scripts/install-${ONE_VER}.sh" ]]; then
+    # shellcheck source=scripts/install-6.4.sh
     source "scripts/install-${ONE_VER}.sh"
-elif [ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]; then
+elif [[ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]]; then
+    # shellcheck source=scripts/install-6.4.sh
     source "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
 else
-    echo "ERROR: Unknown OpenNebula version '$ONE_VER' detected!"
+    echo "ERROR: Unknown OpenNebula version '${ONE_VER}' detected!"
     echo "Please contact StorPool support for assistance"
     echo
 fi

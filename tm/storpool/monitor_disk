@@ -27,20 +27,24 @@ DRIVER="$4"
 DRIVER_PATH="${0%/*}"
 
 SP_JSON_PATH="/tmp"
-SP_SPACE_USED_LVMWAY=
+SP_SPACE_USED_LVMWAY=""
 SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
 SP_CMD_VOLUME_SPACE="cat _SP_JSON_PATH_/_SP_VOLUME_SPACE_JSON_"
 SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
 SP_CMD_SNAPSHOT_SPACE="cat _SP_JSON_PATH_/_SP_SNAPSHOT_SPACE_JSON_"
 
-if [ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]; then
-    source "${DRIVER_PATH}/../../addon-storpoolrc"
+
+if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
+	source "${DRIVER_PATH}/../../addon-storpoolrc"
 fi
-if [ -f "/etc/storpool/addon-storpool.conf" ]; then
-    source "/etc/storpool/addon-storpool.conf"
+if [[ -f "/etc/storpool/addon-storpool.conf" ]]; then
+    # shellcheck source=/dev/null
+	source "/etc/storpool/addon-storpool.conf"
 fi
 
-DS_NAME="${ONE_PX:-one}-ds-$DS_ID"
+DS_NAME="${ONE_PX:-one}-ds-${DS_ID}"
+export DS_NAME
 
 function boolTrue()
 {
@@ -53,140 +57,142 @@ function boolTrue()
    esac
 }
 
+DISK_LINK="$(readlink "${DISK}" || true)"
+DISK_DEV="$(readlink -f "${DISK}" || true)"
 if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
-	splog "$PWD $DISK $DS_ID $VM_ID $DRIVER"
-	[ -d "$SP_DS_TMP" ] && splog "found SP_DS_TMP:$SP_DS_TMP"
+	splog "[DD] ${PWD} ${DISK} ${DS_ID} ${VM_ID} ${DRIVER} ${DISK_DEV} ${DISK_LINK}"
+	[[ -d "${SP_DS_TMP:-}" ]] && splog "[DD] found SP_DS_TMP:${SP_DS_TMP}"
 fi
 
-DISK_LINK="$(readlink "$DISK")"
-DISK_DEV="$(readlink -f "$DISK")"
-#splog "$DISK $DISK_LINK $DISK_DEV"
-
-if [ -z "$DISK_LINK" ] || [ -n "${DISK_LINK%/dev/storpool*}" ]; then
+if [[ -z "${DISK_LINK}" || -n "${DISK_LINK%/dev/storpool*}" ]]; then
 	if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
-		splog "$DISK NOT on storpool! $DISK_LINK"
+		splog "[DD] ${DISK} NOT on storpool! ${DISK_LINK}"
 	fi
-	"${0}-misc" "$DISK" "$DS_ID" "$VM_ID"
+	"${0}-misc" "${DISK}" "${DS_ID}" "${VM_ID}"
 	exit $?
 else
 	if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
-		splog "$DISK StorPool volume $DISK_LINK"
+		splog "[DD] ${DISK} StorPool volume ${DISK_LINK}"
 	fi
 fi
 
 DISK_ID="${DISK##*\.}"
 spVolume=${DISK_LINK#/dev/storpool/}
 
-if boolTrue "SP_SPACE_USED_LVMWAY"; then
+declare -a columns_a
+if boolTrue "SP_SPACE_USED_LVMWAY" "${SP_SPACE_USED_LVMWAY}"; then
 	used="storedSize"
-	columns="data other"
+	columns_a=("data" "other")
 else
 	used="spaceUsed"
-	columns="other data"
+	columns_a=("other" "data")
 fi
 
 function getSnapId()
 {
     local name="$1" spVolume="$2"
-    snap_id=
-    [ "$name" = "${name#$spVolume-snap}" ] || snap_id=${name#*snap}
-    [ -z "${snap_id//[0-9]/}" ] || snap_id=
+    snap_id=""
+    [[ "${name}" == "${name#"${spVolume}-snap"}" ]] || snap_id="${name#*snap}"
+    [[ -z "${snap_id//[0-9]/}" ]] || snap_id=""
 }
 
 #"name",storedSize,spaceUsed
-if [ -f "$SP_DS_TMP/sizes" ]; then
+if [[ -f "${SP_DS_TMP}/sizes" ]]; then
 	#if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
-	#	splog "walking $SP_DS_TMP/sizes for volume $spVolume"
+	#	splog "[DD] walking $SP_DS_TMP/sizes for volume $spVolume"
 	#fi
-	fgrep "$spVolume" "$SP_DS_TMP/sizes" | while IFS=, read name $columns; do
+	while IFS=',' read -r -u "${grepfd}" name "${columns_a[@]}"; do
 		name=${name//\"/}
-		if [ -n "$disk_size" ]; then
-            getSnapId "$name" "$spVolume" 
+		if [[ -n "${disk_size:-}" ]]; then
+            getSnapId "${name}" "${spVolume}"
 #			snap_id=${name#*snap}
-            [ "$name" = "${name#$spVolume-snap}" ] && snap_id= || snap_id=${name#*snap}
-            [ -z "${snap_id//[0-9]/}" ] || snap_id=
-			if [ -n "$snap_id" ]; then
-				if [ "$snap_id" = "$name" ]; then
+            [[ "${name}" == "${name#"${spVolume}-snap"}" ]] && snap_id="" || snap_id="${name#*snap}"
+            [[ -z "${snap_id//[0-9]/}" ]] || snap_id=
+			if [[ -n "${snap_id}" ]]; then
+				if [[ "${snap_id}" == "${name}" ]]; then
 					if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
-						splog "skipping $name looking for *snap"
+						splog "[DD] skipping ${name} looking for *snap"
 					fi
 					continue
 				fi
 				snap_size=$((data/1024/1024))
 				if boolTrue "DEBUG_TM_MONITOR_DISK"; then
-					splog "$DISK ID:$DISK_ID SNAP:$snap_id SIZE:$snap_size ($((other/1024/1024))) snapshot:$name"
+					# shellcheck disable=SC2154
+					splog "[D] ${DISK} ID:${DISK_ID} SNAP:${snap_id} SIZE:${snap_size} ($((other/1024/1024))) snapshot:${name}"
 				fi
 				echo -n " SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
 			else
 				if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
-					splog "skipping $name looking for <volume>-snap<N>"
+					splog "[DD] skipping ${name} looking for <volume>-snap<N>"
 				fi
 			fi
 		else
-			if [ "$spVolume" = "$name" ]; then
+			if [[ "${spVolume}" == "${name}" ]]; then
 				disk_size="${data:-0}"
 				disk_size=$((disk_size/1024/1024))
-				if [ "$disk_size" = "0" ] && [ -n "$data" ] && [ "$data" -gt "0" ]; then
+				if [[ "${disk_size}" == "0" ]] && [[ -n "${data}" ]] && [[ "${data}" -gt "0" ]]; then
 					disk_size=1
 				fi
 				if boolTrue "DEBUG_TM_MONITOR_DISK"; then
-					splog "$DISK ID:$DISK_ID SIZE:$disk_size ($((other/1024/1024))) volume:$name"
+					splog "[D] ${DISK} ID:${DISK_ID} SIZE:${disk_size} ($((other/1024/1024))) volume:${name}"
 				fi
 				echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 			else
-				splog "skip '$name' looking for '$spVolume'"
+				splog "skip ${name} looking for ${spVolume}"
 			fi
 		fi
-	done
+	done {grepfd}< <(grep -F "${spVolume}" "${SP_DS_TMP}/sizes" || true)
 	exit
 else
 	if boolTrue "DEBUG_TM_MONITOR_DISK"; then
-		splog "${DRIVER}:${DISK} not found $SP_DS_TMP/sizes"
+		splog "[D] ${DRIVER}:${DISK} not found ${SP_DS_TMP}/sizes"
 	fi
 fi
 
 # expand SP_CMD_VOLUME_SPACE macro variables
-SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/$DS_ID}"
-SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
-SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
-SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/$SP_VOLUME_SPACE_JSON}"
-SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_DATASTORE_ID_/${DS_ID}}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_CLUSTER_ID_/${CLUSTER_ID}}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_API_HTTP_HOST_/${SP_API_HTTP_HOST}}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_VOLUME_SPACE_JSON_/${SP_VOLUME_SPACE_JSON}}"
+SP_CMD_VOLUME_SPACE="${SP_CMD_VOLUME_SPACE//_SP_JSON_PATH_/${SP_JSON_PATH}}"
 
 # expand SP_CMD_SNAPSHOT_SPACE macro variables
-SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_DATASTORE_ID_/$DS_ID}"
-SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/$CLUSTER_ID}"
-SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_API_HTTP_HOST_/$SP_API_HTTP_HOST}"
-SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/$SP_SNAPSHOT_SPACE_JSON}"
-SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/$SP_JSON_PATH}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_DATASTORE_ID_/${DS_ID}}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_CLUSTER_ID_/${CLUSTER_ID}}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_API_HTTP_HOST_/${SP_API_HTTP_HOST}}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_SNAPSHOT_SPACE_JSON_/${SP_SNAPSHOT_SPACE_JSON}}"
+SP_CMD_SNAPSHOT_SPACE="${SP_CMD_SNAPSHOT_SPACE//_SP_JSON_PATH_/${SP_JSON_PATH}}"
 
-if boolTrue "DDEBUG_TM_MONITOR_DISK";then
-	splog "SP_CMD_VOLUME_SPACE:$SP_CMD_VOLUME_SPACE"
+if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
+	splog "[DD] SP_CMD_VOLUME_SPACE:${SP_CMD_VOLUME_SPACE}"
 fi
-spSize=$(eval $SP_CMD_VOLUME_SPACE 2>/dev/null | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv" 2>/dev/null) #"
+spSize=$(eval "${SP_CMD_VOLUME_SPACE}" 2>/dev/null | jq -r ".data | map( select( .name==\"${spVolume}\" ) ) | .[] | [.${used}] | @csv" 2>/dev/null || true)
 
 disk_size="${spSize:-0}"
 disk_size=$((disk_size/1024/1024))
-if [ "$disk_size" = "0" ] && [ -n "$spSize" ] && [ "$spSize" -gt "0" ]; then
+if [[ "${disk_size}" == "0" ]] && [[ -n "${spSize}" ]] && [[ "${spSize}" -gt "0" ]]; then
 	disk_size=1
 fi
 if boolTrue "DEBUG_TM_MONITOR_DISK"; then
-	splog "$DISK ID:$DISK_ID SIZE:$disk_size ($used)"
+	splog "[D] ${DISK} ID:${DISK_ID} SIZE:${disk_size} (${used})"
 fi
 echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 
-while IFS=',' read -u 5 name spaceUsed storedSize; do
+while IFS=',' read -r -u "${jqfd}" name spaceUsed storedSize; do
 	name=${name//\"/}
     snap_size="${!used}"
-    getSnapId "$name" "$spVolume" 
-    if [ -z "$snap_id" ]; then
+    getSnapId "${name}" "${spVolume}"
+    if [[ -z "${snap_id}" ]]; then
         if boolTrue "DEBUG_TM_MONITOR_DISK"; then
-            splog "Skipping $DISK ID:$DISK_ID snapshot $name ($used) spaceUsed:$spaceUsed storedSize:$storedSize"
+            splog "[D] Skipping ${DISK} ID:${DISK_ID} snapshot ${name} (${used}) spaceUsed:${spaceUsed} storedSize:${storedSize}"
         fi
         continue
     fi
 	snap_size=$((snap_size/1024/1024))
 	if boolTrue "DEBUG_TM_MONITOR_DISK"; then
-		splog "$DISK ID:$DISK_ID SNAP:$snap_id ($name) SIZE:$snap_size ($used) spaceUsed:$spaceUsed storedSize:$storedSize"
+		splog "[D] ${DISK} ID:${DISK_ID} SNAP:${snap_id} (${name}) SIZE:${snap_size} (${used}) spaceUsed:${spaceUsed} storedSize:${storedSize}"
 	fi
 	echo -n " SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
-done 5< <(eval $SP_CMD_SNAPSHOT_SPACE 2>/dev/null | jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" | sort)
+done {jqfd}< <(eval "${SP_CMD_SNAPSHOT_SPACE}" 2>/dev/null | \
+		jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" \
+		| sort || true)

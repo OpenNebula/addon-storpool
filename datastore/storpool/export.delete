@@ -16,26 +16,27 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname $0)
-LOG_PREFIX="ds"
+DRIVER_PATH="$(dirname "${0}")"
+export LOG_PREFIX="ds"
 
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 DST_HOST="$1"
 FILE="$2"
 
-splog "DST_HOST:$DST_HOST FILE=$FILE"
+splog "DST_HOST:${DST_HOST} FILE:${FILE}"
 
-$SSH "$DST_HOST" "test -L \"$FILE\""
+${SSH:-ssh} "${DST_HOST}" "test -L \"${FILE}\""
 RET=$?
-if [ $RET -eq 0 ]; then
-    splog "$SSH $DST_HOST test -L $FILE ($RET) -- symlink"
+if [[ "${RET}" -eq 0 ]]; then
+    splog "${SSH:-ssh} ${DST_HOST} test -L ${FILE} (${RET}) -- symlink"
     SP_SNAPSHOT="${FILE##*/}"
-    storpoolVolumeDetach "$SP_SNAPSHOT" "force" "$DST_HOST"
-    storpoolSnapshotDelete "$SP_SNAPSHOT"
+    storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"
+    storpoolSnapshotDelete "${SP_SNAPSHOT}"
 else
-    splog "$SSH $DST_HOST test -L $FILE ($RET) -- not symlink"
-    $SSH "$DST_HOST" "rm -f \"$FILE\""
-    splog "$SSH \"$DST_HOST\" rm -f \"$FILE\" ($?)"
+    splog "${SSH:-ssh} ${DST_HOST} test -L ${FILE} (${RET}) -- not symlink"
+    ${SSH:-ssh} "${DST_HOST}" "rm -f \"${FILE}\""
+    splog "${SSH:-ssh} \"${DST_HOST}\" rm -f \"${FILE}\" ($?)"
 fi
-splog "END $FILE"
+splog "END ${FILE}"

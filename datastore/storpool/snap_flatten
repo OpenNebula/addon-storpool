@@ -26,26 +26,29 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
-if [ -n "${ONE_LOCATION}" ]; then
-    LIB_LOCATION=$ONE_LOCATION/lib
+if [[ -n "${ONE_LOCATION}" ]]; then
+    LIB_LOCATION="${ONE_LOCATION}/lib"
 else
-    LIB_LOCATION=/usr/lib/one
+    LIB_LOCATION="/usr/lib/one"
 fi
 
-. $LIB_LOCATION/sh/scripts_common.sh
+# shellcheck source=/dev/null
+. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH=$(dirname $0)
-source ${DRIVER_PATH}/../libfs.sh
+DRIVER_PATH="$(dirname "$0")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
-LOG_PREFIX="ds"
+export LOG_PREFIX="ds"
 
-source ${DRIVER_PATH}/../../tm/storpool/storpool_common.sh
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 #-------------------------------------------------------------------------------
 # Get stat and datastore arguments from OpenNebula core
 #-------------------------------------------------------------------------------
 
-if [ -n "$2" ]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -53,19 +56,21 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "$DRIVER_PATH"
+oneDsDriverAction "${DRIVER_PATH}"
 
 SP_VOL="${SOURCE##*/}"
-SP_TMPVOL="${SP_VOL}-$(date +%s)-$(mktemp --dry-run XXXXXX)"
+SP_TMPVOL="${SP_VOL}-$(date +%s || true)-$(mktemp --dry-run XXXXXX || true)"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
-SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX:-one}-ds-${DATASTORE_ID}"
 
-storpoolVolumeInfo "$SP_VOL"
+export SP_TMPVOL SP_TEMPLATE  # TBD: remove
 
-if [ "$V_PARENT_NAME" = "$SP_SNAP" ]; then
-    splog "$SP_VOL already based on $V_PARENT_NAME"
+storpoolVolumeInfo "${SP_VOL}"
+
+if [[ "${V_PARENT_NAME}" == "${SP_SNAP}" ]]; then
+    splog "${SP_VOL} already based on ${V_PARENT_NAME}"
 else
-    storpoolSnapshotRevert "$SP_SNAP" "$SP_VOL"
+    storpoolSnapshotRevert "${SP_SNAP}" "${SP_VOL}"
 fi
 
 storpoolVolumeSnapshotsDelete "${SP_VOL}-snap"
