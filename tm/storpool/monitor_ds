@@ -46,7 +46,10 @@ function boolTrue()
 if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
     parent="${PPID:-}"
     splog "[DDD] ${PWD}::${0} parent ${parent}::$(readlink -f "/proc/${parent}/exe" || true)::$(cat "/proc/${parent}/cmdline" || true)"
-    echo "su - oneadmin -c 'cd ${PWD} && ${0} $*'" >>"/tmp/tm_monitor_ds-${DS_ID}.sh"
+	if boolTrue "DDDDEBUG_TM_MONITOR_DS"; then
+        echo "su - oneadmin -c 'cd ${PWD} && ${0} $*'" >>"/tmp/tm_monitor_ds-${DS_ID}.sh"
+		splog "[DDDD] created /tmp/tm_monitor_ds-${DS_ID}.sh"
+	fi
 fi
 
 if [[ -d "${0%/*}/../../im/kvm-probes.d/vm" ]]; then

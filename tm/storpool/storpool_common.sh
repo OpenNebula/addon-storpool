@@ -1983,8 +1983,9 @@ function oneDsDriverAction()
 {
     local _XPATH="" _ret=0 _errmsg="" _tmpXML="" _element="" i=0
 
-    if boolTrue "DDDEBUG_oneDsDriverAction"; then
+    if boolTrue "DDDDEBUG_oneDsDriverAction"; then
         echo "${DRV_ACTION:-}" |base64 -d | xmllint --format - >"/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml" || true
+        splog "[DDDD][DriverAction] /tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml"
     fi
 
     _XPATH="$(lookup_file "datastore/xpath.rb")"
