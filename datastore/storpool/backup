@@ -26,7 +26,11 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 splog "$*"
 
-cat >"/tmp/${0##*/}-$3-$4-$5.input"
+if boolTrue "DDDDEBUG_datastore_backup"; then
+    cat >"/tmp/${0##*/}-$3-$4-$5.input"
+else
+    cat >/dev/null
+fi
 
 msg="${0##*/}: Operation not supported"
 error_message "${msg}"

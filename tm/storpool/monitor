@@ -73,7 +73,10 @@ function boolTrue()
 if boolTrue "DDDEBUG_TM_MONITOR"; then
     parent="${PPID}"
     splog "[DDD] ${PWD}::$0 parent ${parent}::$(readlink -f "/proc/${parent}/exe" || true)::$(cat "/proc/${parent}/cmdline" || true)"
-    echo "cd ${PWD} && ${0} $*" >"/tmp/DRV_${DS_ID}.sh"
+    if boolTrue "DDDDEBUG_TM_MONITOR"; then
+        echo "cd ${PWD} && ${0} $*" >"/tmp/DRV_${DS_ID}.sh"
+        splog "[DDDD] created /tmp/DRV_${DS_ID}.sh"
+    fi
 fi
 if boolTrue "DEBUG_TM_MONITOR"; then
 	splog "[D] ${PWD} DRV_ACTION:${DRV_ACTION:0:6}"
@@ -322,8 +325,9 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
         ret=$?
         if boolTrue "DDEBUG_TM_MONITOR"; then
             splog "[DD] ${DS_ID} (${ret}) MONITOR_VM SUCCESS ${HOST_ID} ${TIMESTAMP} ${monitor_b64} | nc ${MONITOR_SEND_UDP:+-u }-w${NC_WAIT_TIME:-1} ${MONITOR_ADDRESS:-127.0.0.1} ${MONITOR_PORT:-4124}"
-            if boolTrue "DDDEBUG_TM_MONITOR"; then
-                echo "[DDD] echo ${monitor_b64} | base64 -d | pigz -d" >"/tmp/ds-${DS_ID}.sh"
+            if boolTrue "DDDDEBUG_TM_MONITOR"; then
+                echo "echo ${monitor_b64} | base64 -d | pigz -d" >"/tmp/ds-${DS_ID}.sh"
+                splog "[DDDD] created /tmp/ds-${DS_ID}.sh"
             fi
         fi
     fi
