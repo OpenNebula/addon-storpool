@@ -45,8 +45,13 @@ TEMP_DIR="$(mktemp -d)"
 trapAdd "rm -rf '${TEMP_DIR}'"
 
 volumeListJson="${TEMP_DIR}/volumeList.json"
+vmPoolFile="${TEMP_DIR}/vm_pool.xml"
 dsPoolFile="${TEMP_DIR}/datastorePool.xml"
+processedVolumes="${TEMP_DIR}/VMvolumes.txt"
 
+declare -A DS_SP_API_HTTP_HOST  # DS_SP_API_HTTP_HOST[DATASTORE_ID] -> SP_API_HTTP_HOST
+declare -A DS_SP_API_HTTP_PORT  # DS_SP_API_HTTP_PORT[DATASTORE_ID] -> SP_API_HTTP_PORT
+declare -A DS_SP_AUTH_TOKEN     # DS_SP_AUTH_TOKEN[DATASTORE_ID] -> SP_AUTH_TOKEN
 
 function update_volume_qc()
 {
@@ -75,14 +80,9 @@ function update_volume_vc_policy()
 
 function alterVcPolicy()
 {
-    local vmId="$1" vmPoolFile="$2" VMID=""
+    local vmId="$1" VMID=""
 
     if [[ -z "${vmId}" ]]; then
-        if [[ -n "${vmPoolFile}" ]]; then
-            splog "Error! Something wen't wrong!"
-            exit 1
-        fi
-        vmPoolFile="${TEMP_DIR}/vm_pool.xml"
         onevm list -x --extended >"${vmPoolFile}"
         ret=$?
         if boolTrue "DDEBUG_alterVcPolicy"; then
@@ -115,6 +115,9 @@ function alterVcPolicy()
     if [[ -n "${VM_DS_ID}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolFile}"
         SYSTEM_DS_SP_QOSCLASS="${DS_SP_QOSCLASS:-}"
+        DS_SP_API_HTTP_HOST["${VM_DS_ID}"]="${SP_API_HTTP_HOST}"
+        DS_SP_API_HTTP_PORT["${VM_DS_ID}"]="${SP_API_HTTP_PORT}"
+        DS_SP_AUTH_TOKEN["${VM_DS_ID}"]="${SP_AUTH_TOKEN}"
     else
         if boolTrue "DDEBUG_alterVcPolicy"; then
             splog "[DD]alterVcPolicy(${vmId},${vmPoolFile}) VM_DS_ID is empty. Return 0"
@@ -123,30 +126,30 @@ function alterVcPolicy()
     fi
 
     if boolTrue "DDEBUG_alterVcPolicy"; then
-        splog "[DD] alterVcPolicy(${vmId},${vmPoolFile}) SP_QOSCLASS:${SP_QOSCLASS:-} VM_SP_QOSCLASS:${VM_SP_QOSCLASS:-} DS_SP_QOSCLASS:${DS_SP_QOSCLASS:-} DEFAULT_QOSCLASS:${DEFAULT_QOSCLASS:-}"
+        splog "[DD] alterVcPolicy(${vmId},${vmPoolFile}) VM_SP_QOSCLASS:${VM_SP_QOSCLASS:-} SYSTEM_DS_SP_QOSCLASS:${SYSTEM_DS_SP_QOSCLASS:-} DEFAULT_QOSCLASS:${DEFAULT_QOSCLASS:-}"
     fi
 
-    unset vols
-    declare -A vols  # vols[VolumeName]=DISK_ID
+    unset volumesDiskId
+    declare -A volumesDiskId  # volumesDiskId[VolumeName]=DISK_ID
     for disk in ${vmDisksMap:-}; do
         volume="${disk%:*}"
-        vols["${volume}"]="${disk#*:}"  # [VOLUME_NAME]=DISK_ID
+        volumesDiskId["${volume}"]="${disk#*:}"  # volumesDiskId[VOLUME_NAME]=DISK_ID
     done
 
     unset volumesQc
     declare -A volumesQc  # volumesQc[VOLUME_NAME]=QosClassName
     for vol in ${vmDisksQcMap:-}; do
-        volumesQc["${vol%%:*}"]="${vol#*:}"  # [VOLUME_NAME]=QOSCLASS
+        volumesQc["${vol%%:*}"]="${vol#*:}"  # volumesQc[VOLUME_NAME]=QOSCLASS
     done
 
     declare -A persistentDisksQc  # persistentDisksQc[VOLUME_NAME]=QOSCLASS
     for vol in ${persistentDisksQcMap:-}; do
-        persistentDisksQc["${vol%%:*}"]="${vol#*:}"  # [VOLUME_NAME]=QOSCLASS
+        persistentDisksQc["${vol%%:*}"]="${vol#*:}"  # persistentDisksQc[VOLUME_NAME]=QOSCLASS
     done
 
     declare -A diskType  # diskType[VOLUME_NAME]=DISK_TYPE
     for vol in ${vmDiskTypeMap:-}; do
-        diskType["${vol%%:*}"]="${vol#*:}"  # [VOLUME_NAME]=DISK_TYPE
+        diskType["${vol%%:*}"]="${vol#*:}"  # diskType[VOLUME_NAME]=DISK_TYPE
     done
 
 #    unset datastoresQc
@@ -157,13 +160,13 @@ function alterVcPolicy()
         dsId="${entry#*:}"
         if [[ -z "${datastoresQc[${dsId}]}" ]]; then
             oneDatastoreInfo "${dsId}" "${dsPoolFile}"
-            datastoresQc["${dsId}"]="${DS_SP_QOSCLASS}"  # [DATASTORE_ID]=DS_SP_QOSCLASS
+            datastoresQc["${dsId}"]="${DS_SP_QOSCLASS}"  # datastoresQc[DATASTORE_ID]=DS_SP_QOSCLASS
         fi
-        volumesDsIds["${volume}"]="${dsId}"  # [VOLUME_NAME]=DATASTORE_ID
+        volumesDsIds["${volume}"]="${dsId}"  # volumesDsIds[VOLUME_NAME]=DATASTORE_ID
     done
     if [[ -z "${datastoresQc[${VM_DS_ID}]}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolFile}"
-        datastoresQc["${VM_DS_ID}"]="${DS_SP_QOSCLASS}"  # [DATASTORE_ID]=DS_SP_QOSCLASS
+        datastoresQc["${VM_DS_ID}"]="${DS_SP_QOSCLASS}"  # datastoresQc[DATASTORE_ID]=DS_SP_QOSCLASS
     fi
 
     if boolTrue "DEBUG_alterVcPolicy"; then
@@ -177,12 +180,12 @@ function alterVcPolicy()
     while read -r -u "${jqfd}" _line; do
         IFS=';' read -ra spdata <<<"${_line}"
         volume="${spdata[0]}"
-        vcp="${spdata[1]}"
-        qc="${spdata[2]}"
-        if [[ -n "${vols[${volume}]+found}" ]]; then
+        vc_policy="${spdata[1]}"
+        tag_qc="${spdata[2]}"
+        if [[ -n "${volumesDiskId[${volume}]+found}" ]]; then
             # vc-policy tag update
-            vcpNew="${VC_POLICY//[[:space:]]/}"
-            update_volume_vc_policy "${volume}" "${vcpNew}" "${vcp}" "VM ${vmId} DISK ${vols[${volume}]}"
+            vc_policy_new="${VC_POLICY//[[:space:]]/}"
+            update_volume_vc_policy "${volume}" "${vc_policy_new}" "${vc_policy}" "VM ${vmId} DISK ${volumesDiskId[${volume}]}"
             # qc tag update
             IMAGE_SP_QOSCLASS="${persistentDisksQc[${volume}]}"
             SYSTEM_DS_SP_QOSCLASS="${datastoresQc[${VM_DS_ID}]}"
@@ -208,26 +211,26 @@ function alterVcPolicy()
 #                    ;;
             esac
             if [[ -n "${VM_DISK_SP_QOSCLASS}" ]]; then      # vm disk qosclass
-                qcNew="${VM_DISK_SP_QOSCLASS}"
+                tag_qc_new="${VM_DISK_SP_QOSCLASS}"
                 used="VM_DISK_SP_QOSCLASS"
             elif [[ -n "${IMAGE_SP_QOSCLASS}" ]]; then      # persistent image qosclass
-                qcNew="${IMAGE_SP_QOSCLASS}"
+                tag_qc_new="${IMAGE_SP_QOSCLASS}"
                 used="IMAGE_SP_QOSCLASS"
             elif [[ -n "${VM_SP_QOSCLASS}" ]]; then         # vm qosclass
-                qcNew="${VM_SP_QOSCLASS}"
+                tag_qc_new="${VM_SP_QOSCLASS}"
                 used="VM_SP_QOSCLASS"
             elif [[ -n "${SYSTEM_DS_SP_QOSCLASS}" ]]; then  # system ds qosclass
-                qcNew="${SYSTEM_DS_SP_QOSCLASS}"
+                tag_qc_new="${SYSTEM_DS_SP_QOSCLASS}"
                 used="SYSTEM_DS_SP_QOSCLASS"
             elif [[ -n "${IMAGE_DS_SP_QOSCLASS}" ]]; then   # image ds qosclass
-                qcNew="${IMAGE_DS_SP_QOSCLASS}"
+                tag_qc_new="${IMAGE_DS_SP_QOSCLASS}"
                 used="IMAGE_DS_SP_QOSCLASS"
             else                                            # default qosclass
-                qcNew="${DEFAULT_QOSCLASS}"
+                tag_qc_new="${DEFAULT_QOSCLASS}"
                 used="DEFAULT_QOSCLASS"
             fi
-            update_volume_qc "${volume}" "${qcNew}" "${qc}" "VM ${vmId} DISK ${vols[${volume}]} (${used})"
-            echo "${volume}" >>"${TEMP_DIR}/VMvolumes.txt"
+            update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "VM ${vmId} DISK ${volumesDiskId[${volume}]} (${used})"
+            echo "${volume}" >>"${processedVolumes}"
         fi
     done {jqfd}< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "${volumeListJson}" || true)
     unset vmDisksMap
@@ -254,18 +257,20 @@ function alterImagesQosClass()
         oneimage list -x >"${imagePoolFile}"
     fi
 
-    declare -A imagesQosClass
+    declare -A imagesQosClass imagesDsIds
     while read -r -u "${imgfh}" imageline; do
         [[ ${imageline:0:3} == "img" ]] || continue
         IFS=';' read -ra imgData <<<"${imageline}"
-        imageId="${imgData[1]}"
-        dsId="${imgData[2]}"
+        image_id="${imgData[1]}"
+        image_ds_id="${imgData[2]}"
         # persistent="${imgData[3]}"
         imgQosClass="${imgData[4]}"
         imgVms="${imgData[5]}"
         # skip images attached to VMs
         [[ -z ${imgVms:-} ]] || continue
-        imagesQosClass["${ONE_PX:-one}-img-${imageId}"]="${imgQosClass:-${dsQosClass[${dsId}]:-${DEFAULT_QOSCLASS}}}"
+        volume="${ONE_PX:-one}-img-${image_id}"
+        imagesQosClass["${volume}"]="${imgQosClass:-${dsQosClass[${image_ds_id}]:-${DEFAULT_QOSCLASS}}}"
+        imagesDsIds["${volume}"]="${image_ds_id}"
     done {imgfh}< <(xmlstarlet sel -t \
         -m "/IMAGE_POOL/IMAGE" \
         -o 'img;' -v 'ID' \
@@ -285,16 +290,32 @@ function alterImagesQosClass()
     while read -r -u "${spfh}" line; do
         IFS=';' read -ra spdata <<<"${line}"
         volume="${spdata[0]}"
-        qc="${spdata[1]}"
+        tag_qc="${spdata[1]}"
         if [[ -n "${imagesQosClass[${volume}]+found}" ]]; then
-            if grep -Eqe "^${volume}$" "${TEMP_DIR}/VMvolumes.txt" &>/dev/null; then
+            if grep -Eqe "^${volume}$" "${processedVolumes}" &>/dev/null; then
                 if boolTrue "DDDEBUG_alterVcPolicy"; then
                     splog "[DDD]IMG ${volume##*-} volume ${volume} already processed"
                 fi
                 continue
             fi
-            qcNew="${imagesQosClass[${volume}]}"
-            update_volume_qc "${volume}" "${qcNew}" "${qc}" "IMG ${volume##*-}"
+            dsId="${imagesDsIds[${volume}]}"
+            if [[ -n "${DS_SP_AUTH_TOKEN[${dsId}]}" ]]; then
+                export SP_AUTH_TOKEN="${DS_SP_AUTH_TOKEN[${dsId}]}"
+            else
+                unset SP_AUTH_TOKEN
+            fi
+            if [[ -n "${DS_SP_API_HTTP_HOST[${dsId}]}" ]]; then
+                export SP_API_HTTP_HOST="${DS_SP_API_HTTP_HOST[${dsId}]}"
+            else
+                unset SP_API_HTTP_HOST
+            fi
+            if [[ -n "${DS_SP_API_HTTP_PORT[${dsId}]}" ]]; then
+                export SP_API_HTTP_PORT="${DS_SP_API_HTTP_PORT[${dsId}]}"
+            else
+                unset SP_API_HTTP_PORT
+            fi
+            tag_qc_new="${imagesQosClass[${volume}]}"
+            update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "IMG ${volume##*-}"
         fi
     done {spfh}< <(jq -r '.data[]|.name+";"+.tags["qc"]' "${volumeListJson}" || true)
 }
