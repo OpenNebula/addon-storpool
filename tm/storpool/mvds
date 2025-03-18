@@ -82,26 +82,22 @@ oneImageQc "${IMAGE_ID}"
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-splog "SRC_HOST=${SRC_HOST} ${SP_VOL} ${DEFERRED:+DEFERRED} SP_NEW=${SP_NEW} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}${SHAREABLE:+ SHAREABLE=${SHAREABLE}}"
+splog "SRC_HOST=${SRC_HOST} ${SP_VOL} ${DEFERRED:+DEFERRED} SP_NEW=${SP_NEW} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}"
 
 #-------------------------------------------------------------------------------
 # Detach and if it is deferred OpenNebula snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
-if boolTrue "SHAREABLE"; then
-    shareableDetach "${SRC_HOST}" "${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL}"
-else
-    storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "all" "${READONLY}"
+storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "all" "${READONLY}"
 
-    storpoolVolumeTag "${SP_VOL}" ";;${SP_QOSCLASS}" "${VM_TAG};vc-policy;qc"
+storpoolVolumeTag "${SP_VOL}" ";;${SP_QOSCLASS}" "${VM_TAG};vc-policy;qc"
 
-    if boolTrue "DEFERRED"; then
-        storpoolVolumeRename "${SP_VOL}" "${SP_NEW}" "${SP_TEMPLATE}"
-    fi
+if boolTrue "DEFERRED"; then
+    storpoolVolumeRename "${SP_VOL}" "${SP_NEW}" "${SP_TEMPLATE}"
+fi
 
-    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-        storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
-    fi
+if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
 fi
 
 splog "deleting ${SRC_PATH} on ${SRC_HOST}"

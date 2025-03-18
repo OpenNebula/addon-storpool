@@ -87,7 +87,6 @@ oneTemplateInfo "${TEMPLATE}"
 # Detach storpool volumes from DST_HOST
 #-------------------------------------------------------------------------------
 json=
-shareable_detach=
 for i in "${!DISK_ID_ARRAY[@]}"; do
     if [[ "${DISK_TM_MAD_ARRAY[i]}" == "storpool" ]]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
@@ -101,14 +100,8 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
             fi
             DST_PATH="${VM_PATH}/disk.${DISK_ID}"
             [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-            if boolTrue "DISK_SHAREABLE_ARRAY[i]"; then
-                IMAGE_DS_ID="${DISK_DS_ID_ARRAY[i]}"
-                IMAGE_ID="${DISK_IMAGE_ID_ARRAY[i]}"
-                shareable_detach+="${IMAGE_DS_ID}/${IMAGE_ID}/${VM_ID}/${DISK_ID}/${SP_VOL} "
-            else
-                [[ -z "${json:-}" ]] || json+=","
-                json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
-            fi
+            [[ -z "${json:-}" ]] || json+=","
+            json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "[D]skip volatile disk for ${DS_ID}/${VM_ID}/disk.${DISK_ID}"
@@ -163,10 +156,6 @@ fi
 
 if [[ -n "${json:-}" ]]; then
     storpoolRetry groupDetach "${json}"
-fi
-
-if [[ -n "${shareable_detach:-}" ]]; then
-    shareableDetach "${DST_HOST}" "${shareable_detach}"
 fi
 
 splog "END ${VM_ID}"
