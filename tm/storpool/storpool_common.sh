@@ -132,8 +132,6 @@ export DISK_SAVEAS_FSFREEZE=0
 export TAG_CONTEXT_ISO=1
 # timeout on attach when the client is not reachable (in seconds)
 export ATTACH_TIMEOUT=20
-# Shareable disk(s) function is administratively disabled! Communicate with StorPool support for assistance."
-export ENABLE_SHAREABLE_SUPPORT=
 # TM/monitor send VM disk stats over UDP
 export MONITOR_SEND_UDP=
 
@@ -1461,7 +1459,6 @@ function oneImageInfo()
     IMAGE_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     IMAGE_VC_POLICY="${XPATH_ELEMENTS[i++]}"
     IMAGE_TEMPLATE_SHAREABLE="${XPATH_ELEMENTS[i++]}"
-    export IMAGE_TEMPLATE_SHAREABLE
     boolTrue "DEBUG_oneImageInfo" || return 0
 
     _MSG="[oneImageInfo]${IMAGE_NAME:+IMAGE_NAME=${IMAGE_NAME} }${IMAGE_TYPE:+IMAGE_TYPE=${IMAGE_TYPE} }${IMAGE_DISK_TYPE:+DISK_TYPE=${IMAGE_DISK_TYPE} }${IMAGE_PERSISTENT:+PERSISTENT=${IMAGE_PERSISTENT} }"
@@ -2528,6 +2525,9 @@ oneVmVolumes()
         if [[ ${#SNAPSHOT_ID_A[@]} -gt 0 ]]; then
             splog "[DDD]oneVmVolumes() SNAPSHOT_ID_A:'${SNAPSHOT_ID_A[*]}'"
         fi
+        if [[ -n "${oneVmVolumesShareable}" ]]; then
+            splog "[DDD]oneVmVolumes() oneVmVolumesShareable:'${oneVmVolumesShareable}'"
+        fi
     fi
     if boolTrue "DDEBUG_oneVmVolumes"; then
         splog "[DD][oneVmVolumes] VM_ID:${VM_ID} DISKS_QC:'${!DISKS_QC_A[*]}'='${DISKS_QC_A[*]}' SP_QOSCLASS_LINE:'${SP_QOSCLASS_LINE}'"
@@ -2849,93 +2849,6 @@ function isRaftLeader()
         splog "[DD][isRaftLeader](${RAFT_LEADER_IP}): ${_ret}"
     fi
     return "${_ret}"
-}
-
-function shareableAttach()
-{
-    local HOST="$1" ENTRIES="$2" ENTRY="" _LOCK=""
-    local _DS_ID="" _IMAGE_ID="" _VM_ID="" _DISK_ID=""
-    local _SP_VOL="" _SP_MODE="" _SP_TARGET="" _S_PATH=""
-    if ! boolTrue "ENABLE_SHAREABLE_SUPPORT"; then
-        msg="Shareable disk(s) function is administratively disabled! Communicate with StorPool support for assistance."
-        log "${msg}"
-        splog "${msg}"
-        exit 1
-    fi
-    for ENTRY in ${ENTRIES}; do
-        read -ra _arr <<<"${ENTRY//\// }"
-        _DS_ID="${_arr[0]}"
-        _IMAGE_ID="${_arr[1]}"
-        _VM_ID="${_arr[2]}"
-        _DISK_ID="${_arr[3]}"
-        _SP_VOL="${_arr[4]}"
-        _SP_MODE="${_arr[5]:-rw}"
-        _SP_TARGET="${_arr[6]:-volume}"
-        _LOCK="/tmp/shareable-${_DS_ID}-${_IMAGE_ID}"
-        if boolTrue "DEBUG_SHAREABLE"; then
-            splog "[D][shareableAttach] ${HOST} ${_arr[*]}"
-        fi
-        exec 213>"${_LOCK}"
-        if flock -x -w "${SHAREABLE_LOCK_WAIT:-60}" 213; then
-            _S_PATH=".shareable/${_DS_ID}/${_IMAGE_ID}/${HOST}/${_VM_ID}-${_DISK_ID}"
-            storpoolVolumeAttach "${_SP_VOL}" "${HOST}" "${_SP_MODE}" "${_SP_TARGET}"
-            mkdir -p "${_S_PATH}"
-            splog "shareableAttach: mkdir -p ${_S_PATH} ($?)"
-            flock -u 213
-        else
-            splog "shareableAttach: Timed out (${SHAREABLE_LOCK_WAIT:-60}) getting lock for ${_LOCK}"
-            return 1
-        fi
-    done
-}
-
-function shareableDetach()
-{
-    local HOST="$1" ENTRIES="$2" ENTRY="" _LOCK="" _S_PATH=""
-    local _DS_ID="" _IMAGE_ID="" _VM_ID="" _DISK_ID="" _SP_VOL=""
-    local SCOUNT=""
-    for ENTRY in ${ENTRIES}; do
-        read -ra _arr <<<"${ENTRY//\// }"
-        _DS_ID="${_arr[0]}"
-        _IMAGE_ID="${_arr[1]}"
-        _VM_ID="${_arr[2]}"
-        _DISK_ID="${_arr[3]}"
-        _SP_VOL="${_arr[4]}"
-        _LOCK="/tmp/shareable-${_DS_ID}-${_IMAGE_ID}"
-        if boolTrue "DEBUG_SHAREABLE"; then
-            splog "[D][shareableDetach] ${HOST} ${_arr[*]}"
-        fi
-        exec 213>"${_LOCK}"
-        if flock -x -w "${SHAREABLE_LOCK_WAIT:-60}" 213; then
-            _S_PATH=".shareable/${_DS_ID}/${_IMAGE_ID}/${HOST}/${_VM_ID}-${_DISK_ID}"
-            if [[ -d "${_S_PATH}" ]]; then
-                rmdir "${_S_PATH}"
-                splog "rmdir ${_S_PATH} ($?)"
-            fi
-            _S_PATH="${_S_PATH%/*}"
-            SCOUNT="$(find "${_S_PATH}" -maxdepth 1 -mindepth 1 -type d | wc -l || true)"
-            splog "shareableDetach COUNT:${SCOUNT} ${_S_PATH}/*"
-            if [[ ${SCOUNT} -eq 0 ]]; then
-                storpoolVolumeDetach "${_SP_VOL}" "" "${HOST}" "" "1"
-                if rmdir "${_S_PATH}" 2>/dev/null; then
-                    _S_PATH="${_S_PATH%/*}"
-                    if rmdir "${_S_PATH}" 2>/dev/null; then
-                        storpoolVolumeTag "${_SP_VOL}" "one;;;${DEFAULT_QOSCLASS:-}" "virt;shareable;vc-policy;qc"
-                        _S_PATH="${_S_PATH%/*}"
-                        if rmdir -p "${_S_PATH}" 2>/dev/null; then
-                            splog "shareableDetach: rmdir -p ${_S_PATH} (Success)"
-                        else
-                            splog "shareableDetach: rmdir -p ${_S_PATH} (Failed: more attachments)"
-                        fi
-                    fi
-                fi
-            fi
-        else
-            splog "shareableDetach: Timed out getting lock for ${_LOCK}"
-            return 1
-        fi
-        flock -u 213
-    done
 }
 
 # redefine own version of ssh_make_path()
