@@ -35,7 +35,7 @@ export HVHOST2  #  TBD: remove
 splog "$*"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-    read -ra DS_ID_A <<< "${FILE//\// }"
+    read -r -a DS_ID_A <<< "${FILE//\// }"
     DS_ID="${DS_ID_A[-3]}"
     oneDatastoreInfo "${DS_ID}"
 
@@ -44,7 +44,7 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     if storpoolVolumeExists "${SP_VOL}"; then
         storpoolVolumeDelete "${SP_VOL}" "force"
     fi
-    read -ra DS_ID_A <<< "${FILE//\// }"
+    read -r -a DS_ID_A <<< "${FILE//\// }"
     DS_ID="${DS_ID_A[-3]}"
     _XPATH="${DRIVER_PATH}/../../datastore/xpath.rb"
     declare -a _XPATH_A _XPATH_QUERY

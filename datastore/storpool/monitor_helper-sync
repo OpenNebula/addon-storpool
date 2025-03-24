@@ -307,22 +307,22 @@ _SP_API_HTTP_PORT="${XPATH_ELEMENTS[i++]}"
 _SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
 _SP_SKIP_MONITOR="${XPATH_ELEMENTS[i++]}"
 
-IFS=';' read -ra DS_ID_ARRAY <<<"${_DS_ID}"
-IFS=';' read -ra DS_STATE_ARRAY <<<"${_DS_STATE}"
-IFS=';' read -ra DS_CLUSTER_ID_ARRAY <<<"${_DS_CLUSTER_ID}"
-IFS=';' read -ra DS_TM_MAD_ARRAY <<<"${_DS_TM_MAD}"
-IFS=';' read -ra SP_REPLICATION_ARRAY <<<"${_SP_REPLICATION}"
-IFS=';' read -ra SP_PLACEALL_ARRAY <<<"${_SP_PLACEALL}"
-IFS=';' read -ra SP_PLACETAIL_ARRAY <<<"${_SP_PLACETAIL}"
-IFS=';' read -ra SP_PLACEHEAD_ARRAY <<<"${_SP_PLACEHEAD}"
-IFS=';' read -ra SP_IOPS_ARRAY <<<"${_SP_IOPS}"
-IFS=';' read -ra SP_BW_ARRAY <<<"${_SP_BW}"
-IFS=';' read -ra SP_AUTO_TEMPLATE_ARRAY <<<"${_SP_AUTO_TEMPLATE}"
-IFS=';' read -ra SP_TEMPLATE_PROPAGATE_ARRAY <<<"${_SP_TEMPLATE_PROPAGATE}"
-IFS=';' read -ra SP_API_HTTP_HOST_ARRAY <<<"${_SP_API_HTTP_HOST}"
-IFS=';' read -ra SP_API_HTTP_PORT_ARRAY <<<"${_SP_API_HTTP_PORT}"
-IFS=';' read -ra SP_AUTH_TOKEN_ARRAY <<<"${_SP_AUTH_TOKEN}"
-IFS=';' read -ra SP_SKIP_MONITOR_ARRAY <<<"${_SP_SKIP_MONITOR}"
+IFS=';' read -r -a DS_ID_ARRAY <<< "${_DS_ID}"
+IFS=';' read -r -a DS_STATE_ARRAY <<< "${_DS_STATE}"
+IFS=';' read -r -a DS_CLUSTER_ID_ARRAY <<< "${_DS_CLUSTER_ID}"
+IFS=';' read -r -a DS_TM_MAD_ARRAY <<< "${_DS_TM_MAD}"
+IFS=';' read -r -a SP_REPLICATION_ARRAY <<< "${_SP_REPLICATION}"
+IFS=';' read -r -a SP_PLACEALL_ARRAY <<< "${_SP_PLACEALL}"
+IFS=';' read -r -a SP_PLACETAIL_ARRAY <<< "${_SP_PLACETAIL}"
+IFS=';' read -r -a SP_PLACEHEAD_ARRAY <<< "${_SP_PLACEHEAD}"
+IFS=';' read -r -a SP_IOPS_ARRAY <<< "${_SP_IOPS}"
+IFS=';' read -r -a SP_BW_ARRAY <<< "${_SP_BW}"
+IFS=';' read -r -a SP_AUTO_TEMPLATE_ARRAY <<< "${_SP_AUTO_TEMPLATE}"
+IFS=';' read -r -a SP_TEMPLATE_PROPAGATE_ARRAY <<< "${_SP_TEMPLATE_PROPAGATE}"
+IFS=';' read -r -a SP_API_HTTP_HOST_ARRAY <<< "${_SP_API_HTTP_HOST}"
+IFS=';' read -r -a SP_API_HTTP_PORT_ARRAY <<< "${_SP_API_HTTP_PORT}"
+IFS=';' read -r -a SP_AUTH_TOKEN_ARRAY <<< "${_SP_AUTH_TOKEN}"
+IFS=';' read -r -a SP_SKIP_MONITOR_ARRAY <<< "${_SP_SKIP_MONITOR}"
 
 tmpDir="$(mktemp --tmpdir -d one-sp-XXXXXXXX)"
 # shellcheck disable=SC2064
@@ -373,8 +373,8 @@ for i in "${!DS_ID_ARRAY[@]}"; do
     fi
 
 	#old style
-	read -ra CLUSTER_IDS <<<"${DS_CLUSTER_ID_ARRAY[i]}"
-	if [[ ${#CLUSTER_IDS[@]} -eq 0 ]]; then
+	read -r -a CLUSTER_ID_ARRAY <<< "${DS_CLUSTER_ID_ARRAY[i]}"
+	if [[ ${#CLUSTER_ID_ARRAY[@]} -eq 0 ]]; then
 		#new style
 		_XPATH="${driverPath}/../xpath.rb"
 		_XPATH_A=(
@@ -385,11 +385,11 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 			"%m%/DATASTORE_POOL/DATASTORE[ID=${DS_ID}]/CLUSTERS/ID"
 		)
 		while IFS='' read -r -u "${xpathfd}" -d '' _element; do
-			CLUSTER_IDS+=("${_element}")
+			CLUSTER_ID_ARRAY+=("${_element}")
 		done {xpathfd}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 	fi
 	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC:-}" ]]; then
-		splog "[DD] DS_ID=${DS_ID} ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_IDS:${CLUSTER_IDS[*]}"
+		splog "[DD] DS_ID=${DS_ID} ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_ID_ARRAY:${CLUSTER_ID_ARRAY[*]}"
 	fi
 
 	# create/update the template in StorPool
@@ -412,7 +412,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 
 	tmpFile="${tmpDir}/${DS_ID}.update"
 
-	read -ra template_data <<<"${tmp//,/ }"
+	read -r -a template_data <<< "${tmp//,/ }"
 	old="${template_data[0]//\"/}"
 	new="${SP_REPLICATION_ARRAY[i]}"
 	if [[ "${old}" != "${new}" ]]; then
@@ -527,7 +527,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 		splog "($?) onedatastore update ${ONE_ARGS} ${DS_ID} --append ${tmpFile}"
 	fi
 
-	for CLUSTER_ID in "${CLUSTER_IDS[@]}"; do
+	for CLUSTER_ID in "${CLUSTER_ID_ARRAY[@]}"; do
 		if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
 			splog "[D] CLUSTER_ID:${CLUSTER_ID} DS_ID:${DS_ID} API:${SP_API_HTTP_HOST} clusters:${clusters}"
 		fi
@@ -628,11 +628,11 @@ if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
 	splog "[D] ${_HOST_ID}|${_HOST_NAME}|${_HOST_CLUSTER_ID}|${_HOST_STATE}"
 fi
 
-IFS=';' read -ra HOST_ID_ARRAY <<<"${_HOST_ID}"
-IFS=';' read -ra HOST_NAME_ARRAY <<<"${_HOST_NAME}"
-IFS=';' read -ra HOST_STATE_ARRAY <<<"${_HOST_STATE}"
-IFS=';' read -ra HOST_CLUSTER_ID_ARRAY <<<"${_HOST_CLUSTER_ID}"
-IFS=';' read -ra HOST_SP_JSON_PATH_ARRAY <<<"${_HOST_SP_JSON_PATH}"
+IFS=';' read -r -a HOST_ID_ARRAY <<< "${_HOST_ID}"
+IFS=';' read -r -a HOST_NAME_ARRAY <<< "${_HOST_NAME}"
+IFS=';' read -r -a HOST_STATE_ARRAY <<< "${_HOST_STATE}"
+IFS=';' read -r -a HOST_CLUSTER_ID_ARRAY <<< "${_HOST_CLUSTER_ID}"
+IFS=';' read -r -a HOST_SP_JSON_PATH_ARRAY <<< "${_HOST_SP_JSON_PATH}"
 
 _lHost="$(hostname -s || true)"
 for i in "${!HOST_ID_ARRAY[@]}"; do

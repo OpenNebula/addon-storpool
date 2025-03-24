@@ -114,9 +114,9 @@ set -o pipefail
 logger -t "ds_sp_export_r[$$]" -- "Begin ${EXPORT_FILE} (\$?)"
 ${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} 2>&1 >"/tmp/export$$.log"
 logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$?)"
-while read -u 4 l; do
+while read -u "\${logfd}" l; do
   logger -t "ds_sp_export_r[$$]" -- "LOG:\$l"
-done 4< <("cat /tmp/export$$.log")
+done {logfd}< <("cat /tmp/export$$.log")
 rm -f "/tmp/export$$.log"
 ${DU:-du} -Lm "${EXPORT_FILE}" | cut -f1
 EOF

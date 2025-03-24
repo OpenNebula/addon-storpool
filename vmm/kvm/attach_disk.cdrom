@@ -57,7 +57,7 @@ done {domfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMA
 if [[ -n ${available[${TARGET}]} ]]; then
     TARGET_DEVICE="${TARGET}"
 else
-    read -ra keys <<< "${!available[@]}"
+    read -r -a keys <<< "${!available[@]}"
     TARGET_DEVICE="${keys[0]}"
 fi
 

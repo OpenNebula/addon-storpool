@@ -29,7 +29,7 @@ SUNSTONE="${SUNSTONE:-0}"
 # some fixtures
 CWD="${CWD:-$(pwd)}"
 if [[ "$(declare -p CP_ARGS)" == "declare -a" ]]; then
-    read -r -a CP_ARGS <<<"${CP_ARG:-"-v -L -f"}"
+    read -r -a CP_ARGS <<< "${CP_ARG:-"-v -L -f"}"
 fi
 
 function patch_hook()
@@ -193,14 +193,14 @@ else
     cp -vf "${CWD}/misc/augeas"/*.aug "${AUGEAS_LENSES}"/
     mkdir -p "${AUGEAS_LENSES}/tests"
     cp -vf "${CWD}/misc/augeas/tests"/*.aug "${AUGEAS_LENSES}/tests"/
-    declare -a AUTOCONF_FILES_A
+    declare -a AUTOCONF_FILES_ARRAY
     for yaml in "${DEFAULT_AUTOCONF:-/etc/one/addon-storpool.autoconf}" "${CWD}/misc/autoconf-${ONE_MAJOR}.${ONE_MINOR}.yaml"; do
         if [[ -f "${yaml}" ]]; then
             echo "  - including: ${yaml}"
-            AUTOCONF_FILES_A+=("-m" "${yaml}")
+            AUTOCONF_FILES_ARRAY+=("-m" "${yaml}")
         fi
     done
-    "${CWD}/misc/autoconf.rb" -v -w "${AUTOCONF_FILES_A[@]}"
+    "${CWD}/misc/autoconf.rb" -v -w "${AUTOCONF_FILES_ARRAY[@]}"
 fi
 
 if [[ -f /var/lib/one/remotes/addon-storpoolrc ]]; then
@@ -209,9 +209,9 @@ if [[ -f /var/lib/one/remotes/addon-storpoolrc ]]; then
 fi
 
 echo "*** Refresh deploy-tweaks"
-read -ra DEPLOY_TWEAKS_A <<<"${DEPLOY_TWEAKS:-} $(find "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/" -maxdepth 1 \( -type f -o -type l \) -printf "%f " 2>/dev/null || true)";
+read -r -a DEPLOY_TWEAKS_ARRAY <<< "${DEPLOY_TWEAKS:-} $(find "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/" -maxdepth 1 \( -type f -o -type l \) -printf "%f " 2>/dev/null || true)";
 declare -A KNOWN_TWEAKS
-for tweak in "${DEPLOY_TWEAKS_A[@]}"; do
+for tweak in "${DEPLOY_TWEAKS_ARRAY[@]}"; do
     [[ -z "${KNOWN_TWEAKS[${tweak//[^[:alnum:]]/}]}" ]] || continue
     KNOWN_TWEAKS[${tweak//[^[:alnum:]]/}]="${tweak}"
     if [[ -L "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/${tweak}" ]]; then
