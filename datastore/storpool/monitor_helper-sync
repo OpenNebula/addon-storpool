@@ -384,9 +384,8 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 		_XPATH_QUERY=(
 			"%m%/DATASTORE_POOL/DATASTORE[ID=${DS_ID}]/CLUSTERS/ID"
 		)
-		unset j
 		while IFS='' read -r -u "${xpathfd}" -d '' _element; do
-			CLUSTER_IDS[j++]="${_element}"
+			CLUSTER_IDS+=("${_element}")
 		done {xpathfd}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 	fi
 	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC:-}" ]]; then
