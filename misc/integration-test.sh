@@ -188,7 +188,7 @@ function vmMigrate()
     local DST="$1" ARGS="$2" EXPECT="${3:-runn}"
     hdr "Migrating to '${DST}'${ARGS:+ ${ARGS}} //(${EXPECT})"
     declare -a _cmd=()
-    read -ra _cmd <<< "onevm migrate ${ARGS} ${VM_ID} ${DST}"
+    read -r -a _cmd <<< "onevm migrate ${ARGS} ${VM_ID} ${DST}"
     "${_cmd[@]}"
     # shellcheck disable=SC2310
     waitforvm "${VM_NAME}" "${EXPECT}" ||\

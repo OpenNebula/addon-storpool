@@ -68,7 +68,7 @@ Standard OpenNebula datastore operations:
 * partial SYSTEM datastore support (see limitations)
 * (optional) set limit on the number of VM disk snapshots (per disk limits)
 * (optional) helper tool to migrate CONTEXT ISO image to StorPool backed volume (require SYSTEM_DS `TM_MAD=storpool`)
-* (optional) send volume snapshot to a remote StorPool cluster on image delete 
+* (optional) send volume snapshot to a remote StorPool cluster on image delete
 * (optional) alternate local kvm/deploy script replacement that allows [tweaks](docs/deploy_tweaks.md) to the domain XML of the VMs with helper tools to enable iothreads, ioeventfd, fix virtio-scsi _nqueues_ to match the number of VCPUs, set cpu-model, etc
 * (optional) support VM checkpoint file stored directly on a StorPool backed block device (see [Limitations](#Limitations))
 * (optional) replace the "VM snapshot" interface scripts to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations)
@@ -377,7 +377,7 @@ Some configuration attributes must be set to enable a datastore as StorPool enab
 
 1. Quoted, space separated list of server hostnames which are members of the StorPool cluster. If it is left empty or removed the front-end must have working _storpool_block_ service (must have access to the StorPool cluster) as all disk preparations will be done locally.
 
-After a datastore is created in OpenNebula a StorPool template must be created to represent the datastore in StorPool. The name of the template should be *one-ds-${DATASTORE_ID}* where *${DATASTORE_ID}* is the *ID* of the OpenNebula's Datastore. Please refer the *StorPool's User Guide* for details how to configure a StorPool template. 
+After a datastore is created in OpenNebula a StorPool template must be created to represent the datastore in StorPool. The name of the template should be *one-ds-${DATASTORE_ID}* where *${DATASTORE_ID}* is the *ID* of the OpenNebula's Datastore. Please refer the *StorPool's User Guide* for details how to configure a StorPool template.
 
 * When there are multiple OpenNebula instances using same StorPool cluster a custom prefix should be set for each opennebula instance in the _addon-storpoolrc_ configuration file
 
@@ -507,4 +507,3 @@ Please follow the [naming convention](docs/naming_convention.md) for details on 
 ## More information
 
 [Tips](docs/tips.md)
-
