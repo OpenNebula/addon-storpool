@@ -193,14 +193,14 @@ else
     cp -vf "${CWD}/misc/augeas"/*.aug "${AUGEAS_LENSES}"/
     mkdir -p "${AUGEAS_LENSES}/tests"
     cp -vf "${CWD}/misc/augeas/tests"/*.aug "${AUGEAS_LENSES}/tests"/
-    AUTOCONF=
+    declare -a AUTOCONF_FILES_A
     for yaml in "${DEFAULT_AUTOCONF:-/etc/one/addon-storpool.autoconf}" "${CWD}/misc/autoconf-${ONE_MAJOR}.${ONE_MINOR}.yaml"; do
         if [[ -f "${yaml}" ]]; then
             echo "  - including: ${yaml}"
-            AUTOCONF+="-m ${yaml} "
+            AUTOCONF_FILES_A+=("-m" "${yaml}")
         fi
     done
-    "${CWD}/misc/autoconf.rb" -v -w "${AUTOCONF}"
+    "${CWD}/misc/autoconf.rb" -v -w "${AUTOCONF_FILES_A[@]}"
 fi
 
 if [[ -f /var/lib/one/remotes/addon-storpoolrc ]]; then
