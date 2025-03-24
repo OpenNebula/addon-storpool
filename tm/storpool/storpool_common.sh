@@ -338,9 +338,10 @@ function oneCallXml()
         _TMP_XML="${TMPDIR}/${_CALL}-${_ID}.XML"
         _OUT_FILE="${_TMP_XML}"
     fi
+    declare -a _ONECMD
     case "${_CALL}" in
         onevm|onehost|onedatastore|oneimage)
-            read -ra _ONECMD <<<"${_CALL} ${_METHOD} ${ONE_ARGS} -x ${_ID}"
+            read -r -a _ONECMD <<< "${_CALL} ${_METHOD} ${ONE_ARGS} -x ${_ID}"
             ;;
         *)
             echo "oneCallXml($*) Error: Unknown call'"
@@ -1091,15 +1092,16 @@ function storpoolVolumeTag()
 {
     local _SP_VOL="$1" _TAG_VAL="$2" _TAG_KEY="${3:-${VM_TAG:-nvm}}"
     local _tagCmd="" _tagKey=""
-    IFS=';' read -r -a tagVals <<< "${_TAG_VAL}"
-    IFS=';' read -r -a tagKeys <<< "${_TAG_KEY}"
+    declare -a _tagVal_array _tagKey_array
+    IFS=';' read -r -a _tagVal_array <<< "${_TAG_VAL}"
+    IFS=';' read -r -a _tagKey_array <<< "${_TAG_KEY}"
     if boolTrue "DEBUG_storpoolVolumeTag"; then
         splog "[D] storpoolVolumeTag(${_SP_VOL},${_TAG_VAL},${_TAG_KEY})"
     fi
-    for i in "${!tagKeys[@]}"; do
-        _tagKey="${tagKeys[i]//[[:space:]]/}"
+    for i in "${!_tagKey_array[@]}"; do
+        _tagKey="${_tagKey_array[i]//[[:space:]]/}"
         [[ -n "${_tagKey}" ]] || continue
-        _tagCmd+="tag ${_tagKey}=${tagVals[i]//[[:space:]]/} "
+        _tagCmd+="tag ${_tagKey}=${_tagVal_array[i]//[[:space:]]/} "
     done
     if [[ -n "${_tagCmd}" ]]; then
         storpoolRetry volume "${_SP_VOL}" "${_tagCmd}" update >/dev/null
@@ -1110,12 +1112,13 @@ function storpoolSnapshotTag()
 {
     local _SP_SNAP="$1" _TAG_VAL="$2" _TAG_KEY="${3:-${VM_TAG:-nvm}}"
     local _tagCmd="" _tagKey=""
-    IFS=';' read -r -a tagVals <<< "${_TAG_VAL}"
-    IFS=';' read -r -a tagKeys <<< "${_TAG_KEY}"
-    for i in "${!tagKeys[@]}"; do
-        _tagKey="${tagKeys[i]//[[:space:]]/}"
+    declare -a _tagVal_array _tagKey_array
+    IFS=';' read -r -a _tagVal_array <<< "${_TAG_VAL}"
+    IFS=';' read -r -a _tagKey_array <<< "${_TAG_KEY}"
+    for i in "${!_tagKey_array[@]}"; do
+        _tagKey="${_tagKey_array[i]//[[:space:]]/}"
         [[ -n "${_tagKey}" ]] || continue
-        _tagCmd+="tag ${_tagKey}=${tagVals[i]//[[:space:]]/} "
+        _tagCmd+="tag ${_tagKey}=${_tagVal_array[i]//[[:space:]]/} "
     done
     if [[ -n "${_tagCmd}" ]]; then
         storpoolRetry snapshot "${_SP_SNAP}" "${_tagCmd}" >/dev/null
@@ -1364,7 +1367,7 @@ function oneBackupImageInfo()
     B_IMAGE_SOURCE="${XPATH_ELEMENTS[i++]}"
     B_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     _BACKUP_DISK_IDS="${XPATH_ELEMENTS[i++]}"
-    read -r -a BACKUP_DISK_IDS <<<"${_BACKUP_DISK_IDS}"
+    read -r -a BACKUP_DISK_IDS <<< "${_BACKUP_DISK_IDS}"
 
     boolTrue "DEBUG_oneBackupImageInfo" || return 0
 
@@ -1455,7 +1458,7 @@ function oneImageInfo()
     IMAGE_SOURCE="${XPATH_ELEMENTS[i++]}"
     IMAGE_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     _IMAGE_VMS="${XPATH_ELEMENTS[i++]}"
-    read -ra IMAGE_VMS_A <<<"${_IMAGE_VMS}"
+    read -r -a IMAGE_VMS_A <<< "${_IMAGE_VMS}"
     IMAGE_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     IMAGE_VC_POLICY="${XPATH_ELEMENTS[i++]}"
     IMAGE_TEMPLATE_SHAREABLE="${XPATH_ELEMENTS[i++]}"
@@ -1596,14 +1599,14 @@ function oneVmInfo()
         T_OS_NVRAM="${_TMP}"
     fi
     SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
-    IFS=';' read -ra SP_QOSCLASS_A <<<"${SP_QOSCLASS_LINE}"
+    IFS=';' read -r -a SP_QOSCLASS_A <<< "${SP_QOSCLASS_LINE}"
     unset DISKS_QC_A VM_DISK_SP_QOSCLASS VM_SP_QOSCLASS IMAGE_SP_QOSCLASS
     if [[ "${CLONE^^}" == "NO" ]]; then
         oneImageQc "${IMAGE_ID}"
     fi
     declare -gA DISKS_QC_A
     for qosclass in "${SP_QOSCLASS_A[@]}"; do
-        IFS=':' read -ra tmparr <<<"${qosclass}"
+        IFS=':' read -r -a tmparr <<< "${qosclass}"
         if [[ ${#tmparr[@]} -eq 1 ]]; then
             VM_SP_QOSCLASS="${qosclass}"
         elif [[ ${#tmparr[@]} -eq 2 ]]; then
@@ -1767,7 +1770,7 @@ function oneDatastoreInfo()
     DS_BASE_PATH="${XPATH_ELEMENTS[i++]}"
     DS_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
     _DS_CLUSTERS_ID="${XPATH_ELEMENTS[i++]}"
-    read -ra DS_CLUSTERS_ID <<<"${_DS_CLUSTERS_ID}"
+    read -r -a DS_CLUSTERS_ID <<< "${_DS_CLUSTERS_ID}"
     DS_SHARED="${XPATH_ELEMENTS[i++]}"
     DS_TEMPLATE_TYPE="${XPATH_ELEMENTS[i++]}"
     DS_RSYNC_HOST="${XPATH_ELEMENTS[i++]}"
@@ -1950,18 +1953,18 @@ function oneTemplateInfo()
 
     # shellcheck disable=SC2034
     {
-    IFS=';' read -ra DISK_TM_MAD_ARRAY <<<"${_DISK_TM_MAD}"
-    IFS=';' read -ra DISK_DS_ID_ARRAY <<<"${_DISK_DS_ID}"
-    IFS=';' read -ra DISK_ID_ARRAY <<<"${_DISK_ID}"
-    IFS=';' read -ra DISK_CLUSTER_ID_ARRAY <<<"${_DISK_CLUSTER_ID}"
-    IFS=';' read -ra DISK_SOURCE_ARRAY <<<"${_DISK_SOURCE}"
-    IFS=';' read -ra DISK_PERSISTENT_ARRAY <<<"${_DISK_PERSISTENT}"
-    IFS=';' read -ra DISK_SHAREABLE_ARRAY <<<"${_DISK_SHAREABLE}"
-    IFS=';' read -ra DISK_TYPE_ARRAY <<<"${_DISK_TYPE}"
-    IFS=';' read -ra DISK_CLONE_ARRAY <<<"${_DISK_CLONE}"
-    IFS=';' read -ra DISK_READONLY_ARRAY <<<"${_DISK_READONLY}"
-    IFS=';' read -ra DISK_IMAGE_ID_ARRAY <<<"${_DISK_IMAGE_ID}"
-    IFS=';' read -ra DISK_FORMAT_ARRAY <<<"${_DISK_FORMAT}"
+    IFS=';' read -r -a DISK_TM_MAD_ARRAY <<< "${_DISK_TM_MAD}"
+    IFS=';' read -r -a DISK_DS_ID_ARRAY <<< "${_DISK_DS_ID}"
+    IFS=';' read -r -a DISK_ID_ARRAY <<< "${_DISK_ID}"
+    IFS=';' read -r -a DISK_CLUSTER_ID_ARRAY <<< "${_DISK_CLUSTER_ID}"
+    IFS=';' read -r -a DISK_SOURCE_ARRAY <<< "${_DISK_SOURCE}"
+    IFS=';' read -r -a DISK_PERSISTENT_ARRAY <<< "${_DISK_PERSISTENT}"
+    IFS=';' read -r -a DISK_SHAREABLE_ARRAY <<< "${_DISK_SHAREABLE}"
+    IFS=';' read -r -a DISK_TYPE_ARRAY <<< "${_DISK_TYPE}"
+    IFS=';' read -r -a DISK_CLONE_ARRAY <<< "${_DISK_CLONE}"
+    IFS=';' read -r -a DISK_READONLY_ARRAY <<< "${_DISK_READONLY}"
+    IFS=';' read -r -a DISK_IMAGE_ID_ARRAY <<< "${_DISK_IMAGE_ID}"
+    IFS=';' read -r -a DISK_FORMAT_ARRAY <<< "${_DISK_FORMAT}"
     }
 
     boolTrue "DEBUG_oneTemplateInfo" || return 0
@@ -2387,17 +2390,17 @@ oneVmVolumes()
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
     local IMG=""
-    IFS=';' read -ra DISK_ID_A <<<"${DISK_ID}"
-    IFS=';' read -ra CLONE_A <<<"${CLONE}"
-    IFS=';' read -ra FORMAT_A <<<"${FORMAT}"
-    IFS=';' read -ra TYPE_A <<<"${TYPE}"
-    IFS=';' read -ra SHAREABLE_A <<<"${SHAREABLE}"
-    IFS=';' read -ra TM_MAD_A <<<"${TM_MAD}"
-    IFS=';' read -ra TARGET_A <<<"${TARGET}"
-    IFS=';' read -ra IMAGE_ID_A <<<"${IMAGE_ID}"
-    IFS=';' read -ra DATASTORE_ID_A <<<"${DATASTORE_ID}"
-    IFS=';' read -ra SNAPSHOT_ID_A <<<"${SNAPSHOT_ID}"
-    IFS=';' read -ra SP_QOSCLASS_A <<<"${SP_QOSCLASS_LINE}"
+    IFS=';' read -r -a DISK_ID_A <<< "${DISK_ID}"
+    IFS=';' read -r -a CLONE_A <<< "${CLONE}"
+    IFS=';' read -r -a FORMAT_A <<< "${FORMAT}"
+    IFS=';' read -r -a TYPE_A <<< "${TYPE}"
+    IFS=';' read -r -a SHAREABLE_A <<< "${SHAREABLE}"
+    IFS=';' read -r -a TM_MAD_A <<< "${TM_MAD}"
+    IFS=';' read -r -a TARGET_A <<< "${TARGET}"
+    IFS=';' read -r -a IMAGE_ID_A <<< "${IMAGE_ID}"
+    IFS=';' read -r -a DATASTORE_ID_A <<< "${DATASTORE_ID}"
+    IFS=';' read -r -a SNAPSHOT_ID_A <<< "${SNAPSHOT_ID}"
+    IFS=';' read -r -a SP_QOSCLASS_A <<< "${SP_QOSCLASS_LINE}"
     vmDisksQcMap=""  # VOLUME_NAME:[VM_DISK_QOSCLASS]
     persistentDisksQcMap=""  # VOLUME_NAME:PERSISTENT_IMAGE_QOSCLASS
     vmDisksDsMap=""  # VOLUME_NAME:DATASTORE_ID
@@ -2409,7 +2412,7 @@ oneVmVolumes()
     declare -gA DISKS_QC_A
     VM_SP_QOSCLASS=""
     for qosclass in "${SP_QOSCLASS_A[@]}"; do
-        IFS=':' read -ra arr <<<"${qosclass}"
+        IFS=':' read -r -a arr <<< "${qosclass}"
         if [[ ${#arr[@]} -eq 1 ]]; then
             VM_SP_QOSCLASS="${qosclass}"
         elif [[ ${#arr[@]} -eq 2 ]]; then
@@ -2577,7 +2580,7 @@ oneVmDiskSnapshots()
     rm -f "${tmpXML}"
     unset i
     local _DISK_SNAPSHOTS="${XPATH_ELEMENTS[i++]}"
-    read -ra DISK_SNAPSHOTS <<<"${_DISK_SNAPSHOTS}"
+    read -r -a DISK_SNAPSHOTS <<< "${_DISK_SNAPSHOTS}"
     if boolTrue "DEBUG_oneVmDiskSnapshots"; then
         splog "[D][oneVmDiskSnapshots] VM_ID:${VM_ID} DISK_ID:${DISK_ID} SNAPSHOTS:${#DISK_SNAPSHOTS[@]} SNAPSHOT_IDs:${DISK_SNAPSHOTS[*]}"
     fi
@@ -2653,8 +2656,8 @@ oneVmSnapshots()
     CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     local _SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
     local _HYPERVISOR_ID="${XPATH_ELEMENTS[i++]}"
-    read -ra SNAPSHOT_IDS <<<"${_SNAPSHOT_ID}"
-    read -ra HYPERVISOR_IDS <<<"${_HYPERVISOR_ID}"
+    read -r -a SNAPSHOT_IDS <<< "${_SNAPSHOT_ID}"
+    read -r -a HYPERVISOR_IDS <<< "${_HYPERVISOR_ID}"
     if [[ -n "${disk_id}" ]]; then
         DISK_A="${XPATH_ELEMENTS[i++]}"  # DATASTORE_ID
         DISK_B="${XPATH_ELEMENTS[i++]}"  # DISK_TYPE
@@ -2675,7 +2678,7 @@ oneSnapshotLookup()
     local _input="$1"
     local volumeName=""
     declare -a _arr
-    read -ra _arr <<<"${_input//-/ }"
+    read -r -a _arr <<< "${_input//-/ }"
     declare -A _snap
     for e in "${_arr[@]}"; do
        _snap["${e%%:*}"]="${e#*:}"
@@ -2888,7 +2891,7 @@ EOF
 function remove_off_hosts {
     local hst="" state="" _RET=1
     declare -a LOOKUP_HOSTS_ARRAY
-    read -ra LOOKUP_HOSTS_ARRAY <<<"$1"
+    read -r -a LOOKUP_HOSTS_ARRAY <<< "$1"
     unset HOSTS_ARRAY
     declare -A HOSTS_ARRAY
     for hst in "${LOOKUP_HOSTS_ARRAY[@]}"; do

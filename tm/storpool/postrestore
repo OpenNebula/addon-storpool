@@ -35,7 +35,7 @@ export DEPLOY_ID HVHOST2  #  TBD: remove
 splog "$*"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-    read -ra DS_ID_A <<< "${FILE//\// }"
+    read -r -a DS_ID_A <<< "${FILE//\// }"
     DS_ID="${DS_ID_A[-3]}"
     oneDatastoreInfo "${DS_ID}"
 

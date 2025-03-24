@@ -178,7 +178,7 @@ function alterVcPolicy()
     fi
 
     while read -r -u "${jqfd}" _line; do
-        IFS=';' read -ra spdata <<<"${_line}"
+        IFS=';' read -r -a spdata <<< "${_line}"
         volume="${spdata[0]}"
         vc_policy="${spdata[1]}"
         tag_qc="${spdata[2]}"
@@ -260,7 +260,7 @@ function alterImagesQosClass()
     declare -A imagesQosClass imagesDsIds
     while read -r -u "${imgfh}" imageline; do
         [[ ${imageline:0:3} == "img" ]] || continue
-        IFS=';' read -ra imgData <<<"${imageline}"
+        IFS=';' read -r -a imgData <<<"${imageline}"
         image_id="${imgData[1]}"
         image_ds_id="${imgData[2]}"
         # persistent="${imgData[3]}"
@@ -288,7 +288,7 @@ function alterImagesQosClass()
     fi
 
     while read -r -u "${spfh}" line; do
-        IFS=';' read -ra spdata <<<"${line}"
+        IFS=';' read -r -a spdata <<< "${line}"
         volume="${spdata[0]}"
         tag_qc="${spdata[1]}"
         if [[ -n "${imagesQosClass[${volume}]+found}" ]]; then

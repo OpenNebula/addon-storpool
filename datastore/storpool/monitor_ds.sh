@@ -128,10 +128,10 @@ if [[ -f "${SP_MONITOR_DS}" ]]; then
             splog "[D] SP_DS_SIZES=${SP_DS_SIZES}"
         fi
 
-        read -ra SP_SIZES <<<"${SP_DS_SIZES}"
-        SP_USED_MB="${SP_SIZES[0]:-0}"
-        SP_TOTAL_MB="${SP_SIZES[1]:-0}"
-        SP_FREE_MB="${SP_SIZES[2]:-0}"
+        read -r -a SP_SIZES_A <<< "${SP_DS_SIZES}"
+        SP_USED_MB="${SP_SIZES_A[0]:-0}"
+        SP_TOTAL_MB="${SP_SIZES_A[1]:-0}"
+        SP_FREE_MB="${SP_SIZES_A[2]:-0}"
 
         if [[ ${SP_USED_MB} -gt 0 ]] && [[ ${SP_FREE_MB} -gt 0 ]]; then
 

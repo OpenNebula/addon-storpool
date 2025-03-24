@@ -24,7 +24,7 @@ function count_cpus()
 {
 	local _list="$1" _cpu=0 _c="" _arr=()
 	for _c in ${_list//,/ }; do
-		read -ra _arr <<< "${_c//-/ }"
+		read -r -a _arr <<< "${_c//-/ }"
 		if [[ ${#_arr[@]} -eq 2 ]]; then
 			_cpu=$((_cpu + _arr[1] - _arr[0]))
 		fi
@@ -39,7 +39,7 @@ function exclude_cpus()
     local set="" cg_map=() root_map=()
 	declare -i i end
 	for _c in ${_root_cpuset//,/ }; do
-		read -ra _arr <<< "${_c//-/ }"
+		read -r -a _arr <<< "${_c//-/ }"
 		i="${_arr[0]}"
 		[[ ${#_arr[@]} -eq 2 ]] && end=${_arr[1]} || end=${i}
 		while [[ ${i} -le ${end} ]]; do
@@ -48,7 +48,7 @@ function exclude_cpus()
 		done
 	done
 	for _c in ${_cg_cpuset//,/ }; do
-		read -ra _arr <<< "${_c//-/ }"
+		read -r -a _arr <<< "${_c//-/ }"
 		i="${_arr[0]}"
 		[[ ${#_arr[@]} -eq 2 ]] && end=${_arr[1]} || end=${i}
 		while [[ ${i} -le ${end} ]]; do
@@ -68,9 +68,9 @@ function exclude_cpus()
 	[[ -z "${set:-}" ]] || echo "${set}"
 }
 
-read -ra mem <<< "$(free -b | grep -i "mem:" || true)"
-read -ra cg_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "${cgroup}" || true)"
-read -ra root_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "" || true)"
+read -r -a mem <<< "$(free -b | grep -i "mem:" || true)"
+read -r -a cg_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "${cgroup}" || true)"
+read -r -a root_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "" || true)"
 cg_cpuset="${cg_arr[1]}"
 root_cpuset="${root_arr[1]}"
 cg_cpus=$(count_cpus "${cg_cpuset}" || true)

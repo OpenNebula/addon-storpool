@@ -22,7 +22,7 @@ PATH="/bin:/usr/bin:/sbin:/usr/sbin:${PATH}"
 
 CP_ARG="${CP_ARG:-"-v -L -f"}"
 export CP_ARG
-read -r -a CP_ARGS <<<"${CP_ARG}"
+read -r -a CP_ARGS <<< "${CP_ARG}"
 
 export ONE_ETC=${ONE_ETC:-/etc/one}
 export ONE_USER=${ONE_USER:-oneadmin}
@@ -72,7 +72,7 @@ function do_patch()
             else
                 _backup="--no-backup-if-mismatch"
             fi
-            read -ra _backup_a <<<"${_backup:-}"
+            read -r -a _backup_a <<< "${_backup}"
             if patch "${_backup_a[@]}" --strip=0 --forward --input="${_patch}"; then
                 DO_PATCH="done"
             else
@@ -137,7 +137,7 @@ function findFile()
 
 oneVersion(){
     local arr=()
-    read -ra arr <<<"${1//\./ }"
+    read -r -a arr <<< "${1//\./ }"
     export ONE_MAJOR="${arr[0]}"
     export ONE_MINOR="${arr[1]}"
     export ONE_VERSION=$((arr[0]*10000 + arr[1]*100 + arr[2]))
