@@ -35,15 +35,15 @@ fi
 # shellcheck source=/dev/null
 . "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH=$(dirname "$0")
+DRIVER_PATH="$(dirname "$0")"
 
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
-LOG_PREFIX="ds"
-
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+
+export LOG_PREFIX="ds"
 
 if boolTrue "DS_CP_REPORT_FORMAT"; then
     REPORT_FORMAT=raw

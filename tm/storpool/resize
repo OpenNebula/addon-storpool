@@ -31,9 +31,9 @@ NEWSIZE="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname "$0")"
+DRIVER_PATH="$(dirname "$0")"
 # shellcheck source=tm/storpool/storpool_common.sh
-source "${TM_PATH}/storpool_common.sh"
+source "${DRIVER_PATH}/storpool_common.sh"
 
 splog "SRC=${SRC} NEWSIZE=${NEWSIZE} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
