@@ -56,7 +56,7 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "${DRIVER_PATH}"
+oneDsDriverAction
 
 SIZE=0
 
