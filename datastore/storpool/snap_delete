@@ -56,7 +56,7 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "${DRIVER_PATH}"
+oneDsDriverAction
 
 SP_SNAP="${SOURCE##*/}-snap${TARGET_SNAPSHOT}"
 

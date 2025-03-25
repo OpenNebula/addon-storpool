@@ -67,7 +67,7 @@ fi
 export DRV_ACTION
 
 #echo "cd $PWD; bash -x $0 $*" >"/tmp/cp-$ID"
-oneDsDriverAction "${DRIVER_PATH}"
+oneDsDriverAction
 
 #-------------------------------------------------------------------------------
 # Validate variables

@@ -65,7 +65,7 @@ export DRV_ACTION
 
 dumpTemplate "${DRV_ACTION}"
 
-oneDsDriverAction "${DRIVER_PATH}"
+oneDsDriverAction
 
 if [[ -n "${DRIVER}" && "${DRIVER,,}" != "raw" ]]; then
     log_error "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."

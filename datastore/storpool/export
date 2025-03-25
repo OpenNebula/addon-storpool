@@ -51,7 +51,7 @@ export DRV_ACTION
 
 dumpTemplate "${DRV_ACTION}"
 
-oneDsDriverAction "${DRIVER_PATH}"
+oneDsDriverAction
 
 if [[ -n "${EXPORT_BRIDGE_LIST:-}" ]]; then
     BRIDGE_LIST="${EXPORT_BRIDGE_LIST}"

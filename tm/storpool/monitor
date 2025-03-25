@@ -95,7 +95,7 @@ if [[ "${DRV_ACTION:0:6}" == "system" ]]; then
 else
     # shellcheck source=tm/storpool/storpool_common.sh
 	source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
-	oneDsDriverAction "${DRIVER_PATH}"
+	oneDsDriverAction
 	#echo "cd $PWD && bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
 	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-${SP_CMD_TEMPLATE_STATUS}}"
 	if [[ -n "${CLUSTERS_ID:-}" ]]; then

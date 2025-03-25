@@ -58,7 +58,7 @@ else
     ID="$1"
 fi
 
-oneDsDriverAction "${DRIVER_PATH}"
+oneDsDriverAction
 IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
 SP_VOL="${ONE_PX:-one}-img-${ID}"
@@ -125,7 +125,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         CLONE_GW="${SRC_SP_CLONE_GW}"
         storpoolVolumeAttach "${SP_PARENT}" "${SRC_SP_CLONE_GW}" "ro"
 
-        oneDsDriverAction "${DRIVER_PATH}"
+        oneDsDriverAction
         IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
         if [[ -n "${BRIDGE_LIST}" ]]; then
@@ -193,7 +193,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         exit 0
     else
         # reset environment and fallback to default routine
-        oneDsDriverAction "${DRIVER_PATH}"
+        oneDsDriverAction
         IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
     fi
 fi
