@@ -26,8 +26,6 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
-# shellcheck disable=SC2034
-
 if [[ -n "${ONE_LOCATION}" ]]; then
     LIB_LOCATION="${ONE_LOCATION}/lib"
 else
@@ -76,31 +74,29 @@ SRC_DS_ID="${IMAGE_PATH%%/*}"
 SRC_DS_ID="${SRC_DS_ID##*-}"
 
 if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
-    DST_BRIDGE_LIST="${SP_BRIDGE_LIST:-}"  # TBD: refactor to not use BRIDGE_LIST use the hosts if available
-    DST_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
-    DST_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
+    #DST_BRIDGE_LIST="${SP_BRIDGE_LIST:-}"  # TBD: refactor to not use BRIDGE_LIST use the hosts if available
+    #DST_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
+    #DST_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
     DST_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"
-    DST_SP_REPLICATION="${SP_REPLICATION}"
-    DST_SP_PLACEALL="${SP_PLACEALL}"
-    DST_SP_PLACETAIL="${SP_PLACETAIL}"
-    DST_SP_PLACEHEAD="${SP_PLACEHEAD}"
-    DST_SP_IOPS="${SP_IOPS}"
-    DST_SP_BW="${SP_BW}"
-    DST_TM_MAD="${TM_MAD}"
+    #DST_SP_REPLICATION="${SP_REPLICATION}"
+    #DST_SP_PLACEALL="${SP_PLACEALL}"
+    #DST_SP_PLACETAIL="${SP_PLACETAIL}"
+    #DST_SP_PLACEHEAD="${SP_PLACEHEAD}"
+    #DST_SP_IOPS="${SP_IOPS}"
+    #DST_SP_BW="${SP_BW}"
+    #DST_TM_MAD="${TM_MAD}"
 
-#    env >/tmp/ds_clone-$ID.dst
     oneDatastoreInfo "${SRC_DS_ID}"
-#    env >/tmp/ds_clone-$ID.src
-    SRC_BRIDGE_LIST="${SP_BRIDGE_LIST}"
+    #SRC_BRIDGE_LIST="${SP_BRIDGE_LIST}"
     SRC_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
     SRC_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
     SRC_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"
-    SRC_SP_REPLICATION="${SP_REPLICATION}"
-    SRC_SP_PLACEALL="${SP_PLACEALL}"
-    SRC_SP_PLACETAIL="${SP_PLACETAIL}"
-    SRC_SP_PLACEHEAD="${SP_PLACEHEAD}"
-    SRC_SP_IOPS="${SP_IOPS}"
-    SRC_SP_BW="${SP_BW}"
+    #SRC_SP_REPLICATION="${SP_REPLICATION}"
+    #SRC_SP_PLACEALL="${SP_PLACEALL}"
+    #SRC_SP_PLACETAIL="${SP_PLACETAIL}"
+    #SRC_SP_PLACEHEAD="${SP_PLACEHEAD}"
+    #SRC_SP_IOPS="${SP_IOPS}"
+    #SRC_SP_BW="${SP_BW}"
 
     if [[ "${DS_TM_MAD}" != "${TM_MAD}" ]]; then
         splog "Clone from ${TM_MAD} to ${DS_TM_MAD} is not supported!"
@@ -113,7 +109,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         if [[ -n "${BRIDGE_LIST}" ]]; then
             SRC_HOST="$(get_destination_host "${ID}")"
             if [[ -z "${SRC_HOST}" ]]; then
-                error_message "Can't get datastore host from BRIDGE_LIST:${BRIDGE_LIST}"
+                error_message "Can't get bridge host for datastore ${ID} from BRIDGE_LIST:${BRIDGE_LIST}"
                 exit 255
             fi
         fi
@@ -131,7 +127,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         if [[ -n "${BRIDGE_LIST}" ]]; then
             DST_HOST="$(get_destination_host "${ID}")"
             if [[ -z "${DST_HOST}" ]]; then
-                error_message "Can't get datastore host from BRIDGE_LIST:${BRIDGE_LIST}"
+                error_message "Can't get bridge host for datastore ${ID} from BRIDGE_LIST:${BRIDGE_LIST}"
                 exit 255
             fi
         fi
