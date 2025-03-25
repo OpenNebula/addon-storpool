@@ -16,14 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-WORKDIR=$(dirname "$0")
+DRIVER_PATH=$(dirname "$0")
 # shellcheck source=/dev/null
-source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
+source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
-source "${WORKDIR}/../../scripts_common.sh"
-if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
+source "${DRIVER_PATH}/../../scripts_common.sh"
+if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${WORKDIR}/../../addon-storpoolrc"
+    source "${DRIVER_PATH}/../../addon-storpoolrc"
 fi
 
 function splog()

@@ -31,9 +31,9 @@ SNAP_ID="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-TM_PATH="$(dirname "$0")"
+DRIVER_PATH="$(dirname "$0")"
 #shellcheck source=tm/storpool/storpool_common.sh
-source "${TM_PATH}/storpool_common.sh"
+source "${DRIVER_PATH}/storpool_common.sh"
 
 splog "SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
@@ -58,7 +58,7 @@ oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 if [[ "${TYPE}" == "CDROM" ]]; then
     # shellcheck source=/dev/null
-    source "${TM_PATH}/../../scripts_common.sh"
+    source "${DRIVER_PATH}/../../scripts_common.sh"
     error_message "${0##*/}: CDROM snapshot operation not supported"
     exit 1
 fi
@@ -85,7 +85,7 @@ if [[ -n "${DISKSNAPSHOT_LIMIT}" ]] && [[ -z "${DISKSNAPSHOT_LIMIT//[[:digit:]]/
         oneVmDiskSnapshots "${VM_ID}" "${DISK_ID}"
         if [[ "${#DISK_SNAPSHOTS[@]}" -gt "${DISKSNAPSHOT_LIMIT}" ]]; then
             # shellcheck source=/dev/null
-            source "${TM_PATH}/../../scripts_common.sh"
+            source "${DRIVER_PATH}/../../scripts_common.sh"
             msg="DISKSNAPSHOT_LIMIT of ${DISKSNAPSHOT_LIMIT} snaphosts exceeded!"
             splog "${msg}"
             error_message "${msg}"

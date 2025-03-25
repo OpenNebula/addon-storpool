@@ -29,20 +29,20 @@ fi
 
 set -a
 
-SCRIPT_PATH="$(dirname "$0")"
-if [[ -f "${SCRIPT_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
+DRIVER_PATH="$(dirname "$0")"
+if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
     # shellcheck source=/dev/null
-    source "${SCRIPT_PATH}/../../etc/vmm/kvm/kvmrc"
-elif [[ -f "${SCRIPT_PATH}/kvmrc" ]]; then
+    source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+elif [[ -f "${DRIVER_PATH}/kvmrc" ]]; then
     # shellcheck source=/dev/null
-    source "${SCRIPT_PATH}/kvmrc"
+    source "${DRIVER_PATH}/kvmrc"
 fi
 # shellcheck source=/dev/null
-source "${SCRIPT_PATH}/../../scripts_common.sh"
+source "${DRIVER_PATH}/../../scripts_common.sh"
 
-if [[ -f "${SCRIPT_PATH}/../../addon-storpoolrc" ]]; then
+if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${SCRIPT_PATH}/../../addon-storpoolrc"
+    source "${DRIVER_PATH}/../../addon-storpoolrc"
 fi
 
 for var in ONE_PX NVRAM_TEMPLATE_PATH TMPDIR ERR_FILE; do
@@ -80,7 +80,7 @@ fi
 
 declare -a _XPATH_A _XPATH_QUERY
 _XPATH_A=(
-    "${SCRIPT_PATH}/../../datastore/xpath.rb"
+    "${DRIVER_PATH}/../../datastore/xpath.rb"
     "--stdin"
 )
 _XPATH_QUERY=(
