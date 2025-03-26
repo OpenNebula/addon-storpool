@@ -65,7 +65,7 @@ function exclude_cpus()
 		fi
 		i=$((i+1))
 	done
-	[[ -z "${set:-}" ]] || echo "${set}"
+	[[ -z "${set}" ]] || echo "${set}"
 }
 
 read -r -a mem <<< "$(free -b | grep -i "mem:" || true)"
@@ -88,5 +88,5 @@ echo "RESERVED_MEM=$(( (mem[1] - cg_arr[0]) / 1024 ))"
 storpool_confshow SP_OURID 2>/dev/null
 
 isolcpus=$(exclude_cpus "${root_cpuset}" "${cg_cpuset}")
-[[ -z "${DEBUG:-}" ]] || echo "root_cpuset '${root_cpuset}', cg_cpuset '${cg_cpuset}', isolcpus '${isolcpus}'" >&2
-[[ -z "${isolcpus:-}" ]] || echo "ISOLCPUS=\"${isolcpus}\""
+[[ -z "${DEBUG}" ]] || echo "root_cpuset '${root_cpuset}', cg_cpuset '${cg_cpuset}', isolcpus '${isolcpus}'" >&2
+[[ -z "${isolcpus}" ]] || echo "ISOLCPUS=\"${isolcpus}\""

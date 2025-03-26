@@ -424,7 +424,7 @@ if ! [[ -d /var/lib/one/remotes/datastore/storpool ]] ||\
 	exit 2
 fi
 
-if [[ -z "${2}" ]]; then
+if [[ -z "$2" ]]; then
 	echo "Usage: $0 host1 host2 '[templateid]'"
 	echo
 	onehost list
@@ -433,8 +433,8 @@ fi
 
 mkdir -p "${DATA_DIR}"
 
-HOST1="${1}"
-HOST2="${2}"
+HOST1="$1"
+HOST2="$2"
 
 CLUSTER_ID1="$(onehost show "${HOST1}" --xml |\
     tee "${DATA_DIR}/host-${HOST1}.XML" |\

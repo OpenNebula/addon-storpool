@@ -35,10 +35,9 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 FILE="$1"
 HOST="$2"
 DEPLOY_ID="$3"
-
 VM_ID="$4"
 DS_ID="$5"
-export FILE DS_ID
+export HOST FILE DS_ID
 export LOG_PREFIX="vmm"
 
 splog "$*"

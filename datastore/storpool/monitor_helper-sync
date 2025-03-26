@@ -216,13 +216,13 @@ function run_task()
 			_ret=$?
 			if boolTrue "DEBUG_MOINTOR_HELPER_SYNC" || [[ "${_ret}" -ne 0 ]]; then
 				splog "[D] run_task:(${_ret}) ${_run} > ${_jsonFile}New [${_cached}]"
-				if [[ "${_ret}" -ne 0 ]]; then
+				if [[ ${_ret} -ne 0 ]]; then
 					return "${_ret}"
 				fi
 			fi
 			mv -f "${_jsonFile}New" "${_jsonFile}"
 			_ret=$?
-			if [[ "${_ret}" -ne 0 ]]; then
+			if [[ ${_ret} -ne 0 ]]; then
 				splog "Can't move ${_jsonFile}New to ${_jsonFile}"
 				return "${_ret}"
 			fi
@@ -255,7 +255,7 @@ fi
 # shellcheck disable=SC2086
 onedatastore list ${ONE_ARGS:-} -x >"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}"
 ret=$?
-if [[ "${ret}" -ne 0 ]]; then
+if [[ ${ret} -ne 0 ]]; then
 	splog "Error: Can't get datastore XML! $(head -n 1 "${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" || true) (ret:${ret})"
 	exit "${ret}"
 fi
@@ -286,9 +286,9 @@ _XPATH_QUERY=(
 )
 
 unset i XPATH_ELEMENTS
-while IFS='' read -r -u "${xpathfd}" element; do
+while IFS='' read -r -u "${xpathfh}" element; do
 	XPATH_ELEMENTS[i++]="${element}"
-done {xpathfd}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
+done {xpathfh}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 unset i
 _DS_ID="${XPATH_ELEMENTS[i++]}"
 _DS_STATE="${XPATH_ELEMENTS[i++]}"
@@ -354,7 +354,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 	else
 		unset SP_API_HTTP_PORT
 	fi
-	export SP_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]:-${SP_TEMPLATE_PROPAGATE:-}}"
+	export SP_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]:-${SP_TEMPLATE_PROPAGATE}}"
 	if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
 		if [[ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]]; then
 			splog "[D] API_TOKEN:${SP_AUTH_TOKEN:+DEFINED} API_HOST:${SP_API_HTTP_HOST} API_PORT:${SP_API_HTTP_PORT}"
@@ -384,11 +384,12 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 		_XPATH_QUERY=(
 			"%m%/DATASTORE_POOL/DATASTORE[ID=${DS_ID}]/CLUSTERS/ID"
 		)
-		while IFS='' read -r -u "${xpathfd}" -d '' _element; do
+		while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+			# shellcheck disable=SC2206
 			CLUSTER_ID_ARRAY+=(${_element})
-		done {xpathfd}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
+		done {xpathfh}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 	fi
-	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC:-}" ]]; then
+	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC}" ]]; then
 		splog "[DD] DS_ID=${DS_ID} ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_ID_ARRAY:${CLUSTER_ID_ARRAY[*]}"
 	fi
 
@@ -399,9 +400,9 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 	ret=$?
 	if [[ -z "${tmp}" ]]; then
 		if [[ ${ret} -ne 0 ]] && [[ -s "${tmpDir}/error.log" ]]; then
-			while read -r -u "${errorfd}" line; do
+			while read -r -u "${errorfh}" line; do
 				splog "(${ret}) Error:${line}"
-			done {errorfd}< <(cat "${tmpDir}/error.log" || true)
+			done {errorfh}< <(cat "${tmpDir}/error.log" || true)
 		fi
 		splog "Missing StorPool template '${template_name}' for datastore ${DS_ID}"
 		reload_template=1
@@ -523,7 +524,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 	fi
 	if [[ -s "${tmpFile}" ]]; then
 		# shellcheck disable=SC2086
-		onedatastore update ${ONE_ARGS:-} "${DS_ID}" --append "${tmpFile}"
+		onedatastore update ${ONE_ARGS} "${DS_ID}" --append "${tmpFile}"
 		splog "($?) onedatastore update ${ONE_ARGS} ${DS_ID} --append ${tmpFile}"
 	fi
 
@@ -613,9 +614,9 @@ _XPATH_QUERY=(
     "/HOST_POOL/HOST/SP_JSON_PATH"
 )
 unset i XPATH_ELEMENTS
-while IFS='' read -r -u "${xpathfd}" element; do
+while IFS='' read -r -u "${xpathfh}" element; do
 	XPATH_ELEMENTS[i++]="${element}"
-done {xpathfd}< <("${_XPATH_A[@]}" <"${tmpXML}" "${_XPATH_QUERY[@]}" || true)
+done {xpathfh}< <("${_XPATH_A[@]}" <"${tmpXML}" "${_XPATH_QUERY[@]}" || true)
 rm -f "${tmpXML}"
 unset i
 _HOST_ID="${XPATH_ELEMENTS[i++]}"

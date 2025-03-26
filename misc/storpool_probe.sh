@@ -55,8 +55,8 @@ function count_cpus()
         echo "${_cpu}"
 }
 
-cpuset_cpus="$(cgget -v -n -r cpuset.cpus "${cgroup:-}")"
+cpuset_cpus="$(cgget -v -n -r cpuset.cpus "${cgroup}")"
 ret=$?
-if [[ "${ret:-}" -eq 0 ]]; then
-    echo "SP_LIBVIRT_CPUS=$(count_cpus "${cpuset_cpus:-}" || true)"
+if [[ ${ret} -eq 0 ]]; then
+    echo "SP_LIBVIRT_CPUS=$(count_cpus "${cpuset_cpus}" || true)"
 fi

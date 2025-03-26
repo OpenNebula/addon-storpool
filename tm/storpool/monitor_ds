@@ -44,7 +44,7 @@ function boolTrue()
 }
 
 if boolTrue "DDDEBUG_TM_MONITOR_DS"; then
-    parent="${PPID:-}"
+    parent="${PPID}"
     splog "[DDD] ${PWD}::${0} parent ${parent}::$(readlink -f "/proc/${parent}/exe" || true)::$(cat "/proc/${parent}/cmdline" || true)"
 	if boolTrue "DDDDEBUG_TM_MONITOR_DS"; then
         echo "su - oneadmin -c 'cd ${PWD} && ${0} $*'" >>"/tmp/tm_monitor_ds-${DS_ID}.sh"
@@ -98,11 +98,11 @@ for VM_ID in "${vm_ids[@]}"; do
 	DRIVER_RUN=
 	for DISK in "${vm_disks[@]}"; do
 #		splog "DISK=$DISK"
-		if [[ -n "${HAS_DOT_MONITOR:-}" ]]; then
+		if [[ -n "${HAS_DOT_MONITOR}" ]]; then
 			[[ -e "${DISK}" ]] || continue
 		fi
 
-		[[ -n "${DRIVER_RUN:-}" ]] || echo -n "VM=[ID=${VM_ID},POLL=\""
+		[[ -n "${DRIVER_RUN}" ]] || echo -n "VM=[ID=${VM_ID},POLL=\""
 
 		if [[ -f "${DISK}.monitor" ]]; then
 			DRIVER="$(<"${DISK}.monitor")"
@@ -122,5 +122,5 @@ for VM_ID in "${vm_ids[@]}"; do
     if [[ -n "${vm_data:0:1}" ]]; then
         echo "${vm_data}"
     fi
-	[[ -z "${DRIVER_RUN:-}" ]] || echo "\"]"
+	[[ -z "${DRIVER_RUN}" ]] || echo "\"]"
 done

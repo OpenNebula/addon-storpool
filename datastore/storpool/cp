@@ -99,14 +99,14 @@ rsync://*|restic://*)
     ;;
 *)
     ret=$(check_restricted "${IMAGE_PATH}")
-    if [[ "${ret}" -ne 0 ]]; then
+    if [[ ${ret} -ne 0 ]]; then
         log_error "Not allowed to copy images from ${RESTRICTED_DIRS}"
         error_message "Not allowed to copy image file ${IMAGE_PATH}"
         exit 255
     fi
 
     log "Copying local image ${IMAGE_PATH} to the image repository"
-    if [[ -z "${MD5}${SHA1}${NOLOCAL:-}" ]]; then
+    if [[ -z "${MD5}${SHA1}${NOLOCAL}" ]]; then
         # localFile="$(echo "${IMAGE_PATH}" | sed -e "s/'/'\\\''/g" || true)"  # original
         # localFile="${IMAGE_PATH//\'/'\\\'}" # TBD: check if this is correct
         localFile=''"{IMAGE_PATH}"''
@@ -317,12 +317,12 @@ if [[ "${DRIVER}" != "raw" ]]; then
         trapAdd "rm -rf \"${TMP_LOC}\""
         echo "DRIVER=raw" >"${TMP_XML}"
         echo "FORMAT=raw" >>"${TMP_XML}"
-        if [[ -n "${DS_CP_FORCE_DEV_PREFIX:-}" ]]; then
+        if [[ -n "${DS_CP_FORCE_DEV_PREFIX}" ]]; then
             echo "DEV_PREFIX=${DS_CP_FORCE_DEV_PREFIX}" >>"${TMP_XML}"
         fi
         oneimage update -a "${ID}" "${TMP_XML}" 2>"${TMP_LOC}/oneimage-update-err" >"${TMP_LOC}/oneimage-update-out"
         ret=$?
-        if [[ "${ret}" -ne 0 ]]; then
+        if [[ ${ret} -ne 0 ]]; then
             if grep -qir "${UPDATE_IMAGE_LOCK_STRING:-locked}" "${TMP_LOC}" 2>/dev/null; then
                 splog "(${ret}) oneimage update ${ID} ... Re-trying with unlock"
                 oneimage unlock "${ID}"
@@ -336,7 +336,7 @@ if [[ "${DRIVER}" != "raw" ]]; then
             fi
         fi
         rm -rf "${TMP_LOC}"
-    elif [[ -z "${REPORT_FORMAT:-}" ]]; then
+    elif [[ -z "${REPORT_FORMAT}" ]]; then
         splog "Image template DRIVER=${DRIVER} and FORMAT=${FORMAT} but image update is not enabled."
     fi
 fi

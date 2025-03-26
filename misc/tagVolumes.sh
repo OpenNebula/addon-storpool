@@ -45,7 +45,7 @@ declare -A datastoreSpAuthToken  # datastoreSpAuthToken[DATASTORE_ID]=SP_AUTH_TO
 declare -A datastoreSpApiHttpHost  # datastoreSpApiHttpHost[DATASTORE_ID]=SP_API_HTTP_HOST
 declare -A datastoreSpApiHttpPort  # datastoreSpApiHttpPort[DATASTORE_ID]=SP_API_HTTP_PORT
 
-while read -r -u "${vmfd}" VM_ID; do
+while read -r -u "${vmfh}" VM_ID; do
     vmVolumes=
     oneVmVolumes "${VM_ID}" "${vmPoolXml}"
     echo "# VM ${VM_ID} SYSTEM_DS_ID=${VM_DS_ID} vmVolumes=${vmVolumes}"
@@ -87,11 +87,11 @@ while read -r -u "${vmfd}" VM_ID; do
     for volume in ${vmVolumes}; do
         if [[ "${volume%iso}" == "${volume}" ]]; then
             storpoolVolumeTag "${volume}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}"
-            while read -r -u "${snapfd}" snap; do
+            while read -r -u "${snapfh}" snap; do
                 storpoolSnapshotTag "${snap}" "one;${LOC_TAG_VAL};${VM_ID}" "virt;${LOC_TAG:-nloc};${VM_TAG}"
             done {snapfh}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJsonFile}" || true)
         else
             echo "# skipping ${volume}"
         fi
     done
-done {vmfd}< <(xmlstarlet sel -t -m //VM -v ID -n "${vmPoolXml}" || true)
+done {vmfh}< <(xmlstarlet sel -t -m //VM -v ID -n "${vmPoolXml}" || true)

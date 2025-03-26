@@ -68,8 +68,8 @@ if ! boolTrue "DS_SHARED"; then
 fi
 if [[ "${DS_TM_MAD:0:8}" == "storpool" ]] && [[ "${SP_SYSTEM^^}" == "SSH" ]]; then
     oneVmVolumes "${VM_ID}"
-    if [[ -n "${vmVolumes:-}" ]]; then
-        if [[ -n "${oneVmVolumesNotStorPool:-}" ]]; then
+    if [[ -n "${vmVolumes}" ]]; then
+        if [[ -n "${oneVmVolumesNotStorPool}" ]]; then
             msg="Unsupported configuration! SYSTEM datastore not on shared filesystem and non-storpool disks! (${oneVmVolumesNotStorPool})"
         fi
     else
@@ -101,7 +101,7 @@ EOF
     splog "Copy ${VM_PATH} from ${SRC_HOST} to ${DST_HOST} (ssh)"
     ssh_forward ssh_exec_and_log "${SRC_HOST}" "eval ${TAR_SSH}" \
             "Error copying VM directory to target host ${VM_PATH}"
-#    splog "Copy ${VM_PATH} from ${SRC_HOST} to ${DST_HOST} (ssh) done ($?) ZDBG"
+    splog "Copy ${VM_PATH} from ${SRC_HOST} to ${DST_HOST} (ssh) done ($?) ZDBG"
 
 fi
 #-------------------------------------------------------------------------------
@@ -117,7 +117,7 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
     if [[ "${DISK_TM_MAD_ARRAY[i]}" == "storpool" ]]; then
         DISK_ID="${DISK_ID_ARRAY[i]}"
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
-        if [[ -n "${DISK_SOURCE:-}" ]]; then
+        if [[ -n "${DISK_SOURCE}" ]]; then
             SP_VOL="${DISK_SOURCE##*/}"
             if boolTrue "DISK_CLONE_ARRAY[i]"; then
                 SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
@@ -137,8 +137,8 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
             else
                 SP_MODE=
             fi
-            [[ -n "${DST_CLIENT:-}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-            [[ -z "${json:-}" ]] || json+=","
+            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+            [[ -z "${json}" ]] || json+=","
             json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "${SP_MODE}")"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
@@ -162,8 +162,8 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT}"
             SP_LINK="/dev/storpool/${SP_VOL}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID}"
-            [[ -n "${DST_CLIENT:-}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-            [[ -z "${json:-}" ]] || json+=","
+            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+            [[ -z "${json}" ]] || json+=","
             json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}")"
 #            oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
         fi
@@ -172,12 +172,12 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     #-------------------------------------------------------------------------------
     # Attach context ISO volume
     #-------------------------------------------------------------------------------
-    if [[ -n "${_CONTEXT_DISK_ID:-}" ]]; then
-        SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+    if [[ -n "${CONTEXT_DISK_ID}" ]]; then
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
         SP_LINK="/dev/storpool/${SP_VOL}"
-        DST_PATH="${VM_PATH}/disk.${_CONTEXT_DISK_ID}"
-        [[ -n "${DST_CLIENT:-}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-        [[ -z "${json:-}" ]] || json+=","
+        DST_PATH="${VM_PATH}/disk.${CONTEXT_DISK_ID}"
+        [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+        [[ -z "${json}" ]] || json+=","
         json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "${READONLY_MODE}")"
 #        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
     fi
@@ -185,10 +185,10 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     #-------------------------------------------------------------------------------
     # Attach NVRAM volume
     #-------------------------------------------------------------------------------
-    if [[ -n "${T_OS_NVRAM:-}" ]]; then
+    if [[ -n "${T_OS_NVRAM}" ]]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-        [[ -n "${DST_CLIENT:-}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-        [[ -z "${json:-}" ]] || json+=","
+        [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+        [[ -z "${json}" ]] || json+=","
         json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "rw")"
     fi
 
@@ -200,7 +200,7 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     fi
 fi
 
-if [[ -n "${json:-}" ]]; then
+if [[ -n "${json}" ]]; then
     storpoolRetry groupAttach "${json}"
 else
     splog "Nothing to attach!?!"

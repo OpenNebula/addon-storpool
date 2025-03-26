@@ -48,7 +48,7 @@ DISK_ID="$(echo "${DST}" | awk -F. '{print $NF}')"
 # Get Image information
 #-------------------------------------------------------------------------------
 
-oneVmInfo "${VM_ID:-}" "${DISK_ID:-}"
+oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 #-------------------------------------------------------------------------------
 # Get System Datastore information

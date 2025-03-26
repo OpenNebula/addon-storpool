@@ -149,7 +149,7 @@ oneVersion(){
 }
 
 if [[ -f "${ONE_VAR}/remotes/VERSION" ]]; then
-    [[ -n "${ONE_VER:-}" ]] || ONE_VER="$(< "${ONE_VAR}/remotes/VERSION")"
+    [[ -n "${ONE_VER}" ]] || ONE_VER="$(< "${ONE_VAR}/remotes/VERSION")"
 fi
 
 oneVersion "${ONE_VER}"

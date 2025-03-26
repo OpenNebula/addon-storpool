@@ -55,9 +55,9 @@ oneDatastoreInfo "${DS_ID}"
 if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     TEMPLATE="$(onevm show -x "${VM_ID}" | base64 -w0 || true)"
     oneTemplateInfo "${TEMPLATE}"
-    LCM_STATE="${_VM_LCM_STATE}"
+    LCM_STATE="${VM_LCM_STATE}"
     for i in "${!DISK_ID_ARRAY[@]}"; do
-        if [[ -z "${DISK_TM_MAD_ARRAY[i]:-}" ]]; then
+        if [[ -z "${DISK_TM_MAD_ARRAY[i]}" ]]; then
 #            splog "[SYSTEM_DS] $i id:${DISK_ID_ARRAY[i]} type:${DISK_TYPE_ARRAY[i]} format:$FORMAT tm:${DISK_TM_MAD_ARRAY[i]}"
             if [[ ${IS_DISK} == 1 ]]; then
                 if [[ "${DISK_ID_ARRAY[i]}" != "${DISK_ID}" ]]; then
@@ -103,7 +103,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     else
 #        splog "[SYSTEM_DS] delete context iso"
         DELAY_DELETE=
-        SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
         storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
         if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
             if [[ ${LCM_STATE} -ne 15 ]]; then

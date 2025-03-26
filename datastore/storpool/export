@@ -20,7 +20,7 @@
 
 # ------------ Set up the environment to source common tools ------------
 
-if [[ -z "${ONE_LOCATION:-}" ]]; then
+if [[ -z "${ONE_LOCATION}" ]]; then
     LIB_LOCATION=/usr/lib/one
 else
     LIB_LOCATION="${ONE_LOCATION}/lib"
@@ -39,7 +39,7 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 # -------- Get tm and datastore arguments from OpenNebula core ------------
 
-if [[ -n "${2:-}" ]]; then
+if [[ -n "${2}" ]]; then
     DRV_ACTION="$1"
     ID="$2"
 else
@@ -53,13 +53,13 @@ dumpTemplate "${DRV_ACTION}"
 
 oneDsDriverAction
 
-if [[ -n "${EXPORT_BRIDGE_LIST:-}" ]]; then
+if [[ -n "${EXPORT_BRIDGE_LIST}" ]]; then
     BRIDGE_LIST="${EXPORT_BRIDGE_LIST}"
 fi
 
 DST_HOST="$(get_destination_host "${ID}")"
 
-if [[ -z "${DST_HOST:-}" ]]; then
+if [[ -z "${DST_HOST}" ]]; then
     msg="Error: Datastore template missing 'BRIDGE_LIST' attribute."
     splog "${msg}"
     error_message "${msg}"
@@ -72,7 +72,7 @@ SP_LINK="/dev/storpool/${SP_SNAPSHOT}"
 
 DISPOSE="YES"
 
-if [[ -n "${EXPORT_FILE_FORMAT:-}" ]]; then
+if [[ -n "${EXPORT_FILE_FORMAT}" ]]; then
     case "${EXPORT_FILE_FORMAT,,}" in
         raw)
             EXPORT_FILE_FORMAT=raw
@@ -114,9 +114,9 @@ set -o pipefail
 logger -t "ds_sp_export_r[$$]" -- "Begin ${EXPORT_FILE} (\$?)"
 ${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} 2>&1 >"/tmp/export$$.log"
 logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$?)"
-while read -u "\${logfd}" l; do
+while read -u "\${logfh}" l; do
   logger -t "ds_sp_export_r[$$]" -- "LOG:\$l"
-done {logfd}< <("cat /tmp/export$$.log")
+done {logfh}< <("cat /tmp/export$$.log")
 rm -f "/tmp/export$$.log"
 ${DU:-du} -Lm "${EXPORT_FILE}" | cut -f1
 EOF
@@ -137,11 +137,11 @@ splog "${EXPORT_FILE} calculating checksum ..."
 CHECKSUM=$(${SSH:-ssh} "${DST_HOST}" "set -o pipefail&&openssl dgst -md5 ${EXPORT_FILE} | cut -d' ' -f2")
 RET=$?
 splog "${EXPORT_FILE} CHECKSUM ${CHECKSUM} (${RET})"
-if [[ "${RET}" -ne 0 ]]; then
+if [[ ${RET} -ne 0 ]]; then
     msg="Error: Can't calculate MD5 checksum for ${EXPORT_FILE}"
     splog "${msg}"
     error_message "${msg}"
-    if [[ -z "${EXPORT_FILE_FORMAT:-}" ]]; then
+    if [[ -z "${EXPORT_FILE_FORMAT}" ]]; then
         storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"
         storpoolSnapshotDelete "${SP_SNAPSHOT}"
     fi

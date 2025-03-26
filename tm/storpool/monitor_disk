@@ -101,9 +101,9 @@ if [[ -f "${SP_DS_TMP}/sizes" ]]; then
 	#if boolTrue "DDEBUG_TM_MONITOR_DISK"; then
 	#	splog "[DD] walking $SP_DS_TMP/sizes for volume $spVolume"
 	#fi
-	while IFS=',' read -r -u "${grepfd}" name "${columns_a[@]}"; do
+	while IFS=',' read -r -u "${grepfh}" name "${columns_a[@]}"; do
 		name=${name//\"/}
-		if [[ -n "${disk_size:-}" ]]; then
+		if [[ -n "${disk_size}" ]]; then
             getSnapId "${name}" "${spVolume}"
 #			snap_id=${name#*snap}
             [[ "${name}" == "${name#"${spVolume}-snap"}" ]] && snap_id="" || snap_id="${name#*snap}"
@@ -141,7 +141,7 @@ if [[ -f "${SP_DS_TMP}/sizes" ]]; then
 				splog "skip ${name} looking for ${spVolume}"
 			fi
 		fi
-	done {grepfd}< <(grep -F "${spVolume}" "${SP_DS_TMP}/sizes" || true)
+	done {grepfh}< <(grep -F "${spVolume}" "${SP_DS_TMP}/sizes" || true)
 	exit
 else
 	if boolTrue "DEBUG_TM_MONITOR_DISK"; then
@@ -178,7 +178,7 @@ if boolTrue "DEBUG_TM_MONITOR_DISK"; then
 fi
 echo -n " DISK_SIZE=[ID=${DISK_ID},SIZE=${disk_size}]"
 
-while IFS=',' read -r -u "${jqfd}" name spaceUsed storedSize; do
+while IFS=',' read -r -u "${jqfh}" name spaceUsed storedSize; do
 	name=${name//\"/}
     snap_size="${!used}"
     getSnapId "${name}" "${spVolume}"
@@ -193,6 +193,6 @@ while IFS=',' read -r -u "${jqfd}" name spaceUsed storedSize; do
 		splog "[D] ${DISK} ID:${DISK_ID} SNAP:${snap_id} (${name}) SIZE:${snap_size} (${used}) spaceUsed:${spaceUsed} storedSize:${storedSize}"
 	fi
 	echo -n " SNAPSHOT_SIZE=[ID=${snap_id},DISK_ID=${DISK_ID},SIZE=${snap_size}]"
-done {jqfd}< <(eval "${SP_CMD_SNAPSHOT_SPACE}" 2>/dev/null | \
+done {jqfh}< <(eval "${SP_CMD_SNAPSHOT_SPACE}" 2>/dev/null | \
 		jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" \
 		| sort || true)

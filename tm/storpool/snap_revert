@@ -89,7 +89,7 @@ NEW_SIZE_M=$((V_SIZE/1024/1024))
 if [[ "${OLD_SIZE_M}" -ne "${NEW_SIZE_M}" ]]; then
     if boolTrue "UPDATE_ONE_DISK_SIZE"; then
         oneVmVolumes "${VM_ID}"
-        declare -A vmVolumesMap
+        declare -A vmVolumesMap  # vmVolumesMap[oneName]=DISK_ID
         for disk in ${vmDisksMap}; do
             vmVolumesMap["${disk%:*}"]="${disk##*:}"
         done
@@ -100,7 +100,7 @@ if [[ "${OLD_SIZE_M}" -ne "${NEW_SIZE_M}" ]]; then
         else
             splog "vmVolumesMap[${SP_VOL}] not found"
         fi
-    elif [[ "${OLD_SIZE_M}" -gt "${NEW_SIZE_M}" ]]; then
+    elif [[ ${OLD_SIZE_M} -gt ${NEW_SIZE_M} ]]; then
         splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than snapshot. Inflating..."
         storpoolVolumeResize "${SP_VOL}" "${OLD_SIZE_M}M"
     fi

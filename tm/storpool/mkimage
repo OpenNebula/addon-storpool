@@ -88,7 +88,7 @@ DISK_ID="$(echo "${DST}" | awk -F. '{print $NF}' || true)"
 
 oneVmInfo "${VM_ID}" "${DISK_ID}"
 
-if [[ -n "${DRIVER:-}" && "${DRIVER,,}" != "raw" ]]; then
+if [[ -n "${DRIVER}" && "${DRIVER,,}" != "raw" ]]; then
     log_error "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
     splog "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
     exit 1
@@ -125,13 +125,13 @@ else
 fi
 
 ON_HOST=""
-if [[ "${FSTYPE,,}" != "raw" || -n "${FS:-}" ]]; then
+if [[ "${FSTYPE,,}" != "raw" || -n "${FS}" ]]; then
     if [[ "${FSTYPE}" == "swap" ]]; then
         MKFS_CMD="${MKSWAP:-mkswap} -L swap \"${SP_LINK}\""
     else
-        if [[ -n "${FS:-}" ]]; then
+        if [[ -n "${FS}" ]]; then
             FS_OPTS="$(eval "echo \${FS_OPTS_${FS}}")"
-            MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${FS_OPTS:-} \"${SP_LINK}\""
+            MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${FS_OPTS} \"${SP_LINK}\""
         else
             MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}" || true)"
         fi

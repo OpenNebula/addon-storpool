@@ -29,7 +29,7 @@ splog "DST_HOST:${DST_HOST} FILE:${FILE}"
 
 ${SSH:-ssh} "${DST_HOST}" "test -L \"${FILE}\""
 RET=$?
-if [[ "${RET}" -eq 0 ]]; then
+if [[ ${RET} -eq 0 ]]; then
     splog "${SSH:-ssh} ${DST_HOST} test -L ${FILE} (${RET}) -- symlink"
     SP_SNAPSHOT="${FILE##*/}"
     storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"

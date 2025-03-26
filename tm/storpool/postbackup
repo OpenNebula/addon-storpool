@@ -58,10 +58,10 @@ if [[ -d "${B_DIR}" ]]; then
     splog "post-clean ${B_DIR} ..."
     snapshots_list="${B_DIR}/.storpool_snapshots"
     if [[ -f "${snapshots_list}" ]]; then
-        while read -r -u "${snpfd}" snp; do
+        while read -r -u "${snpfh}" snp; do
             storpoolVolumeDetach "${snp}" "force" "" "all"
             storpoolSnapshotDelete "${snp}"
-        done {snpfd}< <(cat "${snapshots_list}" || true)
+        done {snpfh}< <(cat "${snapshots_list}" || true)
     fi
     rm -rf "${B_DIR}"
     splog "post-clean completed ($?)"

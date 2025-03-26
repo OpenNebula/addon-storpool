@@ -27,7 +27,7 @@ fi
 
 function usage()
 {
-  [[ -n "${1:-}" ]] && echo -e "ee\nee Error: $*\nee\n"
+  [[ -n "${1}" ]] && echo -e "ee\nee Error: $*\nee\n"
   echo "$0 <VM_ID> <DISK_ID> <SIZE> <DBconn>"
   echo
   echo "Note: the SIZE should be in MiB"
@@ -38,21 +38,21 @@ function usage()
   exit 1
 }
 
-if [[ -n "${VM_ID:-}" ]]; then
+if [[ -n "${VM_ID}" ]]; then
   if [[ -n "${VM_ID//[[:digit:]]/}" ]]; then
     usage "VM_ID '${VM_ID}' should be a numer!"
   fi
 else
   usage "VM_ID is empty! Please provide VM id"
 fi
-if [[ -n "${DISK_ID:-}" ]]; then
+if [[ -n "${DISK_ID}" ]]; then
   if [[ -n "${DISK_ID//[[:digit:]]/}" ]]; then
     usage "DISK_ID '${DISK_ID}' should be a numer!"
   fi
 else
   usage "DISK_ID is empty! Please provide disk id"
 fi
-if [[ -n "${DISK_SIZE:-}" ]]; then
+if [[ -n "${DISK_SIZE}" ]]; then
   if [[ -n "${DISK_SIZE//[[:digit:]]/}" ]]; then
     usage "SIZE '${DISK_SIZE}' should be a numer!"
   fi
@@ -92,7 +92,7 @@ SOURCE="${XPATH_ELEMENTS[j++]}"
 CLONE="${XPATH_ELEMENTS[j++]}"
 VMHOST="${XPATH_ELEMENTS[j++]}"
 
-if [[ -n "${CLONE:-}" ]]; then
+if [[ -n "${CLONE}" ]]; then
   SP_VOL="${SOURCE##*/}"
   if [[ "${CLONE}" == "YES" ]]; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
@@ -101,7 +101,7 @@ else
   echo "ee Can't get disk info from OpenNebula for DISK_ID:${DISK_ID} on VM with ID:${VM_ID}!"
   exit 1
 fi
-if [[ -n "${DEBUG:-}" ]]; then
+if [[ -n "${DEBUG}" ]]; then
   echo "LCM_STATE:${LCM_STATE} SIZE:${SIZE} ORIGINAL_SIZE:${ORIGINAL_SIZE} VMHOST:${VMHOST}"
   #echo "CLONE:$CLONE SOURCE:$SOURCE"
   echo "DEPLOY_ID:${DEPLOY_ID} SP_VOL=${SP_VOL}"
@@ -129,15 +129,15 @@ while IFS=',' read -u 5 -r device drv filename; do
     qemu_file="${filename}"
     break
   fi
-  if [[ -n "${DEBUG:-}" ]]; then
+  if [[ -n "${DEBUG}" ]]; then
     echo "${device} | ${drv} | ${filename}"
   fi
 done 5< <(su - oneadmin -c "ssh ${VMHOST} \"virsh --connect ${LIBVIRT_URI:-qemu:///system} qemu-monitor-command \\\"${DEPLOY_ID}\\\"  '{\\\"execute\\\":\\\"query-block\\\"}'\"" 2>/dev/null \
 | jq -r ".return[]|[.device,.inserted.drv,.inserted.image.filename]|@csv" || true)
 
-if [[ -n "${qemu_device:-}" ]]; then
+if [[ -n "${qemu_device}" ]]; then
   echo "ii Found ${qemu_device} >>> ${device} | ${drv} | ${filename}"
-  if [[ -n "${DEBUG:-}" ]]; then
+  if [[ -n "${DEBUG}" ]]; then
     set -x
   fi
 #    su - oneadmin -c "ssh $VMHOST 'virsh --connect $LIBVIRT_URI qemu-monitor-command \"$DEPLOY_ID\" --hmp \"block_resize $qemu_device ${DISK_SIZE}M\"'"
