@@ -77,9 +77,9 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 
     rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-	while read -r -u "\${virshfd}" out; do
+	while read -r -u "\${virshfh}" out; do
         logger -t vmm_sp_snapshot_revert_r "virsh: \${out}"
-    done {virshfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" destroy "${DOMAIN}" 2>&1)
+    done {virshfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" destroy "${DOMAIN}" 2>&1)
     logger -t vmm_sp_snapshot_revert_r "virsh destroy ${DOMAIN} ret:\$?"
 EOF
 )
@@ -89,7 +89,7 @@ EOF
     SP_TMP="SPTMP-$(date +%s||true)-$(mktemp --dry-run XXXXXXXX)"
     declare -a tmpVolumes snapList
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-    while read -r -u "${spfd}" snap vmtag loctagval; do
+    while read -r -u "${spfh}" snap vmtag loctagval; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "[DD] ${snap} vmtag:${vmtag} loctagval:${loctagval}"
         fi
@@ -120,7 +120,7 @@ EOF
             continue
         fi
         snapList+=("${snap}")
-    done {spfd}< <(storpoolRetry -j snapshot list |\
+    done {spfh}< <(storpoolRetry -j snapshot list |\
                   jq -r --arg snp "${SNAP_ID}" --arg vmtag "${VM_TAG:-nvm}" --arg loctag "${LOC_TAG:-nloc}" \
                       '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]' || true)
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
@@ -223,7 +223,7 @@ EOF
             RET=1
         fi
         storpoolVolumeDetach "${MEM_SNAP}" "" "${VMHOST}"
-        if [[ "${RET}" -ne 0 ]]; then
+        if [[ ${RET} -ne 0 ]]; then
             splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID} Failed! (${RET})"
             exit "${RET}"
         fi

@@ -20,8 +20,7 @@
 
 set -e
 
-VMID="$1"
-VC_POLICY="$2"
+VMID="${1}"
 
 export LOG_PREFIX="vc"
 ONE_HOME="${ONE_HOME:-/var/lib/one}"
@@ -80,26 +79,23 @@ function update_volume_vc_policy()
 
 function alterVcPolicy()
 {
-    local vmId="$1" VMID=""
+    local vmId="$1"
+    local volumeListJsonFile=""
 
     if [[ -z "${vmId}" ]]; then
-        onevm list -x --extended >"${vmPoolFile}"
-        ret=$?
-        if boolTrue "DDEBUG_alterVcPolicy"; then
-            splog "[DD] (${ret}) onevm list ${vmPoolFile}"
-        fi
+        oneCallXml onevm list --extended "${vmPoolFile}"
         if [[ ${ret} -ne 0 ]]; then
             splog "Error! Can't get VM list!"
             return 1
         fi
-        while read -r -u "${vmfd}" _vmId; do
-            alterVcPolicy "${_vmId}" "${vmPoolFile}"
-        done {vmfd}< <(xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
+        while read -r -u "${vmfh}" _vmId; do
+            alterVcPolicy "${_vmId}"
+        done {vmfh}< <(xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
         return 0
     fi
 
     if boolTrue "DDEBUG_alterVcPolicy"; then
-        splog "[DD] alterVcPolicy(${vmId},${vmPoolFile}) BEGIN"
+        splog "[DD][alterVcPolicy] VM ${vmId} BEGIN"
     fi
 
     SP_QOSCLASS=""
@@ -107,62 +103,70 @@ function alterVcPolicy()
 
     if [[ -z "${vmDisksMap}" ]]; then
         if boolTrue "DDEBUG_alterVcPolicy"; then
-            splog "[DD]alterVcPolicy(${vmId},${vmPoolFile}) vmDisksMap is empty. Return 0"
+            splog "[DD][alterVcPolicy] VM ${vmId} vmDisksMap is empty. Return 0"
         fi
         return 0
     fi
 
     if [[ -n "${VM_DS_ID}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolFile}"
-        SYSTEM_DS_SP_QOSCLASS="${DS_SP_QOSCLASS:-}"
+        SYSTEM_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
         DS_SP_API_HTTP_HOST["${VM_DS_ID}"]="${SP_API_HTTP_HOST}"
         DS_SP_API_HTTP_PORT["${VM_DS_ID}"]="${SP_API_HTTP_PORT}"
         DS_SP_AUTH_TOKEN["${VM_DS_ID}"]="${SP_AUTH_TOKEN}"
     else
         if boolTrue "DDEBUG_alterVcPolicy"; then
-            splog "[DD]alterVcPolicy(${vmId},${vmPoolFile}) VM_DS_ID is empty. Return 0"
+            splog "[DD][alterVcPolicy] VM ${vmId} VM_DS_ID is empty. Return 0"
         fi
         return 0
     fi
 
     if boolTrue "DDEBUG_alterVcPolicy"; then
-        splog "[DD] alterVcPolicy(${vmId},${vmPoolFile}) VM_SP_QOSCLASS:${VM_SP_QOSCLASS:-} SYSTEM_DS_SP_QOSCLASS:${SYSTEM_DS_SP_QOSCLASS:-} DEFAULT_QOSCLASS:${DEFAULT_QOSCLASS:-}"
+        _DBGMSG="[alterVcPolicy] VM ${vmId}"
+        _DBGMSG+=" VM_SP_QOSCLASS:${VM_SP_QOSCLASS}"
+        _DBGMSG+=" SYSTEM_DS_SP_QOSCLASS:${SYSTEM_DS_SP_QOSCLASS}"
+        _DBGMSG+=" DEFAULT_QOSCLASS:${DEFAULT_QOSCLASS}"
+        _DBGMSG+=" VM_DS_ID:${VM_DS_ID}"
+        _DBGMSG+=" DS_SP_API_HTTP_HOST:${DS_SP_API_HTTP_HOST[${VM_DS_ID}]}"
+        _DBGMSG+=" DS_SP_API_HTTP_PORT:${DS_SP_API_HTTP_PORT[${VM_DS_ID}]}"
+        _DBGMSG+=" DS_SP_AUTH_TOKEN:${DS_SP_AUTH_TOKEN[${VM_DS_ID}]:+AVAILABLE}"
+        splog "[DD]${_DBGMSG}"
     fi
 
     unset volumesDiskId
-    declare -A volumesDiskId  # volumesDiskId[VolumeName]=DISK_ID
-    for disk in ${vmDisksMap:-}; do
+    declare -A volumesDiskId  # volumesDiskId[oneName]=DISK_ID
+    for disk in ${vmDisksMap}; do
         volume="${disk%:*}"
-        volumesDiskId["${volume}"]="${disk#*:}"  # volumesDiskId[VOLUME_NAME]=DISK_ID
+        volumesDiskId["${volume}"]="${disk#*:}"  # volumesDiskId[oneName]=DISK_ID
     done
 
     unset volumesQc
-    declare -A volumesQc  # volumesQc[VOLUME_NAME]=QosClassName
-    for vol in ${vmDisksQcMap:-}; do
-        volumesQc["${vol%%:*}"]="${vol#*:}"  # volumesQc[VOLUME_NAME]=QOSCLASS
+    declare -A volumesQc  # volumesQc[oneName]=QosClassName
+    for vol in ${vmDisksQcMap}; do
+        volumesQc["${vol%%:*}"]="${vol#*:}"  # volumesQc[oneName]=QOSCLASS
     done
 
-    declare -A persistentDisksQc  # persistentDisksQc[VOLUME_NAME]=QOSCLASS
-    for vol in ${persistentDisksQcMap:-}; do
-        persistentDisksQc["${vol%%:*}"]="${vol#*:}"  # persistentDisksQc[VOLUME_NAME]=QOSCLASS
+    declare -A persistentDisksQc  # persistentDisksQc[oneName]=QOSCLASS
+    for vol in ${persistentDisksQcMap}; do
+        persistentDisksQc["${vol%%:*}"]="${vol#*:}"  # persistentDisksQc[oneName]=QOSCLASS
     done
 
-    declare -A diskType  # diskType[VOLUME_NAME]=DISK_TYPE
-    for vol in ${vmDiskTypeMap:-}; do
-        diskType["${vol%%:*}"]="${vol#*:}"  # diskType[VOLUME_NAME]=DISK_TYPE
+    declare -A diskType  # diskType[oneName]=DISK_TYPE
+    for vol in ${vmDisksTypeMap}; do
+        diskType["${vol%%:*}"]="${vol#*:}"  # diskType[oneName]=DISK_TYPE
     done
 
 #    unset datastoresQc
 #    declare -A datastoresQc  # datastoresQc[DATASTORE_ID]=QosClassName
-    declare -A volumesDsIds  # volumesDsIds[VOLUME_NAME]=DATASTORE_ID
-    for entry in ${vmDisksDsMap:-}; do
+    declare -A volumesDsIds  # volumesDsIds[oneName]=DATASTORE_ID
+    for entry in ${vmDisksDsMap}; do
         volume="${entry%%:*}"
         dsId="${entry#*:}"
         if [[ -z "${datastoresQc[${dsId}]}" ]]; then
             oneDatastoreInfo "${dsId}" "${dsPoolFile}"
             datastoresQc["${dsId}"]="${DS_SP_QOSCLASS}"  # datastoresQc[DATASTORE_ID]=DS_SP_QOSCLASS
         fi
-        volumesDsIds["${volume}"]="${dsId}"  # volumesDsIds[VOLUME_NAME]=DATASTORE_ID
+        volumesDsIds["${volume}"]="${dsId}"  # volumesDsIds[oneName]=DATASTORE_ID
     done
     if [[ -z "${datastoresQc[${VM_DS_ID}]}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolFile}"
@@ -170,14 +174,15 @@ function alterVcPolicy()
     fi
 
     if boolTrue "DEBUG_alterVcPolicy"; then
-        splog "[D] VM ${vmId} VC_POLICY:${VC_POLICY:-} vmDisksMap:${vmDisksMap:-}"
+        splog "[D] VM ${vmId} VC_POLICY:${VC_POLICY} vmDisksMap:${vmDisksMap}"
     fi
 
-    if [[ ! -f "${volumeListJson}" ]]; then
-        storpoolRetry -j volume list >"${volumeListJson}"
+    volumeListJsonFile="${volumeListJson}-${SP_API_HTTP_HOST:-0.0.0.0}"
+    if [[ ! -f "${volumeListJsonFile}" ]]; then
+        storpoolRetry -j volume list >"${volumeListJsonFile}"
     fi
 
-    while read -r -u "${jqfd}" _line; do
+    while read -r -u "${jqfh}" _line; do
         IFS=';' read -r -a spdata <<< "${_line}"
         volume="${spdata[0]}"
         vc_policy="${spdata[1]}"
@@ -232,16 +237,17 @@ function alterVcPolicy()
             update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "VM ${vmId} DISK ${volumesDiskId[${volume}]} (${used})"
             echo "${volume}" >>"${processedVolumes}"
         fi
-    done {jqfd}< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "${volumeListJson}" || true)
+    done {jqfh}< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "${volumeListJsonFile}" || true)
     unset vmDisksMap
 }
 
 function alterImagesQosClass()
 {
     declare -A dsQosClass
+    volumeListJsonFile=""
 
-    if [[ ! -f ${dsPoolFile} ]]; then
-        oneDatastore list -x >"${dsPoolFile}"
+    if [[ ! -f "${dsPoolFile}" ]]; then
+        oneCallXml oneDatastore list "${dsPoolFile}"
     fi
 
     while read -r -u "${dsfh}" dsId dsQosClass; do
@@ -267,7 +273,7 @@ function alterImagesQosClass()
         imgQosClass="${imgData[4]}"
         imgVms="${imgData[5]}"
         # skip images attached to VMs
-        [[ -z ${imgVms:-} ]] || continue
+        [[ -z ${imgVms} ]] || continue
         volume="${ONE_PX:-one}-img-${image_id}"
         imagesQosClass["${volume}"]="${imgQosClass:-${dsQosClass[${image_ds_id}]:-${DEFAULT_QOSCLASS}}}"
         imagesDsIds["${volume}"]="${image_ds_id}"
@@ -280,44 +286,46 @@ function alterImagesQosClass()
         -o ';' -v "VMS/ID" \
         -n "${imagePoolFile}" || true)
 
-    if [[ ! -f ${volumeListJson} ]]; then
-        storpoolRetry -B -j volume list >"${volumeListJson}"
-    fi
     if boolTrue "DDDDEBUG_alterVcPolicy"; then
         splog "[DDDD] alterImagesQosClass() imagesQosClass:${!imagesQosClass[*]}=${imagesQosClass[*]}"
     fi
-
-    while read -r -u "${spfh}" line; do
-        IFS=';' read -r -a spdata <<< "${line}"
-        volume="${spdata[0]}"
-        tag_qc="${spdata[1]}"
-        if [[ -n "${imagesQosClass[${volume}]+found}" ]]; then
-            if grep -Eqe "^${volume}$" "${processedVolumes}" &>/dev/null; then
-                if boolTrue "DDDEBUG_alterVcPolicy"; then
-                    splog "[DDD]IMG ${volume##*-} volume ${volume} already processed"
-                fi
-                continue
-            fi
-            dsId="${imagesDsIds[${volume}]}"
-            if [[ -n "${DS_SP_AUTH_TOKEN[${dsId}]}" ]]; then
-                export SP_AUTH_TOKEN="${DS_SP_AUTH_TOKEN[${dsId}]}"
-            else
-                unset SP_AUTH_TOKEN
-            fi
-            if [[ -n "${DS_SP_API_HTTP_HOST[${dsId}]}" ]]; then
-                export SP_API_HTTP_HOST="${DS_SP_API_HTTP_HOST[${dsId}]}"
-            else
-                unset SP_API_HTTP_HOST
-            fi
-            if [[ -n "${DS_SP_API_HTTP_PORT[${dsId}]}" ]]; then
-                export SP_API_HTTP_PORT="${DS_SP_API_HTTP_PORT[${dsId}]}"
-            else
-                unset SP_API_HTTP_PORT
-            fi
-            tag_qc_new="${imagesQosClass[${volume}]}"
-            update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "IMG ${volume##*-}"
+    for ds_id in "${!DS_SP_API_HTTP_HOST[@]}"; do
+        if [[ -n "${DS_SP_AUTH_TOKEN[${ds_id}]}" ]]; then
+            export SP_AUTH_TOKEN="${DS_SP_AUTH_TOKEN[${ds_id}]}"
+        else
+            unset SP_AUTH_TOKEN
         fi
-    done {spfh}< <(jq -r '.data[]|.name+";"+.tags["qc"]' "${volumeListJson}" || true)
+        if [[ -n "${DS_SP_API_HTTP_HOST[${ds_id}]}" ]]; then
+            export SP_API_HTTP_HOST="${DS_SP_API_HTTP_HOST[${ds_id}]}"
+        else
+            unset SP_API_HTTP_HOST
+        fi
+        if [[ -n "${DS_SP_API_HTTP_PORT[${ds_id}]}" ]]; then
+            export SP_API_HTTP_PORT="${DS_SP_API_HTTP_PORT[${ds_id}]}"
+        else
+            unset SP_API_HTTP_PORT
+        fi
+        volumeListJsonFile="${volumeListJson}-${SP_API_HTTP_HOST:-0.0.0.0}"
+        if [[ ! -f "${volumeListJsonFile}" ]]; then
+            storpoolRetry -j volume list >"${volumeListJsonFile}"
+        fi
+        while read -r -u "${spfh}" line; do
+            IFS=';' read -r -a spdata <<< "${line}"
+            volume="${spdata[0]}"
+            tag_qc="${spdata[1]}"
+            if [[ -n "${imagesQosClass[${volume}]+found}" ]]; then
+                if grep -Eqe "^${volume}$" "${processedVolumes}" &>/dev/null; then
+                    if boolTrue "DDDEBUG_alterVcPolicy"; then
+                        splog "[DDD]IMG ${volume##*-} volume ${volume} already processed"
+                    fi
+                    continue
+                fi
+                dsId="${imagesDsIds[${volume}]}"
+                tag_qc_new="${imagesQosClass[${volume}]}"
+                update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "IMG ${volume##*-}"
+            fi
+        done {spfh}< <(jq -r '.data[]|.name+";"+.tags["qc"]' "${volumeListJsonFile}" || true)
+    done
 }
 
 
@@ -328,7 +336,7 @@ else
     if [[ -z "${RAFT_LEADER_IP}" ]] && [[ -f "${ONE_HOME}/config" ]]; then
         #RAFT_LEADER_HOOK=ARGUMENTS=leader vlan11 10.163.1.250,COMMAND=raft/vip.sh
         RAFT_IP="$(awk '$0 ~ /^RAFT_LEADER_HOOK/{print $3}' "${ONE_HOME}/config" | tail -n 1 || true)"
-        if [[ -n "${RAFT_IP:-}" ]]; then
+        if [[ -n "${RAFT_IP}" ]]; then
             RAFT_LEADER_IP="${RAFT_IP%%/*}"
             RAFT_LEADER_IP="${RAFT_LEADER_IP%%,*}"
         fi

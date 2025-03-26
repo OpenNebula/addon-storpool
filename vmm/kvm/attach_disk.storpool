@@ -72,7 +72,7 @@ if [[ -n "${PERSISTENT_CDROM}" ]]; then
             splog "(${ret}) ${SSH:-ssh} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
             exit "${ret}"
         else
-            splog "VM ${VM_ID:-} DISK_ID=${DISK_ID:-} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' != 'hd'"
+            splog "VM ${VM_ID:-} DISK_ID=${DISK_ID} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' != 'hd'"
         fi
     fi
 fi

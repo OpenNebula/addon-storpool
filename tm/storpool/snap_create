@@ -84,10 +84,10 @@ export DST_PATH  #  TBD: remove
 if [[ -n "${DISKSNAPSHOT_LIMIT}" ]] && [[ -z "${DISKSNAPSHOT_LIMIT//[[:digit:]]/}" ]]; then
     if [[ "${DISKSNAPSHOT_LIMIT}" -ge 0 ]]; then
         oneVmDiskSnapshots "${VM_ID}" "${DISK_ID}"
-        if [[ "${#DISK_SNAPSHOTS[@]}" -gt "${DISKSNAPSHOT_LIMIT:-}" ]]; then
+        if [[ ${#DISK_SNAPSHOTS_A[@]} -gt ${DISKSNAPSHOT_LIMIT} ]]; then
             # shellcheck source=/dev/null
             source "${DRIVER_PATH}/../../scripts_common.sh"
-            msg="DISKSNAPSHOT_LIMIT of ${DISKSNAPSHOT_LIMIT:-} snaphosts exceeded!"
+            msg="DISKSNAPSHOT_LIMIT of ${DISKSNAPSHOT_LIMIT} snaphosts exceeded!"
             splog "${msg}"
             error_message "${msg}"
             exit 1

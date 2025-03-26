@@ -74,7 +74,7 @@ SRC_DS_ID="${IMAGE_PATH%%/*}"
 SRC_DS_ID="${SRC_DS_ID##*-}"
 
 if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
-    #DST_BRIDGE_LIST="${SP_BRIDGE_LIST:-}"  # TBD: refactor to not use BRIDGE_LIST use the hosts if available
+    #DST_BRIDGE_LIST="${SP_BRIDGE_LIST}"  # TBD: refactor to not use BRIDGE_LIST use the hosts if available
     #DST_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
     #DST_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
     DST_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"

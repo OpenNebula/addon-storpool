@@ -17,9 +17,9 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-function splog() { logger -t "tm_sp_${0##*/}" "[$$] ${DS_ID:-} $*"; }
+function splog() { logger -t "tm_sp_${0##*/}" "[$$] ${DS_ID} $*"; }
 
-if [[ -n "${2}" ]]; then
+if [[ -n "$2" ]]; then
     DRV_ACTION="$1"
     DS_ID="$2"
 else
@@ -98,7 +98,7 @@ else
 	oneDsDriverAction
 	#echo "cd $PWD && bash -x $0 $*" >/tmp/monitor-${DS_ID}-${CLUSTER_ID}.sh
 	SP_CMD_TEMPLATE_STATUS="${SP_CMD_TEMPLATE_STATUS_IMAGE:-${SP_CMD_TEMPLATE_STATUS}}"
-	if [[ -n "${CLUSTERS_ID:-}" ]]; then
+	if [[ -n "${CLUSTERS_ID}" ]]; then
 		read -r -a CLUSTERS_ID_ARRAY <<< "${CLUSTERS_ID}"
 		export CLUSTER_ID="${CLUSTERS_ID_ARRAY[0]}"
 	fi
@@ -117,7 +117,7 @@ if boolTrue "DDDEBUG_TM_MONITOR"; then
 	splog "[DDD] ${DS_ID} SP_CMD_TEMPLATE_STATUS:${SP_CMD_TEMPLATE_STATUS}"
 fi
 
-while IFS=',' read -r -u "${jqfd}" n t f u2 u3; do
+while IFS=',' read -r -u "${jqfh}" n t f u2 u3; do
 	if [[ "${n//\"/}" == "${DS_NAME}" ]]; then
 		if boolTrue "ALT_STATS"; then
 			f=$(( f + u2 + u3 ))
@@ -139,15 +139,15 @@ while IFS=',' read -r -u "${jqfd}" n t f u2 u3; do
 		fi
 		break
 	fi
-done {jqfd}< <(eval "${SP_CMD_TEMPLATE_STATUS}" 2>/dev/null | \
+done {jqfh}< <(eval "${SP_CMD_TEMPLATE_STATUS}" 2>/dev/null | \
         jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv' \
         ||true)
 
 # VM disks monitoring
-if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
-	if [[ -f "${BASE_PATH:-}/.monitor" ]]; then
+if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
+	if [[ -f "${BASE_PATH}/.monitor" ]]; then
 		if boolTrue "DEBUG_TM_MONITOR"; then
-			test -f "${BASE_PATH:-}/.monitor" && DS_DRIVER="$(<"${BASE_PATH:-}/.monitor")" || DS_DRIVER="storpool"
+			test -f "${BASE_PATH}/.monitor" && DS_DRIVER="$(<"${BASE_PATH}/.monitor")" || DS_DRIVER="storpool"
 			splog "[D] ${DS_ID} is marked for remote monitoring via IM_MAD using 'tm/${DS_DRIVER}/monitor_ds'"
 		fi
         if boolTrue "DEBUG_TM_MONITOR"; then
@@ -157,7 +157,7 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
 	fi
     if boolTrue "MONITOR_VM_DISKS"; then
         if boolTrue "DDEBUG_TM_MONITOR"; then
-		    splog "[DD] ${DS_ID} ${BASE_PATH:-} processing VM disks..."
+		    splog "[DD] ${DS_ID} ${BASE_PATH} processing VM disks..."
     	fi
     else
         if boolTrue "DEBUG_TM_MONITOR"; then
@@ -223,11 +223,11 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
     ${JQ_BIN:-jq} -r '.data[]|(.name)+" "+(.storedSize|tostring)+" "+(.spaceUsed|tostring)' >"${TMP_SNAPSHOT_SPACE}" || true
 
     monitor=
-    while read -r -u "${vmfd}" VM_ID; do
+    while read -r -u "${vmfh}" VM_ID; do
         unset disk_datastore disk_clone disk_type disk_image vm_snapshots
         declare -A disk_datastore disk_clone disk_type disk_image vm_snapshots
         vm_disks="<TEMPLATE>$(xmllint -xpath "/VM_POOL/VM[ID=${VM_ID}]/TEMPLATE/DISK" "${ONE_VM_POOL_XML}")</TEMPLATE>"
-        while read -r -u "${xmlstarletfd}" DISK_ID; do
+        while read -r -u "${xmlstarletfh}" DISK_ID; do
             unset i xp
             for e in DATASTORE_ID TYPE CLONE IMAGE_ID; do
                 xp[i++]="$(echo "${vm_disks}"|xmlstarlet sel -t -m "//DISK[DISK_ID=${DISK_ID}]" -v "${e}")"
@@ -237,7 +237,7 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
             disk_type[${DISK_ID}]="${xp[i++]}"
             disk_clone[${DISK_ID}]="${xp[i++]}"
             disk_image[${DISK_ID}]="${xp[i++]}"
-        done {xmlstarletfd}< <(echo "${vm_disks}" | xmlstarlet sel -t -m "//DISK" -v "DISK_ID" -n || true)
+        done {xmlstarletfh}< <(echo "${vm_disks}" | xmlstarlet sel -t -m "//DISK" -v "DISK_ID" -n || true)
         vm_monitor=""
         for DISK_ID in ${!disk_datastore[*]}; do
             volume="${ONE_PX:-one}"
@@ -262,7 +262,7 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
                 continue
             fi
             s_cnt=0
-            while read -r -u "${grepfd}" data; do
+            while read -r -u "${grepfh}" data; do
                 read -r -a s_data <<< "${data}"
                 snapshot="${s_data[0]}"
                 # mrs-img-150-snap0
@@ -285,7 +285,7 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
                         vm_snapshots[${SNAP_ID}]+=" ${snap_size}"
                     fi
                 fi
-            done {grepfd}< <(grep "^${volume}" "${TMP_SNAPSHOT_SPACE}" || true)
+            done {grepfh}< <(grep "^${volume}" "${TMP_SNAPSHOT_SPACE}" || true)
 
             if boolTrue "DDEBUG_TM_MONITOR"; then
                 splog "[DD] ${DS_ID} ${DS_TYPE} VM ${VM_ID} DISK ${DISK_ID} disk_size:${disk_size} v_data:${#v_data[*]} snaps:${s_cnt} vm_monitor:${#vm_monitor}"
@@ -314,7 +314,7 @@ if [[ -d "$(readlink -f "${BASE_PATH:-}" || true)" ]]; then
                 splog "[DD] VM=[ID=\"${VM_ID}\",MONITOR=\"${vm_monitor_b64}\"]"
             fi
         fi
-    done {vmfd}< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=${DS_ID}][STATE=3]" -v "ID" -n "${ONE_VM_POOL_XML}" || true)
+    done {vmfh}< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=${DS_ID}][STATE=3]" -v "ID" -n "${ONE_VM_POOL_XML}" || true)
     if [[ "${MONITOR_TAG}" == "MONITOR" ]]; then
         monitor_b64="$(echo "${monitor}" | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \

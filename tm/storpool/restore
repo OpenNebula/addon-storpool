@@ -25,10 +25,10 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 DST_HOST="${1%%:*}"
 SYSTEM_DS_PATH="${1#*:}"
-VM_ID="${2}"
-IMG_ID="${3}"
-INC_ID="${4}"
-DISK_ID="${5}"
+VM_ID="$2"
+IMG_ID="$3"
+INC_ID="$4"
+DISK_ID="$5"
 export SYSTEM_DS_PATH  # TBD: remove
 
 #splog "$* //${#DRV_ACTION}"
@@ -46,10 +46,10 @@ SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAUL
 debug_sp_qosclass
 
 MSG="VM ${VM_ID} BackupID ${IMG_ID} '${B_IMAGE_NAME}'"
-if [[ ${INC_ID} != "-1" ]]; then
+if [[ "${INC_ID}" != "-1" ]]; then
     MSG+=" Incremental ${INC_ID}"
 fi
-if [[ ${DISK_ID} != "-1" ]]; then
+if [[ "${DISK_ID}" != "-1" ]]; then
     MSG+=" Disk ${DISK_ID} (size ${SIZE}M)"
 else
     MSG+=" All disks"
@@ -75,9 +75,9 @@ BACKUP_MAD_LS="${DRIVER_PATH}/../../datastore/${DS_DS_MAD}/ls"
 
 declare -A disksUrl disksMap
 
-while IFS=' ' read -r -u "${jqfd}" did url; do
+while IFS=' ' read -r -u "${jqfh}" did url; do
     disksUrl["${did}"]="${url}"
-done {jqfd}< <("${BACKUP_MAD_LS}" -i "${INC_ID}" <"${DS_DRIVER_ACTION}" |\
+done {jqfh}< <("${BACKUP_MAD_LS}" -i "${INC_ID}" <"${DS_DRIVER_ACTION}" |\
           jq -r 'to_entries[]|"\(.key) \(.value)"' || true)
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}"
@@ -88,8 +88,8 @@ _TMP_NAME=$(mktemp --dry-run tmRestoreXXXXXXXX)
 ERROR=0
 RET=0
 for did in ${!disksUrl[*]}; do
-    if [[ ${DISK_ID} != "-1" ]]; then
-        if [[ ${DISK_ID} != "${did}" ]]; then
+    if [[ "${DISK_ID}" != "-1" ]]; then
+        if [[ "${DISK_ID}" != "${did}" ]]; then
             continue
         fi
     fi
@@ -99,7 +99,7 @@ for did in ${!disksUrl[*]}; do
     SP_LINK="/dev/storpool/${SP_NAME}"
     COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp \"${BACKUP_URL}\" -"
     storpoolVolumeInfo "${SP_NAME}"
-    if [[ -z ${V_SIZE} ]]; then
+    if [[ -z "${V_SIZE}" ]]; then
         splog "VM ${VM_ID} volume ${SP_NAME} not found"
         ERROR=1
         break
@@ -136,8 +136,8 @@ for did in ${!disksUrl[*]}; do
 done
 
 for did in ${!disksUrl[*]}; do
-    if [[ ${DISK_ID} != "-1" ]]; then
-        if [[ ${DISK_ID} != "${did}" ]]; then
+    if [[ "${DISK_ID}" != "-1" ]]; then
+        if [[ "${DISK_ID}" != "${did}" ]]; then
             continue
         fi
     fi

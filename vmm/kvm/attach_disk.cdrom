@@ -46,12 +46,12 @@ fi
 
 TARGET_DEVICE=""
 declare -A available
-while read -r -u "${domfd}" target_dev source_x; do
+while read -r -u "${domfh}" target_dev source_x; do
     splog "${DOMAIN} target/@dev=${target_dev} source=${source_x}"
     if [[ "${source_x##*/}" == "" ]]; then
         available[${target_dev}]="${target_dev}"
     fi
-done {domfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
+done {domfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
     xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
 
 if [[ -n ${available[${TARGET}]} ]]; then
@@ -88,9 +88,9 @@ multiline_exec_and_log "${ATTACH_CMD}" \
     "Could not ${OPTIONS} ${ISO_PATH} (${TARGET_DEVICE}) to ${DOMAIN}"
 ret=$?
 
-while read -r -u "${virshfd}" qdev tray_open inserted_file locked; do
+while read -r -u "${virshfh}" qdev tray_open inserted_file locked; do
     splog "${qdev} locked:${locked} tray_open:${tray_open} inserted_file:${inserted_file} // ${TARGET_DEVICE} (ret:${ret})"
-done {virshfd}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" qemu-monitor-command "${DOMAIN}" --cmd '{"execute":"query-block"}' |\
+done {virshfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" qemu-monitor-command "${DOMAIN}" --cmd '{"execute":"query-block"}' |\
     jq -r '.return[]|select(.removable)|.qdev+" "+(.tray_open|tostring)+" "+(.inserted.file|tostring)+" "+(.locked|tostring)' || true)
 
 exit "${ret}"

@@ -90,7 +90,7 @@ elif [[ -f "${DISK_DEV}" ]]; then
 		done
 		for snapfile in "${snap_files[@]}"; do
 			snap_size="$(du -mL --apparent-size "${snapfile}" | awk '{print $1}' || true)"
-			[[ -z "${snap_size:-}" ]] && continue
+			[[ -z "${snap_size}" ]] && continue
 
 			if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
 				splog "[DD] ${DISK} SNAP_ID:${snapfile} ID:${DISK_ID} SIZE:${snap_size}"

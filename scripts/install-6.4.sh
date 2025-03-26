@@ -160,9 +160,9 @@ for mad in im vmm vnm; do
         [[ -d "${patchdir}" ]] || continue
         echo "*** Applying patches found in ${patchdir} ..."
         pushd "${ONE_VAR}" || exit 1
-        while read -r -u "${patchfd}" patchfile; do
+        while read -r -u "${patchfh}" patchfile; do
             do_patch "${patchfile}" "backup"
-        done {patchfd}< <(ls -1 "${patchdir}"/*.patch || true)
+        done {patchfh}< <(ls -1 "${patchdir}"/*.patch || true)
         popd || exit 1
         break 1
     done

@@ -49,38 +49,39 @@ function splog()
 
 function report()
 {
-    [[ -n "${2}" ]] || return 0
+    local _vmid="$1" _poll="$2"
+    [[ -n "${_poll}" ]] || return 0
     if [[ -d "${0%/*}/../../kvm-probes.d" ]]; then
-        echo "VM=[ID=${1},MONITOR=\"$(echo "${2}" | tr ' ' '\n' | base64 -w 0 || true)\"]"
+        echo "VM=[ID=${_vmid},MONITOR=\"$(echo "${_poll}" | tr ' ' '\n' | base64 -w 0 || true)\"]"
         if boolTrue "DEBUG_NICSTATS"; then
-            splog "[D] VM=[ID=${1},MONITOR=\"$(echo "${2}" | tr ' ' '\n' | base64 -w 0 || true)\"]"
+            splog "[D] VM=[ID=${_vmid},MONITOR=\"$(echo "${_poll}" | tr ' ' '\n' | base64 -w 0 || true)\"]"
         fi
     else
-        echo "VM=[ID=${1},POLL=\"${2}\"]"
+        echo "VM=[ID=${_vmid},POLL=\"${_poll}\"]"
         if boolTrue "DEBUG_NICSTATS"; then
-            splog "[D] VM=[ID=${1},POLL=\"${2}\"]"
+            splog "[D] VM=[ID=${_vmid},POLL=\"${_poll}\"]"
         fi
     fi
 }
 
 #27: one-135-0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master onebr.616 state UNKNOWN mode DEFAULT group default qlen 1000\    link/ether fe:00:70:30:4a:06 brd ff:ff:ff:ff:ff:ff\    RX: bytes  packets  errors  dropped overrun mcast   \    179604395  177435   0       0       0       0       \    TX: bytes  packets  errors  dropped carrier collsns \    135264059  1235572  0       0       0       0
 poll=""
-vmidold=""
-while read -r -u "${nicfd}" line; do
+vmidOld=""
+while read -r -u "${nicfh}" line; do
 	IFS=' ' read -r -a array <<< "${line}"
 	nic="${array[1]%:}"
 	read -r -a nica <<< "${nic//-/ }"
 	vmid="${nica[1]}"
 	nicid="${nica[2]}"
-	if [[ "${vmid:-}" != "${vmidold:-}" ]]; then
-        report "${vmidold:-}" "${poll:-}"
+	if [[ "${vmid}" != "${vmidOld}" ]]; then
+        report "${vmidOld}" "${poll}"
 		poll=""
 	fi
-	vmidold="${vmid}"
+	vmidOld="${vmid}"
     [[ -z "${poll}" ]] || poll+=" "
 	poll+="NIC_STATS=[ID=${nicid:-0},RX=${array[41]:-0},TX=${array[28]:-0}]"
-done {nicfd}< <(ip -o -s link | grep one- | sort -k 2 || true)
+done {nicfh}< <(ip -o -s link | grep one- | sort -k 2 || true)
 
-if [[ -n "${vmidold}" ]] && [[ -n "${poll}" ]]; then
-    report "${vmidold}" "${poll}"
+if [[ -n "${vmidOld}" ]] && [[ -n "${poll}" ]]; then
+    report "${vmidOld}" "${poll}"
 fi

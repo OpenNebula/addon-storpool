@@ -100,7 +100,7 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
             fi
             DST_PATH="${VM_PATH}/disk.${DISK_ID}"
             [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-            [[ -z "${json:-}" ]] || json+=","
+            [[ -z "${json}" ]] || json+=","
             json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "detach" "force" "${DISK_READONLY_ARRAY[i]}")"
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
@@ -122,8 +122,8 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
             DST_PATH="${VM_PATH}/disk.${DISK_ID_ARRAY[i]}"
-            [[ -n "${DST_CLIENT:-}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-            [[ -z "${json:-}" ]] || json+=","
+            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+            [[ -z "${json}" ]] || json+=","
             json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "detach" "force")"
         fi
     done
@@ -131,19 +131,19 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     #-------------------------------------------------------------------------------
     # Detach context ISO volume from DST_HOST
     #-------------------------------------------------------------------------------
-    SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
-    DST_PATH="${VM_PATH}/disk.${_CONTEXT_DISK_ID}"
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
+    DST_PATH="${VM_PATH}/disk.${CONTEXT_DISK_ID}"
     export DST_PATH  # TBD: remove
     [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-    [[ -z "${json:-}" ]] || json+=","
+    [[ -z "${json}" ]] || json+=","
     json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "detach" "force")"
 
     #-------------------------------------------------------------------------------
     # Detach NVRAM volume from DST_HOST
     #-------------------------------------------------------------------------------
-    if [[ -n "${T_OS_NVRAM:-}" ]]; then
+    if [[ -n "${T_OS_NVRAM}" ]]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-        [[ -z "${json:-}" ]] || json+=","
+        [[ -z "${json}" ]] || json+=","
         json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "detach" "force")"
     fi
     #-------------------------------------------------------------------------------
@@ -154,7 +154,7 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     fi
 fi
 
-if [[ -n "${json:-}" ]]; then
+if [[ -n "${json}" ]]; then
     storpoolRetry groupDetach "${json}"
 fi
 

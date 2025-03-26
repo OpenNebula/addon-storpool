@@ -53,12 +53,12 @@ vmMetaXml="${tmpDir}/${vm_id}.XML"
 onevm show -x "${vm_id}" >"${vmMetaXml}"
 
 if [[ -d "${0}.d" ]]; then
-    while read -r -u "${helperfd}" helper; do
+    while read -r -u "${helperfh}" helper; do
         if [[ -x "${helper}" ]]; then
             "${helper}" "${deployXML}" "${vmMetaXml}"
             splog "($?) ${helper} ${deployXML} ${vmMetaXml}"
         fi
-    done {helperfd}< <(find "${0}.d" -type f -o -type l || true)
+    done {helperfh}< <(find "${0}.d" -type f -o -type l || true)
 fi
 
 rm -f "${vmMetaXml}"
@@ -71,7 +71,7 @@ splog "(${ret}) virsh --connect ${QEMU_PROTOCOL}://${src_host}/system migrate --
 
 rm -rf "${tmpDir}"
 
-if [[ "${ret}" -eq 0 ]]; then
+if [[ ${ret} -eq 0 ]]; then
     if [[ "${SYNC_TIME:-no}" == "yes" ]]; then
         virsh --connect "${QEMU_PROTOCOL}://${dest_host}/system" domtime --sync "${deploy_id}" >/dev/null 2>/dev/null || :
     fi

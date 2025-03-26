@@ -70,7 +70,7 @@ cp -f "${DEP_FILE}" "${DEP_XML}"
 
 onevm show "${VM_ID}" -x >"${VM_XML}" 2>"${ERR_FILE}"
 ret=$?
-if [[ "${ret:-}" -ne 0 ]]; then
+if [[ ${ret} -ne 0 ]]; then
     errmsg="[deploy-tweaks] Can't get VM ${VM_ID} XML, VM_XML=${VM_XML}"
     error_message "${errmsg}"
     cat "${ERR_FILE}" >&2
@@ -90,9 +90,9 @@ _XPATH_QUERY=(
 )
 
 unset i XPATH_ELEMENTS
-while IFS='' read -r -u "${xpathfd}" -d '' element; do
+while IFS='' read -r -u "${xpathfh}" -d '' element; do
     XPATH_ELEMENTS[i++]="${element}"
-done {xpathfd}< <( sed '/\/>$/d' "${VM_XML}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
+done {xpathfh}< <( sed '/\/>$/d' "${VM_XML}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
 unset i
 export DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
 export TM_MAD="${XPATH_ELEMENTS[i++]}"
@@ -110,7 +110,7 @@ if [[ -z "${DS_ID}" ]]; then
 fi
 
 if [[ -d "${0}.d" ]]; then
-    while read -r -u "${hookfd}" hook; do
+    while read -r -u "${hookfh}" hook; do
         [[ -x "${0}.d/${hook}" ]] || continue
         cp -f "${DEP_XML}" "${TMPDIR}/deployment.xml"
         splog "cp -f ${DEP_XML} ${TMPDIR}/deployment.xml ($?)"
@@ -118,29 +118,29 @@ if [[ -d "${0}.d" ]]; then
         "${0}.d/${hook}" "${TMPDIR}/deployment.xml" "${TMPDIR}/vm.xml" 2>"${ERR_FILE}"
         ret=$?
         splog "${hook} (${ret})"
-        if [[ -n "${DEBUG_DEPLOY_TWEAKS:-}" ]]; then
-            while read -r -u "${errfd}" line; do
+        if [[ -n "${DEBUG_DEPLOY_TWEAKS}" ]]; then
+            while read -r -u "${errfh}" line; do
                 splog "[D][${hook}]stderr:${line}"
-            done {errfd}< <(cat "${ERR_FILE}" || true)
+            done {errfh}< <(cat "${ERR_FILE}" || true)
         fi
-        if [[ "${ret:-}" -eq 0 ]]; then
+        if [[ ${ret} -eq 0 ]]; then
             xmllint --noout "${TMPDIR}/deployment.xml" 2>"${ERR_FILE}"
             ret=$?
-            if [[ "${ret:-}" -eq 0 ]]; then
+            if [[ ${ret} -eq 0 ]]; then
                 mv -f "${TMPDIR}/deployment.xml" "${DEP_XML}"
                 continue
             else
-                splog "Error: ${hook} succeeded but xmllint failed with exit code ${ret:-}"
+                splog "Error: ${hook} succeeded but xmllint failed with exit code ${ret}"
             fi
         else
             splog "${hook} failed with exit code ${ret}"
         fi
-        if [[ -z "${DEBUG_DEPLOY_TWEAKS:-}" ]]; then
-            while read -r -u "${errfd}" line; do
+        if [[ -z "${DEBUG_DEPLOY_TWEAKS}" ]]; then
+            while read -r -u "${errfh}" line; do
                 splog "[D][${hook}]stderr:${line}"
-            done {errfd}< <(cat "${ERR_FILE}" || true)
+            done {errfh}< <(cat "${ERR_FILE}" || true)
         fi
-    done {hookfd}< <(ls -A "${0}.d" 2>"${ERR_FILE}" || true)
+    done {hookfh}< <(ls -A "${0}.d" 2>"${ERR_FILE}" || true)
 else
     splog "Directory ${0}.d not found!"
 fi
@@ -150,7 +150,7 @@ DOMAIN_ID="$(${SSH:-ssh} "${HOST}" "${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm/
 ret=$?
 splog "VM ${VM_ID} deploy on ${HOST} returned (${ret}) DOMAIN_ID=${DOMAIN_ID}"
 
-if [[ "${ret}" -eq 0 ]]; then
+if [[ ${ret} -eq 0 ]]; then
     echo "${DOMAIN_ID}"
 else
     error_message "[deploy-tweaks] VM ${VM_ID} could not create domain from ${DEP_XML}"
