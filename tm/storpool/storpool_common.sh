@@ -1082,6 +1082,14 @@ function storpoolVolumeDetach()
 function storpoolVolumeTemplate()
 {
     local _SP_VOL="$1" _SP_TEMPLATE="$2"
+    if [[ -z "${_SP_VOL}" ]]; then
+        splog "[E]storpoolVolumeTemplate($*): volume is empty"
+        exit 1
+    fi
+    if [[ -z "${_SP_TEMPLATE}" ]]; then
+        splog "[E]storpoolVolumeTemplate($*): template is empty"
+        exit 1
+    fi
     storpoolRetry volume "${_SP_VOL}" template "${_SP_TEMPLATE}" update >/dev/null
 }
 
