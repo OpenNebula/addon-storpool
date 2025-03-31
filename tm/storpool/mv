@@ -245,11 +245,11 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         fi
         # context ISO. Do detach/attach only when hosts differ
         if boolTrue "DO_CONTEXT" "${DO_CONTEXT}"; then
-            if [[ -n "${_CONTEXT_DISK_ID}" ]]; then
-                SP_VOL="${ONE_PX}-sys-${VM_ID}-${_CONTEXT_DISK_ID}-iso"
+            if [[ -n "${CONTEXT_DISK_ID}" ]]; then
+                SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
                 if [[ "${SRC_HOST}" != "${DST_HOST}" ]]; then
                     SP_LINK="/dev/storpool/${SP_VOL}"
-                    CTX_PATH="${DST_DIR}/${VM_ID}/disk.${_CONTEXT_DISK_ID}"
+                    CTX_PATH="${DST_DIR}/${VM_ID}/disk.${CONTEXT_DISK_ID}"
                     if [[ -n "${ATTACH_ONLY}" ]]; then
                         splog "${ATTACH_ONLY}"
                     else
@@ -264,10 +264,10 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                         fi
                     fi
                 fi
-            fi
-            if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
-                if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                    storpoolVolumeTemplate "${SP_VOL}" "${ONE_PX}-ds-${DS_ID}"
+                if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
+                    if ! boolTrue "NO_VOLUME_TEMPLATE"; then
+                        storpoolVolumeTemplate "${SP_VOL}" "${ONE_PX}-ds-${DS_ID}"
+                    fi
                 fi
             fi
         fi
