@@ -34,16 +34,12 @@ source "${ONE_PATH}/tm/storpool/storpool_common.sh"
 LOG_PREFIX="misc"
 export LOG_PREFIX
 
-TMP_DIR="$(mktemp -d)"
-trapAdd "rm -rf '${TMP_DIR}'"
+vmPoolXml="${TMPDIR:-/tmp}/vmPool.xml"
+dsPoolXml="${TMPDIR:-/tmp}/dsPool.xml"
+snapshotsJson="${TMPDIR:-/tmp}/snapshots.json"
 
-vmPoolXml="${TMP_DIR}/vmPool.xml"
-dsPoolXml="${TMP_DIR}/dsPool.xml"
-snapshotsJson="${TMP_DIR}/snapshots.json"
-
-${SUDO:-sudo} onevm list -x --extended >"${vmPoolXml}"
-${SUDO:-sudo} onedatastore list -x >"${dsPoolXml}"
-${SUDO:-sudo} storpool -B -j snapshot list >"${snapshotsJson}"
+oneCallXml onevm list --extended "${vmPoolXml}"
+oneCallXml onedatastore list "${dsPoolXml}"
 
 declare -A datastoreSpAuthToken  # datastoreSpAuthToken[DATASTORE_ID]=SP_AUTH_TOKEN
 declare -A datastoreSpApiHttpHost  # datastoreSpApiHttpHost[DATASTORE_ID]=SP_API_HTTP_HOST
@@ -83,12 +79,17 @@ while read -r -u "${vmfd}" VM_ID; do
         unset SP_API_HTTP_PORT
     fi
 
+    snapshotsJsonFile="${snapshotsJson}-${SP_API_HTTP_HOST:-0.0.0.0}"
+    if [[ ! -f "${snapshotsJsonFile}" ]]; then
+        storpool -B -j snapshot list >"${snapshotsJsonFile}"
+    fi
+
     for volume in ${vmVolumes}; do
         if [[ "${volume%iso}" == "${volume}" ]]; then
             storpoolVolumeTag "${volume}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}"
             while read -r -u "${snapfd}" snap; do
                 storpoolSnapshotTag "${snap}" "one;${LOC_TAG_VAL};${VM_ID}" "virt;${LOC_TAG:-nloc};${VM_TAG}"
-            done {snapfd}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJson}" || true)
+            done {snapfh}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJsonFile}" || true)
         else
             echo "# skipping ${volume}"
         fi
