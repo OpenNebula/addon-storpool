@@ -69,9 +69,10 @@ DISK_ID="$(echo "${DST_PATH}" | "${AWK:-awk}" -F. '{print $NF}' || true)"
 oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 if boolTrue "SHAREABLE"; then
-    msg="SHAREABLE image is not supported."
+    msg="[ERROR] Unsupported persistent image type"
+    msg+=" (${SHAREABLE:+DISK/SHAREABLE=${SHAREABLE} }${PERSISTENT_TYPE:+PERSISTENT_TYPE=${PERSISTENT_TYPE}})."
     splog "${msg}"
-    log "${msg}"
+    log_error "${msg}"
     exit 1
 fi
 
