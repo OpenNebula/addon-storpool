@@ -1120,7 +1120,7 @@ function storpoolSnapshotClone()
 {
     local _SP_SNAP="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
 
-    storpoolRetry volume "${_SP_VOL}" parent "${_SP_SNAP}" ${_SP_TEMPLATE:+template "${_SP_TEMPLATE}"} >/dev/null
+    storpoolRetry volume "${_SP_VOL}" parent "${_SP_SNAP}" ${_SP_TEMPLATE:+template "${_SP_TEMPLATE}"} create >/dev/null
 }
 
 function storpoolSnapshotRevert()
@@ -2406,6 +2406,7 @@ function oneVmVolumes()
         "/VM/TEMPLATE/DISK/FORMAT"
         "/VM/TEMPLATE/DISK/TYPE"
         "/VM/TEMPLATE/DISK/SHAREABLE"
+        "/VM/TEMPLATE/DISK/READONLY"
         "/VM/TEMPLATE/DISK/TM_MAD"
         "/VM/TEMPLATE/DISK/TARGET"
         "/VM/TEMPLATE/DISK/IMAGE_ID"
@@ -2434,6 +2435,7 @@ function oneVmVolumes()
     local FORMAT="${XPATH_ELEMENTS[i++]}"
     local TYPE="${XPATH_ELEMENTS[i++]}"
     local SHAREABLE="${XPATH_ELEMENTS[i++]}"
+    local READONLY="${XPATH_ELEMENTS[i++]}"
     local TM_MAD="${XPATH_ELEMENTS[i++]}"
     local TARGET="${XPATH_ELEMENTS[i++]}"
     local IMAGE_ID="${XPATH_ELEMENTS[i++]}"
@@ -2463,6 +2465,7 @@ function oneVmVolumes()
     IFS=';' read -r -a FORMAT_A <<< "${FORMAT}"
     IFS=';' read -r -a TYPE_A <<< "${TYPE}"
     IFS=';' read -r -a SHAREABLE_A <<< "${SHAREABLE}"
+    IFS=';' read -r -a READONLY_A <<< "${READONLY}"
     IFS=';' read -r -a TM_MAD_A <<< "${TM_MAD}"
     IFS=';' read -r -a TARGET_A <<< "${TARGET}"
     IFS=';' read -r -a IMAGE_ID_A <<< "${IMAGE_ID}"
@@ -2476,6 +2479,7 @@ function oneVmVolumes()
     vmDisksDsMap=""  # oneName:DATASTORE_ID
     vmDisksTypeMap=""  # oneName:DISK_TYPE
     persistentDisksQcMap=""  # oneName:PERSISTENT_IMAGE_QOSCLASS
+    vmDisksReadOnlyMap=""  # oneName:READONLY
     unset DISKS_QC_A VM_SP_QOSCLASS oneVmVolumesNotStorPool
     declare -gA DISKS_QC_A  # DISKS_QC_A[DISK_ID]=DISK_QOSCLASS
     for qosclass in "${SP_QOSCLASS_A[@]}"; do
@@ -2498,6 +2502,7 @@ function oneVmVolumes()
         FORMAT="${FORMAT_A[${idx}]}"
         TYPE="${TYPE_A[${idx}]}"
         SHAREABLE="${SHAREABLE_A[${idx}]}"
+        READONLY="${READONLY_A[${idx}]}"
         TM_MAD="${TM_MAD_A[${idx}]}"
         TARGET="${TARGET_A[${idx}]}"
         DISK_ID="${DISK_ID_A[${idx}]}"
@@ -2549,6 +2554,7 @@ function oneVmVolumes()
         vmDisks=$(( vmDisks+1 ))
         vmDisksMap+="${oneName}:${DISK_ID} "
         vmDisksTypeMap+="${oneName}:${xTYPE} "
+        vmDisksReadOnlyMap+="${oneName}:${READONLY} "
         if boolTrue "SHAREABLE"; then
             oneVmVolumesShareable+="${oneName}:${DISK_ID} "
         fi
@@ -2558,6 +2564,7 @@ function oneVmVolumes()
         vmVolumes+="${oneName} "
         vmDisksMap+="${oneName}: "
         vmDisksTypeMap+="${oneName}:NVRAM "
+        vmDisksReadOnlyMap+="${oneName}: "
     fi
     DISK_ID="${CONTEXT_DISK_ID}"
     if [[ -n "${DISK_ID}" ]]; then
@@ -2565,6 +2572,7 @@ function oneVmVolumes()
         vmVolumes+="${oneName} "
         vmDisksMap+="${oneName}:${DISK_ID} "
         vmDisksTypeMap+="${oneName}:CONTEXT "
+        vmDisksReadOnlyMap+="${oneName}:YES "
         if boolTrue "DEBUG_oneVmVolumes"; then
             splog "[D] VM ${VM_ID} disk.${DISK_ID} ${oneName} //CONTEXT"
         fi
@@ -2596,6 +2604,7 @@ function oneVmVolumes()
         splog "[DDD][oneVmVolumes] vmDisksQcMap:'${vmDisksQcMap}'"
         splog "[DDD][oneVmVolumes] vmDisksDsMap:'${vmDisksDsMap}'"
         splog "[DDD][oneVmVolumes] vmDisksTypeMap:'${vmDisksTypeMap}'"
+        splog "[DDD][oneVmVolumes] vmDisksReadOnlyMap:'${vmDisksReadOnlyMap}'"
         splog "[DDD][oneVmVolumes] persistentDisksQcMap:'${persistentDisksQcMap}'"
         if [[ ${#SNAPSHOT_ID_A[*]} -gt 0 ]]; then
             splog "[DDD][oneVmVolumes] SNAPSHOT_ID_A:'${SNAPSHOT_ID_A[*]}'"

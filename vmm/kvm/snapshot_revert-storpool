@@ -59,12 +59,15 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "${VM_ID}"
     oneDatastoreInfo "${VM_DS_ID}"
 
-    declare -A vmVolumesMap diskVolumes vmVolumesQcMap
+    declare -A vmVolumesMap diskVolumes vmVolumesQcMap vmDisksReadOnly_a
     for volume in ${vmVolumes}; do
         diskVolumes["${volume}"]="${volume}"  # diskVolumes[VOLUME_NAME]=VOLUME_NAME
     done
     for disk in ${vmDisksMap}; do
         vmVolumesMap["${disk%:*}"]="${disk##*:}"  # vmVolumesMap[DISK_ID]=VOLUME_NAME
+    done
+    for entry in ${vmDisksReadOnlyMap}; do
+        vmDisksReadOnly_a["${entry%:*}"]="${entry##*:}"  # vmDisksReadOnly_a[DISK_ID]=READONLY
     done
 
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
@@ -135,15 +138,17 @@ EOF
         tb=$(date +%s%N)
         splog "BEGIN snapshot ${snap} (${tb})"
         volume="${snap%"-${SNAP_ID}"}"
-        [[ "${volume%-iso}" == "${volume}" ]] && mode="rw" || mode="${READONLY_MODE}"
+        #[[ "${volume%-iso}" == "${volume}" ]] && sp_mode="rw" || sp_mode="${READONLY_MODE}"
+        if [[ "${vmDisksReadOnly_a["${volume}"]^^}" == "YES" ]]; then
+            sp_mode="${READONLY_MODE,,}"
+        else
+            sp_mode="rw"
+        fi
         storpoolVolumeDetach "${volume}" "force" "${VMHOST}" "all"
         storpoolVolumeInfo "${volume}"
         OLD_SIZE_M=$((V_SIZE/1024/1024))
-        if [[ "${V_TYPE}" == "CDROM" ]]; then
-            mode="${READONLY_MODE}"
-        fi
         tmpVolume="${volume}-${SP_TMP}"
-        storpoolRetry volume "${volume}" rename "${tmpVolume}" >/dev/null || finish=0
+        storpoolRetry volume "${volume}" rename "${tmpVolume}" update >/dev/null || finish=0
         storpoolSnapshotClone "${snap}" "${volume}" "${V_TEMPLATE_NAME}" || finish=0
         storpoolVolumeInfo "${volume}"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
@@ -163,7 +168,7 @@ EOF
         else
             splog "${tmpVolume}=${OLD_SIZE_M} ${volume}=${NEW_SIZE_M}"
         fi
-        storpoolVolumeAttach "${volume}" "${VMHOST}" "${mode}"
+        storpoolVolumeAttach "${volume}" "${VMHOST}" "${sp_mode}"
 
         VM_DISK_SP_QOSCLASS="${vmVolumesQcMap[${volume}]}"
 
