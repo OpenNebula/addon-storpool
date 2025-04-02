@@ -158,7 +158,7 @@ exec_and_log "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=/dev/storp
 #-------------------------------------------------------------------------------
 # (re)attach readonly
 #------------------------------------------------------------------------------
-if [[ "${READONLY_MODE}" == "ro" ]]; then
+if [[ "${READONLY_MODE,,}" == "ro" ]]; then
     storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "ro"
 fi
 

@@ -127,7 +127,7 @@ if [[ -n "${SIZE}" ]]; then
 fi
 
 if boolTrue "READONLY"; then
-    SP_MODE="${READONLY_MODE}"
+    SP_MODE="${READONLY_MODE,,}"
 fi
 
 

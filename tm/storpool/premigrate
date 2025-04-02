@@ -133,9 +133,9 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
                 SP_VOL="${CDROM_VOL}"
             fi
             if boolTrue "DISK_READONLY_ARRAY[i]"; then
-                SP_MODE="${READONLY_MODE}"
+                SP_MODE="${READONLY_MODE,,}"
             else
-                SP_MODE=
+                SP_MODE="rw"
             fi
             [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
             [[ -z "${json}" ]] || json+=","
@@ -178,7 +178,7 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
         DST_PATH="${VM_PATH}/disk.${CONTEXT_DISK_ID}"
         [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
         [[ -z "${json}" ]] || json+=","
-        json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "${READONLY_MODE}")"
+        json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "${READONLY_MODE,,}")"
 #        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
     fi
 
