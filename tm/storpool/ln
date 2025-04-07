@@ -76,6 +76,15 @@ if boolTrue "SHAREABLE"; then
     exit 1
 fi
 
+IMMUTABLE="$(isImmutable "${CLONE}" "${SAVE}" "${READONLY}")"
+if boolTrue "IMMUTABLE" && [[ "${TYPE^^}" != "CDROM" ]]; then
+    msg="[ERROR] Unsupported persistent image type: IMMUTABLE"
+    msg+=" (${PERSISTENT_TYPE:+PERSISTENT_TYPE=${PERSISTENT_TYPE}})."
+    splog "${msg}"
+    log_error "${msg}"
+    exit 1
+fi
+
 #-------------------------------------------------------------------------------
 # Get System Datastore information
 #-------------------------------------------------------------------------------
