@@ -1143,7 +1143,7 @@ function storpoolSnapshotRevert()
 
 function storpoolVolumeTag()
 {
-    local _SP_VOL="$1" _TAG_VAL="$2" _TAG_KEY="${3:-${VM_TAG:-nvm}}"
+    local _SP_VOL="$1" _TAG_KEY="${2:-${VM_TAG:-nvm}}" _TAG_VAL="$3"
     local _tagCmd="" _tagKey=""
     declare -a _tagVal_array _tagKey_array
     IFS=';' read -r -a _tagVal_array <<< "${_TAG_VAL}"

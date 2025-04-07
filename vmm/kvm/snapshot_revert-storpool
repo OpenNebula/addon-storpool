@@ -191,7 +191,7 @@ EOF
         SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
         debug_sp_qosclass
 
-        storpoolVolumeTag "${volume}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}"
+        storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}"
         tmpVolumes+=("${tmpVolume}")
         te=$(date +%s%N)
         splog "END snapshot ${snap} (${te} dt:$((te-tb)))"
