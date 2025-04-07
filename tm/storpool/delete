@@ -175,8 +175,9 @@ elif boolTrue "IMMUTABLE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
 else
-    log "Not CLONE ${DST_PATH}. Only detaching ${SP_VOL}"
-    splog "Not CLONE ${DST_PATH}. Only detaching ${SP_VOL}"
+    _LOGMSG="Not CLONE ${DST_PATH}. Only detaching ${SP_VOL}"
+    log "${_LOGMSG}"
+    splog "${_LOGMSG}"
 
     storpoolVolumeDetach "${SP_VOL}" "force" "" "all" "${READONLY}"
 
