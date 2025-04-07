@@ -88,7 +88,7 @@ while read -r -u "${vmfh}" VM_ID; do
         if [[ "${volume%iso}" == "${volume}" ]]; then
             storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY}"
             while read -r -u "${snapfh}" snap; do
-                storpoolSnapshotTag "${snap}" "one;${LOC_TAG_VAL};${VM_ID}" "virt;${LOC_TAG:-nloc};${VM_TAG}"
+                storpoolSnapshotTag "${snap}" "virt;${LOC_TAG:-nloc};${VM_TAG}" "one;${LOC_TAG_VAL};${VM_ID}"
             done {snapfh}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJsonFile}" || true)
         else
             echo "# skipping ${volume}"
