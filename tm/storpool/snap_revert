@@ -58,9 +58,18 @@ oneVmInfo "${VM_ID}" "${DISK_ID}"
 # Compute the source image
 #-------------------------------------------------------------------------------
 
+xTYPE="PERS"
+
 SP_VOL=${SOURCE##*/}
 if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
+    xTYPE="NPERS"
+fi
+if boolTrue "READONLY"; then
+    xTYPE="${xTYPE}RO"
+    if boolTrue "CDROM"; then
+        xTYPE="CDROM"
+    fi
 fi
 
 SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
