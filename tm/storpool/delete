@@ -155,14 +155,14 @@ if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     log "Deleting ${DST_PATH} (${SP_VOL})"
     storpoolVolumeDelete "${SP_VOL}" "force" "snaps" "${REMOTE_BACKUP_DELETE}"
-elif boolTrue "IMMUTABLE"; then
+elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
     if [[ "${TYPE}" == "CDROM" ]]; then
         # DISK/TYPE="CDROM"
         # backward compatibility
         if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then
             if storpoolVolumeExists "${SP_VOL}"; then
                 storpoolVolumeDetach "${SP_VOL}" "force" "${DST_HOST}" "" "${READONLY}"
-                storpoolVolumeTag "${SP_VOL}" ";;${DEFAULT_QOSCLASS}" "${VM_TAG:-nvm};vc-policy;qc"
+                storpoolVolumeTag "${SP_VOL}" ";;${DEFAULT_QOSCLASS};" "${VM_TAG:-nvm};vc-policy;qc;type"
             fi
         fi
         _LOGMSG="CDROM image"
@@ -181,7 +181,7 @@ else
 
     storpoolVolumeDetach "${SP_VOL}" "force" "" "all" "${READONLY}"
 
-	storpoolVolumeTag "${SP_VOL}" ";;${DEFAULT_QOSCLASS}" "${VM_TAG:-nvm};vc-policy;qc"
+	storpoolVolumeTag "${SP_VOL}" ";;${DEFAULT_QOSCLASS};" "${VM_TAG:-nvm};vc-policy;qc;type"
 fi
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     if [[ ${LCM_STATE} -ne 15 ]]; then

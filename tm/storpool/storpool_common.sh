@@ -2528,14 +2528,14 @@ function oneVmVolumes()
             elif boolTrue "READONLY"; then
                 if boolTrue "VMSNAPSHOT_EXCLUDE_READONLY"; then
                     _DBGMSG="Image ${IMAGE_ID} excluded because it is READONLY"
-                    _DBGMSG+=" (VMSNAPSHOT_EXCLUDE_READONLY=${VMSNAPSHOT_EXCLUDE_READONLY})"
+                    _DBGMSG+=" (VMSNAPSHOT_EXCLUDE_READONLY=${VMSNAPSHOT_EXCLUDE_READONLY:-false})"
                     splog "${_DBGMSG}"
                     continue
                 fi
                 oneName+="-${VM_ID}-${DISK_ID}"
                 if [[ "${TYPE}" == "CDROM" ]]; then
                     xTYPE="CDROM"
-                elif boolTrue "IMMUTABLE"; then
+                elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
                     xTYPE="IMMUT"
                 else
                     xTYPE+="RO"
