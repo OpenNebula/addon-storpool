@@ -125,19 +125,26 @@ if [[ -n "${SIZE}" ]]; then
         fi
     fi
 fi
-
+TAG_TYPE="PERS"
 if boolTrue "READONLY"; then
-    SP_MODE="${READONLY_MODE,,}"
-fi
-
-
-if [[ "${TYPE}" == "CDROM" ]]; then
-    CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-    if ! storpoolVolumeExists "${CDROM_VOL}"; then
-        storpoolVolumeClone "${SP_VOL}" "${CDROM_VOL}" "${SP_TEMPLATE}"
-        storpoolVolumeTag "${CDROM_VOL}" "CDROM" "type"
+    if [[ "${TYPE}" == "CDROM" ]]; then
+        TAG_TYPE="CDROM"
+    elif boolTrue "IMMUTABLE"; then
+        TAG_TYPE="IMMUT"
+        if boolTrue "CLONE"; then
+            TAG_TYPE="CLONE"
+        fi
+    else
+        TAG_TYPE+="RO"
     fi
-    SP_VOL="${CDROM_VOL}"
+    if boolTrue "IMMUTABLE"; then
+        IMMUTABLE_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+        if ! storpoolVolumeExists "${IMMUTABLE_VOL}"; then
+            storpoolVolumeClone "${SP_VOL}" "${IMMUTABLE_VOL}" "${SP_TEMPLATE}"
+        fi
+        SP_VOL="${IMMUTABLE_VOL}"
+    fi
+    SP_MODE="${READONLY_MODE,,}"
 fi
 
 storpoolVolumeDetach "${SP_VOL}" "force" "" "all"
