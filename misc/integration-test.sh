@@ -35,7 +35,7 @@ trap 'echo "PID:$$ exit status:$?"' EXIT QUIT
 function hdr()
 {
     echo -ne "\n[$(date +%T || true)]${DEBUG:+[${BASH_LINENO[*]}]} $*"
-    logger -t test_sp_test -- "$*"
+    logger -t test_sp_test -- "$* //${FUNCNAME[*]:1}"
 }
 
 function msg()
@@ -83,6 +83,7 @@ function waitforvm()
 function die()
 {
 	echo -e "\nERROR: $*!"
+    logger -t test_sp_test -- "[ERROR] $*! //${FUNCNAME[*]:1}"
 	exit 5
 }
 
@@ -307,12 +308,13 @@ function vmSnapshotDelete()
 
 function diskCreate()
 {
-    hdr "Adding disk (volatile $1)"
-    local VOLATILE_TEMPLATE="${DATA_DIR}/volatile-${1}.template"
+    local _disk_type="$1"
+    hdr "Adding disk (volatile ${_disk_type})"
+    local VOLATILE_TEMPLATE="${DATA_DIR}/volatile-${_disk_type}.template"
     cat >"${VOLATILE_TEMPLATE}" <<EOF
 DISK=[
   SIZE="1024",
-  TYPE="${1}",
+  TYPE="${_disk_type}",
   FORMAT="raw",
   DRIVER="raw",
   CACHE="none",
@@ -322,12 +324,13 @@ DISK=[
 ]
 EOF
     onevm disk-attach "${VM_ID}" --file "${VOLATILE_TEMPLATE}"
+    sleep 0.9
     # shellcheck disable=SC2310
     waitforvm "${VM_NAME}" runn || die "Disk add timed out"
     DISK_ID=$(onevm show "${VM_ID}" --xml |\
-        xmlget "//DISK[TYPE=\"swap\"]" DISK_ID)
+        xmlget "//DISK[TYPE=\"${_disk_type}\"]" DISK_ID)
     [[ -n "${DISK_ID}" ]] || die "Adding disk failed"
-    msg "Disk ${1} ID '${DISK_ID}'"
+    msg "Disk ${_disk_type} ID '${DISK_ID}'"
 }
 
 # shellcheck disable=SC2310

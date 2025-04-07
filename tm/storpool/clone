@@ -107,7 +107,14 @@ if [[ -n "${SIZE}" ]]; then
     fi
 fi
 
-storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
+mode="rw"
+type="VOL"
+if boolTrue "READONLY"; then
+    mode="${READONLY_MODE,,}"
+    type="NPERS"
+fi
+
+storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${mode}"
 
 trapAdd "storpoolVolumeDetach \"${SP_VOL}\" \"\" \"${DST_HOST}\""
 

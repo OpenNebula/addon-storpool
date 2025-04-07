@@ -2403,6 +2403,7 @@ function oneVmVolumes()
         "/VM/TEMPLATE/CONTEXT/DISK_ID"
         "/VM/TEMPLATE/DISK/DISK_ID"
         "/VM/TEMPLATE/DISK/CLONE"
+        "/VM/TEMPLATE/DISK/SAVE"
         "/VM/TEMPLATE/DISK/FORMAT"
         "/VM/TEMPLATE/DISK/TYPE"
         "/VM/TEMPLATE/DISK/SHAREABLE"
@@ -2432,6 +2433,7 @@ function oneVmVolumes()
     local CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     local DISK_ID="${XPATH_ELEMENTS[i++]}"
     local CLONE="${XPATH_ELEMENTS[i++]}"
+    local SAVE="${XPATH_ELEMENTS[i++]}"
     local FORMAT="${XPATH_ELEMENTS[i++]}"
     local TYPE="${XPATH_ELEMENTS[i++]}"
     local SHAREABLE="${XPATH_ELEMENTS[i++]}"
@@ -2462,6 +2464,7 @@ function oneVmVolumes()
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
     IFS=';' read -r -a DISK_ID_A <<< "${DISK_ID}"
     IFS=';' read -r -a CLONE_A <<< "${CLONE}"
+    IFS=';' read -r -a SAVE_A <<< "${SAVE}"
     IFS=';' read -r -a FORMAT_A <<< "${FORMAT}"
     IFS=';' read -r -a TYPE_A <<< "${TYPE}"
     IFS=';' read -r -a SHAREABLE_A <<< "${SHAREABLE}"
@@ -2499,6 +2502,7 @@ function oneVmVolumes()
         IMAGE_ID="${IMAGE_ID_A[${idx}]}"
         DATASTORE_ID="${DATASTORE_ID_A[${idx}]}"
         CLONE="${CLONE_A[${idx}]}"
+        SAVE="${SAVE_A[${idx}]}"
         FORMAT="${FORMAT_A[${idx}]}"
         TYPE="${TYPE_A[${idx}]}"
         SHAREABLE="${SHAREABLE_A[${idx}]}"
@@ -2517,16 +2521,25 @@ function oneVmVolumes()
         oneName="${ONE_PX}-img-${IMAGE_ID}"
         xTYPE="PERS"
         if [[ -n "${IMAGE_ID}" ]]; then
+            IMMUTABLE="$(isImmutable "${CLONE}" "${SAVE}" "${READONLY}")"
             if boolTrue "CLONE"; then
                 oneName+="-${VM_ID}-${DISK_ID}"
-                xTYPE="NONPERS"
-            elif [[ "${TYPE}" == "CDROM" ]]; then
-                if boolTrue "VMSNAPSHOT_EXCLUDE_CDROM"; then
-                    splog "Image ${IMAGE_ID} excluded because TYPE=CDROM"
+                xTYPE="NPERS"
+            elif boolTrue "READONLY"; then
+                if boolTrue "VMSNAPSHOT_EXCLUDE_READONLY"; then
+                    _DBGMSG="Image ${IMAGE_ID} excluded because it is READONLY"
+                    _DBGMSG+=" (VMSNAPSHOT_EXCLUDE_READONLY=${VMSNAPSHOT_EXCLUDE_READONLY})"
+                    splog "${_DBGMSG}"
                     continue
                 fi
                 oneName+="-${VM_ID}-${DISK_ID}"
-                xTYPE="CDROM"
+                if [[ "${TYPE}" == "CDROM" ]]; then
+                    xTYPE="CDROM"
+                elif boolTrue "IMMUTABLE"; then
+                    xTYPE="IMMUT"
+                else
+                    xTYPE+="RO"
+                fi
             fi
         else
             xTYPE="VOL"
@@ -3006,4 +3019,15 @@ function debug_sp_qosclass()
         msg+="${DEFAULT_QOSCLASS:+DEFAULT_QOSCLASS=${DEFAULT_QOSCLASS} }"
         splog "[D][debug_sp_qosclass] ${msg}"
     fi
+}
+
+function isImmutable()
+{
+    local CLONE="$1" SAVE="$2" READONLY="$3"
+    local _IMMUTABLE="NO"
+    if [[ "${CLONE}" == "NO" && "${SAVE}" == "NO" && "${READONLY}" == "YES" ]]; then
+        # IMAGE/TEMPLATE/PERSISTENT_TYPE="IMMUTABLE"
+        _IMMUTABLE="YES"
+    fi
+    echo "${_IMMUTABLE}"
 }
