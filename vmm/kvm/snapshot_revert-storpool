@@ -60,23 +60,26 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneDatastoreInfo "${VM_DS_ID}"
 
     declare -A vmVolumesMap diskVolumes vmVolumesQcMap vmDisksReadOnly_a
-    for volume in ${vmVolumes}; do
-        diskVolumes["${volume}"]="${volume}"  # diskVolumes[VOLUME_NAME]=VOLUME_NAME
+    for entry in ${vmVolumes}; do
+        diskVolumes["${entry}"]="${entry}"  # diskVolumes[oneName]=oneName
     done
-    for disk in ${vmDisksMap}; do
-        vmVolumesMap["${disk%:*}"]="${disk##*:}"  # vmVolumesMap[DISK_ID]=VOLUME_NAME
+    for entry in ${vmDisksMap}; do
+        vmVolumesMap["${entry%:*}"]="${entry##*:}"  # vmVolumesMap[oneName]=DISK_ID
     done
     for entry in ${vmDisksReadOnlyMap}; do
-        vmDisksReadOnly_a["${entry%:*}"]="${entry##*:}"  # vmDisksReadOnly_a[DISK_ID]=READONLY
+        vmDisksReadOnly_a["${entry%:*}"]="${entry##*:}"  # vmDisksReadOnly_a[oneName]=READONLY
+    done
+    for entry in ${vmVolumesQc:-}; do
+        vmVolumesQcMap["${entry%:*}"]="${entry##*:}"  # vmVolumesQcMap[oneName]=QOSCLASS
+    done
+    for entry in ${vmDisksTypeMap}; do
+        vmDisksTypeMap["${entry%:*}"]="${entry##*:}"  # vmDisksTypeMap[oneName]=xTYPE
     done
 
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
         MEM_VOL="${ONE_PX}-sys-${VM_ID}"
         diskVolumes["${MEM_VOL}"]="${MEM_VOL}"
     fi
-    for volume in ${vmVolumesQc:-}; do
-        vmVolumesQcMap["${volume%%:*}"]="${volume##*:}"  # vmVolumesQcMap[VOLUME_NAME]=QOSCLASS
-    done
 
     rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
@@ -122,6 +125,19 @@ EOF
             fi
             continue
         fi
+        case "${vmDisksTypeMap["${snapVol}"]}" in
+            IMM*)
+                if boolTrue "DEBUG_VMSNAPSHOT"; then
+                    splog "[D] Skip ${snap} IMMUTABLE image"
+                fi
+                continue
+                ;;
+            *)
+                if boolTrue "DDEBUG_VMSNAPSHOT"; then
+                    splog "[DD] add ${snap} (xTYPE=${vmDisksTypeMap["${snapVol}"]})"
+                fi
+                ;;
+        esac
         snapList+=("${snap}")
     done {spfh}< <(storpoolRetry -j snapshot list |\
                   jq -r --arg snp "${SNAP_ID}" --arg vmtag "${VM_TAG:-nvm}" --arg loctag "${LOC_TAG:-nloc}" \

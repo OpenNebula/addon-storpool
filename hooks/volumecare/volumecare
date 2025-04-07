@@ -201,19 +201,14 @@ function alterVcPolicy()
             fi
             VM_DISK_SP_QOSCLASS="${volumesQc[${volume}]}"
             # shellcheck disable=SC2249
-            case "${diskType[${volume}]}" in
-                PERS)
+            case "${diskType[${volume}]^^}" in
+                PERS*|IMM*)
                     if [[ -n "${IMAGE_SP_QOSCLASS}" ]]; then
                         IMAGE_DS_SP_QOSCLASS=""
                         SYSTEM_DS_SP_QOSCLASS=""
                         VM_SP_QOSCLASS=""
                     fi
                     ;;
-#                NONPERS|CDROM)
-#                    if [[ -n "${IMAGE_DS_SP_QOSCLASS}" ]]; then
-#                        SYSTEM_DS_SP_QOSCLASS=""
-#                    fi
-#                    ;;
             esac
             if [[ -n "${VM_DISK_SP_QOSCLASS}" ]]; then      # vm disk qosclass
                 tag_qc_new="${VM_DISK_SP_QOSCLASS}"
