@@ -118,7 +118,7 @@ else
 fi
 
 storpoolVolumeAttach "${SP_VOL}" "${SRC_HOST}"
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}"
+storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};disk-id" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${DISK_ID}"
 oneSymlink "${SRC_HOST}" "${SP_LINK}" "${SRC_PATH}"
 trapReset
 

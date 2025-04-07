@@ -168,10 +168,15 @@ EOF
         storpoolSnapshotClone "${snap}" "${volume}" "${V_TEMPLATE_NAME}" || finish=0
         storpoolVolumeInfo "${volume}"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
+        if [[ -n "${vmVolumesMap["${volume}"]}" ]]; then
+            DISK_ID="${vmVolumesMap[${volume}]}"
+        else
+            DISK_ID=""
+        fi
+
         if [[ "${OLD_SIZE_M}" -ne "${NEW_SIZE_M}" ]]; then
             if boolTrue "UPDATE_ONE_DISK_SIZE"; then
-                if [[ -n "${vmVolumesMap["${volume}"]}" ]]; then
-                    DISK_ID="${vmVolumesMap[${volume}]}"
+                if [[ -n "${DISK_ID}" ]]; then
                     onedb change-body vm --id "${VM_ID}" "/VM/TEMPLATE/DISK[DISK_ID=${DISK_ID}]/SIZE" "${NEW_SIZE_M}"
                     splog "onedb change VM_ID:${VM_ID} DISK_ID:${DISK_ID} SIZE:${NEW_SIZE_M} (OLD_SIZE:${OLD_SIZE_M})($?)"
                 else
@@ -191,7 +196,8 @@ EOF
         SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
         debug_sp_qosclass
 
-        storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS}"
+
+        storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}${SP_QOSCLASS:+qc};disk-id" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${DISK_ID}"
         tmpVolumes+=("${tmpVolume}")
         te=$(date +%s%N)
         splog "END snapshot ${snap} (${te} dt:$((te-tb)))"
