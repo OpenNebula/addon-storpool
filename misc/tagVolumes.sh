@@ -95,3 +95,5 @@ while read -r -u "${vmfh}" VM_ID; do
         fi
     done
 done {vmfh}< <(xmlstarlet sel -t -m //VM -v ID -n "${vmPoolXml}" || true)
+
+rm -f "${snapshotsJson}" "${vmPoolXml}" "${dsPoolXml}"
