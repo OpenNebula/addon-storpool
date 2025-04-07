@@ -125,7 +125,7 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
                 CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
                 if ! storpoolVolumeExists "${CDROM_VOL}"; then
                     storpoolVolumeClone "${SP_VOL}" "${CDROM_VOL}" "${SP_TEMPLATE:-}"
-                    storpoolVolumeTag "CDROM" "type" "${CDROM_VOL}"
+                    storpoolVolumeTag "${CDROM_VOL}" "type;disk-id" "CDROM;${DISK_ID}"
                     SP_LINK="/dev/storpool/${SP_VOL}"
                     DST_PATH="${VM_PATH}/disk.${DISK_ID}"
                     oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
