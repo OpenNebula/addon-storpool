@@ -126,7 +126,7 @@ storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:
 
 oneDatastoreInfo "${VM_DS_ID}"
 
-MONITOR_TM_MAD=
+MONITOR_TM_MAD=""
 if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="${DS_TM_MAD}"
 fi
