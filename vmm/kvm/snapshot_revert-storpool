@@ -59,12 +59,12 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "${VM_ID}"
     oneDatastoreInfo "${VM_DS_ID}"
 
-    declare -A vmVolumesMap diskVolumes vmVolumesQcMap vmDisksReadOnly_a
+    declare -A vmDisks_a diskVolumes vmVolumesQcMap vmDisksReadOnly_a vmDisksType_a
     for entry in ${vmVolumes}; do
         diskVolumes["${entry}"]="${entry}"  # diskVolumes[oneName]=oneName
     done
     for entry in ${vmDisksMap}; do
-        vmVolumesMap["${entry%:*}"]="${entry##*:}"  # vmVolumesMap[oneName]=DISK_ID
+        vmDisks_a["${entry%:*}"]="${entry##*:}"  # vmDisks_a[oneName]=DISK_ID
     done
     for entry in ${vmDisksReadOnlyMap}; do
         vmDisksReadOnly_a["${entry%:*}"]="${entry##*:}"  # vmDisksReadOnly_a[oneName]=READONLY
@@ -73,7 +73,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         vmVolumesQcMap["${entry%:*}"]="${entry##*:}"  # vmVolumesQcMap[oneName]=QOSCLASS
     done
     for entry in ${vmDisksTypeMap}; do
-        vmDisksTypeMap["${entry%:*}"]="${entry##*:}"  # vmDisksTypeMap[oneName]=xTYPE
+        vmDisksType_a["${entry%:*}"]="${entry##*:}"  # vmDisksType_a[oneName]=xTYPE
     done
 
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
@@ -126,7 +126,7 @@ EOF
             fi
             continue
         fi
-        case "${vmDisksTypeMap["${snapVol}"]}" in
+        case "${vmDisksType_a["${snapVol}"]}" in
             IMM*)
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
                     splog "[D] Skip ${snap} IMMUTABLE image"
@@ -135,7 +135,7 @@ EOF
                 ;;
             *)
                 if boolTrue "DDEBUG_VMSNAPSHOT"; then
-                    splog "[DD] add ${snap} (xTYPE=${vmDisksTypeMap["${snapVol}"]})"
+                    splog "[DD] add ${snap} (xTYPE=${vmDisksType_a["${snapVol}"]})"
                 fi
                 ;;
         esac
@@ -170,8 +170,8 @@ EOF
         storpoolSnapshotClone "${snap}" "${volume}" "${V_TEMPLATE_NAME}" || finish=0
         storpoolVolumeInfo "${volume}"
         NEW_SIZE_M=$((V_SIZE/1024/1024))
-        if [[ -n "${vmVolumesMap["${volume}"]}" ]]; then
-            DISK_ID="${vmVolumesMap[${volume}]}"
+        if [[ -n "${vmDisks_a["${volume}"]}" ]]; then
+            DISK_ID="${vmDisks_a[${volume}]}"
         else
             DISK_ID=""
         fi
@@ -182,14 +182,16 @@ EOF
                     onedb change-body vm --id "${VM_ID}" "/VM/TEMPLATE/DISK[DISK_ID=${DISK_ID}]/SIZE" "${NEW_SIZE_M}"
                     splog "onedb change VM_ID:${VM_ID} DISK_ID:${DISK_ID} SIZE:${NEW_SIZE_M} (OLD_SIZE:${OLD_SIZE_M})($?)"
                 else
-                    splog "vmVolumesMap[${volume}] not found"
+                    splog "vmDisks_a[${volume}] not found"
                 fi
             elif [[ "${OLD_SIZE_M}" -gt "${NEW_SIZE_M}" ]]; then
                 splog "VM volume is +$((OLD_SIZE_M - NEW_SIZE_M))MB than snapshot. Inflating..."
                 storpoolVolumeResize "${volume}" "${OLD_SIZE_M}M"
             fi
         else
-            splog "${tmpVolume}=${OLD_SIZE_M} ${volume}=${NEW_SIZE_M}"
+            if boolTrue "DEBUG_VMSNAPSHOT"; then
+                splog "[I] sizes... ${tmpVolume}=${OLD_SIZE_M} ${volume}=${NEW_SIZE_M}"
+            fi
         fi
         storpoolVolumeAttach "${volume}" "${VMHOST}" "${sp_mode}"
 
