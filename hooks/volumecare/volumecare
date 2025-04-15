@@ -163,13 +163,13 @@ function alterVcPolicy()
     for entry in ${vmDisksDsMap}; do
         volume="${entry%%:*}"
         dsId="${entry#*:}"
-        if [[ -z "${datastoresQc[${dsId}]}" ]]; then
+        if [[ -z "${datastoresQc[${dsId}]:+found}" ]]; then
             oneDatastoreInfo "${dsId}" "${dsPoolFile}"
             datastoresQc["${dsId}"]="${DS_SP_QOSCLASS}"  # datastoresQc[DATASTORE_ID]=DS_SP_QOSCLASS
         fi
         volumesDsIds["${volume}"]="${dsId}"  # volumesDsIds[oneName]=DATASTORE_ID
     done
-    if [[ -z "${datastoresQc[${VM_DS_ID}]}" ]]; then
+    if [[ -z "${datastoresQc[${VM_DS_ID}]:+found}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolFile}"
         datastoresQc["${VM_DS_ID}"]="${DS_SP_QOSCLASS}"  # datastoresQc[DATASTORE_ID]=DS_SP_QOSCLASS
     fi
