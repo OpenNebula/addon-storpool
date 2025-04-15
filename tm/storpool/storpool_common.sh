@@ -2521,7 +2521,7 @@ function oneVmVolumes()
         FORMAT="${FORMAT_A[${idx}]}"
         TYPE="${TYPE_A[${idx}]}"
         SHAREABLE="${SHAREABLE_A[${idx}]}"
-        READONLY="${READONLY_A[${idx}]}"
+        READONLY="${READONLY_A[${idx}]^^}"
         TM_MAD="${TM_MAD_A[${idx}]}"
         TARGET="${TARGET_A[${idx}]}"
         DISK_ID="${DISK_ID_A[${idx}]}"
@@ -2540,15 +2540,16 @@ function oneVmVolumes()
             if boolTrue "CLONE"; then
                 oneName+="-${VM_ID}-${DISK_ID}"
                 xTYPE="NPERS"
-            elif boolTrue "READONLY"; then
+            fi
+            if boolTrue "READONLY"; then
                 if boolTrue "VMSNAPSHOT_EXCLUDE_READONLY"; then
                     _DBGMSG="Image ${IMAGE_ID} excluded because it is READONLY"
                     _DBGMSG+=" (VMSNAPSHOT_EXCLUDE_READONLY=${VMSNAPSHOT_EXCLUDE_READONLY:-false})"
                     splog "${_DBGMSG}"
                     continue
                 fi
-                oneName+="-${VM_ID}-${DISK_ID}"
                 if [[ "${TYPE}" == "CDROM" ]]; then
+                    oneName+="-${VM_ID}-${DISK_ID}"
                     xTYPE="CDROM"
                 elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
                     xTYPE="IMMUT"
@@ -2565,9 +2566,12 @@ function oneVmVolumes()
                 *)
                     oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
             esac
+            if boolTrue "READONLY"; then
+                xTYPE+="RO"
+            fi
         fi
         if boolTrue "DEBUG_oneVmVolumes"; then
-            splog "[D] VM ${VM_ID} disk.${DISK_ID} ${oneName} //${xTYPE}"
+            splog "[D] VM ${VM_ID} disk.${DISK_ID} ${oneName} type:${xTYPE} RO:${READONLY_A[${idx}]}"
         fi
         vmDisksDsMap+="${oneName}:${DATASTORE_ID:-${VM_DS_ID}} "
         vmVolumes+="${oneName} "
@@ -2599,8 +2603,9 @@ function oneVmVolumes()
         oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
         vmVolumes+="${oneName} "
         vmDisksMap+="${oneName}:${DISK_ID} "
-        vmDisksTypeMap+="${oneName}:CONTEXT "
+        vmDisksTypeMap+="${oneName}:CNTXT "
         vmDisksReadOnlyMap+="${oneName}:YES "
+        vmDisksDsMap+="${oneName}:${VM_DS_ID} "
         if boolTrue "DEBUG_oneVmVolumes"; then
             splog "[D] VM ${VM_ID} disk.${DISK_ID} ${oneName} //CONTEXT"
         fi
