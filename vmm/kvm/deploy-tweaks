@@ -93,6 +93,7 @@ unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" -d '' element; do
     XPATH_ELEMENTS[i++]="${element}"
 done {xpathfh}< <( sed '/\/>$/d' "${VM_XML}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
+exec {xpathfh}<&-
 unset i
 export DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
 export TM_MAD="${XPATH_ELEMENTS[i++]}"
@@ -122,6 +123,7 @@ if [[ -d "${0}.d" ]]; then
             while read -r -u "${errfh}" line; do
                 splog "[D][${hook}]stderr:${line}"
             done {errfh}< <(cat "${ERR_FILE}" || true)
+            exec {errfh}<&-
         fi
         if [[ ${ret} -eq 0 ]]; then
             xmllint --noout "${TMPDIR}/deployment.xml" 2>"${ERR_FILE}"
@@ -139,8 +141,10 @@ if [[ -d "${0}.d" ]]; then
             while read -r -u "${errfh}" line; do
                 splog "[D][${hook}]stderr:${line}"
             done {errfh}< <(cat "${ERR_FILE}" || true)
+            exec {errfh}<&-
         fi
     done {hookfh}< <(ls -A "${0}.d" 2>"${ERR_FILE}" || true)
+    exec {hookfh}<&-
 else
     splog "Directory ${0}.d not found!"
 fi

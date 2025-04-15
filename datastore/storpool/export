@@ -117,6 +117,7 @@ logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_I
 while read -u "\${logfh}" l; do
   logger -t "ds_sp_export_r[$$]" -- "LOG:\$l"
 done {logfh}< <("cat /tmp/export$$.log")
+exec {logfh}<&-
 rm -f "/tmp/export$$.log"
 ${DU:-du} -Lm "${EXPORT_FILE}" | cut -f1
 EOF

@@ -62,6 +62,7 @@ if [[ -d "${B_DIR}" ]]; then
             storpoolVolumeDetach "${snp}" "force" "" "all"
             storpoolSnapshotDelete "${snp}"
         done {snpfh}< <(cat "${snapshots_list}" || true)
+        exec {snpfh}<&-
     fi
     rm -rf "${B_DIR}"
     splog "post-clean completed ($?)"

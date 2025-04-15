@@ -416,6 +416,7 @@ function oneHostInfo()
 {
     local _name="$1" _force="$2"
     local ret=1 errmsg="" _tmpXML="" _XPATH="" _element=""
+    local xfh=""
     [[ "${_name}" == "${HOST_NAME}" ]] || _force="nameDiffer"
     if [[ -n "${_force}" ]]; then
         _tmpXML="$(mktemp --tmpdir "oneHostInfo-${_name}-XXXXXX")"
@@ -449,9 +450,10 @@ function oneHostInfo()
         )
         sed -i '/\/>$/d' "${_tmpXML}"
         unset XPATH_ELEMENTS i
-        while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+        while IFS='' read -r -u "${xfh}" -d '' _element; do
             XPATH_ELEMENTS[i++]="${_element}"
-        done {xpathfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" 2>/dev/null || true)
+        done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" 2>/dev/null || true)
+        exec {xfh}<&-
         rm -f "${_tmpXML}"
         unset i
         HOST_ID="${XPATH_ELEMENTS[i++]}"
@@ -741,13 +743,14 @@ function storpoolWrapper()
 }
 
 function splogFile() {
-    local _logfile="$1" _line=""
+    local _logfile="$1" _line="" logfh=""
     if boolTrue "DEBUG_splogFile"; then
         splog "[D][splogFile] $*"
     fi
-    while read -r -u "${logfilefh}" _line; do
+    while read -r -u "${logfh}" _line; do
         splog "splogFile: ${_line}"
-    done {logfilefh}< <(cat "${_logfile}" 2>&1 || true)
+    done {logfh}< <(cat "${_logfile}" 2>&1 || true)
+    exec {logfh}<&-
     [[ -z "${2:-}" ]] || rm -f "${_logfile}"
 }
 
@@ -826,18 +829,19 @@ function storpoolTemplate()
 function storpoolVolumeInfo()
 {
     local _SP_VOL="$1" _retries="$2"
-    local STORPOOL_RETRIES_OLD="${STORPOOL_RETRIES}"
+    local STORPOOL_RETRIES_OLD="${STORPOOL_RETRIES}" xfh=""
     [[ -z "${_retries}" ]] || STORPOOL_RETRIES="${_retries}"
     V_SIZE=
     V_PARENT_NAME=
     V_TEMPLATE_NAME=
     V_TYPE=
-    while IFS=',' read -r -u "${spfh}" V_SIZE V_PARENT_NAME V_TEMPLATE_NAME V_TYPE; do
+    while IFS=',' read -r -u "${xfh}" V_SIZE V_PARENT_NAME V_TEMPLATE_NAME V_TYPE; do
         V_PARENT_NAME="${V_PARENT_NAME//\"/}"
         V_TEMPLATE_NAME="${V_TEMPLATE_NAME//\"/}"
         V_TYPE="${V_TYPE//\"/}"
         break
-    done {spfh}< <(storpoolRetry -j volume "${_SP_VOL}" info|jq -r ".data|[.size,.parentName,.templateName,.tags.type]|@csv" || true)
+    done {xfh}< <(storpoolRetry -j volume "${_SP_VOL}" info|jq -r ".data|[.size,.parentName,.templateName,.tags.type]|@csv" || true)
+    exec {xfh}<&-
     export V_SIZE V_PARENT_NAME V_TEMPLATE_NAME V_TYPE
     if boolTrue "DEBUG_storpoolVolumeInfo"; then
         splog "[D] storpoolVolumeInfo(${_SP_VOL}) size:${V_SIZE} parentName:${V_PARENT_NAME} templateName:${V_TEMPLATE_NAME} tags.type:${V_TYPE}"
@@ -1024,7 +1028,7 @@ function storpoolVolumeJsonHelper()
 function storpoolVolumeDetach()
 {
     local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _VOLUMES_GROUP="$6"
-    local _SP_CLIENT volume client
+    local _SP_CLIENT="" volume="" client="" xfh=""
     if boolTrue "DEBUG_storpoolVolumeDetach"; then
         splog "[D] storpoolVolumeDetach(_SP_VOL=$1 _FORCE=$2 _SP_HOST=$3 _DETACH_ALL=$4 _SOFT_FAIL=$5 _VOLUMES_GROUP=$6)"
     fi
@@ -1051,7 +1055,7 @@ function storpoolVolumeDetach()
     if [[ "${_DETACH_ALL}" == "all" ]]; then
         _SP_CLIENT="all"
     fi
-    while IFS=',' read -r -u "${spfh}" volume client snapshot; do
+    while IFS=',' read -r -u "${xfh}" volume client snapshot; do
         if boolTrue "_SOFT_FAIL" "_SOFT_FAIL"; then
             _FORCE=
         fi
@@ -1077,7 +1081,8 @@ function storpoolVolumeDetach()
                 fi
                 ;;
         esac
-    done {spfh}< <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv"||true)
+    done {xfh}< <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv"||true)
+    exec {xfh}<&-
 }
 
 function storpoolVolumeTemplate()
@@ -1388,7 +1393,7 @@ EOF
 function oneBackupImageInfo()
 {
     local _image_id="$1"
-    local _XPATH="" _element="" i=0
+    local _XPATH="" _element="" i=0 xfh=""
     local _tmpXML="${TMPDIR:-/tmp}/oneimage-${_image_id}.XML"
 
     oneCallXml oneimage show "${_image_id}" "${_tmpXML}"
@@ -1407,9 +1412,10 @@ function oneBackupImageInfo()
         "%m%/IMAGE/BACKUP_DISK_IDS/ID"
     )
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
     rm -f "${_tmpXML}"
     unset i
     B_IMAGE_NAME="${XPATH_ELEMENTS[i++]}"
@@ -1432,7 +1438,7 @@ function oneBackupImageInfo()
 function oneImageInfo()
 {
     local _IMAGE_ID="$1" _IMAGE_POOL_FILE="$2"
-    local _XPATH="" _ret=0 _errmsg="" _tmpXML=""
+    local _XPATH="" _ret=0 _errmsg="" _tmpXML="" xfh=""
 
     _tmpXML="${TMPDIR:-/tmp}/oneImageInfo-${_IMAGE_ID}.XML"
 
@@ -1487,9 +1493,10 @@ function oneImageInfo()
     )
 
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
     rm -f "${_tmpXML}"
 
     unset i
@@ -1519,7 +1526,7 @@ function oneImageInfo()
 function oneVmInfo()
 {
     local _VM_ID="$1" _DISK_ID="$2"
-    local _XPATH="" _tmpXML="" _ret=1 _errmsg="" _element=""
+    local _XPATH="" _tmpXML="" _ret=1 _errmsg="" _element="" xfh=""
 
     _tmpXML="${TMPDIR:-/tmp}/oneVmInfo-${_VM_ID}.XML"
     oneCallXml onevm show "${_VM_ID}" "${_tmpXML}"
@@ -1579,9 +1586,10 @@ function oneVmInfo()
         "/VM/USER_TEMPLATE/VC_POLICY"
     )
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${vmfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {vmfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
     rm -f "${_tmpXML}"
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
@@ -1709,7 +1717,7 @@ ${B_ACTIVE_FLATTEN:+B_ACTIVE_FLATTEN=${B_ACTIVE_FLATTEN} }\
 function oneDatastoreInfo()
 {
     local _DS_ID="$1" _DS_POOL_FILE="$2"
-    local _XPATH="" _tmpXML="" _errmsg="" _ret=1 _element=""
+    local _XPATH="" _tmpXML="" _errmsg="" _ret=1 _element="" xfh=""
 
     _tmpXML="${TMPDIR:-/tmp}/oneDatastoreInfo-${_DS_ID}.XML"
 
@@ -1784,10 +1792,10 @@ function oneDatastoreInfo()
         "/DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE"
     )
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
-
+    done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
     rm -f "${_tmpXML}"
 
     unset i
@@ -1881,7 +1889,7 @@ function dumpTemplate()
 function oneTemplateInfo()
 {
     local _TEMPLATE="$1"
-    local _XPATH="" _ret=0 _errmsg="" _tmpXML="" _element=""
+    local _XPATH="" _ret=0 _errmsg="" _tmpXML="" _element="" xfh=""
     local _DBGMSG="" _ONEVMXML=""
     if boolTrue "DDDDEBUG_oneTemplateInfo"; then
         dumpTemplate "${_TEMPLATE}"
@@ -1931,9 +1939,10 @@ function oneTemplateInfo()
     fi
 
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" "${_TEMPLATE}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${_TEMPLATE}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
 
     unset i
     VM_ID="${XPATH_ELEMENTS[i++]}"
@@ -1974,9 +1983,10 @@ function oneTemplateInfo()
         "/VM/TEMPLATE/DISK/FORMAT"
     )
     unset i XPATH_ELEMENTS
-    while read -r -u "${xpathfh}" _element; do
+    while read -r -u "${xfh}" _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" "${_TEMPLATE}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${_TEMPLATE}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
 
     unset i
     _DISK_TM_MAD="${XPATH_ELEMENTS[i++]}"
@@ -2017,7 +2027,7 @@ function oneTemplateInfo()
 
 function oneDsDriverAction()
 {
-    local _XPATH="" _ret=0 _errmsg="" _tmpXML="" _element=""
+    local _XPATH="" _ret=0 _errmsg="" _tmpXML="" _element="" xfh=""
 
     if boolTrue "DDDDEBUG_oneDsDriverAction"; then
         local _DBGFILE="/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml"
@@ -2088,9 +2098,10 @@ function oneDsDriverAction()
     )
 
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
 
     unset i
     # shellcheck disable=SC2034
@@ -2235,7 +2246,7 @@ ${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=${DS_SP_QOSCLASS} }\
 
 function oneMarketDriverAction()
 {
-    local _XPATH="" _element=""
+    local _XPATH="" _element="" xfh=""
 
     _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
     declare -a _XPATH_A _XPATH_QUERY
@@ -2254,9 +2265,10 @@ function oneMarketDriverAction()
         "/MARKET_DRIVER_ACTION_DATA/MARKETPLACE/TEMPLATE/SP_AUTH_TOKEN"
     )
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}"  "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
 
     unset i
     IMPORT_SOURCE="${XPATH_ELEMENTS[i++]}"
@@ -2355,7 +2367,7 @@ function oneImageQc()
 function oneVmVolumes()
 {
     local VM_ID="$1" VM_POOL_FILE="$2" VM_XML_FILE="$3"
-    local _tmpXML="" _errmsg="" _ret=1 _XPATH="" _element=""
+    local _tmpXML="" _errmsg="" _ret=1 _XPATH="" _element="" xfh=""
     if boolTrue "DEBUG_oneVmVolumes"; then
         splog "[D][oneVmVolumes] VM_ID:${VM_ID} vmPoolFile:${VM_POOL_FILE}${VM_XML_FILE:+ VM_XML_FILE:${VM_XML_FILE}}"
     fi
@@ -2387,9 +2399,10 @@ function oneVmVolumes()
     )
 
     unset XPATH_ELEMENTS i
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" <"${VM_XML_FILE}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" <"${VM_XML_FILE}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
 
     unset i
     VM_STATE=${XPATH_ELEMENTS[i++]}
@@ -2425,9 +2438,10 @@ function oneVmVolumes()
         "/VM/BACKUPS/BACKUP_CONFIG/MODE"
     )
     unset XPATH_ELEMENTS i
-    while read -r -u "${xpathfh}" _element; do
+    while read -r -u "${xfh}" _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" <"${VM_XML_FILE}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" <"${VM_XML_FILE}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
 
     unset i
     VM_DS_ID="${XPATH_ELEMENTS[i++]}"
@@ -2635,7 +2649,7 @@ function oneVmVolumes()
 function oneVmDiskSnapshots()
 {
     local VM_ID="$1" DISK_ID="$2"
-    local _tmpXML="" _errmsg="" _XPATH="" _ret=1
+    local _tmpXML="" _errmsg="" _XPATH="" _ret=1 _element="" xfh=""
 
     if boolTrue "DDEBUG_oneVmDiskSnapshots"; then
         splog "[DD][oneVmDiskSnapshots] VM ${VM_ID} DISK_ID=${DISK_ID}"
@@ -2660,9 +2674,10 @@ function oneVmDiskSnapshots()
     )
 
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' _element; do
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
     rm -f "${_tmpXML}"
 
     unset i
@@ -2676,7 +2691,7 @@ function oneVmDiskSnapshots()
 function oneVmSnapshots()
 {
     local VM_ID="$1" snapshot_id="$2" disk_id="$3"
-    local _tmpXML="" _errmsg="" _ret=1 _XPATH=""
+    local _tmpXML="" _errmsg="" _ret=1 _XPATH="" xfh=""
 
     if boolTrue "DDEBUG_oneVmSnapshots"; then
         splog "[DD][oneVmSnapshots] VM ${VM_ID} snapshot_id=${snapshot_id} disk_id=${disk_id}"
@@ -2727,9 +2742,10 @@ function oneVmSnapshots()
         )
     fi
     unset i XPATH_ELEMENTS
-    while IFS='' read -r -u "${xpathfh}" -d '' element; do
+    while IFS='' read -r -u "${xfh}" -d '' element; do
         XPATH_ELEMENTS[i++]="${element}"
-    done {xpathfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
+    exec {xfh}<&-
     rm -f "${_tmpXML}"
 
     unset i
@@ -2807,22 +2823,23 @@ function oneSnapshotLookup()
 function storpoolVmVolumes()
 {
     local _vmTag="$1" _vmTagVal="$2" _locTag="${LOC_TAG:-nloc}"
-    local _vol="" _loctagval=""
+    local _vol="" _loctagval="" xfh=""
     vmVolumes=
-    while read -r -u "${spfh}" _vol _loctagval; do
+    while read -r -u "${xfh}" _vol _loctagval; do
         [[ "${_loctagval}" == "${LOC_TAG_VAL}" ]] || continue
         [[ -n "${_vol%"${ONE_PX:-one}"*}" ]] || continue
         vmVolumes+="${_vol} "
-    done {spfh}< <(storpoolRetry -j volume list |\
+    done {xfh}< <(storpoolRetry -j volume list |\
         jq -r --arg vmtag "${_vmTag}" --arg vmtagval "${_vmTagVal}" --arg loctag "${_locTag}" \
             '.data[]|select(.tags[$vmtag]==$vmtagval)|"\(.name) \(.tags[$loctag])"' || true)  # TBD: rework to use cache file...
+    exec {xfh}<&-
     splog "storpoolVmVolumes(${_vmTag},${_vmTagVal}) ${vmVolumes}"
 }
 
 function forceDetachOther()
 {
     local VM_ID="$1" DST_HOST="$2" VOLUME="$3"
-    local SP_CLIENT=""
+    local SP_CLIENT="" xfh=""
     SP_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
     if [[ -z "${SP_CLIENT}" ]]; then
         splog "Error: SP_CLIENT is empty!"
@@ -2849,15 +2866,16 @@ function forceDetachOther()
     if boolTrue "DEBUG_forceDetachOther"; then
         splog "[D][forceDetachOther](${VM_ID},${DST_HOST}${VOLUME:+,${VOLUME}}) ${vmVolumes}"
     fi
-    while read -r -u "${spfh}" _client _volume; do
+    while read -r -u "${xfh}" _client _volume; do
         if boolTrue "DDEBUG_forceDetachOther"; then
             splog "[DD][forceDetachOther]($*) DST=${SP_CLIENT} ${_client} ${_volume}"
         fi
         if [[ "${_client}" -ne "${SP_CLIENT}" ]]; then
             storpoolRetry detach volume "${_volume}" client "${_client}" force yes >/dev/null
         fi
-    done {spfh}< <(storpoolRetry -j attach list |\
+    done {xfh}< <(storpoolRetry -j attach list |\
         jq -r ".data[]|select(${jqStr})|(.client|tostring) + \" \" + .volume" || true)  # TBD: rework to use cache file...
+    exec {xfh}<&-
 }
 
 # disable sp checkpoint transfer from file to block device
@@ -2978,7 +2996,7 @@ EOF
 
 # Override the non-working upstream function
 function remove_off_hosts {
-    local hst="" state="" _RET=1
+    local hst="" state="" _RET=1 xfh=""
     declare -a LOOKUP_HOSTS_ARRAY
     read -r -a LOOKUP_HOSTS_ARRAY <<< "$1"
     unset HOSTS_ARRAY
@@ -2986,7 +3004,7 @@ function remove_off_hosts {
     for hst in "${LOOKUP_HOSTS_ARRAY[@]}"; do
         HOSTS_ARRAY["${hst//\./}"]="1"
     done
-    while IFS=',' read -r -u "${hostfh}" hst state; do
+    while IFS=',' read -r -u "${xfh}" hst state; do
         [[ -n ${state} ]] || continue
         if [[ ${state} -lt 1 ]] || [[ ${state} -gt 2 ]]; then
             continue
@@ -2994,9 +3012,10 @@ function remove_off_hosts {
         [[ -n "${HOSTS_ARRAY["${hst//\./}"]}" ]] || continue
         echo -ne "${hst} "
         _RET=0
-    done {hostfh}< <(oneCallXml onehost list | \
+    done {xfh}< <(oneCallXml onehost list | \
         xmlstarlet sel -t -m '//HOST' -v NAME -o ',' -v STATE -n 2>/dev/null \
         || true)
+    exec {xfh}<&-
     if [[ ${_RET} -ne 0 ]]; then
         splog "remove_off_hosts($1) Error: Can't filter hosts!"
         echo "${LOOKUP_HOSTS_ARRAY[*]}"

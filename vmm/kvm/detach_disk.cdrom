@@ -63,6 +63,7 @@ while read -r -u "${domfh}" target_dev source_x; do
     fi
 done {domfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
     xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
+exec {domfh}<&-
 
 splog "${DOMAIN} TARGET_DEVICE='${TARGET_DEVICE}' ${source_x}"
 
@@ -79,6 +80,7 @@ if [[ -n "${TARGET_DEVICE}" ]]; then
         splog "${qdev} locked:${locked} tray_open:${tray_open} inserted_file:${inserted_file} (${TARGET_DEVICE}:${ret})"
     done {virshfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" qemu-monitor-command "${DOMAIN}" --cmd '{"execute":"query-block"}' |\
         jq -r '.return[]|select(.removable)|.qdev+" "+(.tray_open|tostring)+" "+(.inserted.file|tostring)+" "+(.locked|tostring)' || true)
+    exec {virshfh}<&-
 else
     localscript="$(dirname "$(realpath "${0}"||true)")/detach_disk"
     "${localscript}" "$@"

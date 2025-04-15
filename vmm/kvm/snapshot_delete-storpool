@@ -98,6 +98,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 	done {spfh}< <(storpoolRetry -j snapshot list |\
 				jq -r --arg snp "${SNAP_ID}" --arg vmtag "${VM_TAG:-nvm}" --arg loctag "${LOC_TAG:-nloc}" \
                     '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]' || true)
+    exec {spfh}<&-
 	splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID}"
 	exit 0
 fi

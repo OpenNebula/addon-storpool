@@ -86,6 +86,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 	while read -r -u "\${virshfh}" out; do
         logger -t vmm_sp_snapshot_revert_r "virsh: \${out}"
     done {virshfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" destroy "${DOMAIN}" 2>&1)
+    exec {virshfh}<&-
     logger -t vmm_sp_snapshot_revert_r "virsh destroy ${DOMAIN} ret:\$?"
 EOF
 )
@@ -142,6 +143,7 @@ EOF
     done {spfh}< <(storpoolRetry -j snapshot list |\
                   jq -r --arg snp "${SNAP_ID}" --arg vmtag "${VM_TAG:-nvm}" --arg loctag "${LOC_TAG:-nloc}" \
                       '.data|map(select(.name|contains($snp)))[]|.name+" "+.tags[$vmtag]+" "+.tags[$loctag]' || true)
+    exec {spfh}<&-
     if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
         if [[ -z "${MEM_SNAP}" ]]; then
            splog "Error: VMSNAPSHOT_WITH_CHECKPOINT is set but checkpoint snapshot not found"

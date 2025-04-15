@@ -59,6 +59,7 @@ if [[ -d "${0}.d" ]]; then
             splog "($?) ${helper} ${deployXML} ${vmMetaXml}"
         fi
     done {helperfh}< <(find "${0}.d" -type f -o -type l || true)
+    exec {helperfh}<&-
 fi
 
 rm -f "${vmMetaXml}"

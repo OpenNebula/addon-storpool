@@ -126,13 +126,14 @@ function patch_hook()
 
 function findFile()
 {
-    local c="" f="" d="$1" csum="$2"
-    while read -r -u "${ffh}" c f; do
+    local c="" f="" d="$1" csum="$2" xfh=""
+    while read -r -u "${xfh}" c f; do
         if [[ "${c}" == "${csum}" ]]; then
             echo "${f}"
             break
         fi
-    done {ffh}< <(md5sum "${d}"/* 2>/dev/null || true)
+    done {xfh}< <(md5sum "${d}"/* 2>/dev/null || true)
+    exec {xfh}<&-
 }
 
 oneVersion(){

@@ -142,6 +142,7 @@ if [[ -f "${SP_DS_TMP}/sizes" ]]; then
 			fi
 		fi
 	done {grepfh}< <(grep -F "${spVolume}" "${SP_DS_TMP}/sizes" || true)
+	exec {grepfh}<&-
 	exit
 else
 	if boolTrue "DEBUG_TM_MONITOR_DISK"; then
@@ -196,3 +197,4 @@ while IFS=',' read -r -u "${jqfh}" name spaceUsed storedSize; do
 done {jqfh}< <(eval "${SP_CMD_SNAPSHOT_SPACE}" 2>/dev/null | \
 		jq -r --arg n "${spVolume}-snap" ".data | map( select( .name | contains(\$n) ) ) | .[] | [.name, .spaceUsed, .storedSize] | @csv" \
 		| sort || true)
+exec {jqfh}<&-
