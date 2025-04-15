@@ -114,7 +114,7 @@ for did in ${!disksUrl[*]}; do
         storpoolVolumeCreate "${SP_NAME}" "${V_SIZE}" "${V_TEMPLATE_NAME}"
         RET=$?
         if [[ ${RET} -eq 0 ]]; then # 2
-            storpoolVolumeTag "${SP_NAME}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;disk-id" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${xTYPE};${DISK_ID}"
+            storpoolVolumeTag "${SP_NAME}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${xTYPE};${DISK_ID}"
             storpoolVolumeAttach "${SP_NAME}" "${DST_HOST}"
             if [[ ${RET} -eq 0 ]]; then # 3
                 splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct"

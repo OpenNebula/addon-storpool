@@ -162,7 +162,7 @@ elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
         if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then
             if storpoolVolumeExists "${SP_VOL}"; then
                 storpoolVolumeDetach "${SP_VOL}" "force" "${DST_HOST}" "" "${READONLY}"
-                storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;disk-id" ";;${DEFAULT_QOSCLASS};;"
+                storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;diskid" ";;${DEFAULT_QOSCLASS};;"
             fi
         fi
         _LOGMSG="CDROM image"
@@ -181,7 +181,7 @@ else
 
     storpoolVolumeDetach "${SP_VOL}" "force" "" "all" "${READONLY}"
 
-	storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;disk-id" ";;${DEFAULT_QOSCLASS};;"
+	storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;diskid" ";;${DEFAULT_QOSCLASS};;"
 fi
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     if [[ ${LCM_STATE} -ne 15 ]]; then
