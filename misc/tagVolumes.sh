@@ -90,10 +90,11 @@ while read -r -u "${vmfh}" VM_ID; do
             while read -r -u "${snapfh}" snap; do
                 storpoolSnapshotTag "${snap}" "virt;${LOC_TAG:-nloc};${VM_TAG}" "one;${LOC_TAG_VAL};${VM_ID}"
             done {snapfh}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJsonFile}" || true)
+            exec {snapfh}<&-
         else
             echo "# skipping ${volume}"
         fi
     done
 done {vmfh}< <(xmlstarlet sel -t -m //VM -v ID -n "${vmPoolXml}" || true)
-
+exec {vmfh}<&-
 rm -f "${snapshotsJson}" "${vmPoolXml}" "${dsPoolXml}"

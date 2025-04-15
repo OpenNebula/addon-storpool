@@ -163,6 +163,7 @@ for mad in im vmm vnm; do
         while read -r -u "${patchfh}" patchfile; do
             do_patch "${patchfile}" "backup"
         done {patchfh}< <(ls -1 "${patchdir}"/*.patch || true)
+        exec {patchfh}<&-
         popd || exit 1
         break 1
     done

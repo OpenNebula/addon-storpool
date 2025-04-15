@@ -81,6 +81,7 @@ while read -r -u "${nicfh}" line; do
     [[ -z "${poll}" ]] || poll+=" "
 	poll+="NIC_STATS=[ID=${nicid:-0},RX=${array[41]:-0},TX=${array[28]:-0}]"
 done {nicfh}< <(ip -o -s link | grep one- | sort -k 2 || true)
+exec {nicfh}<&-
 
 if [[ -n "${vmidOld}" ]] && [[ -n "${poll}" ]]; then
     report "${vmidOld}" "${poll}"

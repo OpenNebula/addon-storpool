@@ -289,6 +289,7 @@ unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" element; do
 	XPATH_ELEMENTS[i++]="${element}"
 done {xpathfh}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
+exec {xpathfh}<&-
 unset i
 _DS_ID="${XPATH_ELEMENTS[i++]}"
 _DS_STATE="${XPATH_ELEMENTS[i++]}"
@@ -388,6 +389,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 			# shellcheck disable=SC2206
 			CLUSTER_ID_ARRAY+=(${_element})
 		done {xpathfh}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
+		exec {xpathfh}<&-
 	fi
 	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC}" ]]; then
 		splog "[DD] DS_ID=${DS_ID} ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_ID_ARRAY:${CLUSTER_ID_ARRAY[*]}"
@@ -403,6 +405,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 			while read -r -u "${errorfh}" line; do
 				splog "(${ret}) Error:${line}"
 			done {errorfh}< <(cat "${tmpDir}/error.log" || true)
+			exec {errorfh}<&-
 		fi
 		splog "Missing StorPool template '${template_name}' for datastore ${DS_ID}"
 		reload_template=1
@@ -617,6 +620,7 @@ unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" element; do
 	XPATH_ELEMENTS[i++]="${element}"
 done {xpathfh}< <("${_XPATH_A[@]}" <"${tmpXML}" "${_XPATH_QUERY[@]}" || true)
+exec {xpathfh}<&-
 rm -f "${tmpXML}"
 unset i
 _HOST_ID="${XPATH_ELEMENTS[i++]}"

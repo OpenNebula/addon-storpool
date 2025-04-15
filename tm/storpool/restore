@@ -79,6 +79,7 @@ while IFS=' ' read -r -u "${jqfh}" did url; do
     disksUrl["${did}"]="${url}"
 done {jqfh}< <("${BACKUP_MAD_LS}" -i "${INC_ID}" <"${DS_DRIVER_ACTION}" |\
           jq -r 'to_entries[]|"\(.key) \(.value)"' || true)
+exec {jqfh}<&-
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}"
 for entry in ${vmDisksMap}; do

@@ -74,6 +74,7 @@ unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" -d '' element;do
     XPATH_ELEMENTS[i++]="${element}"
 done {xpathfh}< <(base64 -d "${tmpb64}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
+exec {xpathfh}<&-
 unset i
 VM_ID="${XPATH_ELEMENTS[i++]}"
 A_ID="${XPATH_ELEMENTS[i++]}"
@@ -99,6 +100,7 @@ unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" -d '' element;do
     XPATH_ELEMENTS[i++]="${element}"
 done {xpathfh}< <(base64 -d "${tmpb64}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
+exec {xpathfh}<&-
 unset i
 NIC_IP="${XPATH_ELEMENTS[i++]}"
 NIC_VN_MAD="${XPATH_ELEMENTS[i++]}"

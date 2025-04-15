@@ -80,7 +80,7 @@ function update_volume_vc_policy()
 function alterVcPolicy()
 {
     local vmId="$1"
-    local volumeListJsonFile=""
+    local volumeListJsonFile="" xfh=""
 
     if [[ -z "${vmId}" ]]; then
         oneCallXml onevm list --extended "${vmPoolFile}"
@@ -88,9 +88,10 @@ function alterVcPolicy()
             splog "Error! Can't get VM list!"
             return 1
         fi
-        while read -r -u "${vmfh}" _vmId; do
+        while read -r -u "${xfh}" _vmId; do
             alterVcPolicy "${_vmId}"
-        done {vmfh}< <(xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
+        done {xfh}< <(xmlstarlet sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
+        exec {xfh}<&-
         return 0
     fi
 
@@ -182,7 +183,7 @@ function alterVcPolicy()
         storpoolRetry -j volume list >"${volumeListJsonFile}"
     fi
 
-    while read -r -u "${jqfh}" _line; do
+    while read -r -u "${xfh}" _line; do
         IFS=';' read -r -a spdata <<< "${_line}"
         volume="${spdata[0]}"
         vc_policy="${spdata[1]}"
@@ -232,12 +233,14 @@ function alterVcPolicy()
             update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "VM ${vmId} DISK ${volumesDiskId[${volume}]} (${used})"
             echo "${volume}" >>"${processedVolumes}"
         fi
-    done {jqfh}< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "${volumeListJsonFile}" || true)
+    done {xfh}< <(jq -r '.data[]|.name+";"+.tags["vc-policy"]+";"+.tags["qc"]' "${volumeListJsonFile}" || true)
+    exec {xfh}<&-
     unset vmDisksMap
 }
 
 function alterImagesQosClass()
 {
+    local xfh=""
     declare -A dsQosClass
     volumeListJsonFile=""
 
@@ -245,13 +248,14 @@ function alterImagesQosClass()
         oneCallXml oneDatastore list "${dsPoolFile}"
     fi
 
-    while read -r -u "${dsfh}" dsId dsQosClass; do
+    while read -r -u "${xfh}" dsId dsQosClass; do
         dsQosClass["${dsId}"]="${dsQosClass}"
-    done {dsfh}< <(xmlstarlet sel -t \
+    done {xfh}< <(xmlstarlet sel -t \
         -m "/DATASTORE_POOL/DATASTORE" \
         -v 'ID' \
         -o ' ' -v "TEMPLATE/SP_QOSCLASS" \
         -n "${dsPoolFile}" || true)
+    exec {xfh}<&-
 
     imagePoolFile="${TEMP_DIR}/imagePool.xml"
     if [[ ! -f ${imagePoolFile} ]]; then
@@ -259,7 +263,7 @@ function alterImagesQosClass()
     fi
 
     declare -A imagesQosClass imagesDsIds
-    while read -r -u "${imgfh}" imageline; do
+    while read -r -u "${xfh}" imageline; do
         [[ ${imageline:0:3} == "img" ]] || continue
         IFS=';' read -r -a imgData <<<"${imageline}"
         image_id="${imgData[1]}"
@@ -272,7 +276,7 @@ function alterImagesQosClass()
         volume="${ONE_PX:-one}-img-${image_id}"
         imagesQosClass["${volume}"]="${imgQosClass:-${dsQosClass[${image_ds_id}]:-${DEFAULT_QOSCLASS}}}"
         imagesDsIds["${volume}"]="${image_ds_id}"
-    done {imgfh}< <(xmlstarlet sel -t \
+    done {xfh}< <(xmlstarlet sel -t \
         -m "/IMAGE_POOL/IMAGE" \
         -o 'img;' -v 'ID' \
         -o ';' -v "DATASTORE_ID" \
@@ -280,7 +284,7 @@ function alterImagesQosClass()
         -o ';' -v "TEMPLATE/SP_QOSCLASS" \
         -o ';' -v "VMS/ID" \
         -n "${imagePoolFile}" || true)
-
+    exec {xfh}<&-
     if boolTrue "DDDDEBUG_alterVcPolicy"; then
         splog "[DDDD] alterImagesQosClass() imagesQosClass:${!imagesQosClass[*]}=${imagesQosClass[*]}"
     fi
@@ -304,7 +308,7 @@ function alterImagesQosClass()
         if [[ ! -f "${volumeListJsonFile}" ]]; then
             storpoolRetry -j volume list >"${volumeListJsonFile}"
         fi
-        while read -r -u "${spfh}" line; do
+        while read -r -u "${xfh}" line; do
             IFS=';' read -r -a spdata <<< "${line}"
             volume="${spdata[0]}"
             tag_qc="${spdata[1]}"
@@ -319,7 +323,8 @@ function alterImagesQosClass()
                 tag_qc_new="${imagesQosClass[${volume}]}"
                 update_volume_qc "${volume}" "${tag_qc_new}" "${tag_qc}" "IMG ${volume##*-}"
             fi
-        done {spfh}< <(jq -r '.data[]|.name+";"+.tags["qc"]' "${volumeListJsonFile}" || true)
+        done {xfh}< <(jq -r '.data[]|.name+";"+.tags["qc"]' "${volumeListJsonFile}" || true)
+        exec {xfh}<&-
     done
 }
 

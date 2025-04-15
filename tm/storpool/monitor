@@ -142,7 +142,7 @@ while IFS=',' read -r -u "${jqfh}" n t f u2 u3; do
 done {jqfh}< <(eval "${SP_CMD_TEMPLATE_STATUS}" 2>/dev/null | \
         jq -r '.data|map(select(.name))|.[]|[.name,.stored.capacity,.stored.free,.stored.internal.u2,.stored.internal.u3]|@csv' \
         ||true)
-
+exec {jqfh}<&-
 # VM disks monitoring
 if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
 	if [[ -f "${BASE_PATH}/.monitor" ]]; then
@@ -238,6 +238,7 @@ if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
             disk_clone[${DISK_ID}]="${xp[i++]}"
             disk_image[${DISK_ID}]="${xp[i++]}"
         done {xmlstarletfh}< <(echo "${vm_disks}" | xmlstarlet sel -t -m "//DISK" -v "DISK_ID" -n || true)
+        exec {xmlstarletfh}<&-
         vm_monitor=""
         for DISK_ID in ${!disk_datastore[*]}; do
             volume="${ONE_PX:-one}"
@@ -286,6 +287,7 @@ if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
                     fi
                 fi
             done {grepfh}< <(grep "^${volume}" "${TMP_SNAPSHOT_SPACE}" || true)
+            exec {grepfh}<&-
 
             if boolTrue "DDEBUG_TM_MONITOR"; then
                 splog "[DD] ${DS_ID} ${DS_TYPE} VM ${VM_ID} DISK ${DISK_ID} disk_size:${disk_size} v_data:${#v_data[*]} snaps:${s_cnt} vm_monitor:${#vm_monitor}"
@@ -315,6 +317,7 @@ if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
             fi
         fi
     done {vmfh}< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=${DS_ID}][STATE=3]" -v "ID" -n "${ONE_VM_POOL_XML}" || true)
+    exec {vmfh}<&-
     if [[ "${MONITOR_TAG}" == "MONITOR" ]]; then
         monitor_b64="$(echo "${monitor}" | tr ' ' '\n' | \
             ruby -e "require 'zlib'; puts Zlib::Deflate.deflate(STDIN.read)" | \
