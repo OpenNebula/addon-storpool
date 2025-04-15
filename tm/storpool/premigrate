@@ -101,8 +101,7 @@ EOF
     splog "Copy ${VM_PATH} from ${SRC_HOST} to ${DST_HOST} (ssh)"
     ssh_forward ssh_exec_and_log "${SRC_HOST}" "eval ${TAR_SSH}" \
             "Error copying VM directory to target host ${VM_PATH}"
-    splog "Copy ${VM_PATH} from ${SRC_HOST} to ${DST_HOST} (ssh) done ($?) ZDBG"
-
+    splog "Copy ${VM_PATH} from ${SRC_HOST} to ${DST_HOST} (ssh) done ($?)"
 fi
 #-------------------------------------------------------------------------------
 # Get VM information
