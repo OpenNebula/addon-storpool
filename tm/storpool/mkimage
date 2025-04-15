@@ -161,7 +161,7 @@ if [[ -z "${ON_HOST}" ]] || [[ "${mode}" == "ro" ]]; then
     storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${mode}"
 fi
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;disk-id" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${type};${DISK_ID}"
+storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${type};${DISK_ID}"
 
 MONITOR_TM_MAD=""
 if ! boolTrue "DS_SHARED"; then

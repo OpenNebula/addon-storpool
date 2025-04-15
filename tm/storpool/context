@@ -163,7 +163,7 @@ if [[ "${READONLY_MODE,,}" == "ro" ]]; then
 fi
 
 if boolTrue "TAG_CONTEXT_ISO"; then
-    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;disk-id" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};CONTEXT;${DISK_ID}"
+    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};CONTEXT;${DISK_ID}"
 fi
 
 MONITOR_TM_MAD=
