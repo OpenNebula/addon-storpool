@@ -876,26 +876,27 @@ function storpoolVolumeCreate()
 
 function storpoolVolumeStartswith()
 {
-    local _SP_VOL="$1" vName=""
-    while read -r -u "${spfh}" vName; do
+    local _SP_VOL="$1" vName="" xfh=""
+    while read -r -u "${xfh}" vName; do
         echo "${vName//\"/}"
-    done {spfh}< <(storpoolRetry -j volume list | \
+    done {xfh}< <(storpoolRetry -j volume list | \
                   jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv" || true)  # TBD use cache files
+    exec {xfh}<&-
 }
 
 function storpoolVolumeSnapshotsDelete()
 {
-    local _SP_VOL_SNAPSHOTS="$1"
+    local _SP_VOL_SNAPSHOTS="$1" xfh=""
     if boolTrue "DEBUG_storpoolVolumeSnapshotsDelete"; then
         splog "[D] storpoolVolumeSnapshotsDelete ${_SP_VOL_SNAPSHOTS}"
     fi
-    storpoolRetry -j snapshot list | \
-        jq -r --arg n "${_SP_VOL_SNAPSHOTS}" '.data|map(select(.name|contains($n)))|.[]|[.name]|@csv' | \
-        while read -r name; do
-            name="${name//\"/}"
-            [[ "${name:0:1}" == "*" ]] && continue
-            storpoolSnapshotDelete "${name}"
-        done || true
+    while read -r -u "${xfh}" name; do
+        name="${name//\"/}"
+        [[ "${name:0:1}" == "*" ]] && continue
+        storpoolSnapshotDelete "${name}"
+    done {xfh}< <(storpoolRetry -j snapshot list | \
+                jq -r --arg n "${_SP_VOL_SNAPSHOTS}" '.data|map(select(.name|contains($n)))|.[]|[.name]|@csv' || true)
+    exec {xfh}<&-
 }
 
 function storpoolVolumeDelete()
