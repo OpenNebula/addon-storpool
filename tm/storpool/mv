@@ -472,14 +472,14 @@ fi
 
 if boolTrue "READONLY"; then
     SP_MODE="${READONLY_MODE,,}"
-    xTYPE="${xTYPE}RO"
+    [[ "${xTYPE}" == "CDROM" ]] || xTYPE="${xTYPE}RO"
 else
     SP_MODE="rw"
 fi
 
 storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${SP_MODE}"
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};type" "one;${LOC_TAG_VAL};${VM_ID};${xTYPE}"
+storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${xTYPE};${DISK_ID}"
 
 if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
     forceDetachOther "${VM_ID}" "${DST_HOST}" "${SP_VOL}"

@@ -67,6 +67,6 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     oneVmInfo "${VM_ID}"
 
-    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY}"
+    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
 
 fi
