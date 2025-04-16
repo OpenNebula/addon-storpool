@@ -245,7 +245,7 @@ function alterImagesQosClass()
     volumeListJsonFile=""
 
     if [[ ! -f "${dsPoolFile}" ]]; then
-        oneCallXml oneDatastore list "${dsPoolFile}"
+        oneCallXml oneDatastore list "" "${dsPoolFile}"
     fi
 
     while read -r -u "${xfh}" dsId dsQosClass; do
