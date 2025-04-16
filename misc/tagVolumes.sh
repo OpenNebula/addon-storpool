@@ -49,6 +49,14 @@ while read -r -u "${vmfh}" VM_ID; do
     vmVolumes=
     oneVmVolumes "${VM_ID}" "${vmPoolXml}"
     echo "# VM ${VM_ID} SYSTEM_DS_ID=${VM_DS_ID} vmVolumes=${vmVolumes}"
+    unset disks_a disksType_a
+    declare -A disks_a disksType_a
+    for entry in ${vmDisksMap}; do
+        disks_a["${entry%%:*}"]="${entry#*:}"
+    done
+    for entry in ${vmDisksTypeMap}; do
+        disksType_a["${entry%%:*}"]="${entry#*:}"
+    done
 
     if [[ -z "${datastoreSpAuthToken["${VM_DS_ID}"]+found}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolXml}"
@@ -85,8 +93,10 @@ while read -r -u "${vmfh}" VM_ID; do
     fi
 
     for volume in ${vmVolumes}; do
+        diskid="${disks_a["${volume}"]}"
+        xType="${disksType_a["${volume}"]}"
         if [[ "${volume%iso}" == "${volume}" ]]; then
-            storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy}" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY}"
+            storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${xType};${diskid}"
             while read -r -u "${snapfh}" snap; do
                 storpoolSnapshotTag "${snap}" "virt;${LOC_TAG:-nloc};${VM_TAG}" "one;${LOC_TAG_VAL};${VM_ID}"
             done {snapfh}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJsonFile}" || true)
