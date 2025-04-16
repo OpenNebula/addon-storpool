@@ -39,7 +39,7 @@ dsPoolXml="${TMPDIR:-/tmp}/dsPool.xml"
 snapshotsJson="${TMPDIR:-/tmp}/snapshots.json"
 
 oneCallXml onevm list --extended "${vmPoolXml}"
-oneCallXml onedatastore list "${dsPoolXml}"
+oneCallXml onedatastore list "" "${dsPoolXml}"
 
 declare -A datastoreSpAuthToken  # datastoreSpAuthToken[DATASTORE_ID]=SP_AUTH_TOKEN
 declare -A datastoreSpApiHttpHost  # datastoreSpApiHttpHost[DATASTORE_ID]=SP_API_HTTP_HOST
