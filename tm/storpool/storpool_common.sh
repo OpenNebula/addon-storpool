@@ -1136,7 +1136,7 @@ function storpoolSnapshotRevert()
     _SP_TMP="$(date +%s||true)-$(mktemp --dry-run XXXXXXXX||true)"
     _SP_VOL_TMP="${_SP_VOL}-${_SP_TMP}"
 
-    storpoolRetry volume "${_SP_VOL}" rename "${_SP_VOL_TMP}" >/dev/null
+    storpoolRetry volume "${_SP_VOL}" rename "${_SP_VOL_TMP}" update >/dev/null
 
     trapAdd "storpool volume \"${_SP_VOL_TMP}\" rename \"${_SP_VOL}\""
 
