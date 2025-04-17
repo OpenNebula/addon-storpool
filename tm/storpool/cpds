@@ -105,7 +105,7 @@ if boolTrue "DISK_SAVEAS_FSFREEZE"; then
     trapReset
 fi
 
-storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;diskid" ";;${SP_QOSCLASS};;"
+storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};vc-policy;qc;type;diskid" "one;${LOC_TAG_VAL};;;${SP_QOSCLASS};;"
 
 splog "END ${VM_ID}"
 exit 0
