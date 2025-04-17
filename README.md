@@ -85,6 +85,7 @@ Standard OpenNebula datastore operations:
 1. VM snapshotting is not possible because it is handled internally by libvirt which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
 1. Only FULL opennebula backups are supported.
 1. Persistent Images with SHAREABLE attribute are not supported.
+1. Persistent Images with IMMUTABLE attribute are not supported.
 1. Tested only with KVM hypervisor and Alma Linux 8/Ubuntu 24.04. Should work on other Linux OS.
 
 ## Known issues
