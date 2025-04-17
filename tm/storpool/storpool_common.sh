@@ -2527,7 +2527,6 @@ function oneVmVolumes()
         DISK_ID="${DISK_ID_A[${idx}]}"
         SNAPSHOT_ID="${SNAPSHOT_ID_A[${idx}]}"
         if [[ "${TM_MAD:0:8}" != "storpool" ]]; then
-            splog "DISK_ID:${DISK_ID} TYPE:${TYPE} TM_MAD:${TM_MAD}"
             if ! boolTrue "SYSTEM_COMPATIBLE_DS[${TM_MAD}]"; then
                 export oneVmVolumesNotStorPool="${TM_MAD}:disk.${DISK_ID}"
                 continue
