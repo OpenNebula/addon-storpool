@@ -183,23 +183,29 @@ else
         CLEANUP="${localFile}"
     fi
     #-------------------------------------------------------------------------------
-    # Import image to temp volume
+    # Import image to a temporary volume
     #-------------------------------------------------------------------------------
 
-    TEMP_SIZE="${SIZE}"
-    if [[ -f "${IMAGE_PATH}" ]] && [[ -s "${IMAGE_PATH}" ]]; then
-        # Check is the file(qcow2) size bigger than the virtual size
-        FSIZE_S=$(${STAT:-stat} --printf="%s" "${IMAGE_PATH}" || true)
-        FSIZE=$(((FSIZE_S+1048575)/1048576))
-        if [[ ${FSIZE} -gt ${SIZE} ]]; then
-            splog "File ${IMAGE_PATH} stat size ${FSIZE}(${FSIZE_S}) > SIZE=${SIZE} (with ~ $((FSIZE-SIZE))MB)"
-            TEMP_SIZE=${FSIZE}
+    TEMP_SIZE="${SIZE}M"
+    image_info "${IMAGE_PATH}" || true
+    if [[ -n "${STAT_IMAGE_SIZE}" ]] && [[ ${STAT_IMAGE_SIZE} -gt 0 ]]; then
+        if [[ "${QEMU_IMG_FORMAT}" != "raw" ]]; then
+            # use the actual file size
+            TEMP_SIZE="${STAT_IMAGE_SIZE}"
+            splog "[I] File ${IMAGE_PATH}, FORMAT:${QEMU_IMG_FORMAT} using actual file size: ${STAT_IMAGE_SIZE}"
+        else
+            # Check is the imported file size is bigger than the virtual size
+            FSIZE=$(((STAT_IMAGE_SIZE+1048575)/1048576))
+            if [[ ${FSIZE} -gt ${SIZE} ]]; then
+                splog "[W] File ${IMAGE_PATH} stat size ${FSIZE}(${STAT_IMAGE_SIZE}) <> SIZE=${SIZE} (with ~ $((FSIZE-SIZE))MB)"
+                TEMP_SIZE="${FSIZE}M"
+            fi
         fi
     fi
 
     storpoolTemplate "${SP_TEMPLATE}"
 
-    storpoolVolumeCreate "${SP_TEMP_VOL}" "${TEMP_SIZE}M" "${SP_TEMPLATE}"
+    storpoolVolumeCreate "${SP_TEMP_VOL}" "${TEMP_SIZE}" "${SP_TEMPLATE}"
 
     trapAdd "storpoolVolumeDelete \"${SP_TEMP_VOL}\" force snaps"
 
