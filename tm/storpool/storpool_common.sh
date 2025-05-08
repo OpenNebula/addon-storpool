@@ -3181,6 +3181,31 @@ EOF
     fi
 }
 
+function image_info()
+{
+    local _img="$1" _host="$2"
+    local _tmpjson="${TMPDIR:-/tmp}/qemu-img-info-${_img##*/}.json" ret=1
+    declare -a CMD
+    unset QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT STAT_IMAGE_SIZE
+    CMD=("${QEMU_IMG:-qemu-img}" info --output json "${_img}")
+    if [[ -n "${_host}" ]]; then
+        CMD=("${SSH:-ssh}" "${_host}" "${CMD[@]}")
+    fi
+    if [[ -f "${_img}" ]]; then
+        STAT_IMAGE_SIZE=$(${STAT:-stat} --printf="%s" "${_img}" || true)
+        "${CMD[@]}" > "${_tmpjson}" || true
+        if [[ -s "${_tmpjson}" ]]; then
+            IFS=";" read -r QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT <<< "$(jq -r '"\(."virtual-size"|tostring);\(."actual-size"|tostring);\(.format|tostring)"' "${_tmpjson}" || true)"
+            ret=0
+            splog "[I][qemu_img_info](${_img}${_host:+:,${_host}}): virtual-size:${QEMU_IMG_VIRTUAL_SIZE} actual-size:${QEMU_IMG_ACTUAL_SIZE} format:${QEMU_IMG_FORMAT} stat size:${STAT_IMAGE_SIZE}"
+        else
+            splog "[E][qemu_img_info](${_img}${_host:+:,${_host}}): Error: Can't get image info! (stat size:${STAT_IMAGE_SIZE})"
+        fi
+        rm -f "${_tmpjson}"
+    fi
+    return "${ret}"
+}
+
 if boolTrue "STORPOOL_COMMON_FUNC_EXEC" ; then
     declare -A DECLARED_FUNCTIONS
     while read -r -u "${xfh}" -a _array; do
