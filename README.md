@@ -265,7 +265,7 @@ VM_MAD = [
     NAME           = "kvm",
     SUNSTONE_NAME  = "KVM",
     EXECUTABLE     = "one_vmm_exec",
-    ARGUMENTS      = "-l deploy=deploy-tweaks -t 15 -r 0 i -p kvm",
+    ARGUMENTS      = "-l deploy=deploy-tweaks -t 15 -r 0 -p kvm",
     ...
 ```
   Optionally add _attach_disk_, _tmsave_ and _tmrestore_:
