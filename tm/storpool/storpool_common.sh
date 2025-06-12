@@ -922,7 +922,7 @@ function storpoolVolumeDelete()
 			storpoolRetry volume "${_SP_VOL}" backup "${_REMOTE_LOCATION}" ${_REMOTE_LOCATION_ARGS} >/dev/null
 			_ret=$?
 			if [[ ${_ret} -ne 0 ]]; then
-				storpoolVolumeRename "${_SP_VOL}" "${_SP_VOL}-$(date +%s||true)" "tag del=y" >/dev/null
+				storpoolVolumeRename "${_SP_VOL}" "${_SP_VOL}-$(date +%s||true)" "" "tag del=y" >/dev/null
 				return $?
 			fi
 		fi
