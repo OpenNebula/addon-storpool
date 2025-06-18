@@ -97,7 +97,7 @@ export SP_SYSTEM="ssh"
 # update Disk size in OpenNebula when reverting a snapshot
 export UPDATE_ONE_DISK_SIZE=1
 # Do not enforce the datastore template on the StorPool volumes
-export NO_VOLUME_TEMPLATE=""
+export NO_VOLUME_TEMPLATE="1"
 # save the VM's checkpoint file directly to a block device, require qemu-kvm-ev
 export SP_CHECKPOINT_BD=0
 # clasify the import process to a given cgroup(s)

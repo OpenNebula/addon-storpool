@@ -123,7 +123,7 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
             elif [[ "${DISK_TYPE_ARRAY[i]}" == "CDROM" ]]; then
                 CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
                 if ! storpoolVolumeExists "${CDROM_VOL}"; then
-                    storpoolVolumeClone "${SP_VOL}" "${CDROM_VOL}" "${SP_TEMPLATE:-}"
+                    storpoolVolumeClone "${SP_VOL}" "${CDROM_VOL}"
                     storpoolVolumeTag "${CDROM_VOL}" "type;diskid" "CDROM;${DISK_ID}"
                     SP_LINK="/dev/storpool/${SP_VOL}"
                     DST_PATH="${VM_PATH}/disk.${DISK_ID}"
