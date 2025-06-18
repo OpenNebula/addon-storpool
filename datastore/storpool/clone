@@ -196,7 +196,11 @@ fi
 
 storpoolVolumeCheck "${SP_VOL}"
 
-storpoolTemplate "${SP_TEMPLATE}"
+if boolTrue "NO_VOLUME_TEMPLATE"; then
+    SP_TEMPLATE=
+else
+    storpoolTemplate "${SP_TEMPLATE}"
+fi
 
 storpoolVolumeClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
 
