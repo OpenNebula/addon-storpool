@@ -99,11 +99,6 @@ export DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
 export TM_MAD="${XPATH_ELEMENTS[i++]}"
 export DS_ID="${XPATH_ELEMENTS[i++]}"
 
-if boolTrue "DDDDEBUG_deploy_tweaks"; then
-    cp "${VM_XML}" "/tmp/dt-vm.xml"
-    splog "[DDDD] created /tmp/dt-vm.xml"
-fi
-
 if [[ -z "${DS_ID}" ]]; then
     error_message "[deploy-tweaks] Can't get SYSTEM datastore ID for one-${VM_ID} VM_XML=${VM_XML} [${_XPATH_A[*]}] -- ${XPATH_ELEMENTS[*]}"
     cat "${ERR_FILE}" >&2
