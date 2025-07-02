@@ -35,7 +35,7 @@ trap 'echo "PID:$$ exit status:$?"' EXIT QUIT
 function hdr()
 {
     echo -ne "\n[$(date +%T || true)]${DEBUG:+[${BASH_LINENO[*]}]} $*"
-    logger -t test_sp_test -- "$* //${FUNCNAME[*]:1}"
+    logger -t TEST_sp_TEST -- "$* //${FUNCNAME[*]:1}"
 }
 
 function msg()
