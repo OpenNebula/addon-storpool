@@ -87,6 +87,7 @@ Standard OpenNebula datastore operations:
 1. Persistent Images with SHAREABLE attribute are not supported.
 1. Persistent Images with IMMUTABLE attribute are not supported.
 1. Tested only with KVM hypervisor and Alma Linux 8/Ubuntu 24.04. Should work on other Linux OS.
+1. The UEFI auto configuration is not supported
 
 ## Known issues
 
