@@ -69,8 +69,9 @@ function exclude_cpus()
 }
 
 read -r -a mem <<< "$(free -b | grep -i "mem:" || true)"
-read -r -a cg_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "${cgroup}" || true)"
-read -r -a root_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "" || true)"
+read -r -a cg_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "${cgroup}" | tr '\n' ' ' || true)"
+read -r -a root_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "" | tr '\n' ' ' || true)"
+
 cg_cpuset="${cg_arr[1]}"
 root_cpuset="${root_arr[1]}"
 cg_cpus=$(count_cpus "${cg_cpuset}" || true)
