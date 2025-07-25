@@ -81,7 +81,9 @@ case "${IMAGE_PATH,,}" in
         fi
         ;;
     *)
-        if ! SIZE=$(fs_size "${IMAGE_PATH}" || true); then
+        SIZE="$(fs_size "${IMAGE_PATH}")"
+        RET=$?
+        if [[ "${RET}" -ne 0 ]]; then
             SIZE=0
         fi
         ;;
