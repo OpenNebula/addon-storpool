@@ -202,7 +202,7 @@ if [[ -n "${T_OS_NVRAM}" ]]; then
                 trapAdd "storpoolVolumeDelete \"${SP_VOL}\""
                 storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
                 trapAdd "storpoolVolumeDetach \"${SP_VOL}\" \"force\" \"\" \"all\""
-                PIPE_CMD="${DD:-dd} if=\"${NVRAM_TEMPLATE}\" bs=128k status=none conv=fdatasync"
+                PIPE_CMD="${DD:-dd} if=\"${NVRAM_TEMPLATE}\" bs=128k status=none"
                 splog "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct"
                 exec_and_log "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct" \
                     "Error importing ${NVRAM_TEMPLATE} to ${DST_HOST}:${SP_LINK}"
