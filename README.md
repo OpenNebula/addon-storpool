@@ -92,7 +92,7 @@ Optional:
 
 * [Installation and upgrade](docs/installation.md)
 * [OpenNebula configuration](docs/one_configuration.md)
-* [naming convention](docs/naming_convention.md)
+* [Naming convention](docs/naming_convention.md)
 * [Support Life Cycles for OpenNebula Environments](https://kb.storpool.com/storpool_integrations/OpenNebula/support_lifecycle.html)
 * [Tips](docs/tips.md)
 * [Known issues](docs/known_issues.md)
