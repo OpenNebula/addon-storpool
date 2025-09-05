@@ -3,7 +3,6 @@
 [StorPool](https://storpool.com/) is a block storage software (software-defined storage solution). It runs on standard x86 servers, converting them into high-performance and highly available virtual (SAN) storage arrays. It can also run beside compute workloads in a hyper-converged manner.
 
 The StorPool datastore driver enables OpenNebula to use a StorPool storage system for storing disk images.
-The documentation of the driver is available at [StorPool's Knowledge Base](https://kb.storpool.com/storpool_integrations/OpenNebula/).
 
 ## Development
 
