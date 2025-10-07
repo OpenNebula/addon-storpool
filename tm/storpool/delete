@@ -53,7 +53,7 @@ IS_DISK="$(is_disk "${DST_PATH}")"
 oneDatastoreInfo "${DS_ID}"
 
 if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
-    TEMPLATE="$(onevm show -x "${VM_ID}" | base64 -w0 || true)"
+    TEMPLATE=""  # "$(onevm show -x "${VM_ID}" | base64 -w0 || true)"
     oneTemplateInfo "${TEMPLATE}"
     LCM_STATE="${VM_LCM_STATE}"
     for i in "${!DISK_ID_ARRAY[@]}"; do
