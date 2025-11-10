@@ -81,6 +81,14 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]] && [[ "${SP_SYSTEM^^}" == "SSH" ]]; th
         exit 1
     fi
 
+    if boolTrue "ONE_TPM_SAVE"; then
+        splog "VM ${VM_ID} TPM_MODEL=${TPM_MODEL}"
+        if [[ -n "${TPM_MODEL}" ]]; then
+            oneTpmBackup "${VM_ID}" "${VM_PATH}" "${SRC_HOST}"
+            tpmSave "${VM_ID}" "${VM_PATH}" "${SRC_HOST}"
+        fi
+    fi
+
     #-------------------------------------------------------------------------------
     # Create DST path
     #-------------------------------------------------------------------------------

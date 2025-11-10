@@ -63,6 +63,10 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         MEM_VOL="${ONE_PX}-sys-${VM_ID}"
         diskVolumes["${MEM_VOL}"]="${MEM_VOL}"
     fi
+    if [[ -n "${TPM_MODEL}" ]]; then
+        SWTPM_VOL="${ONE_PX}-sys-${VM_ID}-SWTPM"
+        diskVolumes["${SWTPM_VOL}"]="${SWTPM_VOL}"
+    fi
 	while read -r -u "${spfh}" snap vmtag loctagval; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "[DD] ${snap} vmtag:${vmtag} loctagval:${loctagval}"
