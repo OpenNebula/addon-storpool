@@ -145,6 +145,8 @@ export TAG_CONTEXT_ISO=1
 export ATTACH_TIMEOUT=20
 # TM/monitor send VM disk stats over UDP
 export MONITOR_SEND_UDP=""
+# save the VM's vTPM data
+export ONE_TPM_SAVE=1
 
 ONE_PX="${ONE_PX:-one}"
 
@@ -209,7 +211,7 @@ function get_one_version()
     fi
 }
 
-DRIVER_PATH="$(dirname "$0")"
+DRIVER_PATH="$(dirname -- "$0")"
 export DRIVER_PATH
 sprcfile="$(lookup_file "addon-storpoolrc" || true)"
 
@@ -1584,6 +1586,7 @@ function oneVmInfo()
         "/VM/USER_TEMPLATE/T_OS_NVRAM"
         "/VM/USER_TEMPLATE/SP_QOSCLASS"
         "/VM/USER_TEMPLATE/VC_POLICY"
+        "/VM/TEMPLATE/TPM/MODEL"
     )
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
@@ -1643,6 +1646,7 @@ function oneVmInfo()
     fi
     SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
+    TPM_MODEL="${XPATH_ELEMENTS[i++]}"
 
     IFS=';' read -r -a SP_QOSCLASS_A <<< "${SP_QOSCLASS_LINE}"
     unset DISKS_QC_A VM_DISK_SP_QOSCLASS VM_SP_QOSCLASS IMAGE_SP_QOSCLASS
@@ -1709,6 +1713,7 @@ ${B_LAST_DATASTORE_ID:+B_LAST_DATASTORE_ID=${B_LAST_DATASTORE_ID} }\
 ${B_LAST_BACKUP_ID:+B_LAST_BACKUP_ID=${B_LAST_BACKUP_ID} }\
 ${B_LAST_BACKUP_SIZE:+B_LAST_BACKUP_SIZE=${B_LAST_BACKUP_SIZE} }\
 ${B_ACTIVE_FLATTEN:+B_ACTIVE_FLATTEN=${B_ACTIVE_FLATTEN} }\
+${TPM_MODEL:+TPM_MODEL=${TPM_MODEL} }\
 "
     local _DBGMSG="${HOTPLUG_SAVE_AS:+HOTPLUG_SAVE_AS=${HOTPLUG_SAVE_AS} }${HOTPLUG_SAVE_AS_ACTIVE:+HOTPLUG_SAVE_AS_ACTIVE=${HOTPLUG_SAVE_AS_ACTIVE} }${HOTPLUG_SAVE_AS_SOURCE:+HOTPLUG_SAVE_AS_SOURCE=${HOTPLUG_SAVE_AS_SOURCE} }"
     [[ -z "${_DBGMSG}" ]] || splog "${_DBGMSG}"
@@ -1932,6 +1937,7 @@ function oneTemplateInfo()
         "/VM/USER_TEMPLATE/T_OS_NVRAM"
         "/VM/USER_TEMPLATE/SP_QOSCLASS"
         "/VM/USER_TEMPLATE/VC_POLICY"
+        "/VM/TEMPLATE/TPM/MODEL"
     )
 
     if boolTrue "DEBUG_oneTemplateInfo"; then
@@ -1953,6 +1959,7 @@ function oneTemplateInfo()
     T_OS_NVRAM="${XPATH_ELEMENTS[i++]}"
     VM_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
+    TPM_MODEL="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
         _DBGMSG="VM_ID=${VM_ID} VM_STATE=${VM_STATE}(${VmState[${VM_STATE}]})"
         _DBGMSG+=" VM_LCM_STATE=${VM_LCM_STATE}(${LcmState[${VM_LCM_STATE}]})"
@@ -1960,6 +1967,7 @@ function oneTemplateInfo()
         _DBGMSG+=" CONTEXT_DISK_ID=${CONTEXT_DISK_ID}"
         _DBGMSG+=" VC_POLICY=${VC_POLICY}"
         _DBGMSG+=" VM_SP_QOSCLASS=${VM_SP_QOSCLASS}"
+        _DBGMSG+=" TPM_MODEL=${TPM_MODEL}"
         splog "[D][oneTemplateInfo]${_DBGMSG}"
     fi
 
@@ -2436,6 +2444,7 @@ function oneVmVolumes()
         "/VM/BACKUPS/BACKUP_CONFIG/BACKUP_VOLATILE"
         "/VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE"
         "/VM/BACKUPS/BACKUP_CONFIG/MODE"
+        "/VM/TEMPLATE/TPM/MODEL"
     )
     unset XPATH_ELEMENTS i
     while read -r -u "${xfh}" _element; do
@@ -2477,6 +2486,7 @@ function oneVmVolumes()
     BACKUP_VOLATILE="${XPATH_ELEMENTS[i++]}"
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
+    TPM_MODEL="${XPATH_ELEMENTS[i++]}"
     IFS=';' read -r -a DISK_ID_A <<< "${DISK_ID}"
     IFS=';' read -r -a CLONE_A <<< "${CLONE}"
     IFS=';' read -r -a SAVE_A <<< "${SAVE}"
@@ -2626,6 +2636,7 @@ function oneVmVolumes()
         _DBGMSG+="${BACKUP_VOLATILE:+ BACKUP_VOLATILE=${BACKUP_VOLATILE}}"
         _DBGMSG+="${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=${BACKUP_FS_FREEZE}}"
         _DBGMSG+="${BACKUP_MODE:+ BACKUP_MODE=${BACKUP_MODE}}"
+        _DBGMSG+="${TPM_MODEL:+ TPM_MODEL=${TPM_MODEL}}"
         _DBGMSG+="${oneVmVolumesNotStorPool:+ oneVmVolumesNotStorPool=${oneVmVolumesNotStorPool}}"
         splog "[D]${_DBGMSG}"
     fi
@@ -3055,3 +3066,129 @@ function isImmutable()
     fi
     echo "${_IMMUTABLE}"
 }
+
+function tpmSave()
+{
+    local _VM_ID="$1" _VM_PATH="$2" _RHOST="$3"
+    local _SP_VOL="${ONE_PX}-sys-${_VM_ID}-SWTPM"
+    local _SP_LINK="/dev/storpool/${_SP_VOL}"
+    local _remote_cmd=""
+
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} ${_VM_PATH} ${_RHOST}"
+    fi
+    if ! storpoolVolumeExists "${_SP_VOL}"; then
+        if boolTrue "DEBUG_tpm"; then
+            splog "[D] Creating StorPool volume ${_SP_VOL}"
+        fi
+        storpoolVolumeCreate "${_SP_VOL}" "4M"
+    else
+        if boolTrue "DEBUG_tpm"; then
+            splog "[D] StorPool volume ${_SP_VOL} already exists"
+        fi
+    fi
+    storpoolVolumeAttach "${_SP_VOL}" "${_RHOST}"
+    _remote_cmd=$(cat <<EOF
+    #
+    if [[ -d "${_VM_PATH}/tpm" ]]; then
+        splog "tar czf ${_SP_LINK} -C ${_VM_PATH} tpm"
+        tar czf "${_SP_LINK}" -C "${_VM_PATH}" tpm
+    else
+        splog "VM ${_VM_ID} No tpm data to save"
+    fi
+EOF
+)
+    splog "VM ${_VM_ID} Saving TPM data to ${_SP_VOL} on host ${_RHOST}"
+    ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
+                "Error saving TPM data to ${_SP_VOL} on host ${_RHOST}"
+
+    storpoolVolumeDetach "${_SP_VOL}" "" "${_RHOST}" "all"
+
+    storpoolVolumeTag "${_SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${_VM_ID};${VC_POLICY};${SP_QOSCLASS};SWTPM"
+
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} END"
+    fi
+}
+
+function tpmRestore()
+{
+    local _VM_ID="$1" _VM_PATH="$2" _RHOST="$3"
+    local _SP_VOL="${ONE_PX}-sys-${_VM_ID}-SWTPM" _remote_cmd=""
+    local _SP_LINK="/dev/storpool/${_SP_VOL}"
+    local _remote_cmd=""
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} ${_VM_PATH} ${_RHOST} ${_SP_VOL}"
+    fi
+    if storpoolVolumeExists "${_SP_VOL}"; then
+        if boolTrue "DEBUG_tpm"; then
+            splog "[D] Attaching StorPool volume ${_SP_VOL} to host ${_RHOST}"
+        fi
+        storpoolVolumeAttach "${_SP_VOL}" "${_RHOST}"
+        _remote_cmd=$(cat <<EOF
+    #
+    splog "tar xzf ${_SP_LINK} -C ${_VM_PATH}"
+    tar xzf "${_SP_LINK}" -C "${_VM_PATH}"
+EOF
+)
+        splog "VM ${_VM_ID} Restoring TPM data from ${_SP_VOL} on host ${_RHOST}"
+        ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
+                    "Error restoring TPM data from ${_SP_VOL} on host ${_RHOST}"
+        storpoolVolumeDetach "${_SP_VOL}" "" "${_RHOST}" "all"
+    fi
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} END"
+    fi
+}
+
+function oneTpmBackup()
+{
+    local _VM_ID="$1" _VM_PATH="$2" _RHOST="$3" _B_DIR="$4"
+    local _remote_cmd=""
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} ${_VM_PATH} ${_RHOST}"
+    fi
+
+    _remote_cmd=$(cat <<EOF
+    #
+    source /var/tmp/one/etc/vmm/kvm/kvmrc
+    XPATH_RB="/var/tmp/one/datastore/xpath.rb"
+    domxml="\$(virsh --connect "\${LIBVIRT_URI:-qemu:///system}" dumpxml "one-${_VM_ID}")"
+    if echo "\${domxml}" | "\${XPATH_RB}" -t '/domain/devices/tpm/backend[@type="emulator"]' > /dev/null 2>&1; then
+        DOM_UUID="\$(echo "\${domxml}" | "\${XPATH_RB}" '/domain/uuid')"
+        if sudo -l | grep -q vtpm_setup; then
+            splog "VM ${_VM_ID} Backing up vTPM data to ${_VM_PATH} DOM_UUID=\${DOM_UUID}"
+            sudo /var/tmp/one/vtpm_setup backup "\${DOM_UUID}" "${_VM_PATH}"
+            if [[ -n "${_B_DIR}" ]]; then
+                mkdir -p "${_B_DIR}"
+                tar zcvf "${_B_DIR}/disk.tpm.0" -C "${_VM_PATH}" tpm
+                splog "VM ${_VM_ID} vTPM data backed up to ${_B_DIR}/disk.tpm.0"
+            fi
+        else
+            splog "VM ${_VM_ID} No sudo privileges to backup vTPM data to ${_VM_PATH} DOM_UUID=\${DOM_UUID}"
+        fi
+    fi
+EOF
+)
+    splog "VM ${_VM_ID} ${_VM_PATH} ${_RHOST}"
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} ${_RHOST} remote ..."
+    fi
+    ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
+                    "Error backing up vTPM data to ${_VM_PATH} on host ${_RHOST}"
+    if boolTrue "DEBUG_tpm"; then
+        splog "[D] VM ${_VM_ID} END ${_RHOST}:${_B_DIR}/disk.tpm.0"
+    fi
+}
+
+if boolTrue "STORPOOL_COMMON_FUNC_EXEC" ; then
+    declare -A DECLARED_FUNCTIONS
+    while read -r -u "${xfh}" -a _array; do
+        DECLARED_FUNCTIONS["${_array[2]}"]="${_array[2]}"
+    done {xfh}< <(declare -F || true)
+    exec {xfh}<&-
+
+    if [[ -n "${DECLARED_FUNCTIONS["${0##*/}"]}" ]]; then
+        "${0##*/}" "${@}"
+    fi
+fi

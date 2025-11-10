@@ -97,14 +97,25 @@ for did in ${!disksUrl[*]}; do
             continue
         fi
     fi
-    BACKUP_URL="${disksUrl[${did}]}"
+
+    if [[ "${did}" == "tpm" ]]; then
+        disksMap["${did}"]="${ONE_PX}-sys-${VM_ID}-SWTPM"
+        disksTypeMap["${did}"]="SWTPM"
+        DISK_ID=""
+    fi
     SP_NAME="${disksMap[${did}]}"
     xTYPE="${disksTypeMap["${SP_NAME}"]}"
     TMP_NAME="${SP_NAME}-${_TMP_NAME}"
     SP_LINK="/dev/storpool/${SP_NAME}"
+    BACKUP_URL="${disksUrl[${did}]}"
     COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp \"${BACKUP_URL}\" -"
+
     storpoolVolumeInfo "${SP_NAME}"
     if [[ -z "${V_SIZE}" ]]; then
+        if [[ "${did}" == "tpm" ]]; then
+            V_SIZE="4M"
+            storpoolVolumeCreate "${SP_NAME}" "${V_SIZE}"
+        fi
         splog "VM ${VM_ID} volume ${SP_NAME} not found"
         ERROR=1
         break
@@ -138,6 +149,11 @@ for did in ${!disksUrl[*]}; do
         ERROR=1
         break
     fi
+
+    if [[ "${did}" == "tpm" ]]; then
+        tpmRestore "${VM_ID}" "${SYSTEM_DS_PATH}" "${DST_HOST}"
+    fi
+
 done
 
 for did in ${!disksUrl[*]}; do
