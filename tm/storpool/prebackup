@@ -87,11 +87,13 @@ for disk in ${DISKS//:/ }; do
     D_ARR["${disk}"]="${disk}"
 done
 
+read -ra vmDisksMap_a <<< "${vmDisksMap}"
+
 B_SUFFIX="ONEBACKUP-$(date +%s)"
 echo "${B_SUFFIX}" >"${B_DIR}/.snapshot_suffix"
 list=()
 backups=()
-for map in "${vmDisksMap[@]}"; do
+for map in "${vmDisksMap_a[@]}"; do
     img="${map%:*}"
     did="${map#*:}"
     if [[ -n "${D_ARR["${did}"]}" ]]; then
@@ -103,6 +105,10 @@ for map in "${vmDisksMap[@]}"; do
 done
 
 storpoolRetry groupSnapshot "tag:${VM_TAG:-nvm}=${VM_ID}" "tag:${LOC_TAG:-nloc}=${LOC_TAG_VAL}" "tag:virt=one" "${list[@]}"
+
+if [[ -n "${TPM_MODEL}" ]]; then
+    oneTpmBackup "${VM_ID}" "${VMDIR}" "${KVMHOST}" "${B_DIR}/disk.tpm.0"
+fi
 
 for b in "${backups[@]}"; do
     snap="${b%:*}"

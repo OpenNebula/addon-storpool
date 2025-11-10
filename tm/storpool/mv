@@ -102,6 +102,8 @@ DO_SYMLINK=""
 SKIP_CONTEXT=""
 DO_CONTEXT="yes"
 IS_UNDEPLOY=""
+TPM_SAVE=""
+TPM_RESTORE=""
 export SKIP_CONTEXT  #  TBD: remove
 case "${LCM_STATE}" in
     8)
@@ -112,6 +114,7 @@ case "${LCM_STATE}" in
             CHECKPOINT_SAVE="yes"
             CHECKPOINT_RESTORE="yes"
         fi
+        TPM_SAVE="yes"
     ;;
     9)
         #-----------------------------------------------------------------------
@@ -125,6 +128,7 @@ case "${LCM_STATE}" in
             IS_UNDEPLOY=1
         fi
         DO_SYMLINK="yes"
+        TPM_RESTORE="yes"
     ;;
     10)
         #-----------------------------------------------------------------------
@@ -138,6 +142,7 @@ case "${LCM_STATE}" in
         if boolTrue "SKIP_UNDEPLOY_SSH"; then
             IS_UNDEPLOY=1
         fi
+        TPM_SAVE="yes"
     ;;
     30)
         #-----------------------------------------------------------------------
@@ -146,6 +151,7 @@ case "${LCM_STATE}" in
         DETACH_ONLY="DETACH_ONLY (LCM_STATE=${LCM_STATE} EPILOG_UNDEPLOY)"
         DETACH_ALL="all"
         IS_UNDEPLOY=1
+        TPM_SAVE="yes"
     ;;
     31)
         #-----------------------------------------------------------------------
@@ -155,12 +161,15 @@ case "${LCM_STATE}" in
         DO_SYMLINK="yes"
         DO_CONTEXT="no"
         IS_UNDEPLOY=1
+        TPM_RESTORE="yes"
     ;;
     43)
         #-----------------------------------------------------------------------
         # (re)create symlinks on PROLOG_MIGRATE_POWEROFF
         #-----------------------------------------------------------------------
         DO_SYMLINK="yes"
+        TPM_SAVE="yes"
+        TPM_RESTORE="yes"
     ;;
     6[01])
         #-----------------------------------------------------------------------
@@ -169,6 +178,7 @@ case "${LCM_STATE}" in
         MIGRATE_UNKNOWN="yes"
         DETACH_ALL="all"
         DO_SYMLINK="yes"
+        TPM_RESTORE="yes"
     ;;
     *)
         errmsg="ERROR: VM ${VM_ID} unhandled STATE=${STATE_TXT} LCM_STATE=${LCM_STATE_TXT}"
@@ -243,6 +253,18 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         if [[ -n "${CHECKPOINT_RESTORE}" ]]; then
             oneCheckpointRestore "${DST}" "${REMOTE_MONITOR}"
         fi
+        # TPM data
+        if boolTrue "ONE_TPM_SAVE"; then
+            if [[ -n "${TPM_MODEL}" ]]; then
+                splog "VM ${VM_ID} TPM_MODEL=${TPM_MODEL} TPM_SAVE=${TPM_SAVE} TPM_RESTORE=${TPM_RESTORE}"
+                if boolTrue "TPM_SAVE" "${TPM_SAVE}"; then
+                    tpmSave "${VM_ID}" "${SRC_PATH}" "${SRC_HOST}"
+                fi
+                if boolTrue "TPM_RESTORE" "${TPM_RESTORE}"; then
+                    tpmRestore "${VM_ID}" "${DST_PATH}" "${DST_HOST}"
+                fi
+            fi
+        fi
         # context ISO. Do detach/attach only when hosts differ
         if boolTrue "DO_CONTEXT" "${DO_CONTEXT}"; then
             if [[ -n "${CONTEXT_DISK_ID}" ]]; then
@@ -298,13 +320,14 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         fi
         # other files in the VM home
         SRC_DS_DIR=$(dirname "${SRC_PATH}")
-        SRC_VM_DIR=$(basename "${SRC_PATH}")
+        SRC_VM_DIR=$(basename -- "${SRC_PATH}")
         SYSTEM_DS_TRANSFER=
         if [[ -n "${SRC_SP_SYSTEM}" ]]; then
             if [[ "${SRC_SP_SYSTEM^^}" == "SSH" || "${SRC_DS_SHARED^^}" != "YES" ]]; then
                 SYSTEM_DS_TRANSFER=1
             fi
         fi
+
         if ! boolTrue "DS_SHARED" || [[ "${SP_SYSTEM^^}" == "SSH" ]] || [[ -n "${SYSTEM_DS_TRANSFER}" ]]; then
             if boolTrue "MIGRATE_UNKNOWN"; then
                 splog "MIGRATE_UNKNOWN: ${SRC_HOST} is in ERROR state"

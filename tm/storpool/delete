@@ -101,6 +101,14 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
             fi
         done
     else
+        # TPM volume
+        if boolTrue "ONE_TPM_SAVE"; then
+            splog "VM ${VM_ID} TPM_MODEL=${TPM_MODEL}"
+            if [[ -n "${TPM_MODEL}" ]]; then
+                SP_VOL="${ONE_PX}-sys-${VM_ID}-SWTPM"
+                storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
+            fi
+        fi
 #        splog "[SYSTEM_DS] delete context iso"
         DELAY_DELETE=
         SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
