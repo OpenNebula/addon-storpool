@@ -86,6 +86,7 @@ Optional:
 * Persistent Images with IMMUTABLE attribute are not supported.
 * Tested only with KVM hypervisor and Alma Linux 8/Ubuntu 24.04. Should work on other Linux OS.
 * The UEFI auto configuration is not supported.
+* The handling of the vTPM is in a Technology Preview - should be used after extensive testing in the given environment.
 
 ## More information
 
