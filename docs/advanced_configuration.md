@@ -1,101 +1,103 @@
-### Advanced configuration variables
+# Advanced configuration variables
 
-#### StorPool VolumeCare policy tags
+The main configuration information is provided in [OpenNebula configuration](one_configuration.md).
+Here you can find additional details about configuration variables.
 
-See [volumecare.md](volumecare.md).
+## StorPool backed SYSTEM datastore on shared filesystem
 
-#### StorPool QoS Class tags
-
-See [qosclass.md](qosclass.md).
-
-#### StorPool backed SYSTEM datastore on shared filesystem
-
-* **SP_SYSTEM**: [optional] Used when StorPool datastore is used as SYSTEM_DS.
+* `SP_SYSTEM`: (optional) Used when StorPool datastore is used as SYSTEM_DS.
 
 Global datastore configuration for storpool TM_MAD is with *SHARED=yes* set. The default configuration of the addon is to copy the VM files over _ssh_. If the datastore is on a shared filesystem this parameter should be set to *SP_SYSTEM=shared*.
 
 
-#### Managing datastore on another StorPool cluster
+## Managing datastore on another StorPool cluster
 
-It is possible to use the OpenNebula's Cluster configuration to manage hosts that are members of different StorPool clusters. Set the StorPool API credentials in the datastore template:
+It is possible to use the OpenNebula's Cluster configuration to manage hosts that are members of different StorPool clusters. To achieve this, set the StorPool API credentials (see [Network communication](https://kb.storpool.com/admin_guide/conf_file/conf_file_net.html)) in the datastore template:
 
-* **SP_AUTH_TOKEN**: The AUTH token for of the StorPool API to use for this datastore. String.
-* **SP_API_HTTP_HOST**: The IP address of the StorPool API to use for this datastore. IP address.
-* **SP_API_HTTP_PORT**: [optional] The port of the StorPool API to use for this datastore. Number.
+* `SP_AUTH_TOKEN`: The AUTH token for of the StorPool API to use for this datastore. String.
+* `SP_API_HTTP_HOST`: The IP address of the StorPool API to use for this datastore. IP address.
+* `SP_API_HTTP_PORT`: (optional) The port of the StorPool API to use for this datastore. Number.
 
-There are rare cases when the driver could not determine the StorPool node ID. To resolve this issue set in the OpenNebula's **Host** template the SP_OURID variable.
+There are rare cases when the driver could not determine the StorPool node ID. To resolve this issue, set in the OpenNebula's **Host** template the `SP_OURID` variable (see [Identification and voting](https://kb.storpool.com/admin_guide/conf_file/conf_file_id_voting.html)).
 
-* **SP_OURID**: The node id in the StorPool's configuration. Number.
+* `SP_OURID`: The node id in the StorPool's configuration. Number.
 
 
-#### VM checkpoint file on a StorPool volume
+## VM checkpoint file on a StorPool volume
 
-Require _qemu-kvm-ev_ installed on the hypervisors. (Please follow OpenNebula's [Nodes Platform notes](http://docs.opennebula.org/5.4/intro_release_notes/release_notes/platform_notes.html#nodes-platform-notes) for installation instructions.)
+Requires _qemu-kvm-ev_ installed on the hypervisors. Please follow OpenNebula's [Nodes Platform notes](http://docs.opennebula.org/5.4/intro_release_notes/release_notes/platform_notes.html#nodes-platform-notes) for installation instructions.
 
-* reconfigure opennebula to use local actions for save and restore
+* Reconfigure OpenNebula to use local actions for save and restore:
 
-```
-VM_MAD = [
-   ...
-   ARGUMENTS = "... -l ...save=tmsave,restore=tmrestore"
-]
-```
+  ```
+  VM_MAD = [
+     ...
+     ARGUMENTS = "... -l ...save=tmsave,restore=tmrestore"
+  ]
+  ```
 
-* set SP_CHECKPOINT_BD=1 to enable the direct save/restore to StorPool backed block device
-```
-ONE_LOCATION=/var/lib/one
-echo "SP_CHECKPOINT_BD=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
-```
+* Set `SP_CHECKPOINT_BD=1` to enable the direct save/restore to StorPool backed block device:
 
-#### Disk snapshot limits
+  ```
+  ONE_LOCATION=/var/lib/one
+  echo "SP_CHECKPOINT_BD=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
+  ```
 
-It is possible to limit the number of snapshots per disk. When the limit is reached the addon will return an error which will be logged in the VM log and the _ERROR_ variable will be set in the VM's Info tab with relevant error message.
+## Disk snapshot limits
 
-There are three levels of configuration possible.
+It is possible to limit the number of snapshots per disk. When the limit is reached, the addon will return an error which will be logged in the VM log, and the _ERROR_ variable will be set in the VM's Info tab with relevant error message.
 
-#### Global in $ONE_LOCATION/remotes/addon-storpoolrc
+There are three levels of configuration possible:
 
-The snapshot limits could be set as global in addon-storpoolrc:
-```
-ONE_LOCATION=/var/lib/one
-echo "DISKSNAPSHOT_LIMIT=15" >> $ONE_LOCATION/remotes/addon-storpoolrc
-```
+* Global in `$ONE_LOCATION/remotes/addon-storpoolrc`
 
-##### Per SYSTEM datastore
+  The snapshot limits could be set as global in addon-storpoolrc:
+  
+  ```
+  ONE_LOCATION=/var/lib/one
+  echo "DISKSNAPSHOT_LIMIT=15" >> $ONE_LOCATION/remotes/addon-storpoolrc
+  ```
 
-Set DISKSNAPSHOT_LIMIT variable in the SYSTEM's datastore template with he desired limit. The limit will be enforced on all VM's that are provisioned on the given SYSTEM datastore.
+* Per SYSTEM datastore
 
-##### Per VM
+  Set the `DISKSNAPSHOT_LIMIT` variable in the SYSTEM's datastore template with he desired limit. The limit will be enforced on all VM's that are provisioned on the given SYSTEM datastore.
 
-> :exclamation: Only the members of the `oneadmin` group could alter the variable.
+* Per VM
 
-Open the VM's Info tab and add to the Attributes
-```
-DISKSNAPSHOT_LIMIT=15
-```
+  **Note:** Only the members of the `oneadmin` group could alter the variable.
+  
+  Open the VM's Info tab and add to the Attributes:
+  
+  ```
+  DISKSNAPSHOT_LIMIT=15
+  ```
 
-### Re-configure the 'VM snapshot' to do atomic disk snapshots
+## Re-configure the 'VM snapshot' to do atomic disk snapshots
 
-* Append the following string to the VM_MAD's _ARGUMENTS_:
-```
--l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool
-```
+1. Append the following string to the VM_MAD's _ARGUMENTS_:
 
-* Edit `/etc/one/oned.conf` and set KEEP_SNAPSHOTS=YES in the VM_MAD section
-```
-VM_MAD = [
-    ...
-    KEEP_SNAPSHOTS = "yes",
-    ...
-]
-```
-It is possible to do fsfreeze/fsthaw while the VM disks are snapshotted.
+   ```
+   -l snapshotcreate=snapshot_create-storpool,snapshotrevert=snapshot_revert-storpool,snapshotdelete=snapshot_delete-storpool
+   ```
+
+2. Edit `/etc/one/oned.conf` and set `KEEP_SNAPSHOTS=YES` in the `VM_MAD` section:
+
+   ```
+   VM_MAD = [
+       ...
+       KEEP_SNAPSHOTS = "yes",
+       ...
+   ]
+   ```
+
+It is possible to do `fsfreeze/fsthaw` while the VM disks are snapshotted:
+
 ```
 ONE_LOCATION=/var/lib/one
 echo "VMSNAPSHOT_FSFREEZE=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
 ```
 
-#### VM snapshot limits
+### VM snapshot limits
 
 To enable VM snapshot limits:
 ```
@@ -103,13 +105,15 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 ```
 
 The snapshot limits could be set as global in addon-storpoolrc:
+
 ```
 VMSNAPSHOT_LIMIT=10
 ```
 
 It is possible to override the global defined values in the SYSTEM datastore configuration.
 
-Also, it is possible to override them per VM defining the variables in the VM's USER_TEMPLATE (the attributes at the bottom in the Sunstone's "VM Info" tab). In this case it is possible (and recommended ) to restrict the variables to be managed by the members of 'oneadmin' group by setting in /etc/one/oned.conf:
+Also, it is possible to override them per VM by defining the variables in the VM's USER_TEMPLATE (the attributes at the bottom in the Sunstone's "VM Info" tab). In this case, it is possible (and recommended ) to restrict the variables to be managed by the members of 'oneadmin' group by setting in `/etc/one/oned.conf`:
+
 ```
 cat >>/etc/one/oned.conf <<EOF
 VM_RESTRICTED_ATTR = "VMSNAPSHOT_LIMIT"
@@ -120,23 +124,26 @@ EOF
 systemctl restart opennebula
 ```
 
-### Send volume snapshot to a remote StorPool cluster when deleting a volume
+## Send volume snapshot to a remote StorPool cluster when deleting a volume
 
 ```
 REMOTE_BACKUP_DELETE=<remote_location>:<optional_argumets>
 ```
-There is an option to send last snapshot to a remote StorPool cluster when deleting a disk image. The configuration is as follow:
- * `remote_location` - the name of the remote StorPool cluster to send volume snapshot to
- * `optional_argumets` - extra arguments
 
-For example, to send volume snapshot to a remote cluster with name _clusterB_ and tag the volumes with tag _del=y_ set 
+There is an option to send last snapshot to a remote StorPool cluster when deleting a disk image. The configuration is as follow:
+
+* `remote_location` - the name of the remote StorPool cluster to send volume snapshot to
+* `optional_argumets` - extra arguments
+
+For example, to send volume snapshot to a remote cluster with name _clusterB_ and tag the volumes with tag _del=y_ set:
 
 ```
 REMOTE_BACKUP_DELETE="clusterB:tag del=y"
 ```
 
-### space usage monitoring configuration
-In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, the SYSTEM datastore and the VM disks(and their snapshots) are monitored from the hosts. As this addon support no direct access to the StorPool API from the hosts we should provide the needed data to the related probes. This is done by the monitor_helper-sync script which is run via cron job on the front-end. The script is collecting the needed data and propagating(if needed) to the hosts for use. Here is the default configuration:
+## Monitoring space usage
+
+In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, and the SYSTEM datastore and the VM disks (and their snapshots) are monitored from the hosts. As this addon does not support direct access to the StorPool API from the hosts, we should provide the needed data to the related probes. This is done by the `monitor_helper-sync` script, which is run via a cron job on the front-end. The script is collecting the needed data and propagating (if needed) to the hosts for use. Here is the default configuration:
 
 ```
 # path to the json files on the hosts
@@ -170,10 +177,12 @@ SP_TEMPLATE_PROPAGATE="YES"
 #DEBUG_MONITOR_SYNC=1
 ```
 
-For the case when there is shared filesystem between the one-fe and the HV nodes there is no need to copy the JSON files. In this case the `SP_JSON_PATH` variable must be altered to point to a shared folder and set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files
-_Note: the shared filesystem must be mounted on same system path on all nodes as on the one-fe!_
+For the case when there is shared filesystem between the `one-fe` and the HV nodes there is no need to copy the JSON files. In this case, the `SP_JSON_PATH` variable must be altered to point to a shared folder, and you should set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in the `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files.
 
-For example the shared file system in mounted on `/sharedfs`:
+**Note:** The shared filesystem must be mounted on same system path on all nodes as on the `one-fe`!
+
+For example, the shared file system in mounted on `/sharedfs`:
+
 ```bash
 cat >>/var/lib/one/remotes/monitor_helper-syncrc <<EOF
 # datastores stats on the sharedfs
@@ -185,22 +194,17 @@ export MONITOR_SYNC_REMOTE="NO"
 EOF
 ```
 
-#### Multiverse - use multiple OpenNebula instances on single StorPool cluster
+## Multiverse - use multiple OpenNebula instances on single StorPool cluster
 
-For each OpenNebula instance set a different string in the `ONE_PX` variable.
+For each OpenNebula instance, set a different string in the `ONE_PX` variable.
 
 It is possible to change the instance tag name (`nloc`) by setting `LOC_TAG` variable.
 
-The ${LOC_TAG} tag value is set using the `LOC_TAG_VAL` variable, where the default is `LOC_TAG_VAL=${ONE_PX}`
+The `${LOC_TAG}` tag value is set using the `LOC_TAG_VAL` variable, where the default is `LOC_TAG_VAL=${ONE_PX}`.
 
 It is possible to change the default volume tag name (`nvm`) by setting `VM_TAG` variable.
 
-The `${VM_TAG}` tag value has format `${VM_ID}`
-
-
-## VM's domain XML tweaking
-
-See  [Deploy tweaks](deploy_tweaks.md)
+The `${VM_TAG}` tag value has format `${VM_ID}`.
 
 
 ## Delayed delete of VM disks
@@ -215,6 +219,13 @@ su - oneadmin -c "onehost sync --force"
 ```
 
 Notes:
- * There is no configuration option to disable _DELAY_DELETE_ but defining a relatively small time, like `DELAY_DELETE=1s` should work as an alternative.
- * In case of need to recover the data immediately contact the StorPool support for assistance.
+
+* There is no configuration option to disable _DELAY_DELETE_, but defining a relatively small time -- like `DELAY_DELETE=1s` -- should work as an alternative.
+* In case of need to recover the data immediately contact the StorPool support for assistance.
+
+## More information
+
+* For details about the StorPool VolumeCare policy tags, see [VolumeCare](volumecare.md).
+* For details about the StorPool QoS Class tags, see [QoS class configuration](qosclass.md).
+* For details about VM's domain XML tweaking, see  [Deploy tweaks](deploy_tweaks.md)
 

@@ -1,6 +1,6 @@
-# StorPool Volumecare
+# StorPool VolumeCare
 
-StorPool Volumecare is a framework to schedule and maintain recovery snapshots in StorPool. This integration allows specifying snapshot policies per VM from within the ONE interface by introducing new VM template variable _VC_POLICY_.
+[StorPool VolumeCare](https://kb.storpool.com/volumecare/) is a framework to schedule and maintain recovery snapshots in StorPool. This integration allows specifying snapshot policies per VM from within the ONE interface by introducing new VM template variable _VC_POLICY_.
 
 
 ## Installation
@@ -37,13 +37,13 @@ systemctl restart opennebula.service
 ## Usage
 
 Set the _VC_POLICY_ variable in the VM's _USER_TEMPLATE_ with the corresponding VolumeCare policy.
-To disable the VolumeCare delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
+To disable the VolumeCare: delete the _VC_POLICY_ variable from the VM's _USER_TEMPLATE_(or set to an empty string).
 
-For the optional tagging for QoS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. For further details see [qosclass.md](qosclass.md).
+For the optional tagging for QoS policy enforcing set the _SP_QOSCLASS_ variable in the VM's _USER_TEMPLATE_ with the name of the defined QOS class in StorPool. For further details see [QoS class configuration](qosclass.md).
 
 ## Troubleshooting
 
-* Monitor the hook events logged in the Hook Manager
+### Monitoring the hook events logged in the Hook Manager
 
 ```bash
 $ onehook list
@@ -153,7 +153,7 @@ EXECUTION STDERR
 
 ```
 
-* monitor the messages logged in the system logs
+### Monitoring the messages logged in the system logs
 
 ```bash
 $ grep vc_sp_ /var/log/messages
