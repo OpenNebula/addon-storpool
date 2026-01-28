@@ -19,6 +19,12 @@
 PATH="/bin:/usr/bin:/sbin:/usr/sbin:${PATH}"
 
 cgroup="${1:-machine.slice}"
+cgpath="/sys/fs/cgroup"
+
+if [[ -f /var/tmp/one/addon-storpoolrc ]]; then
+    # shellcheck source=addon-storpoolrc
+    source /var/tmp/one/addon-storpoolrc
+fi
 
 function count_cpus()
 {
@@ -68,26 +74,32 @@ function exclude_cpus()
 	[[ -z "${set}" ]] || echo "${set}"
 }
 
-read -r -a mem <<< "$(free -b | grep -i "mem:" || true)"
-read -r -a cg_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "${cgroup}" | tr '\n' ' ' || true)"
-read -r -a root_arr <<< "$(cgget -v -n -r memory.limit_in_bytes -r cpuset.cpus "" | tr '\n' ' ' || true)"
+read -r -a mem_arr <<< "$(free -b | grep -i "mem:" || true)"
+root_mem="${mem_arr[1]}"
 
-cg_cpuset="${cg_arr[1]}"
-root_cpuset="${root_arr[1]}"
-cg_cpus=$(count_cpus "${cg_cpuset}" || true)
-root_cpus=$(count_cpus "${root_cpuset}" || true)
-
-if [[ -f /var/tmp/one/addon-storpoolrc ]]; then
-	# shellcheck source=addon-storpoolrc
-    source /var/tmp/one/addon-storpoolrc
+read -r -a cgmount <<<"$(grep cgroup /proc/mounts)"
+#cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0
+if [[ "${cgmount[2]}" == "cgroup2" ]]; then
+    cgver="2"
+    cg_mem="$(<"${cgpath}/${cgroup}/memory.max")"
+    cg_cpuset="$(<"${cgpath}/${cgroup}/cpuset.cpus.effective")"
+    root_cpuset="$(<"${cgpath}/cpuset.cpus.effective")"
+else
+    cgver="1"
+    cg_mem="$(<"${cgpath}/memory/${cgroup}/memory.limit_in_bytes")"
+    cg_cpuset="$(<"${cgpath}/cpuset/${cgroup}/cpuset.cpus")"
+    root_cpuset="$(<"${cgpath}/cpuset/cpuset.cpus")"
 fi
+
+cg_cpus="$(count_cpus "${cg_cpuset}")"
+root_cpus="$(count_cpus "${root_cpuset}")"
 
 [[ -n "${SKIP_RESERVED_CPU}" ]] || echo "RESERVED_CPU=$(((root_cpus-cg_cpus)*100))"
 
-echo "RESERVED_MEM=$(( (mem[1] - cg_arr[0]) / 1024 ))"
+echo "RESERVED_MEM=$(( (root_mem - cg_mem) / 1024 ))"
 
 storpool_confshow SP_OURID 2>/dev/null
 
 isolcpus=$(exclude_cpus "${root_cpuset}" "${cg_cpuset}")
-[[ -z "${DEBUG}" ]] || echo "root_cpuset '${root_cpuset}', cg_cpuset '${cg_cpuset}', isolcpus '${isolcpus}'" >&2
-[[ -z "${isolcpus}" ]] || echo "ISOLCPUS=\"${isolcpus}\""
+[[ -z ${DEBUG:-} ]] || echo "#CGROUPv${cgver} root_cpuset '${root_cpuset}', cg_cpuset '${cg_cpuset}', cg_mem '${cg_mem}', isolcpus '${isolcpus}'" >&2
+[[ -z ${isolcpus} ]] || echo "ISOLCPUS=\"${isolcpus}\""
