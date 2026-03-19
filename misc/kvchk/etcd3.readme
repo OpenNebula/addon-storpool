@@ -1,0 +1,89 @@
+export ETCD_RELEASE=v3.5.25
+# get the precompiled binaries
+wget https://github.com/etcd-io/etcd/releases/download/${ETCD_RELEASE}/etcd-${ETCD_RELEASE}-linux-amd64.tar.gz
+
+# extract to /usr/local/bin
+sudo tar -v -C /usr/local/bin --strip-components 1 -f etcd-${ETCD_RELEASE}-linux-amd64.tar.gz -x etcd-${ETCD_RELEASE}-linux-amd64/{etcd,etcdctl,etcdutl}
+
+sudo chown -v root.root /usr/local/bin/etcd*
+
+# Create system etcd user
+
+sudo groupadd --system etcd
+
+sudo useradd --system --create-home --home-dir "/var/lib/etcd3" --gid etcd --shell "/sbin/nologin" --comment "etcd user" etcd
+
+sudo mkdir -p /etc/etcd/tls && sudo chown etcd:etcd /etc/etcd/tls && sudo chmod 0700 /etc/etcd/tls
+
+
+# Create /etc/default/etcd3
+# Replace _HOSTNAME_ and 
+cat >/etc/default/etcd3 << EOF
+ETCD_NAME="_HOSTNAME_"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://_HOST_IP_:2380"
+ETCD_INITIAL_CLUSTER_TOKEN="spKVstore1"
+ETCD_INITIAL_CLUSTER="_HOSTNAME_=http://_HOST_IP_:2380"
+ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_LISTEN_PEER_URLS="http://_HOST_IP_:2380"
+ETCD_LISTEN_CLIENT_URLS="http://_HOST_IP_:2379,http://127.0.0.1:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://_HOST_IP_:2379"
+ETCD_DATA_DIR="/var/lib/etcd3/spKVstore1.etcd"
+EOF
+
+# sed -i s"/_HOSTNAME_/${HOSTNAME}/g" /etc/default/etcd3
+# sed -i s"/_HOST_IP_/${HOST_IP}/g" /etc/default/etcd3
+
+
+# Create systemd service file
+
+cat >/etc/systemd/system/etcd3.service <<EOF
+[Unit]
+Description=Etcd Server
+After=network.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Nice=-5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5
+LimitNOFILE=65536
+TimeoutStartSec=300
+Type=notify
+WorkingDirectory=/var/lib/etcd3/
+EnvironmentFile=-/etc/default/etcd3
+User=etcd
+ExecStart=/bin/bash -c "GOMAXPROCS=\$(nproc) /usr/local/bin/etcd"
+SyslogIdentifier=etcd3
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Start the etcd3 service
+
+sudo systemctl daemon-reload
+
+sudo systemctl enable --now etcd3.service
+
+sudo systemctl status etcd3.service
+
+### Hints ###
+
+###
+# check
+etcdctl -w table --endpoints=__NODE1__:2379,__NODE2__:2379,__NODE3__:2379 endpoint status
+etcdctl member list
+
+###
+# replace member - delete the unavailable (get memberID from `etcd3 member list`)
+# list all "live" endpoints
+etcdctl --endpoints=NODE1_IP:2379,NODE2_IP:2379,...  member remove xxxxxxxxxxxxxxxx
+# add the new peer to the cluster
+etcdctl member add PEER_HOSTNAME --peer-urls=http://192.168.11.61:2380
+# edit the new peer configuration and set ETCD_INITIAL_CLUSTER_STATE="existing"
+# In ETCD_INITIAL_CLUSTER list all existing peers plus the new one
+# start the service on the new peer
+# sync ETCD_INITIAL_CLUSTER list in /etc/sysconfiig/etcd3 to have all members
+
