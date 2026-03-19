@@ -1736,39 +1736,70 @@ function storpoolSnapshotRevert()
 function storpoolSnapshotsDelete()
 {
     local _NAME="$1" _SP_SNAPSHOTS_PREFIX="$2"
-    local _SP_NAME_SNAPSHOTS="${_NAME}-${_SP_SNAPSHOTS_PREFIX}"
     local _SP_UID="" _RET=1 _name="" _spfh=""
+    # Parse multiple prefixes if comma-separated
+    local multi_prefix="" kv_count=0 prefixes_array=()
+    local _SP_NAME_SNAPSHOTS=""
+    IFS=',' read -ra prefixes_array <<< "${_SP_SNAPSHOTS_PREFIX}"
+    if [[ ${#prefixes_array[@]} -gt 1 ]]; then
+        multi_prefix="1"
+    fi
     if boolTrue "DEBUG_storpoolSnapshotsDelete"; then
         splog "[D] storpoolSnapshotsDelete($*) DO_REMOTE=${DO_REMOTE}"
     fi
-    while read -r -u "${kvfh}" _name; do
-        read -r -u "${kvfh}" _SP_UID
-        _name="${_name##*/}"
-        if boolTrue "DDEBUG_storpoolSnapshotsDelete"; then
-            splog "[DD] KV/LOOP _name:${_name} SP_UID:${_SP_UID}"
-        fi
-        if [[ ${#_name} -lt ${#_SP_NAME_SNAPSHOTS} ]]; then
-            splog "[I] storpoolSnapshotsDelete ${_name}(${#_name} chars) > ${_SP_NAME_SNAPSHOTS}(${#_SP_NAME_SNAPSHOTS} chars)"
-            continue
-        fi
-        storpoolSnapshotDelete "${_SP_UID}"
-    done {kvfh}< <(kvGet "byName" "${_SP_NAME_SNAPSHOTS}" "startswith" "KeysAndVals" || true)
+    # Process KV store for each prefix
+    for prefix in "${prefixes_array[@]}"; do
+        _SP_NAME_SNAPSHOTS="${_NAME}-${prefix}"
+        while read -r -u "${kvfh}" _name; do
+            read -r -u "${kvfh}" _SP_UID
+            _name="${_name##*/}"
+            ((kv_count++))
+            if boolTrue "DDEBUG_storpoolSnapshotsDelete"; then
+                splog "[DD] KV/LOOP _name:${_name} SP_UID:${_SP_UID}"
+            fi
+            if [[ ${#_name} -lt ${#_SP_NAME_SNAPSHOTS} ]]; then
+                splog "[I] storpoolSnapshotsDelete ${_name}(${#_name} chars) > ${_SP_NAME_SNAPSHOTS}(${#_SP_NAME_SNAPSHOTS} chars)"
+                continue
+            fi
+            storpoolSnapshotDelete "${_SP_UID}"
+        done {kvfh}< <(kvGet "byName" "${_SP_NAME_SNAPSHOTS}" "startswith" "KeysAndVals" || true)
+        exec {kvfh}<&-
+    done
     # process storpool snapshots by tags too
     if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList; then
+        # Build jq filter for multiple prefixes
+        local jq_filter_conditions=""
+        local jq_args=""
+        local prefix_count=0
+        if [[ -n "${multi_prefix}" ]]; then
+            # Multi-prefix mode: build OR conditions
+            for prefix in "${prefixes_array[@]}"; do
+                if [[ ${prefix_count} -gt 0 ]]; then
+                    jq_filter_conditions+=" or "
+                fi
+                jq_filter_conditions+="(.tags[\$snap] | startswith(\$prefix${prefix_count}))"
+                jq_args+=" --arg prefix${prefix_count} \"${prefix}\""
+                ((prefix_count++))
+            done
+        else
+            # Single prefix mode (backward compatibility)
+            jq_filter_conditions="(.tags[\$snap] | startswith(\$prefix))"
+            jq_args=" --arg prefix \"${_SP_SNAPSHOTS_PREFIX}\""
+        fi
+
+        local snap_count=0
         while read -r -u "${_spfh}" _SP_UID deleted snap img tags; do
-            [[ "${deleted}" == "false" ]] || continue
-            [[ "${snap}" != "null" ]] || continue
-            if [[ "${_SP_VOL}" == "${img}" ]]; then
-                if boolTrue "DDEBUG_storpoolSnapshotsDelete"; then
-                    splog "[DD] storpoolSnapshotsDelete($*) ${_SP_UID} d:${deleted} '${snap}' '${img}' ${tags}"
-                fi
-                if [[ "${snap}" =~ ${_SP_SNAPSHOTS_PREFIX} ]]; then
-                    storpoolSnapshotDelete "${_SP_UID}"
-                fi
+            ((snap_count++))
+            # jq now filters everything, so we just need to delete the snapshots
+            if boolTrue "DDEBUG_storpoolSnapshotsDelete"; then
+                splog "[DD] storpoolSnapshotsDelete($*) ${_SP_UID} d:${deleted} '${snap}' '${img}' ${tags}"
             fi
-        done {_spfh}< <(jq -r --arg snap snap --arg img img \
-           '.data.clusters[].response.data[]|"\(.name) \(.deleted|tostring) \(.tags[$snap]|tostring) \(.tags[$img]|tostring) \(.tags|tostring)"' \
-            "${TMPDIR}/SnapshotsList.json" || true)
+            storpoolSnapshotDelete "${_SP_UID}"
+        done {_spfh}< <(eval "jq -r --arg snap snap --arg img img --arg target_img \"${_NAME}\" ${jq_args} \
+           '.data.clusters[].response.data[]
+           | select(.deleted == false and .tags.img == \$target_img and (.tags[\$snap] // null) != null and (${jq_filter_conditions}))
+           | \"\(.name) \(.deleted|tostring) \(.tags[\$snap]|tostring) \(.tags[\$img]|tostring) \(.tags|tostring)\"' \
+            \"${TMPDIR}/SnapshotsList.json\"" || true)
         exec {_spfh}<&-
     fi
 }
