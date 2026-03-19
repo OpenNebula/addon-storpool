@@ -50,9 +50,10 @@ fi
 
 splog "SIZE=${SIZE} FSTYPE=${FSTYPE} DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}${SUPPORTED_FS:+ SUPPORTED_FS=${SUPPORTED_FS}}${FS_OPTS:+ FS_OPTS=${FS_OPTS}}"
 
-if [[ "${FSTYPE,,}" != "raw" && "${FSTYPE,,}" != "swap" ]]; then
-    log_error "Unsupported FSTYPE '${FSTYPE}'! Please use 'raw'."
-    splog "Unsupported FSTYPE '${FSTYPE}'! Please use 'raw'."
+if [[ "${FSTYPE,,}" != "raw" ]] && [[ "${FSTYPE,,}" != "swap" ]]; then
+    msg="Unsupported FSTYPE '${FSTYPE}'! Please use 'raw'."
+    log_error "${msg}"
+    splog "${msg}"
     exit 1
 fi
 
@@ -62,90 +63,84 @@ fi
 
 oneDatastoreInfo "${DS_ID}"
 
-if boolTrue "AUTO_TEMPLATE"; then
-    if [[ -z "${SP_PLACEALL}" ]]; then
-        error_message "The template of the datastore with ID ${DS_ID} is missing 'SP_PLACEALL' attribute."
-        exit 255
-    fi
-    if [[ -z "${SP_PLACETAIL}" ]]; then
-        SP_PLACETAIL="${SP_PLACEALL}"
-    fi
-    if [[ -n "${SP_REPLICATION}" && "${SP_REPLICATION}" =~ ^[123]+$ || "${SP_REPLICATION}" =~ ^[[:digit:]]+$ ]]; then
-        error_message "The template of the datastore with ID ${DS_ID} is with unknown value for 'SP_REPLICATION' attribute (SP_REPLICATION=${SP_REPLICATION})."
-        exit 255
-    fi
-fi
-
 #-------------------------------------------------------------------------------
 # Set dst path and dirs
 #-------------------------------------------------------------------------------
 
-DST_PATH="$(arg_path "${DST}")"
-DST_HOST="$(arg_host "${DST}")"
-DST_DIR="$(dirname "${DST_PATH}")"
-export DST_DIR  # TBD: remove
-DISK_ID="$(echo "${DST}" | awk -F. '{print $NF}' || true)"
+DST_PATH=$(arg_path "${DST}")
+DST_HOST=$(arg_host "${DST}")
+
+DISK_ID=$(echo "${DST}" | awk -F. '{print $NF}')
 
 oneVmInfo "${VM_ID}" "${DISK_ID}"
 
-if [[ -n "${DRIVER}" && "${DRIVER,,}" != "raw" ]]; then
-    log_error "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
-    splog "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
+if [[ -n "${DRIVER}" ]] && [[ "${DRIVER,,}" != "raw" ]]; then
+    msg="Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
+    log_error "${msg}"
+    splog "${msg}"
     exit 1
 fi
 
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
 debug_sp_qosclass
 
+if boolTrue "MULTICLUSTER"; then
+   oneHostInfo "${DST_HOST}"
+   DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+fi
+
 #-------------------------------------------------------------------------------
 # Create image
 #-------------------------------------------------------------------------------
 
-SP_SIZE="${SIZE}M"
-SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FSTYPE}"
-SP_LINK="/dev/storpool/${SP_VOL}"
+SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
-export SP_SIZE  # TBD: remove
 
-storpoolTemplate "${SP_TEMPLATE}"
-
-storpoolVolumeCheck "${SP_VOL}"
-
-storpoolVolumeCreate "${SP_VOL}" "${SIZE}M" "${SP_TEMPLATE}"
-
-if type -t contains &>/dev/null; then
-    if contains "${SUPPORTED_FS}" "${FS}" ","; then
-        splog "FS:${FS} is SUPPORTED_FS:${SUPPORTED_FS}"
-    else
-        splog "FS:${FS} not in SUPPORTED_FS:${SUPPORTED_FS}"
-        FS=
-    fi
-else
-    FS=
+if storpoolVolumeExists "${SP_VOL}" byName; then
+    storpoolDelete "${SP_UID}" "force"
+    splog "Delete ${SP_UID} (${SP_VOL}) ($?)"
 fi
 
-ON_HOST=""
-if [[ "${FSTYPE,,}" != "raw" || -n "${FS}" ]]; then
+storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${SP_TEMPLATE}" \
+    "diskid;${VM_TAG};fs;type;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
+    "${DISK_ID};${VM_ID};${FS};VOL${FSTYPE^^};${VC_POLICY};${SP_QOSCLASS}"
+
+VOL_UID="${SP_UID}"
+SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
+
+if [[ -n ${FS} ]]; then
+    if type -t contains &>/dev/null; then
+        if contains "${SUPPORTED_FS}" "${FS}" ","; then
+            splog "FS:'${FS}' is SUPPORTED_FS:${SUPPORTED_FS}"
+        else
+            splog "FS:'${FS}' not in SUPPORTED_FS:${SUPPORTED_FS}"
+            FS=
+        fi
+    else
+        FS=
+    fi
+fi
+
+storpoolAttach "${VOL_UID}" "${DST_HOST}"
+
+if [[ "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
     if [[ "${FSTYPE}" == "swap" ]]; then
         MKFS_CMD="${MKSWAP:-mkswap} -L swap \"${SP_LINK}\""
     else
         if [[ -n "${FS}" ]]; then
-            FS_OPTS="$(eval "echo \${FS_OPTS_${FS}}")"
-            MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${FS_OPTS} \"${SP_LINK}\""
+            FS_OPTS="FS_OPTS_${FS}"
+            MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${!FS_OPTS} \"${SP_LINK}\""
         else
-            MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}" || true)"
+            MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}")"
         fi
     fi
     splog "MKFS_CMD=${MKFS_CMD}"
 
-    trapAdd "splog \"return \$? \"; storpoolVolumeDetach \"${SP_VOL}\" \"force\" \"\" \"all\"; storpoolVolumeDelete \"${SP_VOL}\" force snaps"
-
-    storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
+    trapAdd "splog \"return \$? \"; storpoolDetach \"${VOL_UID}\" \"force\" \"\" \"all\"; storpoolDelete \"${VOL_UID}\" force snaps"
 
     splog "ssh_exec_and_log ${DST_HOST} ${MKFS_CMD}"
     ssh_exec_and_log "${DST_HOST}" "${MKFS_CMD}" \
-        "Error running ${MKFS_CMD} on ${DST_HOST}"
-    ON_HOST="${DST_HOST}"
+            "Error running ${MKFS_CMD} on ${DST_HOST}"
 
     trapReset
 fi
@@ -154,21 +149,23 @@ mode="rw"
 type="VOL"
 if boolTrue "READONLY"; then
     mode="${READONLY_MODE,,}"
-    type="VOLRO"
+    type+="RO"
 fi
 
 if [[ -z "${ON_HOST}" ]] || [[ "${mode}" == "ro" ]]; then
-    storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${mode}"
+    storpoolAttach "${VOL_UID}" "${DST_HOST}" "${mode}"
 fi
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${type};${DISK_ID}"
+storpoolVolumeTag "${VOL_UID}" \
+    "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
+    "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${type};${DISK_ID}"
 
 MONITOR_TM_MAD=""
 if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="storpool"
 fi
 
-oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
+oneSymlink "${DST_HOST}" "${VOL_UID}" "${DST_PATH}"
 
 splog "END ${VM_ID}"
 exit 0

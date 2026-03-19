@@ -35,9 +35,10 @@ ARGV=("$@")
 DS_ID="${ARGV[$(($#-1))]}"
 VM_ID="${ARGV[$(($#-2))]}"
 DST="${ARGV[$(($#-3))]}"
-SRC=("${ARGV[@]:0:$(($#-3))}")
+read -r -a SRC <<< "${ARGV[@]:0:$(($#-3))}"
 
 TM_PATH="$(dirname "$0")"
+
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${TM_PATH}/storpool_common.sh"
 
@@ -56,20 +57,6 @@ function exit_error()
 #-------------------------------------------------------------------------------
 
 oneDatastoreInfo "${DS_ID}"
-
-if boolTrue "AUTO_TEMPLATE"; then
-    if [[ -z "${SP_PLACEALL}" ]]; then
-        error_message "The template of the datastore with ID ${DS_ID} is missing 'SP_PLACEALL' attribute."
-        exit 255
-    fi
-    if [[ -z "${SP_PLACETAIL}" ]]; then
-        SP_PLACETAIL="${SP_PLACEALL}"
-    fi
-    if [[ -n "${SP_REPLICATION/[123]/}" || -n "${SP_REPLICATION/[[:digit:]]/}" ]]; then
-        error_message "The template of the datastore with ID ${DS_ID} is with unknown value for 'SP_REPLICATION' attribute (SP_REPLICATION=${SP_REPLICATION})."
-        exit 255
-    fi
-fi
 
 #-------------------------------------------------------------------------------
 # Set dst path and dirs
@@ -124,7 +111,7 @@ debug_sp_qosclass
 if boolTrue "INCLUDE_CONTEXT_PACKAGES"; then
     if [[ -d "/usr/share/one/context" ]]; then
         exec_and_set_error "rsync -a --exclude='*.iso' /usr/share/one/context/* '${ISO_DIR}'/" \
-            "Error copying /usr/share/one/context to ${ISO_DIR}"
+            "Error copying /usr/share/one/context/* to ${ISO_DIR}"
     fi
 fi
 
@@ -132,46 +119,54 @@ exec_and_set_error "${MKISOFS:-mkisofs} -o ${ISO_FILE} -V CONTEXT -J -R ${ISO_DI
     "Error creating iso fs"
 [[ -n "${ERROR}" ]] && exit_error
 
-SP_SIZE="$(du -b "${ISO_FILE}" | cut -f1 || true)"
-SP_SIZE="$(( (SP_SIZE +511) /512 *512 ))"
-SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
-SP_LINK="/dev/storpool/${SP_VOL}"
+SP_SIZE=$(du -b "${ISO_FILE}" | cut -f 1 || true)
+SP_SIZE=$(( (SP_SIZE +511) /512 *512 ))
+SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
 
-if storpoolVolumeExists "${SP_VOL}"; then
-    storpoolVolumeResize "${SP_VOL}" "${SP_SIZE}" "shrinkOk"
-    storpoolTemplate "${SP_TEMPLATE}"
+if kvGetUid "${SP_VOL}"; then
+    VOL_UID="${SP_UID}"
+    storpoolVolumeResize "${VOL_UID}" "${SP_SIZE}" "shrinkOk"
 else
-    storpoolVolumeCreate "${SP_VOL}" "${SP_SIZE}" "${SP_TEMPLATE}"
+    storpoolVolumeCreate "${SP_VOL}" "${SP_SIZE}" "${SP_TEMPLATE}" \
+        "virt;${LOC_TAG};type;diskid;${VM_TAG}" \
+        "one;${LOC_TAG_VAL};CNTXT;${DISK_ID};${VM_ID}"
+    VOL_UID="${SP_UID}"
 fi
+
+SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
 
 #-------------------------------------------------------------------------------
 # Import image to the context volume
 #-------------------------------------------------------------------------------
 
-storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
+storpoolAttach "${VOL_UID}" "${DST_HOST}"
 PIPE_CMD="cat ${ISO_FILE}"
-splog "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=/dev/storpool/${SP_VOL} bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct"
-exec_and_log "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=/dev/storpool/${SP_VOL} bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct" \
-            "Error importing ${ISO_FILE} to ${DST_HOST}:/dev/storpool/${SP_VOL}"
+splog "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct"
+exec_and_log "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=512k conv=fdatasync status=none iflag=fullblock oflag=direct" \
+         "Error importing ${ISO_FILE} to ${DST_HOST}:${SP_LINK}"
 
 #-------------------------------------------------------------------------------
 # (re)attach readonly
 #------------------------------------------------------------------------------
 if [[ "${READONLY_MODE,,}" == "ro" ]]; then
-    storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "ro"
+    storpoolAttach "${VOL_UID}" "${DST_HOST}" "ro"
 fi
 
 if boolTrue "TAG_CONTEXT_ISO"; then
-    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};CNTXT;${DISK_ID}"
+    storpoolVolumeTag "${VOL_UID}" \
+        "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
+        "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};CNTXT;${DISK_ID}"
+
 fi
 
 MONITOR_TM_MAD=
 if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="storpool"
 fi
+export MONITOR_TM_MAD
 
-oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
+oneSymlink "${DST_HOST}" "${VOL_UID}" "${DST_PATH}"
 
 #-------------------------------------------------------------------------------
 # Remove ISO file and source dir
@@ -180,44 +175,44 @@ oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
 rm -rf "${ISO_FILE}" > /dev/null 2>&1
 rm -rf "${ISO_DIR}" > /dev/null 2>&1
 
-if boolTrue "FORCE_DETACH_OTHER_CONTEXT"; then
-    forceDetachOther "${VM_ID}" "${DST_HOST}"
-fi
-
-if [[ -n "${T_OS_NVRAM}" ]]; then
-    read -r -a t_os_nvram <<< "${T_OS_NVRAM#*:}"
-    NVRAM_TEMPLATE="${t_os_nvram[0]#*=}"
-    # read -r -a t_arr <<< "${NVRAM_TEMPLATE//\// }"  # TBD: remove
-    if [[ "${NVRAM_TEMPLATE#*/}" == "${NVRAM_TEMPLATE}" ]]; then
+if [[ -n ${T_OS_NVRAM} ]]; then
+    NVRAM_TEMPLATE="${T_OS_NVRAM##*=}"
+    if [[ ${NVRAM_TEMPLATE#*/} == "${NVRAM_TEMPLATE}" ]]; then
         NVRAM_TEMPLATE="${OVMF_PATH:-/var/lib/one/remotes/OVMF}/${NVRAM_TEMPLATE}"
     fi
-    if [[ -f "${NVRAM_TEMPLATE}" ]]; then
+    if [[ -f ${NVRAM_TEMPLATE} ]]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-        SP_LINK="/dev/storpool/${SP_VOL}"
-        if ! storpoolVolumeExists "${SP_VOL}"; then
+        if storpoolVolumeExists "${SP_VOL}" byName; then
+            VOL_UID="${SP_UID}"
+            storpoolAttach "${VOL_UID}" "${DST_HOST}"
+        else
             SIZE=$(stat --printf=%s "${NVRAM_TEMPLATE}")
             if [[ -n "${SIZE}" ]]; then
-                splog "NVRAM_TEMPLATE=${NVRAM_TEMPLATE} SIZE=${SIZE} // ${T_OS_NVRAM}"
-                storpoolVolumeCreate "${SP_VOL}" "${SIZE}" "${SP_TEMPLATE}"
-                trapAdd "storpoolVolumeDelete \"${SP_VOL}\""
-                storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
-                trapAdd "storpoolVolumeDetach \"${SP_VOL}\" \"force\" \"\" \"all\""
-                PIPE_CMD="${DD:-dd} if=\"${NVRAM_TEMPLATE}\" bs=128k status=none"
+                splog "NVRAM_TEMPLATE=${NVRAM_TEMPLATE} SIZE=${SIZE} //${T_OS_NVRAM}"
+                storpoolVolumeCreate "${SP_VOL}" "${SIZE}" "${SP_TEMPLATE}" \
+                        "virt;${LOC_TAG};type;${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
+                        "one;${LOC_TAG_VAL};NVRAM;${VM_ID};${VC_POLICY};${SP_QOSCLASS}"
+                VOL_UID="${SP_UID}"
+                SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
+                trapAdd "storpoolDelete \"${VOL_UID}\""
+                storpoolAttach "${VOL_UID}" "${DST_HOST}"
+                trapAdd "storpoolDetach \"${VOL_UID}\" \"force\" \"\" \"all\""
+                PIPE_CMD="cat \"${NVRAM_TEMPLATE}\""
                 splog "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct"
                 exec_and_log "eval ${PIPE_CMD} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=128k conv=fdatasync status=none iflag=fullblock oflag=direct" \
                     "Error importing ${NVRAM_TEMPLATE} to ${DST_HOST}:${SP_LINK}"
                 trapReset
-                storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};NVRAM"
-
             else
                 splog "Can't get the size of ${NVRAM_TEMPLATE}!"
             fi
-        else
-            storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
         fi
     else
-        splog "NVRAM_TEMPLATE='${NVRAM_TEMPLATE}' not found!"
+        splog "NVRAM_TEMPLATE=${NVRAM_TEMPLATE} not found!"
     fi
+fi
+
+if boolTrue "FORCE_DETACH_OTHER_CONTEXT"; then
+    forceDetachOther "${VM_ID}" "${DST_HOST}"
 fi
 
 splog "END ${VM_ID}"

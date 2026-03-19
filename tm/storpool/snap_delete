@@ -31,15 +31,13 @@ SNAP_ID="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-DRIVER_PATH="$(dirname "$0")"
+TM_PATH="$(dirname "$0")"
 #shellcheck source=tm/storpool/storpool_common.sh
-source "${DRIVER_PATH}/storpool_common.sh"
+source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
+splog "[I] SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
-SRC_HOST=$(arg_host "${SRC}")
-SRC_PATH=$(arg_path "${SRC}")
-
+SRC_HOST="$(arg_host "${SRC}")"
 DISK_ID=$(echo "${SRC##*/}" | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
@@ -65,13 +63,13 @@ fi
 
 SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
 DST_HOST="${SRC_HOST}"
-DST_PATH="${SRC_PATH}"
-export DST_PATH  #  TBD: remove
 #-------------------------------------------------------------------------------
 # Delete snapshot
 #-------------------------------------------------------------------------------
 
-storpoolSnapshotDelete "${SP_SNAP}"
+if kvGetUid "${SP_SNAP}"; then
+    storpoolSnapshotDelete "${SP_UID}"
+fi
 
 splog "END ${VM_ID}"
 exit 0

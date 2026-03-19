@@ -1,1 +1,5 @@
 *~
+*.out
+*.stderr
+*.stdout
+*__pycache__

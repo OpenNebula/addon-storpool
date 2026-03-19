@@ -31,11 +31,11 @@ if [[ -n "${ONE_LOCATION}" ]]; then
 else
     LIB_LOCATION="/usr/lib/one"
 fi
-
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
+
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
@@ -59,20 +59,14 @@ fi
 oneDsDriverAction
 
 SP_VOL="${SOURCE##*/}"
-SP_TMPVOL="${SP_VOL}-$(date +%s || true)-$(mktemp --dry-run XXXXXX || true)"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
-SP_TEMPLATE="${ONE_PX:-one}-ds-${DATASTORE_ID}"
+# Test Volume and Snapshot exists
+kvGetUid "${SP_VOL}" fatal
+kvGetUid "${SP_SNAP}" fatal
+SNAP_UID="${SP_UID}"
 
-export SP_TMPVOL SP_TEMPLATE  # TBD: remove
+storpoolSnapshotRevert "${SNAP_UID}" "${SP_VOL}" "IS_SNAPSHOT"
 
-storpoolVolumeInfo "${SP_VOL}"
-
-if [[ "${V_PARENT_NAME}" == "${SP_SNAP}" ]]; then
-    splog "${SP_VOL} already based on ${V_PARENT_NAME}"
-else
-    storpoolSnapshotRevert "${SP_SNAP}" "${SP_VOL}"
-fi
-
-storpoolVolumeSnapshotsDelete "${SP_VOL}-snap"
+storpoolSnapshotsDelete "${SP_VOL}" "snap"
 
 splog "END"

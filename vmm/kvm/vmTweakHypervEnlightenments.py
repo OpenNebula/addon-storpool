@@ -92,7 +92,7 @@ try:
 		if dev.tag == 'disk':
 			# loop on all elements
 			for el in dev:
-				 if el.tag == 'driver':
+				if el.tag == 'driver':
 					for e in el.items():
 						# check if io=native already set
 						if e[0] == 'io' and e[1] == 'native':

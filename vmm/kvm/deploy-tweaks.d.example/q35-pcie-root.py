@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,17 +15,20 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
-from __future__ import print_function
-from sys import argv, stderr
+from typing import Optional
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0"
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -43,41 +46,43 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-changed = 0
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
+changed: bool = False
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
+xmlDomain: str = sys.argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
+
+xmlVm: str = sys.argv[2]
+vm_e: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_e.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-t_q35_ports_e = vm.find('./USER_TEMPLATE/Q35_PCIE_ROOT_PORTS')
-if t_q35_ports_e is not None:
-    q35_ports = int(t_q35_ports_e.text)
+xpath: str = './USER_TEMPLATE/Q35_PCIE_ROOT_PORTS'
+t_q35_ports_e: Optional[ET.Element] = vm.find(xpath)
+if t_q35_ports_e is not None and t_q35_ports_e.text is not None:
+    q35_ports: int = int(t_q35_ports_e.text)
+    os_type: Optional[ET.Element] = root.find('./os/type')
+    if os_type is not None and os_type.attrib['machine'] is not None:
+        if 'q35' in os_type.attrib['machine']:
+            new_device_e: ET.Element = ET.SubElement(root, 'devices', {})
 
-    machine_type = root.find('./os/type')
-    if 'q35' in machine_type.attrib['machine']:
-        new_device = ET.SubElement(root, 'devices', {})
-
-        ET.SubElement(new_device, 'controller', {
-                'type': 'pci',
-                'model': 'pcie-root'
-            })
-        for i in range(0,q35_ports):
-            ET.SubElement(new_device, 'controller', {
+            ET.SubElement(new_device_e, 'controller', {
                     'type': 'pci',
-                    'model': 'pcie-root-port'
+                    'model': 'pcie-root'
                 })
-        ET.SubElement(new_device, 'controller', {
-            'type': 'pci',
-            'model': 'pcie-to-pci-bridge'
-        })
-        changed = 1
+            for i in range(0, q35_ports):
+                ET.SubElement(new_device_e, 'controller', {
+                        'type': 'pci',
+                        'model': 'pcie-root-port'
+                    })
+            ET.SubElement(new_device_e, 'controller', {
+                'type': 'pci',
+                'model': 'pcie-to-pci-bridge'
+            })
+            changed = True
 
 if changed:
     indent(root)

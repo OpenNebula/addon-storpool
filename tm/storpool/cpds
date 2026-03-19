@@ -20,6 +20,7 @@
 
 #-------------------------------------------------------------------------------
 # cpds host:SOURCE host:DEST vmId datastoreId
+#   VM disk save-as image
 #-------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
@@ -41,7 +42,8 @@ splog "SRC=${SRC} DST=${DST} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 SRC_HOST="$(arg_host "${SRC}")"
 SRC_PATH="$(arg_path "${SRC}")"
 
-DISK_ID="$(echo "${SRC}" | awk -F. '{print $NF}')"
+DISK_ID=$(echo "${SRC}" | awk -F. '{print $NF}')
+SP_VOL="${DST##*/}"
 
 #-------------------------------------------------------------------------------
 # Get Image information
@@ -64,15 +66,14 @@ debug_sp_qosclass
 #-------------------------------------------------------------------------------
 # Compute the destination image name
 #-------------------------------------------------------------------------------
-
 SP_SRC="${SRC_PATH##*/}"
-SP_DST="${SP_SRC}-${VM_ID}-${DISK_ID}"
 
-SP_VOL="${HOTPLUG_SAVE_AS_SOURCE##*/}"
 SP_PARENT="${SOURCE##*/}"
-if boolTrue "CLONE"; then
+if boolTrue "CLONE" || [[ "${TYPE^^}" == "CDROM" ]]; then
     SP_PARENT+="-${VM_ID}-${DISK_ID}"
 fi
+kvGetUid "${SP_PARENT}" fatal
+PARENT_ID="${SP_UID}"
 
 if boolTrue "NO_VOLUME_TEMPLATE"; then
 	SP_TEMPLATE=
@@ -80,32 +81,32 @@ else
 	SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
 fi
 
-splog "DISK_ID=${DISK_ID} SP_DST=${SP_DST} SP_VOL=${SP_VOL} SP_PARENT=${SP_PARENT}${SP_TEMPLATE:+ SP_TEMPLATE=${SP_TEMPLATE}}"
+splog "DISK_ID=${DISK_ID} SP_SRC=${SP_SRC} SP_VOL=${SP_VOL} SP_PARENT=${SP_PARENT} PARENT_UID=${PARENT_ID}${SP_TEMPLATE:+ SP_TEMPLATE=${SP_TEMPLATE}}"
 
 #-------------------------------------------------------------------------------
 # Take snapshot of the image
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
-
-if boolTrue "DISK_SAVEAS_FSFREEZE"; then
-    oneFsfreeze "${SRC_HOST}" "${DEPLOY_ID}"
-    trapAdd "oneFsthaw \"${SRC_HOST}\" \"${DEPLOY_ID}\""
-fi
-
 if [[ "${SNAP_ID}" == "-1" ]]; then
-    storpoolVolumeClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
+    if boolTrue "DISK_SAVEAS_FSFREEZE"; then
+        oneFsfreeze "${SRC_HOST}" "${DEPLOY_ID}"
+        trapAdd "oneFsthaw \"${SRC_HOST}\" \"${DEPLOY_ID}\""
+    fi
+    storpoolSnapshotCreate "${SP_VOL}" "${PARENT_ID}" \
+            "img;${LOC_TAG};virt;qc" \
+            "${SP_VOL};${LOC_TAG_VAL};one;${SP_QOSCLASS}"
+
+    if boolTrue "DISK_SAVEAS_FSFREEZE"; then
+        oneFsthaw "${SRC_HOST}" "${DEPLOY_ID}"
+        trapReset
+    fi
 else
-    SP_PARENT="${SP_PARENT}-snap${SNAP_ID}"
-    storpoolSnapshotClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
+    SP_SNAPSHOT="${SP_PARENT}-snap${SNAP_ID}"
+    kvGetUid "${SP_SNAPSHOT}" fatal
+    SNAP_ID="${SP_UID}"
+    storpoolVolumeFromSnapshot "${SNAP_ID}" "${SP_VOL}" "${SP_TEMPLATE}"
+    storpoolVolumeFreeze "${SP_UID}" "volume"
 fi
-
-if boolTrue "DISK_SAVEAS_FSFREEZE"; then
-    oneFsthaw "${SRC_HOST}" "${DEPLOY_ID}"
-    trapReset
-fi
-
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};vc-policy;qc;type;diskid" "one;${LOC_TAG_VAL};;;${SP_QOSCLASS};;"
 
 splog "END ${VM_ID}"
 exit 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,17 +15,23 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
 from __future__ import print_function
-from sys import argv, exit, stderr
+from typing import Optional, Dict, List, Union
+from sys import argv
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+StringOrDict = Union[str, Dict[str, str]]
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
+
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -43,66 +49,76 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-def get_attributes(attr):
-    ret = {}
+
+def get_attributes(attr: str) -> Dict[str, str]:
+    ret: Dict[str, str] = {}
     for a in attr.split():
-        k,v = a.split('=')
+        k, v = a.split('=')
         ret[k] = v
     return ret
 
-def parse_features(features):
-    ret = {}
+
+def parse_features(
+        features: str
+) -> Dict[str, Dict[str, StringOrDict]]:
+    ret: Dict[str, Dict[str, StringOrDict]] = {}
     for feat in features.split(';'):
-        name,value,attributes = feat.split(':')
-        ret[name] = {'val':value,'attr':get_attributes(attributes)}
+        name, value, attributes = feat.split(':')
+        ret[name] = {'val': value, 'attr': get_attributes(attributes)}
     return ret
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
+xmlVm: str = argv[2]
+vm_element: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_element.getroot()
 
-changed = 0
+xmlDomain: str = argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
+
+changed: bool = False
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 # merge all <features> elements in first one
-features_e = None
-features_elements = root.findall('.//features')
-features_len = len(features_elements)
+features_e: Optional[ET.Element] = None
+features_elements: List[ET.Element] = root.findall('.//features')
+features_len: int = len(features_elements)
 if features_len > 0:
     features_e = features_elements[0]
     if features_len > 1:
         for features_element in features_elements[1:]:
-            for features_child in features_element.getchildren():
+            for features_child in list(features_element):
                 features_e.append(features_child)
                 features_element.remove(features_child)
             root.remove(features_element)
-            changed = 1
+            changed = True
 else:
     features_e = ET.SubElement(root, 'features', {})
 
-t_smm_e = vm.find('.//USER_TEMPLATE/T_FEATURE_SMM')
-if t_smm_e is not None:
+xpath: str = './/USER_TEMPLATE/T_FEATURE_SMM'
+t_smm_e: Optional[ET.Element] = vm.find(xpath)
+if t_smm_e is not None and t_smm_e.text is not None:
     value, attr = t_smm_e.text.split(':')
-    smm_e = features_e.find('./smm')
+    smm_e: Optional[ET.Element] = features_e.find('./smm')
     if smm_e is not None:
         features_e.remove(smm_e)
     smm_e = ET.SubElement(features_e, 'smm', get_attributes(attr))
 #    if value != '':
 #        f_e.text = '{}'.format(value)
-    changed = 1
-    t_tseg_e = vm.find('.//USER_TEMPLATE/T_FEATURE_SMM_TSEG')
-    if t_tseg_e is not None:
+    changed = True
+    xpath = './/USER_TEMPLATE/T_FEATURE_SMM_TSEG'
+    t_tseg_e: Optional[ET.Element] = vm.find(xpath)
+    if t_tseg_e is not None and t_tseg_e.text is not None:
         value, attr = t_tseg_e.text.split(':')
-        tseg_e = ET.SubElement(smm_e, 'tseg', get_attributes(attr))
         if value == '':
-            value = 0
-        tseg_e.text = '{}'.format(value)
+            value = '0'
+        tseg_e: Optional[ET.Element] = smm_e.find('./tseg')
+        if tseg_e is not None:
+            smm_e.remove(tseg_e)
+        tseg_e = ET.SubElement(smm_e, 'tseg', get_attributes(attr))
+        tseg_e.text = f"{value}"
 
 if changed:
     indent(root)

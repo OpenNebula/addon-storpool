@@ -32,8 +32,8 @@ source "${ONE_PATH}/tm/storpool/storpool_common.sh"
 # shellcheck source=addon-storpoolrc
 source "${ONE_PATH}/addon-storpoolrc"
 
-TMP_DIR="$(mktemp -d)"
-trapAdd "rm -rf \"${TMP_DIR}\""
+TMP_DIR="$(mktemp --tmpdir -d)"
+trapAdd APPEND 'rm -rf "$TMP_DIR"'
 
 echo -n "*** StorPool Volumes JSON " >&2
 spVols="${TMP_DIR}/spVols.json"
@@ -75,10 +75,9 @@ done 4< <( jq -r '.data[]|
 
 echo "*** Processing Image Pool ..." >&2
 unset i x
-# shellcheck disable=SC2312
-while read -r -u 4 e; do
-    x[i++]="${e}"
-done 4< <("${ONE_PATH}/datastore/xpath_multi.py" -s \
+while read -u 4 -r e; do
+    x[i++]="$e"
+done 4< <($ONE_PATH/datastore/xpath_multi.py -s <"$imagePool" \
 		/IMAGE_POOL/IMAGE/ID \
                 /IMAGE_POOL/IMAGE/SIZE \
                 /IMAGE_POOL/IMAGE/PERSISTENT < "${imagePool}" )

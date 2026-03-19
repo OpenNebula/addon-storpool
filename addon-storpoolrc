@@ -6,22 +6,6 @@ MKSWAP="/usr/sbin/mkswap"
 # default: "one"
 #ONE_PX="one"
 
-# (obsolete)there is a code in the addon to manage the attributes of the
-# StorPool templates which represent the OpenNebula datastores
-#
-# The new polisy is to setup the datastore attributes using the storpool CLI
-#
-# Set to '1' to enable the template management via the datastore templates.
-#
-# Default: 0 (disabled)
-#AUTO_TEMPLATE=0
-
-# (obsolete)
-# Global option to manage template propagate
-#
-# Default: 1 (enabled)
-#SP_TEMPLATE_PROPAGATE=1
-
 # Run stats collecting only on the LEADER instance
 # If autodetction fails set the leader IP manually
 # Or to administratively disable set to 'disabled'
@@ -126,8 +110,8 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #DDEBUG_SP_RUN_CMD=1
 
 # datastore/monitor_helper-sync
-#DEBUG_MOINTOR_HELPER_SYNC=1
-#DDEBUG_MOINTOR_HELPER_SYNC=1
+#DEBUG_MONITOR_HELPER_SYNC=1
+#DDEBUG_MONITOR_HELPER_SYNC=1
 
 # datastore/monitor
 #DEBUG_DS_MONITOR=1

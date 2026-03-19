@@ -31,11 +31,12 @@ if [[ -n "${ONE_LOCATION}" ]]; then
 else
     LIB_LOCATION="/usr/lib/one"
 fi
-
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../libfs.sh"
 
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
@@ -57,16 +58,16 @@ fi
 #-------------------------------------------------------------------------------
 
 if [[ -n "$2" ]]; then
-    DRV_ACTION="$1"
+    export DRV_ACTION="$1"
     ID="$2"
 else
     DRV_ACTION="$(cat)"
+    export DRV_ACTION
     ID="$1"
 fi
 
-export DRV_ACTION
+#echo "cd ${PWD}; bash -x $0 $*" >"/tmp/cp-$ID"
 
-#echo "cd $PWD; bash -x $0 $*" >"/tmp/cp-$ID"
 oneDsDriverAction
 
 #-------------------------------------------------------------------------------
@@ -81,15 +82,15 @@ if [[ -n "${BRIDGE_LIST}" ]]; then
     fi
 fi
 
-set_up_datastore "${BASE_PATH}" "${RESTRICTED_DIRS:-}" "${SAFE_DIRS:-/var/tmp}"
+set_up_datastore "${BASE_PATH:-/var/lib/one/datastores}" "${RESTRICTED_DIRS:-/etc}" "${SAFE_DIRS:-/var/tmp}"
 
-export IMAGE_HASH
 # shellcheck disable=SC2116
-IMAGE_PATH="$(echo "${IMAGE_PATH}")"
+IMAGE_PATH="$(echo "${IMAGE_PATH}")" #TBD
 
 case "${IMAGE_PATH}" in
 *VMSNAP:*|*SPSNAPSHOT:*)
     oneSnapshotLookup "${IMAGE_PATH##*/}"
+    log "Using StorPool snapshot '${IMAGE_PATH}'"
     ;;
 http://*|https://*|ssh://*|s3://*|rbd://*|vcenter://*)
     log "Downloading ${IMAGE_PATH} to the image repository"
@@ -98,8 +99,8 @@ rsync://*|restic://*)
     log "Downloading backup ${IMAGE_PATH} to the image repository"
     ;;
 *)
-    ret=$(check_restricted "${IMAGE_PATH}")
-    if [[ ${ret} -ne 0 ]]; then
+    IS_RESTRICTED="$(check_restricted "${IMAGE_PATH}" || true)"
+    if [[ ${IS_RESTRICTED:-1} -eq 1 ]]; then
         log_error "Not allowed to copy images from ${RESTRICTED_DIRS}"
         error_message "Not allowed to copy image file ${IMAGE_PATH}"
         exit 255
@@ -107,27 +108,27 @@ rsync://*|restic://*)
 
     log "Copying local image ${IMAGE_PATH} to the image repository"
     if [[ -z "${MD5}${SHA1}${NOLOCAL}" ]]; then
-        # localFile="$(echo "${IMAGE_PATH}" | sed -e "s/'/'\\\''/g" || true)"  # original
-        # localFile="${IMAGE_PATH//\'/'\\\'}" # TBD: check if this is correct
-        localFile=''"{IMAGE_PATH}"''
-        log "Using direct IO for ${localFile}"
+        # fix SC2001
+        #localFile="$(echo "${IMAGE_PATH}" | sed -e "s/'/'\\\''/g")"
+        replacement="'\''"
+        localFile="${IMAGE_PATH//\'/${replacement}}"
+        log "Using direct IO"
     else
-        splog "${MD5:+MD5:${MD5}} ${SHA1:+SHA1:${SHA1}} ${NOLOCAL:+NOLOCAL:${NOLOCAL}}"
+        splog "${MD5:+MD5:${MD5} }${SHA1:+SHA1:${SHA1} }${NOLOCAL:+NOLOCAL:${NOLOCAL}}"
     fi
     ;;
 esac
 
 SP_VOL="${ONE_PX}-img-${ID}"
-SP_LINK="/dev/storpool/${SP_VOL}"
-SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID:-}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
-storpoolVolumeCheck "${SP_VOL}"
+storpoolVolumeCheck "${SP_VOL}" byName
 
 if [[ -n "${SNAPSHOT_NAME}" ]]; then
 
-    if [[ "${IMAGE_GID}" -ne 0 ]]; then
-        if [[ "${VM_UID}" -ne "${IMAGE_UID}" ]]; then
+    if [[ ${IMAGE_GID:-65536} -ne 0 ]]; then
+        if [[ ${VM_UID:-65536} -ne ${IMAGE_UID:-65536} ]]; then
             errmsg="UID ${IMAGE_UID} is not allowed to import snapshot from VM with UID:${VM_UID}"
             log_error "${errmsg}"
             error_message "${errmsg}"
@@ -136,17 +137,77 @@ if [[ -n "${SNAPSHOT_NAME}" ]]; then
         fi
     fi
 
-    msg="UID ${IMAGE_UID} with GID:${IMAGE_GID} imported ${SNAPSHOT_NAME} (UID:${VM_UID}) as ${SP_DST}"
+    msg="UID ${IMAGE_UID} with GID:${IMAGE_GID} imported ${SNAPSHOT_NAME} (VMUID:${VM_UID}) as ${SP_DST}"
     log "${msg}"
     splog "${msg}"
+    if kvGetUid "${SNAPSHOT_NAME}"; then
+        ENTRY="${SP_UID}"
+    else
+        ENTRY="${SNAPSHOT_NAME}"
+        storpoolExist "${SNAPSHOT_NAME}" "Snapshot"
+    fi
+    if ! storpoolSnapshotInfo "${ENTRY}"; then
+        errmsg="Error: Can't get Storpool info for snapshot '${ENTRY}' ($?)"
+        log_error "${errmsg}"
+        error_message "${errmsg}"
+        splog "${errmsg}"
+        exit 255
+    fi
+    if [[ "${ENTRY:0:1}" == "~" ]]; then
+        SP_UID="${ENTRY}"
+    else
+        SP_UID="~${X_GLOBALID}"
+    fi
 
-    storpoolSnapshotClone "${SNAPSHOT_NAME}" "${SP_VOL}" "${SP_TEMPLATE}"
+    SNAPSHOT_UID="${SP_UID}"
+    storpoolVolumeFromSnapshot "${SNAPSHOT_UID}" "${SP_VOL}"
 
+    VOL_UID="${SP_UID}"
     FORMAT="raw"
 
     echo "${SP_DST} ${REPORT_FORMAT}"
 
 else
+
+    SP_TEMP_VOL="${SP_VOL}-$(echo "${SP_VOL}" | md5sum | awk '{print $1}')"
+    CREATE_SIZE="$((SIZE*1024*1024))"
+    TEMP_SIZE="${CREATE_SIZE}"
+
+    CREATE_SIZE="$((SIZE*1024*1024))"
+    TEMP_SIZE="${CREATE_SIZE}"
+    if [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
+        TEMP_SIZE=$((1*1024*1024))
+    else
+        image_info "${IMAGE_PATH}"
+        if [[ -n "${STAT_IMAGE_SIZE}" ]] && [[ ${STAT_IMAGE_SIZE} -gt 0 ]]; then
+            if [[ "${QEMU_IMG_FORMAT}" != "raw" ]]; then
+                # use the actual file size
+                TEMP_SIZE="${STAT_IMAGE_SIZE}"
+                splog "[I] File ${IMAGE_PATH}, FORMAT:${QEMU_IMG_FORMAT} using actual file size: ${STAT_IMAGE_SIZE}"
+            else
+                # Check is the imported file size is bigger than the virtual size
+                FSIZE=$(((STAT_IMAGE_SIZE+1048575)/1048576))
+                if [[ ${FSIZE} -gt ${SIZE} ]]; then
+                    splog "[W] File ${IMAGE_PATH} stat size ${FSIZE}(${STAT_IMAGE_SIZE}) <> SIZE=${SIZE} (with ~ $((FSIZE-SIZE))MB)"
+                    TEMP_SIZE="$((FSIZE*1024*1024))"
+                    CREATE_SIZE="${TEMP_SIZE}"
+                fi
+            fi
+        fi
+    fi
+
+    storpoolVolumeCreate "${SP_TEMP_VOL}" "${TEMP_SIZE}" "${SP_TEMPLATE}"
+
+    if [[ -z "${SP_UID}" ]]; then
+        errmsg="Error: Can't create ${SP_TEMP_VOL} (no StorPool UID) SIZE:${TEMP_SIZE}"
+        log_error "${errmsg}"
+        error_message "${errmsg}"
+        splog "${errmsg}"
+        exit 1
+    fi
+
+    TEMP_VOL_UID="${SP_UID}"
+    SP_TEMP_LINK="/dev/storpool-byid/${TEMP_VOL_UID#*~}"
 
     echo "${SP_DST} ${REPORT_FORMAT}"
 
@@ -155,76 +216,63 @@ else
         for cg in ${SP_IMPORT_CGROUPS}; do
             [[ "${cg/../}" == "${cg}" ]] || continue
             [[ -d "/sys/fs/cgroup/${cg}" ]] || continue
-            echo $$ | sudo tee "/sys/fs/cgroup/${cg}/tasks" >/dev/null
-            splog "($?) pin to cgroup ${cg}"
+            echo "$$" | ${SUDO:-sudo} tee "/sys/fs/cgroup/${cg}/tasks" >/dev/null
+            splog "($?) pin PID $$ to cgroup ${cg}/tasks"
         done
-#        splog "$(</proc/self/cgroup)"
     fi
 
-    SP_TEMP_VOL="${SP_VOL}-$(echo "${SP_VOL}" | md5sum | awk '{print $1}')"
-    SP_TEMP_LINK="/dev/storpool/${SP_TEMP_VOL}"
+    trapAdd "storpoolDelete \"${TEMP_VOL_UID}\" force snaps"
+
+    storpoolAttach "${TEMP_VOL_UID}" "${DST_HOST}"
+
     if [[ -n "${DST_HOST}" ]]; then
-        DOWNLOADER_ARGS=$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}" "${IMAGE_PATH}" "-")
+        DOWNLOADER_ARGS="$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS:-}" "${LIMIT_TRANSFER_BW:-}" "${IMAGE_PATH}" -)"
     else
-        DOWNLOADER_ARGS=$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}" "${IMAGE_PATH}" "${SP_TEMP_LINK}")
+        DOWNLOADER_ARGS="$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS:-}" "${LIMIT_TRANSFER_BW:-}" "${IMAGE_PATH}" "${SP_TEMP_LINK}")"
     fi
 
     COPY_CMD="${DRIVER_PATH}/../downloader.sh ${DOWNLOADER_ARGS}"
 
-    if [[ -z "${SIZE}" ]] || [[ "${SIZE}" -eq 0 ]]; then
+    if [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
         localFile="/var/tmp/${SP_TEMP_VOL}"
-        splog "Image SIZE=${SIZE} downloading on fe to get the size"
-        DOWNLOADER_ARGS=$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}" "${IMAGE_PATH}" "${localFile}")
+        splog "image SIZE=${SIZE} downloading on fe to get the size"
+        DOWNLOADER_ARGS="$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}" "${IMAGE_PATH}" "${localFile}")"
         COPY_CMD="${DRIVER_PATH}/../downloader.sh ${DOWNLOADER_ARGS}"
+        splog "COPY_CMD='${COPY_CMD}'"
         multiline_exec_and_log "${COPY_CMD}" \
                      "Error dumping ${IMAGE_PATH} to ${localFile}"
-        SIZE=$(fs_size "${localFile}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}")
-        splog "Image ${localFile} SIZE=${SIZE} (M)"
+        SIZE="$(fs_size "${localFile}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}")"
+
+        storpoolVolumeResize "${TEMP_VOL_UID}" "$((SIZE*1024*1024))"
+
+        splog "${TEMP_VOL_UID} image ${localFile} SIZE=${SIZE} (M)"
+
         CLEANUP="${localFile}"
     fi
     #-------------------------------------------------------------------------------
-    # Import image to temp volume
+    # Import image to a temporary volume
     #-------------------------------------------------------------------------------
-
-    TEMP_SIZE="${SIZE}"
-    if [[ -f "${IMAGE_PATH}" ]] && [[ -s "${IMAGE_PATH}" ]]; then
-        # Check is the file(qcow2) size bigger than the virtual size
-        FSIZE_S=$(${STAT:-stat} --printf="%s" "${IMAGE_PATH}" || true)
-        FSIZE=$(((FSIZE_S+1048575)/1048576))
-        if [[ ${FSIZE} -gt ${SIZE} ]]; then
-            splog "File ${IMAGE_PATH} stat size ${FSIZE}(${FSIZE_S}) > SIZE=${SIZE} (with ~ $((FSIZE-SIZE))MB)"
-            TEMP_SIZE=${FSIZE}
-        fi
-    fi
-
-    storpoolTemplate "${SP_TEMPLATE}"
-
-    storpoolVolumeCreate "${SP_TEMP_VOL}" "${TEMP_SIZE}M" "${SP_TEMPLATE}"
-
-    trapAdd "storpoolVolumeDelete \"${SP_TEMP_VOL}\" force snaps"
-
-    storpoolVolumeAttach "${SP_TEMP_VOL}" "${DST_HOST}"
 
     tStart=$(date +%s)
     if [[ -n "${DST_HOST}" ]]; then
         if [[ -n "${localFile}" ]] && [[ -f "${localFile}" ]]; then
-            COPY_CMD="${DD:-dd} if=${localFile} bs=\"${COPY_CMD_DS_BS:-1M}\" iflag=direct"
+            COPY_CMD="${DD:-dd} if=\"${localFile}\" bs=\"${COPY_CMD_DS_BS:-1M}\" iflag=direct"
         fi
-        splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_TEMP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct"
-        multiline_exec_and_log "set -e -o pipefail; eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_TEMP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct" \
+        splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_TEMP_LINK} bs=${COPY_CMD_DD_BS:-1M} status=none iflag=fullblock oflag=direct"
+        multiline_exec_and_log "set -e -o pipefail; eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} \"${DST_HOST}\" ${DD:-dd} of=\"${SP_TEMP_LINK}\" bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct" \
                      "Error dumping ${IMAGE_PATH} to ${DST_HOST}:${SP_TEMP_LINK}"
     else
         if [[ -n "${localFile}" ]] && [[ -f "${localFile}" ]]; then
-            COPY_CMD="${DD:-dd} if=${localFile} of=${SP_TEMP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" iflag=direct oflag=direct"
+            COPY_CMD="${DD:-dd} if=\"${localFile}\" of=\"${SP_TEMP_LINK}\" bs=\"${COPY_CMD_DD_BS:-1M}\" iflag=direct oflag=direct"
         fi
-        splog "${COPY_CMD}"
+        splog "COPY_CMD='${COPY_CMD}'"
         multiline_exec_and_log "${COPY_CMD}" \
                      "Error dumping ${IMAGE_PATH} to ${SP_TEMP_VOL}"
     fi
-    tEnd=$(date +%s)
-    tEnd=$((tEnd-tStart))
-    [[ "${tEnd}" -ne 0 ]] || tEnd=1
-    splog "Image transferred in ${tEnd} seconds (~$((SIZE/tEnd))MB/s)"
+    tEnd="$(date +%s)"
+    tEnd=$((tEnd - tStart))
+    [[ ${tEnd} -ne 0 ]] || tEnd=1
+    splog "image transferred in ${tEnd} seconds (~$((SIZE/tEnd))MB/s)"
 
     if [[ -n "${CLEANUP}" ]]; then
         rm -f "${localFile}"
@@ -234,42 +282,40 @@ else
     #-------------------------------------------------------------------------------
     # Process imported image
     #-------------------------------------------------------------------------------
-    # shellcheck disable=SC2016
-    if [[ -n "${DST_HOST}" ]]; then
-        FORMAT=$(${SSH:-ssh} "${DST_HOST}" "${QEMU_IMG:-qemu-img} info ${SP_TEMP_LINK}" | grep "^file format:" | ${AWK:-awk} '{print $3}')
-    else
-        FORMAT=$(${QEMU_IMG:-qemu-img} info "${SP_TEMP_LINK}" | grep "^file format:" | ${AWK:-awk} '{print $3}')
-    fi
-    splog "${SP_TEMP_LINK} FORMAT=${FORMAT} SIZE=${SIZE} ${QEMU_IMG:-qemu-img} status:$?"
 
-    if [[ "${FORMAT}" != "${DRIVER}" ]]; then
-        splog "${QEMU_IMG:-qemu-img} detected format ${FORMAT} but DRIVER=${DRIVER} in the image template"
+    image_info "${SP_TEMP_LINK}" "${DST_HOST}"
+    FORMAT="${QEMU_IMG_FORMAT}"
+
+    if [[ "${FORMAT}" != "${DRIVER:-undefined}" ]]; then
+        splog "${QEMU_IMG} detected format ${FORMAT} but DRIVER=${DRIVER} in the image template"
     fi
 
     if [[ "${FORMAT}" == "raw" ]]; then
 
-        storpoolVolumeDetach "${SP_TEMP_VOL}" "force" "${DST_HOST}"
+        storpoolDetach "${TEMP_VOL_UID}" "force" "${DST_HOST}"
 
-        storpoolVolumeRename "${SP_TEMP_VOL}" "${SP_VOL}" "${SP_TEMPLATE}"
-
-        trapDel "storpoolVolumeDelete \"${SP_TEMP_VOL}\" force snaps"
-
-        trapAdd "storpoolVolumeDelete \"${SP_VOL}\" force snaps"
+        storpoolVolumeRename "${TEMP_VOL_UID}" "${SP_TEMP_VOL}" "${SP_VOL}" "${SP_TEMPLATE}"
+        VOL_UID="${TEMP_VOL_UID}"
     else
-        storpoolTemplate "${SP_TEMPLATE}"
+        storpoolVolumeCreate "${SP_VOL}" "${CREATE_SIZE}" "${SP_TEMPLATE}"
 
-        storpoolVolumeCreate "${SP_VOL}" "${SIZE}M" "${SP_TEMPLATE}"
+        if [[ -z "${SP_UID}" ]]; then
+            splog "Can't create volume ${SP_VOL} size ${CREATE_SIZE} template ${SP_TEMPLATE}"
+            exit 1
+        fi
+        VOL_UID="${SP_UID}"
+        SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
 
-        trapAdd "storpoolVolumeDelete \"${SP_VOL}\" force snaps"
+        trapAdd "storpoolDelete \"${VOL_UID}\" force snaps"
 
-        storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
+        storpoolAttach "${VOL_UID}" "${DST_HOST}"
 
         POST_COPY_CMD=$(cat <<EOF
     set -e
     export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
     splog(){ logger -t "ds_sp_${0##*/}[\$\$]" "\$*"; }
 
-    splog "${FORMAT} ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k  ${SP_TEMP_LINK} ${SP_LINK}"
+    splog "${FORMAT} ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k ${SP_TEMP_LINK} ${SP_LINK}"
     ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k "${SP_TEMP_LINK}" "${SP_LINK}"
     sync
 EOF
@@ -280,30 +326,36 @@ EOF
             ssh_exec_and_log "${DST_HOST}" "${POST_COPY_CMD}" \
                              "Error converting image on ${DST_HOST}"
         else
-            splog "${FORMAT} ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k  ${SP_TEMP_LINK} ${SP_LINK}"
+            splog "${FORMAT} ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k ${SP_TEMP_LINK} ${SP_LINK}"
             ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k "${SP_TEMP_LINK}" "${SP_LINK}"
             sync
         fi
         tEnd=$(date +%s)
-        splog "Image converted to raw in $((tEnd-tStart)) seconds"
+        splog "image converted to raw in $((tEnd-tStart)) seconds"
 
-        trapDel "storpoolVolumeDelete \"${SP_VOL}\" force snaps"
+        trapDel "storpoolDelete \"${VOL_UID}\" force snaps"
 
-        storpoolVolumeDetach "${SP_VOL}" "" "${DST_HOST}"
+        storpoolDetach "${TEMP_VOL_UID}" "" "${DST_HOST}"
 
-        trapDel "storpoolVolumeDelete \"${SP_TEMP_VOL}\" force snaps"
+        trapDel "storpoolDelete \"${TEMP_VOL_UID}\" force snaps"
 
-        DELAY_DELETE=""
-        storpoolVolumeDelete "${SP_TEMP_VOL}" "force" "snaps"
+        DELAY_DELETE="" storpoolDelete "${TEMP_VOL_UID}" "force" "snaps"
 
-        storpoolVolumeDetach "${SP_VOL}" "force" "${DST_HOST}"
+        storpoolDetach "${VOL_UID}" "force" "${DST_HOST}"
     fi
 fi
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+storpoolVolumeTag "${VOL_UID}" "virt;${LOC_TAG:-nloc};img;qc" "one;${LOC_TAG_VAL:-};${SP_VOL};${SP_QOSCLASS}"
+
+storpoolVolumeFreeze "${VOL_UID}" "volume"
+ret=$?
+if [[ ${ret} -ne 0 ]]; then
+    splog "Error: Volume to snapshot conversion failed! (${ret})"
+    exit "${ret}"
+fi
 
 #-------------------------------------------------------------------------------
 # fix image DRIVER to raw
@@ -311,19 +363,17 @@ storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${S
 
 if [[ "${DRIVER}" != "raw" ]]; then
     if boolTrue "UPDATE_IMAGE_ON_IMPORT"; then
-        splog "Image template DRIVER=${DRIVER} updating to DRIVER=raw"
-        TMP_LOC="$(mktemp --directory --tmpdir cp-sp-XXXXXXXX)"
-        TMP_XML="${TMP_LOC}/image-template"
-        trapAdd "rm -rf \"${TMP_LOC}\""
+        splog "image template DRIVER=${DRIVER} updating to DRIVER=raw"
+        TMP_XML="${TMPDIR}/image-template"
         echo "DRIVER=raw" >"${TMP_XML}"
         echo "FORMAT=raw" >>"${TMP_XML}"
         if [[ -n "${DS_CP_FORCE_DEV_PREFIX}" ]]; then
             echo "DEV_PREFIX=${DS_CP_FORCE_DEV_PREFIX}" >>"${TMP_XML}"
         fi
-        oneimage update -a "${ID}" "${TMP_XML}" 2>"${TMP_LOC}/oneimage-update-err" >"${TMP_LOC}/oneimage-update-out"
+        oneimage update -a "${ID}" "${TMP_XML}" 2>"${TMPDIR}/oneimage-update-err" >"${TMPDIR}/oneimage-update-out"
         ret=$?
         if [[ ${ret} -ne 0 ]]; then
-            if grep -qir "${UPDATE_IMAGE_LOCK_STRING:-locked}" "${TMP_LOC}" 2>/dev/null; then
+            if grep -qir "${UPDATE_IMAGE_LOCK_STRING:-locked}" "${TMPDIR}" 2>/dev/null; then
                 splog "(${ret}) oneimage update ${ID} ... Re-trying with unlock"
                 oneimage unlock "${ID}"
                 splog "($?) oneimage unlock ${ID}"
@@ -335,9 +385,9 @@ if [[ "${DRIVER}" != "raw" ]]; then
                 splog "(${ret}) oneimage update -a ${ID} ... Failed!"
             fi
         fi
-        rm -rf "${TMP_LOC}"
+
     elif [[ -z "${REPORT_FORMAT}" ]]; then
-        splog "Image template DRIVER=${DRIVER} and FORMAT=${FORMAT} but image update is not enabled."
+        splog "image template DRIVER='${DRIVER}' and FORMAT='${FORMAT}' but image update is not enabled."
     fi
 fi
 

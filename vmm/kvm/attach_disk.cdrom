@@ -16,14 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname "$0")
+WORKDIR=$(dirname "$0")
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../scripts_common.sh"
-if [[ -f "${DRIVER_PATH}/addon-storpoolrc" ]]; then
+source "${WORKDIR}/../../scripts_common.sh"
+if [[ -f "${WORKDIR}/addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${DRIVER_PATH}/addon-storpoolrc"
+    source "${WORKDIR}/addon-storpoolrc"
 fi
 
 function splog()
@@ -36,7 +36,9 @@ set -o pipefail
 DOMAIN="$1"
 SOURCE="$2"
 TARGET="$3"
+# shellcheck disable=SC2034
 TARGET_INDEX="$4"
+# shellcheck disable=SC2034
 DRV_ACTION="$5"
 export DRV_ACTION TARGET_INDEX
 
@@ -45,20 +47,20 @@ if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
 fi
 
 TARGET_DEVICE=""
-declare -A available
-while read -r -u "${domfh}" target_dev source_x; do
+declare -A available_a
+while read -r -u "${lvfh}" target_dev source_x; do
     splog "${DOMAIN} target/@dev=${target_dev} source=${source_x}"
     if [[ "${source_x##*/}" == "" ]]; then
-        available[${target_dev}]="${target_dev}"
+        available_a[${target_dev}]="${target_dev}"
     fi
-done {domfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
+done {lvfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
     xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
-exec {domfh}<&-
+exec {lvfh}<&-
 
-if [[ -n ${available[${TARGET}]} ]]; then
+if [[ -n "${available_a[${TARGET}]}" ]]; then
     TARGET_DEVICE="${TARGET}"
 else
-    read -r -a keys <<< "${!available[@]}"
+    keys=( "${!available_a[@]}" )
     TARGET_DEVICE="${keys[0]}"
 fi
 

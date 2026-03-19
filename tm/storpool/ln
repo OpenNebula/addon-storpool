@@ -41,26 +41,28 @@ splog "SRC=${SRC} DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 # Do nothing if src and dst are same
 #-------------------------------------------------------------------------------
 
-if [[ "${SRC}" == "${DST}" ]]; then
-    log "Not moving ${SRC} to ${DST}, they are the same path"
-    splog "END same path"
+if [[ "{${SRC}" == "${DST}" ]]; then
+    msg="Not moving ${SRC} to ${DST}, they are the same path"
+    log "[I] ${msg}"
+    splog "END ${VM_ID} ${msg}"
     exit 0
 fi
 
-log "vm ${VM_ID} moving ${SRC} to ${DST}"
+log "${SRC} to disk ${DST} on VM ${VM_ID}"
 
 #-------------------------------------------------------------------------------
 # Process source and destination
 #-------------------------------------------------------------------------------
 
-SRC_PATH="$(arg_path "${SRC}")"
-SRC_HOST="$(arg_host "${SRC}")"
-DST_PATH="$(arg_path "${DST}")"
-DST_HOST="$(arg_host "${DST}")"
-DST_DIR="$(dirname "${DST_PATH}")"
-export SRC_PATH SRC_HOST DST_DIR  # TBD: remove
+DST_PATH=$(arg_path "${DST}")
+DST_HOST=$(arg_host "${DST}")
 # shellcheck disable=SC2016
-DISK_ID="$(echo "${DST_PATH}" | "${AWK:-awk}" -F. '{print $NF}' || true)"
+DISK_ID="$(echo "${DST_PATH}" | ${AWK:-awk} -F. '{print $NF}')"
+
+if boolTrue "MULTICLUSTER"; then
+   oneHostInfo "${DST_HOST}"
+   DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+fi
 
 #-------------------------------------------------------------------------------
 # Get Image information
@@ -77,12 +79,14 @@ if boolTrue "SHAREABLE"; then
 fi
 
 IMMUTABLE="$(isImmutable "${CLONE}" "${SAVE}" "${READONLY}")"
-if boolTrue "IMMUTABLE" && [[ "${TYPE^^}" != "CDROM" ]]; then
-    msg="[ERROR] Unsupported persistent image type: IMMUTABLE"
-    msg+=" (${PERSISTENT_TYPE:+PERSISTENT_TYPE=${PERSISTENT_TYPE}})."
-    splog "${msg}"
-    log_error "${msg}"
-    exit 1
+if boolTrue "IMMUTABLE"; then
+    if [[ "${TYPE^^}" != "CDROM" ]]; then
+        msg="[ERROR] Unsupported persistent image type: IMMUTABLE"
+        msg+=" (${PERSISTENT_TYPE:+PERSISTENT_TYPE=${PERSISTENT_TYPE}})."
+        splog "${msg}"
+        log_error "${msg}"
+        exit 1
+    fi
 fi
 
 #-------------------------------------------------------------------------------
@@ -100,6 +104,20 @@ oneDatastoreInfo "${DS_ID}"
 IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
 SP_VOL="${SOURCE##*/}"
+kvGetUid "${SP_VOL}" fatal
+SRC_UID="${SP_UID}"
+if [[ "${TYPE}" == "CDROM" ]]; then
+    CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+    if ! kvGetUid "${CDROM_VOL}"; then
+        storpoolVolumeFromSnapshot "${SRC_UID}" "${CDROM_VOL}"
+    fi
+    SP_VOL="${CDROM_VOL}"
+else
+    storpoolVolumeFromSnapshot "${SP_UID}" "${SP_VOL}"
+    storpoolSnapshotDelete "${SRC_UID}" "1"
+fi
+VOL_UID="${SP_UID}"
+
 if boolTrue "NO_VOLUME_TEMPLATE"; then
     SP_TEMPLATE=""
 else
@@ -119,18 +137,18 @@ fi
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${IMAGE_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${SYSTEM_DS_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}}}"
 debug_sp_qosclass
 
-splog "SP_VOL=${SP_VOL} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}"
+splog "SRC_UID=${SRC_UID} VOL_UID=${VOL_UID} SP_VOL=${SP_VOL} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}"
 
 #-------------------------------------------------------------------------------
 # Enable the destination device
 #-------------------------------------------------------------------------------
 
 if [[ -n "${SIZE}" ]]; then
-    if [[ "${SIZE}" -gt "${ORIGINAL_SIZE:-0}" ]]; then
+    if [[ ${SIZE} -gt ${ORIGINAL_SIZE:-0} ]]; then
         if boolTrue "CLONE"; then
-            storpoolVolumeResize "${SP_VOL}" "${SIZE}M"
+            storpoolVolumeResize "${VOL_UID}" "$((SIZE*1024*1024))"
         else
-            splog "not resizing Non-CLONED ${SP_VOL} SIZE=${SIZE} ORIGINAL_SIZE=${ORIGINAL_SIZE}"
+            splog "[I] not resizing Non-CLONED ${VOL_UID} (${SP_VOL}) SIZE=${SIZE} ORIGINAL_SIZE=${ORIGINAL_SIZE}"
         fi
     fi
 fi
@@ -146,22 +164,16 @@ if boolTrue "READONLY"; then
     else
         TAG_TYPE+="RO"
     fi
-    if boolTrue "IMMUTABLE"; then
-        IMMUTABLE_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-        if ! storpoolVolumeExists "${IMMUTABLE_VOL}"; then
-            storpoolVolumeClone "${SP_VOL}" "${IMMUTABLE_VOL}" "${SP_TEMPLATE}"
-        fi
-        SP_VOL="${IMMUTABLE_VOL}"
-    fi
     SP_MODE="${READONLY_MODE,,}"
 fi
 
-storpoolVolumeDetach "${SP_VOL}" "force" "" "all"
-
-storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${SP_MODE}"
-
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
-                                "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${TAG_TYPE};${DISK_ID}"
+if kvGetUid "${SP_VOL}" fatal; then
+    VOL_UID="${SP_UID}"
+    storpoolAttach "${VOL_UID}" "${DST_HOST}" "${SP_MODE}" volume detachAll
+    storpoolVolumeTag "${VOL_UID}" \
+            "virt;${LOC_TAG};diskid;${VM_TAG};type;${VC_POLICY:+vc-policy};qc" \
+            "one;${LOC_TAG_VAL};${DISK_ID};${VM_ID};${TAG_TYPE};${VC_POLICY};${SP_QOSCLASS}"
+fi
 
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information
@@ -174,7 +186,13 @@ if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="${DS_TM_MAD}"
 fi
 
-oneSymlink "${DST_HOST}" "/dev/storpool/${SP_VOL}" "${DST_PATH}"
+if [[ -n "${VOL_UID}" ]]; then
+    oneSymlink "${DST_HOST}" "${VOL_UID}" "${DST_PATH}"
+fi
+
+if [[ -n "${SNAPSHOT_UID}" ]]; then
+    DO_REMOTE="" storpoolSnapshotDelete "${SNAPSHOT_UID}" snapshotOnly
+fi
 
 splog "END ${VM_ID}"
 exit 0

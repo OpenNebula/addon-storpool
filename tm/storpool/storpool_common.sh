@@ -65,7 +65,6 @@ done
 #-------------------------------------------------------------------------------
 # configuration parameters
 #-------------------------------------------------------------------------------
-
 export DEBUG_COMMON=""
 export DEBUG_TRAPS=""
 export DEBUG_SP_RUN_CMD=1
@@ -76,12 +75,6 @@ export DEBUG_oneTemplateInfo=""
 export DEBUG_oneDsDriverAction=""
 export DEBUG_KV=""
 
-# Manage StorPool templates from the DATASTORE variables (not recommended)
-export AUTO_TEMPLATE=0
-# Propagate the changes to the template to the volumes in the template
-# Require AUTO_TEMPLATE=1
-export SP_TEMPLATE_PROPAGATE=1
-
 # enable the alternate VM Snapshot function to do atomic snapshots
 export VMSNAPSHOT_OVERRIDE=1
 # the common tag of the snapshots created by the alternate VM Snapshot interface
@@ -91,11 +84,11 @@ export VMSNAPSHOT_FSFREEZE=0
 # Delete VM snapshots when terminating a VM
 export VMSNAPSHOT_DELETE_ON_TERMINATE=1
 # block creating new VM Snapshots when the limit is reached
-export VMSNAPSHOT_LIMIT=
+export VMSNAPSHOT_LIMIT=""
 # alter the SYSTEM snapshot behavior depending on the underlying file system
 export SP_SYSTEM="ssh"
 # update Disk size in OpenNebula when reverting a snapshot
-export UPDATE_ONE_DISK_SIZE=1
+export UPDATE_ONE_DISK_SIZE=0
 # Do not enforce the datastore template on the StorPool volumes
 export NO_VOLUME_TEMPLATE="1"
 # save the VM's checkpoint file directly to a block device, require qemu-kvm-ev
@@ -145,18 +138,23 @@ export TAG_CONTEXT_ISO=1
 export ATTACH_TIMEOUT=20
 # TM/monitor send VM disk stats over UDP
 export MONITOR_SEND_UDP=""
-# save the VM's vTPM data
-export ONE_TPM_SAVE=1
-
-ONE_PX="${ONE_PX:-one}"
-
-DEFAULT_QOSCLASS=""
-
-export ADDON_RELEASE="25.07.0"
+#
+export ONE_PX="${ONE_PX:-one}"
+#
+export DEFAULT_QOSCLASS=""
+#
+export MULTICLUSTER=1
+#
+export ADDON_RELEASE="25.01.2"
+#
+export SP_API_TIMEOUT=300
 
 declare -A SYSTEM_COMPATIBLE_DS
+# shellcheck disable=SC2034
 SYSTEM_COMPATIBLE_DS["ceph"]=1
 export SYSTEM_COMPATIBLE_DS
+# save the VM's vTPM data
+export ONE_TPM_SAVE=1
 
 DRV_ACTION="${DRV_ACTION:-}"
 
@@ -229,8 +227,12 @@ fi
 
 set -o pipefail
 
-LOC_TAG="${LOC_TAG:-nloc}"
-LOC_TAG_VAL="${LOC_TAG_VAL:-${ONE_PX}}"
+export ONE_PX="${ONE_PX:-one}"
+export LOC_TAG="${LOC_TAG:-nloc}"
+export LOC_TAG_VAL="${LOC_TAG_VAL:-${ONE_PX}}"
+export SP_QOSCLASS="${SP_QOSCLASS:-}"
+export STORPOOL_EXIST_HINT="${STORPOOL_EXIST_HINT:-Volume Snapshot}"
+export SKIP_KV_DATA=0
 
 VmState=(INIT PENDING HOLD ACTIVE STOPPED SUSPENDED DONE FAILED POWEROFF UNDEPLOYED CLONING CLONING_FAILURE)
 LcmState=(LCM_INIT PROLOG BOOT RUNNING MIGRATE SAVE_STOP SAVE_SUSPEND SAVE_MIGRATE PROLOG_MIGRATE PROLOG_RESUME EPILOG_STOP EPILOG
@@ -368,6 +370,130 @@ REMOTE_FTR=$(cat <<EOF
 EOF
 )
 
+function kvPut()
+{
+    local _kvName="$1" _kvUid="$2"
+    local KVRET=1 KVKEY="/byName/${_kvName}" KVRES="" _DBGPX=""
+    if boolTrue "DEBUG_KV"; then
+        splog "[D] KV put $*"
+    fi
+    KVRES="$(ETCDCTL_API=3 etcdctl put --prev-kv -- "${KVKEY}" "${_kvUid}")"
+    KVRET=$?
+    if boolTrue "DDEBUG_KV" || [[ ${KVRET} -ne 0 ]]; then
+        [[ ${KVRET} -ne 0 ]] && _DBGPX="E" || _DBGPX="DD"
+        splog "[${_DBGPX}] kvPut(${KVKEY}):${_kvUid} (${KVRET}) //${KVRES[*]}"
+    fi
+    if [[ ${KVRET} -eq 0 ]]; then
+        KVKEY="/byUid/${_kvUid}"
+        KVRES="$(ETCDCTL_API=3 etcdctl put --prev-kv -- "${KVKEY}" "${_kvName}")"
+        KVRET=$?
+        if boolTrue "DDEBUG_KV" || [[ ${KVRET} -ne 0 ]]; then
+            [[ ${KVRET} -ne 0 ]] && _DBGPX="E" || _DBGPX="DD"
+            splog "[${_DBGPX}] kvPut(${KVKEY}):${_kvName} (${KVRET}) //${KVRES[*]}"
+        fi
+    fi
+    return "${KVRET}"
+}
+
+function kvGet()
+{
+    local _kvKey="$1" _kvName="$2" _prefix="$3" _keysAndVals="$4"
+    local KVRES="" KVRET=1 _line="" _pvo="1" _DBGPX=""
+    local KVKEY="/${_kvKey}/${_kvName}"
+    local _errFile="${TMPDIR}/etcdctl_get_err"
+    local _kvGetLogFile="${TMPDIR}/etcdctl_get"
+    [[ -z "${_keysAndVals}" ]] || _pvo=""
+    if boolTrue "DDEBUG_KV"; then
+        splog "[D] kvGet(${_kvKey}, ${_kvName}, ${_prefix}, ${_keysAndVals}) =-> ${KVKEY}"
+    fi
+    ETCDCTL_API=3 etcdctl get${_pvo:+ --print-value-only}${_prefix:+ --prefix} -- "${KVKEY}" 2>"${_errFile}" | tee "${_kvGetLogFile}"
+    KVRET=$?
+    if boolTrue "DEBUG_KV" || [[ ${KVRET} -ne 0 ]]; then
+        boolTrue "DEBUG_KV" && _DBGPX="D" || _DBGPX="W"
+        splog "[${_DBGPX}] get($*) stdout:'$(tr '\n' ' ' <"${_kvGetLogFile}" || true)' (${KVRET})"
+        if [[ -s "${_errFile}" ]]; then
+            while read -r -u "${errfh}" _line; do
+               splog "[D] kvGet(${KVKEY}) stderr:${_line}"
+            done {errfh}< <(cat "${_errFile}" || true)
+        fi
+    fi
+    return "${KVRET}"
+}
+
+function kvGetUid()
+{
+    local _NAME="$1" _FATAL="$2"
+    local ret=0 errmsg=""
+    unset SP_UID
+    SP_UID="$(kvGet byName "${_NAME}")"
+    if [[ -z "${SP_UID}" ]]; then
+        ret=1
+        errmsg="Can't get StorPool generic name for ${_NAME}!"
+        if [[ -n "${_FATAL}" ]]; then
+            splog "[E] KV Error: ${errmsg}"
+            exit "${ret}"
+        else
+            splog "[W] KV kvGetUid($*) ${errmsg}"
+        fi
+    fi
+    export SP_UID
+    return "${ret}"
+}
+
+function kvDel()
+{
+    local _kvName="$1" _kvUid="$2"
+    local KVRET="" KVKEY="" line="" _DBGPX=""
+    declare -a KVRES_A
+    if boolTrue "DEBUG_KV"; then
+        splog "[D] KV del byName:${_kvName:-n/a} byUid:${_kvUid:-n/a}"
+    fi
+    if [[ -n "${_kvName}" ]]; then
+        KVKEY="/byName/${_kvName}"
+        line="$(ETCDCTL_API=3 etcdctl del --prev-kv -- "${KVKEY}")"
+        KVRET=$?
+        read -r -a KVRES_A <<< "${line}"
+        if boolTrue "DDEBUG_KV" || [[ ${KVRET} -ne 0 ]]; then
+            [[ ${KVRET} -ne 0 ]] && _DBGPX="E" || _DBGPX="DD"
+            splog "[${_DBGPX}] KV kvDel(${KVKEY}):${KVRES_A[2]} //${KVRES_A[0]} (${KVRET})"
+        fi
+    else
+        if boolTrue "DDEBUG_KV"; then
+            splog "[DD] KV kvDel byUid only"
+        fi
+        KVRET=0
+    fi
+    if [[ -n "${_kvUid}" ]] && [[ ${KVRET} -eq 0 ]]; then
+        KVKEY="/byUid/${_kvUid}"
+        line="$(ETCDCTL_API=3 etcdctl del --prev-kv -- "${KVKEY}")"
+        KVRET=$?
+        read -r -a KVRES_A <<< "${line}"
+        if boolTrue "DDEBUG_KV" || [[ ${KVRET} -ne 0 ]]; then
+            [[ ${KVRET} -ne 0 ]] && _DBGPX="E" || _DBGPX="DD"
+            splog "[${_DBGPX}] KV kvDel(${KVKEY}):${KVRES_A[2]} //${KVRES_A[0]} (${KVRET})"
+        fi
+    fi
+    return "${KVRET}"
+}
+
+function kvDelByKey()
+{
+    local KVKEY="$1"
+    local KVRET=1 line="" _DBGPX=""
+    declare -a KVRES_A
+    if boolTrue "DEBUG_KV"; then
+        splog "[D] KV del ByKey $*"
+    fi
+    line="$(ETCDCTL_API=3 etcdctl del --prev-kv -- "${KVKEY}")"
+    KVRET=$?
+    read -r -a KVRES_A <<< "${line}"
+    if boolTrue "DDEBUG_KV" || [[ ${KVRET} -ne 0 ]]; then
+        [[ ${KVRET} -ne 0 ]] && _DBGPX="E" || _DBGPX="DD"
+        splog "[${_DBGPX}] kvDelByKey(${KVKEY}):${KVRES_A[2]} //${KVRES_A[0]} (${KVRET})"
+    fi
+    return "${KVRET}"
+}
+
 function oneCallXml()
 {
     local _call="$1" _method="$2" _id="$3" _outfile="$4"
@@ -448,6 +574,7 @@ function oneHostInfo()
             "/HOST/NAME"
             "/HOST/STATE"
             "/HOST/TEMPLATE/SP_OURID"
+            "/HOST/TEMPLATE/SP_CLUSTER_ID"
             "/HOST/TEMPLATE/HOSTNAME"
         )
         sed -i '/\/>$/d' "${_tmpXML}"
@@ -462,12 +589,14 @@ function oneHostInfo()
         HOST_NAME="${XPATH_ELEMENTS[i++]}"
         HOST_STATE="${XPATH_ELEMENTS[i++]}"
         HOST_SP_OURID="${XPATH_ELEMENTS[i++]}"
+        HOST_SP_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
         HOST_HOSTNAME="${XPATH_ELEMENTS[i++]}"
     fi
     boolTrue "DEBUG_oneHostInfo" || return 0
     local _dbgmsg="ID:${HOST_ID} NAME:${HOST_NAME} STATE:${HOST_STATE}(${HostState[${HOST_STATE}]})"
     _dbgmsg+=" HOSTNAME:${HOST_HOSTNAME}"
     _dbgmsg+="${HOST_SP_OURID:+ HOST_SP_OURID=${HOST_SP_OURID}}"
+    _dbgmsg+="${HOST_SP_CLUSTER_ID:+ HOST_SP_CLUSTER_ID=${HOST_SP_CLUSTER_ID}}"
     _dbgmsg+="${_force:+ force:${_force}}"
     splog "[D] oneHostInfo($*): ${_dbgmsg}"
 }
@@ -568,21 +697,27 @@ function storpoolClientId()
             if [[ -n "${CLIENT_OURID}" ]]; then
                 if [[ -z "${CLIENT_OURID//[[:digit:]]/}" ]]; then
                     echo "${CLIENT_OURID}"
+                    if boolTrue "DEBUG_storpoolClientId"; then
+                        splog "[D] storpoolClientId(${_hst}${_common_domain:+,${_common_domain}}) CLIENT_OURID=${CLIENT_OURID} (storpoolGetId${_method})"
+                    fi
                     return 0
                 else
-                    splog "storpoolClientId${_method}(${_hst}${_common_domain:+,${_common_domain}}) CLIENT_OURID has incorrect format '${CLIENT_OURID}'"
+                    splog "[W] storpoolClientId${_method}(${_hst}${_common_domain:+,${_common_domain}}) CLIENT_OURID has incorrect format '${CLIENT_OURID}'"
                 fi
             fi
         else
-            splog "storpoolClientId(${_hst}${_common_domain:+,${_common_domain}}) unknown function storpoolGetId${_method}"
+            splog "[W] storpoolClientId(${_hst}${_common_domain:+,${_common_domain}}) unknown function storpoolGetId${_method}"
         fi
     done
+    if boolTrue "DEBUG_storpoolClientId"; then
+        splog "[D] storpoolClientId(${_hst}${_common_domain:+,${_common_domain}}) empty CLIENT_OURID //sources:${STORPOOL_CLIENT_ID_SOURCES}"
+    fi
     return 1
 }
 
 function storpoolApi()
 {
-    local _method="$1" _data="$2" _max_time="$3"
+    local _method="$1" _data="$2" _max_time="${3:-300}"
     local _apiCmd="" _ret=1
     if [[ -z "${SP_API_HTTP_HOST}" ]]; then
         if [[ -x "/usr/sbin/storpool_confget" ]]; then
@@ -590,7 +725,7 @@ function storpoolApi()
             eval $(/usr/sbin/storpool_confget -S || true)
         fi
         if [[ -z "${SP_API_HTTP_HOST}" ]]; then
-            splog "storpoolApi: ERROR! SP_API_HTTP_HOST is not set!"
+            splog "[E][storpoolApi] ERROR! SP_API_HTTP_HOST is not set!"
             return "${_ret}"
         fi
     fi
@@ -601,151 +736,275 @@ function storpoolApi()
         splog "[DD] SP_API_HTTP_HOST=${SP_API_HTTP_HOST} SP_API_HTTP_PORT=${SP_API_HTTP_PORT} SP_AUTH_TOKEN=${SP_AUTH_TOKEN:+available} ${NO_PROXY:+NO_PROXY=${NO_PROXY}} $*"
     fi
     if boolTrue "DDDEBUG_SP_RUN_CMD"; then
-        splog "[DDD] $0 $1 $2 $3"
+        splog "[DDD] $0 $*"
     fi
-
     if boolTrue "storpoolApiCmdline"; then
-        # shellcheck disable=2016
         _apiCmd="curl -s -S -q -N -H 'Authorization: Storpool v1:${SP_AUTH_TOKEN}' \
         --connect-timeout '${SP_API_CONNECT_TIMEOUT:-1}' \
-        --max-time '${_max_time:-300}' ${_data:+-d '${_data}'} \
+        --max-time '${_max_time}' ${_data:+-d "${_data}"} \
         '${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81}/ctrl/1.0/${_method}'"
         echo "${_apiCmd}"
-        _ret=0
     else
         curl -s -S -q -N -H "Authorization: Storpool v1:${SP_AUTH_TOKEN}" \
         --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
-        --max-time "${_max_time:-300}" ${_data:+-d "${_data}"} \
+        --max-time "${_max_time}" ${_data:+-d "${_data}"} \
         "${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81}/ctrl/1.0/${_method}" 2>/dev/null
         _ret=$?
         if [[ ${_ret} -ne 0 ]]; then
-            splog "${_method} ${_data}${_max_time:+ max-time:${_max_time}} ret:${_ret}"
+            splog "${_method} ${_data:+${_data}} max-time:${_max_time} ret:${_ret}"
         fi
+        return "${_ret}"
     fi
     return "${_ret}"
 }
 
-function volumesGroupSnapshotJson()
-{
-    local _json="" _tags="" _tg="" _res=""
-    while [[ ${1:0:4} = "tag:" ]]; do
-        _tg="${1#tag:}"
-        [[ -z "${_tags}" ]] || _tags+=","
-        _tags+="\"${_tg%%=*}\":\"${_tg#*=}\""
-        shift
-    done
-    while [[ -n "$2" ]]; do
-        [[ -z "${_json}" ]] || _json+=","
-        _json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
-        shift 2
-    done
-    if [[ -n "${_json}" ]]; then
-        _res="{\"volumes\":[${_json}]${_tags:+,\"tags\":{${_tags}}}}"
-        echo "${_res}"
-    fi
-}
-
 function storpoolWrapper()
 {
-	local _json="" _res="" _ret=1
-	case "$1" in
-		groupSnapshot)
-			shift
-            local _tags="" _tg=""
-            while [[ ${1:0:4} = "tag:" ]]; do
-                _tg="${1#tag:}"
-                [[ -z "${_tags}" ]] || _tags+=","
-                _tags+="\"${_tg%%=*}\":\"${_tg#*=}\""
-                shift
-            done
-			while [[ -n "$2" ]]; do
-				[[ -z "${_json}" ]] || _json+=","
-				_json+="{\"volume\":\"$1\",\"name\":\"$2\"}"
-				shift 2
-			done
-			if [[ -n "${_json}" ]]; then
-				_res="$(storpoolApi "VolumesGroupSnapshot" "{\"volumes\":[${_json}]${_tags:+,\"tags\":{${_tags}}}}")"
-				_ret=$?
-				if [[ ${_ret} -ne 0 ]]; then
-					splog "API communication error:${_res} (${_ret})"
-					return "${_ret}"
-				else
-					ok="$(echo "${_res}"|jq -r ".data|.ok" 2>&1)"
-					if [[ "${ok}" == "true" ]]; then
-						if boolTrue "DDEBUG_SP_RUN_CMD"; then
-							splog "[DD] API response:${_res}"
-						fi
-					else
-						splog "API Error:$(echo "${_res}" | tr '\n' ' ' || true) info:${ok}"
-                        _ret=1
-					fi
-				fi
-			else
-				splog "storpoolWrapper: Error: Empty volume list!"
-                _ret=1
-			fi
-            return "${_ret}"
-			;;
-		groupAttach)
-			shift
-			if [[ -n "$1" ]]; then
-				_res="$(storpoolApi "VolumesReassignWait" "{\"attachTimeout\":${ATTACH_TIMEOUT},\"reassign\":[$1]}")"
-				_ret=$?
-				if [[ ${_ret} -ne 0 ]]; then
-					splog "API communication error:${_res} (${_ret})"
-					return "${_ret}"
-				else
-					ok="$(echo "${_res}"|jq -r ".data|.ok" 2>&1)"
-					if [[ "${ok}" == "true" ]]; then
-						if boolTrue "DDEBUG_SP_RUN_CMD"; then
-							splog "[DD] API response:${_res}"
-						fi
-					else
-						splog "API Error:$(echo "${_res}" | tr '\n' ' ' || true) info:${ok}"
-                        _ret=1
-					fi
-				fi
-			else
-				splog "storpoolWrapper: Error: Empty json!"
-                _ret=1
-			fi
-            return "${_ret}"
-			;;
-		groupDetach)
-			shift
-			if [[ -n "$1" ]]; then
-				_res="$(storpoolApi "VolumesReassignWait" "{\"reassign\":[$1]}")"
-				_ret=$?
-				if [[ ${_ret} -ne 0 ]]; then
-					splog "API communication error:${_res} (${_ret})"
-					return "${_ret}"
-				else
-					ok="$(echo "${_res}"|jq -r ".data|.ok" 2>&1)"
-					if [[ "${ok}" == "true" ]]; then
-						if boolTrue "DDEBUG_SP_RUN_CMD"; then
-							splog "[DD] API response:${_res}"
-						fi
-					else
-						splog "API Error:$(echo "${_res}" | tr '\n' ' ' || true) info:${ok}"
-                        _ret=1
-					fi
-				fi
-			else
-				splog "storpoolWrapper: Error: Empty volume list!"
-                _ret=1
-			fi
-            return "${_ret}"
-			;;
-		*)
-			storpool -B "$@"
-			_ret=$?
-			return "${_ret}"
-			;;
-	esac
+    local method="$1"
+    local json="" res="" ret="" ok="" error_name="" cmd="${method}"
+    TRANSIENT="false"
+    if boolTrue "MULTICLUSTER"; then
+        if [[ -n "${DO_MULTICLUSTER}" ]]; then
+            cmd="MultiCluster"
+            if [[ -n "${DO_ALLCLUSTERS}" ]]; then
+                cmd+="/AllClusters"
+            else
+                if boolTrue "DDDEBUG_SP_RUN_CMD"; then
+                    splog "DO_ALLCLUSTERS is not set${SP_LOCATION:+ SP_LOCATION=${SP_LOCATION}}"
+                fi
+            fi
+            cmd+="/${method}"
+        else
+            if boolTrue "DDDEBUG_SP_RUN_CMD"; then
+                splog "DO_MULTICLUSTER is not set"
+            fi
+        fi
+        if [[ -n "${DO_REMOTE}" ]]; then
+            cmd="RemoteCommand/${SP_LOCATION:-${DO_REMOTE}}/${cmd}"
+        else
+            if boolTrue "DDDEBUG_SP_RUN_CMD"; then
+                splog "DO_REMOTE is not set${SP_LOCATION:+ using SP_LOCATION=${SP_LOCATION}}"
+            fi
+        fi
+    fi
+    case "${method}" in
+        # POST API {JSON}
+        VolumesReassignWait)
+            shift
+            res="$(storpoolApi "${cmd}" "{$1}" "${SP_API_TIMEOUT:-300}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd} {$1} communication error:${res} (${ret})"
+            else
+                ok="$(echo "${res}"|jq -r ".data|.ok" 2>&1)"
+                if [[ "${ok}" == "true" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd} {$1} response:${res}"
+                    fi
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd} {$1} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "jsonError" ]] || ret=4
+                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                fi
+            fi
+            ;;
+        # POST API {JSON} -> ~sp_uid
+        VolumeCreate|VolumeBackup)
+            shift
+            res="$(storpoolApi "${cmd}" "{$1}" "${SP_API_TIMEOUT:-300}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd} {$1} communication error:${res} (${ret})"
+            else
+                ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
+                if [[ "${ok}" == "true" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd} {$1} response:${res}"
+                    fi
+                    echo "${res}" | jq -r '.data.name'
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd} {$1} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "jsonError" ]] || ret=4
+                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                fi
+            fi
+            ;;
+        # POST API {JSON} -> {JSON}
+        VolumesGroupSnapshot)
+            export DATA_JSON="${TMPDIR}/${method}.json"
+            shift
+            res="$(storpoolApi "${cmd}" "{$1}" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd} {$1} communication error:${res} (${ret})"
+            else
+                ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
+                if [[ "${ok}" == "true" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd} {$1} response:${res}"
+                    fi
+                    echo "${res}"
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd} {$1} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "jsonError" ]] || ret=4
+                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                fi
+            fi
+            ;;
+        # POST API/NAME {JSON} -> ~sp_uid
+        VolumeSnapshot)
+            shift
+            res="$(storpoolApi "${cmd}/$1" "{$2}" "${SP_API_TIMEOUT:-300}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd}/$1 {$2} communication error:${res} (${ret})"
+            else
+                ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
+                if [[ "${ok}" == "true" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd}/$1 {$2} response:${res}"
+                    fi
+                    snapshotName="$(echo "${res}" | jq -r '.data.snapshotGlobalId')"
+                    echo "~${snapshotName}"
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd}/$1 {$2} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "jsonError" ]] || ret=4
+                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                fi
+            fi
+            ;;
+        # POST API/NAME {JSON} -> globalId
+        VolumeRevert)
+            shift
+            res="$(storpoolApi "${cmd}/$1" "{$2}" "${SP_API_TIMEOUT:-300}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd}/$1 {$2} communication error:${res} (${ret})"
+            else
+                ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
+                if [[ "${ok}" == "true" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd}/$1 {$2} response:${res}"
+                    fi
+                    echo "${res}" | jq -r '.data.globalId'
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd}/$1 {$2} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "jsonError" ]] || ret=4
+                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                fi
+            fi
+            ;;
+        # POST API/NAME {JSON} // ${TMPDIR}/${cmd}.json
+        VolumeDelete|VolumeFreeze|VolumeUpdate|SnapshotUpdate|SnapshotDelete)
+            export DATA_JSON="${TMPDIR}/${method}.json"
+            shift
+            res="$(storpoolApi "${cmd}/$1" "{$2}" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd}/$1 {$2} communication error:${res} (${ret})"
+            else
+                ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
+                if [[ "${ok}" == "true" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd}/$1 {$2} response:${res}"
+                    fi
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd}/$1 {$2} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "jsonError" ]] || ret=4
+                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                fi
+            fi
+            ;;
+        # GET API/NAME -> {JSON} // ${TMPDIR}/${cmd}.json
+        Volume|Snapshot)
+            export DATA_JSON="${TMPDIR}/${method}.json"
+            shift
+            res="$(storpoolApi "${cmd}/$1" "" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd}/$1 communication error:${res} (${ret})"
+            else
+                error_descr="$(echo "${res}" | jq -r ".error|.descr" 2>&1)"
+                if [[ "${error_descr}" == "null" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd}/$1 response:${res:0:850}"
+                    fi
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd}/$1 ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                fi
+            fi
+            ;;
+        # GET API -> {JSON} // ${TMPDIR}/${cmd}.json
+        AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList)
+            export DATA_JSON="${TMPDIR}/${method}.json"
+            shift
+            res="$(storpoolApi "${cmd}" "" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "API ${cmd} communication error:${res} ${DATA_JSON} (${ret})"
+            else
+                error_descr="$(jq -r ".error|.descr" "${DATA_JSON}" 2>&1)"
+                if [[ "${error_descr}" == "null" ]]; then
+                    if boolTrue "DEBUG_SP_RUN_CMD"; then
+                        splog "API ${cmd} response:${res:0:512}... file:${DATA_JSON}"
+                    fi
+                else
+                    error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
+                    splog "API ${cmd} ERROR:${error_name} ${res//$'\n'/ }"
+                    ret=1
+                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                    [[ "${error_name}" != "invalidParam" ]] || ret=3
+                    [[ "${error_name}" != "multiCluster" ]] || ret=4
+                fi
+            fi
+            ;;
+        *)
+            splog "Error: Unexpected command '${cmd}' ($*)"
+            ret=255
+            ;;
+    esac
+    return "${ret}"
 }
 
 function splogFile() {
-    local _logfile="$1" _line="" logfh=""
+    local _logfile="$1"
+    local _line="" logfh=""
     if boolTrue "DEBUG_splogFile"; then
         splog "[D][splogFile] $*"
     fi
@@ -753,449 +1012,866 @@ function splogFile() {
         splog "splogFile: ${_line}"
     done {logfh}< <(cat "${_logfile}" 2>&1 || true)
     exec {logfh}<&-
-    [[ -z "${2:-}" ]] || rm -f "${_logfile}"
+    [[ -z "${2}" ]] || rm -f "${_logfile}"
+}
+
+function tagsHelper()
+{
+    local _TAG_KEY="$1" _TAG_VAL="$2"
+    local _TAGSJSON="" _tagKey=""
+    IFS=';' read -r -a _tagVals <<< "${_TAG_VAL}"
+    IFS=';' read -r -a _tagKeys <<< "${_TAG_KEY}"
+    for i in ${!_tagKeys[*]}; do
+        _tagKey="${_tagKeys[i]//[[:space:]]/}"
+        [[ -n ${_tagKey} ]] || continue
+        _TAGSJSON+="${_TAGSJSON:+,}\"${_tagKey}\":\"${_tagVals[i]//[[:space:]]/}\""
+    done
+    echo "${_TAGSJSON}"
 }
 
 function storpoolRetry() {
-    local t=${STORPOOL_RETRIES:-10}
-    local errfile="" err=
-    errfile="$(mktemp)"
-    if boolTrue "DEBUG_SP_RUN_CMD"; then
-        if boolTrue "DDEBUG_SP_RUN_CMD"; then
-            splog "[DD] ${SP_API_HTTP_HOST:+${SP_API_HTTP_HOST}:}storpool $* #${errfile}"
+    local _retries=${STORPOOL_RETRIES:-10}
+    local _errfile="" _err="1" DO_MULTICLUSTER="${DO_MULTICLUSTER}"
+    _errfile="$(mktemp --tmpdir storpoolRetry-XXXXXXXX.err || mktemp --tmpdir=/tmp storpoolRetry-XXXXXX.err)"
+    if boolTrue "DEBUG_storpoolRetry"; then
+        if boolTrue "DDEBUG_storpoolRetry"; then
+            splog "[DD] ${SP_API_HTTP_HOST:+${SP_API_HTTP_HOST}:}API $* #${_errfile}"
         else
             for _last_cmd;do :;done
-            if [[ "${_last_cmd}" != "list" ]]; then
-                splog "[D] ${SP_API_HTTP_HOST:+${SP_API_HTTP_HOST}:}storpool $*"
+            if [[ ${_last_cmd} != "list" ]]; then
+                if boolTrue "DEBUG_storpoolRetry"; then
+                    splog "[D] ${SP_API_HTTP_HOST:+${SP_API_HTTP_HOST}:} $*"
+                fi
             fi
         fi
     fi
     while true; do
-        if storpoolWrapper "$@" 2>"${errfile}"; then
-            if boolTrue "DEBUG_SP_RUN_CMD"; then
-                splogFile "${errfile}" clean
+        TRANSIENT="false"
+        if storpoolWrapper "$@" 2>"${_errfile}"; then
+            _err=$?
+            if boolTrue "DEBUG_storpoolRetry"; then
+                splogFile "${_errfile}" clean
             fi
             break
+        else
+            _err=$?
+            if ! boolTrue "DO_MULTICLUSTER"; then
+                if [[ ${_err} -eq 2 ]] && [[ -z "${NO_MC_RETRY}" ]]; then
+                    DO_MULTICLUSTER=1
+                    splog "Retry with MultiCluster '$*'"
+                    continue
+                fi
+            fi
+            if boolTrue "_SOFT_FAIL"; then
+                if ! boolTrue "_QUIET_FAIL"; then
+                    splog "Warn: $* SOFT_FAIL"
+                    splogFile "${_errfile}" clean
+                fi
+                if [[ "${TRANSIENT,,}" != "true" ]]; then
+                    break
+                fi
+            fi
+            if [[ "${TRANSIENT,,}" == "true" ]]; then
+                # retry forever, reduce logs flooding with a bit longer retry
+                _retries=$((_retries + 1))
+                splog "VM ${VM_ID} TRANSIENT error! Waiting ${TRANSIENT_ERROR_SLEEP_SECONDS:-3} seconds before retry"
+                # reduce logs flooding with a bit longer delay
+                sleep "${TRANSIENT_ERROR_SLEEP_SECONDS:-3}"
+            else
+                splog "TRANSIENT=${TRANSIENT}"
+            fi
+            _retries=$((_retries - 1))
+            if [[ ${_retries} -lt 1 ]]; then
+                splog "storpoolRetry($*) FAILED (try:[${_retries}], err:${_err})"
+                splogFile "${_errfile}" clean
+                exit 1
+            fi
+            if [[ ${_err} -gt 1 ]]; then
+                splog "storpoolRetry($*) FAILED (try:${_retries}, err:[${_err}])"
+                splogFile "${_errfile}"
+                exit "${_err}"
+            fi
+            splogFile "${_errfile}"
         fi
-        err=$?
-        if boolTrue "_SOFT_FAIL"; then
-            splog "storpool $* SOFT_FAIL"
-            splogFile "${errfile}" clean
-            break
-        fi
-        t=$((t - 1))
-        if [[ ${t} -lt 1 ]]; then
-            splog "storpool $* FAILED (try:${t}, err:${err})"
-            splogFile "${errfile}" clean
-            exit 1
-        fi
-        splogFile "${errfile}"
         sleep .1
-        splog "retry ${t} storpool $* (err:${err})"
+        splog "API retry ${_retries} storpool $* (err:${_err})"
     done
-    if [[ -f "${errfile}" ]]; then
-        rm -f "${errfile}"
+    if [[ -f "${_errfile}" ]]; then
+        rm -f "${_errfile}"
     fi
-}
-
-function storpoolTemplate()
-{
-    local _SP_TEMPLATE="$1" _SP_PROPAGATE=
-    if ! boolTrue "AUTO_TEMPLATE"; then
-        return 0
-    fi
-    if [[ "${SP_PLACEALL}" == "" ]]; then
-        splog "Datastore template ${_SP_TEMPLATE} missing 'SP_PLACEALL' attribute."
-        exit 255
-    fi
-    if [[ "${SP_PLACETAIL}" == "" ]]; then
-        splog "Datastore template ${_SP_TEMPLATE} missing 'SP_PLACETAIL' attribute. Using SP_PLACEALL"
-        SP_PLACETAIL="${SP_PLACEALL}"
-    fi
-    if [[ -n "${SP_REPLICATION/[123]/}" || -n "${SP_REPLICATION/[[:digit:]]/}" ]]; then
-        splog "Datastore template ${_SP_TEMPLATE} with unknown value for SP_REPLICATION attribute=${SP_REPLICATION}"
-        exit 255
-    fi
-    if boolTrue "SP_TEMPLATE_PROPAGATE"; then
-        _SP_PROPAGATE=1
-	fi
-    if [[ -n "${_SP_TEMPLATE}" && -n "${SP_REPLICATION}" && -n "${SP_PLACEALL}" && -n "${SP_PLACETAIL}" ]]; then
-        storpoolRetry template "${_SP_TEMPLATE}" replication "${SP_REPLICATION}" \
-		              placeAll "${SP_PLACEALL}" placeTail "${SP_PLACETAIL}" \
-					  ${SP_PLACEHEAD:+ placeHead "${SP_PLACEHEAD}"} \
-					  ${SP_IOPS:+iops "${SP_IOPS}"} ${SP_BW:+bw "${SP_BW}"} \
-					  ${_SP_PROPAGATE:+propagate ${PROPAGATE_YES:+yes}} >/dev/null
-    fi
+    return "${_err}"
 }
 
 function storpoolVolumeInfo()
 {
-    local _SP_VOL="$1" _retries="$2"
-    local STORPOOL_RETRIES_OLD="${STORPOOL_RETRIES}" xfh=""
-    [[ -z "${_retries}" ]] || STORPOOL_RETRIES="${_retries}"
+    local _SP_UID="$1" STORPOOL_RETRIES="${2:-${STORPOOL_RETRIES}}"
+    local _V_TAGS="" _RET=1
+    if boolTrue "DDEBUG_storpoolVolumeInfo"; then
+        splog "[DD]storpoolVolumeInfo($*) DO_REMOTE=${DO_REMOTE} DO_MULTICLUSTER=${DO_MULTICLUSTER} STORPOOL_RETRIES=${STORPOOL_RETRIES}"
+    fi
     V_SIZE=
     V_PARENT_NAME=
     V_TEMPLATE_NAME=
     V_TYPE=
-    while IFS=',' read -r -u "${xfh}" V_SIZE V_PARENT_NAME V_TEMPLATE_NAME V_TYPE; do
-        V_PARENT_NAME="${V_PARENT_NAME//\"/}"
-        V_TEMPLATE_NAME="${V_TEMPLATE_NAME//\"/}"
-        V_TYPE="${V_TYPE//\"/}"
-        break
-    done {xfh}< <(storpoolRetry -j volume "${_SP_VOL}" info|jq -r ".data|[.size,.parentName,.templateName,.tags.type]|@csv" || true)
-    exec {xfh}<&-
-    export V_SIZE V_PARENT_NAME V_TEMPLATE_NAME V_TYPE
-    if boolTrue "DEBUG_storpoolVolumeInfo"; then
-        splog "[D] storpoolVolumeInfo(${_SP_VOL}) size:${V_SIZE} parentName:${V_PARENT_NAME} templateName:${V_TEMPLATE_NAME} tags.type:${V_TYPE}"
+    V_GLOBAL_ID=
+    V_PRESERVED_GLOBAL_ID=
+    V_CLUSTER_ID=
+    V_TAG_KEYS=
+    V_TAG_VALS=
+    DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry Volume "${_SP_UID}"
+    _RET=$?
+    if [[ ${_RET} -eq 0 ]]; then
+        IFS=';' read -r V_SIZE V_PARENT_NAME V_GLOBAL_ID V_PRESERVED_GLOBAL_ID V_TEMPLATE_NAME V_CLUSTER_ID V_TAGS <<< "$(jq -r \
+            '.data[]|"\(.size|tostring);\(.parentName);\(.globalId);\(.preservedGlobalId);\(.templateName);\(.clusterId);\(.tags|tostring)"' \
+            "${TMPDIR}/Volume.json" || true)"
+        unset V_TAGS_ARR
+        declare -g -A V_TAGS_ARR
+        while read -r -u "${spfh}" tagline; do
+            _TAG_KEY="${tagline%%=*}"
+            _TAG_VAL="${tagline#*=}"
+            V_TAGS_ARR["${_TAG_KEY}"]="${_TAG_VAL}"
+            V_TAG_KEYS+="${V_TAG_KEYS:+;}${_TAG_KEY}"
+            V_TAG_VALS+="${V_TAG_VALS:+;}${_TAG_VAL}"
+        done {spfh}< <(echo "${V_TAGS}" | jq -r 'to_entries[]|"\(.key|tostring)=\(.value|tostring)"' || true)
+        exec {spfh}<&-
+        V_TYPE="${V_TAGS_ARR["type"]}"
     fi
-    STORPOOL_RETRIES="${STORPOOL_RETRIES_OLD}"
+    export V_SIZE V_PARENT_NAME V_GLOBAL_ID V_TEMPLATE_NAME V_CLUSTER_ID V_TAGS
+    if boolTrue "DEBUG_storpoolVolumeInfo"; then
+        splog "[D]storpoolVolumeInfo(${_SP_UID}) size:${V_SIZE} parentName:${V_PARENT_NAME} globalId:${V_GLOBAL_ID}${V_PRESERVED_GLOBAL_ID:+preservedGlobaId:${V_PRESERVED_GLOBAL_ID}} templateName:${V_TEMPLATE_NAME} tags:${V_TAGS}${V_TYPE:- tag.type:${V_TYPE}} (${_RET})"
+    fi
+    return "${_RET}"
+}
+
+function storpoolExist()
+{
+    local _NAME="$1" _ENTRY="${2:-${STORPOOL_EXIST_HINT}}" _RETRIES="${3:-1}"
+    local _RET="1" _method="" _LOOP=""
+    unset X_FOUND_AS X_CLUSTER_ID
+    for _LOOP in ${_ENTRY}; do
+        _method="${_LOOP}Update"
+        DO_MULTICLUSTER="1" DO_REMOTE="" _SOFT_FAIL="1" _QUIET_FAIL="1" storpoolRetry "${_method}" "${_NAME}" ""
+        _RET=$?
+        if [[ ${_RET} -eq 0 ]]; then
+            X_FOUND_AS="${_LOOP}"
+            read -r X_CLUSTER_ID <<< "$(jq -r '.clusterId' "${TMPDIR}/${_method}.json" || true)"
+            export X_CLUSTER_ID X_FOUND_AS
+            break
+        fi
+    done
+    if boolTrue "DEBUG_storpoolExist" || [[ ${_RET} -ne 0 ]]; then
+        boolTrue "DEBUG_storpoolExist" && _DBGPX="D" || _DBGPX="E"
+        splog "[${_DBGPX}]storpoolExist(${_NAME}, '${_ENTRY}', ${_RETRIES}) ${X_FOUND_AS:-not found}, clusterId ${X_CLUSTER_ID:-not found} (${_RET})"
+    fi
+    return "${_RET}"
+}
+
+function storpoolLocate()
+{
+    local _NAME="$1" _ENTRY="$2" _RETRIES="${3:-1}"
+    local DO_REMOTE="" _RET=1 cluster="" _method="" JSFILE="" _tagline=""
+    local NO_MC_RETRY=1 _SOFT_FAIL=1
+    unset X_NAME X_SIZE X_GLOBAL_ID X_TAGS X_TYPE
+    unset X_TEMPLATE_NAME X_PARENT_NAME
+    unset X_TAGS_ARR
+    if boolTrue "DDEBUG_storpoolLocate"; then
+        splog "[DD](${_NAME}, ${_ENTRY}, ${_RETRIES})"
+    else
+        # shellcheck disable=SC2034
+        local DEBUG_SP_RUN_CMD=""
+    fi
+    if storpoolExist "${_NAME}" "${_ENTRY}" "${_RETRIES}"; then
+        _method="${X_FOUND_AS}sList"
+        DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 storpoolRetry "${_method}"
+        JSFILE="${TMPDIR}/${_method}.json"
+        IFS=';' read -r X_NAME X_SIZE X_PARENT_NAME X_GLOBAL_ID X_TEMPLATE_NAME X_TAGS <<< "$(jq -r \
+            --arg cId "${X_CLUSTER_ID}" \
+            '.data.clusters[]|select(.clusterId==$cId).response.data[]|"\(.name);\(.size|tostring);\(.parentName);\(.globalId);\(.templateName);\(.tags|tostring)"' \
+            "${JSFILE}" | grep -e "^${_NAME};" || true)"
+        if [[ -n ${X_SIZE} ]]; then
+            _RET=0
+            declare -g -A X_TAGS_ARR
+            while read -r -u "${spfh}" _tagline; do
+                X_TAGS_ARR["${_tagline%%=*}"]="${_tagline#*=}"
+            done {spfh}< <(echo "${X_TAGS}" | jq -r 'to_entries[]|"\(.key|tostring)=\(.value|tostring)"' || true)
+            X_TYPE="${X_TAGS_ARR["type"]}"
+        fi
+        export X_NAME X_SIZE X_PARENT_NAME X_GLOBAL_ID X_TEMPLATE_NAME X_TAGS X_TAGS_ARR
+    fi
+    if boolTrue "DEBUG_storpoolLocate"; then
+        splog "[D](${_NAME}) ${X_FOUND_AS} clusterId:${X_CLUSTER_ID} size:${X_SIZE} parentName:${X_PARENT_NAME} globalId:${X_GLOBAL_ID} templateName:${X_TEMPLATE_NAME} tags:${X_TAGS}${X_TYPE:- tag.type:${X_TYPE}} (${_RET})"
+    fi
+    return "${_RET}"
 }
 
 function storpoolVolumeExists()
 {
-    local _SP_VOL="$1" _RET=1
-    if [[ -n "$(storpoolRetry -j volume list | jq -r ".data[]|select(.name == \"${_SP_VOL}\")" || true)" ]]; then
-        _RET=0
-    fi
+    local _match="$1" _type=${2:-globalId}
+    local _RET=1 _RES=""
+    case "${_type}" in
+        byName)
+            _RES=$(kvGet byName "${_match}")
+            if [[ -n ${_RES} ]]; then
+                _RET=0
+                SP_UID="${_RES}"
+            fi
+            if boolTrue "DDEBUG_storpoolVolumeExists"; then
+                splog "[DD] KV ${_match} (${_RET})"
+            fi
+            ;;
+        *)
+            storpoolLocate "${_match}" "Volume" 2
+            _RET=$?
+            if boolTrue "DDEBUG_storpoolVolumeExists"; then
+                splog "[DD] SP ${_match} (${_RET})"
+            fi
+            ;;
+    esac
     if boolTrue "DEBUG_storpoolVolumeExists"; then
-        splog "[D] storpoolVolumeExists(${_SP_VOL}): ${_RET}"
+        splog "[D]($*): ${_RES:+res:"${_RES}" }return ${_RET}"
     fi
     return "${_RET}"
 }
 
 function storpoolVolumeCheck()
 {
-    local _SP_VOL="$1" _errmsg=""
-    if storpoolVolumeExists "${_SP_VOL}"; then
-        _errmsg="Error: StorPool volume ${_SP_VOL} exists"
-        splog "${_errmsg}"
-        log_error "${_errmsg}"
+    local _match="$1" _type="$2"
+    if storpoolVolumeExists "${_match}" "${_type}"; then
+        errmsg="Error: StorPool volume ${_match} exists"
+        splog "${errmsg}"
+        log_error "${errmsg}"
         exit 1
     fi
 }
 
 function storpoolVolumeCreate()
 {
-    local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3"
-    storpoolRetry volume "${_SP_VOL}" size "${_SP_SIZE}" ${_SP_TEMPLATE:+template "${_SP_TEMPLATE}"} create >/dev/null
+    local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3" _TAG_KEY="$4" _TAG_VAL="$5"
+    local _RET=1 _DATA="" _TAGS=""
+    _TAGS="$(tagsHelper "img;${LOC_TAG};virt${_TAG_KEY:+;${_TAG_KEY}}" "${_SP_VOL};${LOC_TAG_VAL};one${_TAG_VAL:+;${_TAG_VAL}}")"
+    _DATA="\"size\":\"${_SP_SIZE}\",\"tags\":{${_TAGS}},\"template\":\"${_SP_TEMPLATE}\""
+    SP_UID=$(storpoolRetry VolumeCreate "${_DATA}")
+    _RET=$?
+    if [[ -n ${SP_UID} ]]; then
+        kvPut "${_SP_VOL}" "${SP_UID}"
+        _RET=$?
+    fi
+    return "${_RET}"
 }
 
 function storpoolVolumeStartswith()
 {
-    local _SP_VOL="$1" vName="" xfh=""
-    while read -r -u "${xfh}" vName; do
-        echo "${vName//\"/}"
-    done {xfh}< <(storpoolRetry -j volume list | \
-                  jq -r ".data|map(select(.name|startswith(\"${_SP_VOL}\")))|.[]|[.name]|@csv" || true)  # TBD use cache files
-    exec {xfh}<&-
-}
-
-function storpoolVolumeSnapshotsDelete()
-{
-    local _SP_VOL_SNAPSHOTS="$1" xfh=""
-    if boolTrue "DEBUG_storpoolVolumeSnapshotsDelete"; then
-        splog "[D] storpoolVolumeSnapshotsDelete ${_SP_VOL_SNAPSHOTS}"
+    local _MATCH="$1" globalid="" sp_uid="" tags="" _RET=1 spfh=""
+    declare -A spnames_a  # spnames_a[SP_UID]=SP_NAME
+    declare -A spuids_a  # spuids_a[SP_UID]=CLUSTER_ID
+    DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry VolumesList
+    _RET=$?
+    if [[ ${_RET} -ne 0 ]]; then
+        splog "StorPool API error ${_RET}"
+        return "${_RET}"
     fi
-    while read -r -u "${xfh}" name; do
-        name="${name//\"/}"
-        [[ "${name:0:1}" == "*" ]] && continue
-        storpoolSnapshotDelete "${name}"
-    done {xfh}< <(storpoolRetry -j snapshot list | \
-                jq -r --arg n "${_SP_VOL_SNAPSHOTS}" '.data|map(select(.name|contains($n)))|.[]|[.name]|@csv' || true)
-    exec {xfh}<&-
+    while read -r -u "${spfh}" clusterid cluster sp_uid globalid tags; do
+        splog "(${_MATCH}) clusterId=${clusterid}(${cluster}) sp_uid=${sp_uid} globalId=${globalid} tags ${tags} //from VolumesList"
+        spuids_a["${sp_uid}"]="${clusterid}"
+    done {spfh}< <(jq -r --arg match "${_MATCH}" \
+                '.data.clusters[]|"\(.clusterId) \(.response.data[]|select(.tags.img|tostring|startswith($match))|"\(.name) \(.globalId) \(.tags|tostring)")"' \
+                 "${TMPDIR}/VolumesList.json" || true)
+    exec {spfh}<&-
+    if [[ "${_MATCH:0:1}" != "~" ]]; then
+        for sp_uid in $(kvGet byName "${_MATCH}" startswith); do
+            splog "(${_MATCH}) ${sp_uid} //from kvGet startswith"
+            spnames_a["${sp_uid}"]="${sp_uid}"
+        done
+    fi
+    [[ -z "${spnames_a[*]}" ]] || echo "${spnames_a[*]}"
+    if boolTrue "DEBUG_storpoolVolumeStartswith"; then
+        splog "[D] spuids_a:[${spuids_a[*]}] spnames_a:[${spnames_a[*]}]"
+    fi
 }
 
-function storpoolVolumeDelete()
+function storpoolVolumeBackup()
 {
-    local _SP_VOL="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE_LOCATION="$4"
-    local _ret=0 _msg="" _newName="" _REMOTE_LOCATION_ARGS=""
-    if storpoolVolumeExists "${_SP_VOL}"; then
-        if boolTrue "DEBUG_storpoolVolumeDelete"; then
-            splog "[D] storpoolVolumeDelete(${_SP_VOL},${_FORCE},${_SNAPSHOTS},${_REMOTE_LOCATION})"
+    local _VOL_UID="$1" _SP_VOL="$2" _REMOTE_DATA="$3"
+    local _TAGS="" _REMOTE="" _k="" _json="" _RET=1 _element=""
+    IFS=':' read -r -a _rdata <<<"${_REMOTE_DATA}"
+
+    for _element in "${_rdata[@]}"; do
+        if [[ -z ${_REMOTE} ]]; then
+            _REMOTE="${_element}"
+            continue
         fi
+        [[ -z ${_TAGS} ]] || _TAGS+=","
+        _k="${_element%%=*}"
+        _TAGS+="\"${_k//[[:space:]]/}\":\"${_element#*=}\""
+    done
 
-        storpoolVolumeDetach "${_SP_VOL}" "${_FORCE}" "" "all"
-        _ret=$?
+    [[ -z "${_TAGS}" ]] || _TAGS="\"del\":\"y\"}"
 
-        if [[ -n "${_REMOTE_LOCATION}" ]]; then
-			_REMOTE_LOCATION_ARGS="${_REMOTE_LOCATION#*:}"
-			_REMOTE_LOCATION="${_REMOTE_LOCATION%:*}"
-            # shellcheck disable=SC2086
-			storpoolRetry volume "${_SP_VOL}" backup "${_REMOTE_LOCATION}" ${_REMOTE_LOCATION_ARGS} >/dev/null
-			_ret=$?
-			if [[ ${_ret} -ne 0 ]]; then
-				storpoolVolumeRename "${_SP_VOL}" "${_SP_VOL}-$(date +%s||true)" "" "tag del=y" >/dev/null
-				return $?
-			fi
-		fi
-        if [[ -n "${DELAY_DELETE}" ]]; then
-            local DELAY_DELETE_tmp="${DELAY_DELETE//[[:digit:]]/}"
+    _json="\"volume\":\"${_VOL_UID}\",\"remote\":\"${_REMOTE}\",\"tags\":{${_TAGS}}"
+
+    DO_MULTICLUSTER=1 storpoolRetry VolumeBackup "${_json}" >/dev/null
+    _RET=$?
+    if [[ ${_RET} -ne 0 ]]; then
+        DO_MULTICLUSTER=1 storpoolVolumeRename "${_VOL_UID}" "${_SP_VOL}" "${_SP_VOL}-$(date +%s||true)" "" "${_TAGS}" >/dev/null
+        _RET=$?
+    fi
+    return "${_RET}"
+}
+
+function storpoolDelete()
+{
+    local _SP_UID="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE="$4" _DD_TAGS="$5" _UID_ONLY="$6"
+    local _ret=0 DO_MULTICLUSTER=1 _SP_VOL="" json=""
+    local _snapshot="" _DELAY_DELETE=""
+
+    _SP_VOL="$(kvGet byUid "${_SP_UID}")"
+    if boolTrue "DEBUG_storpoolDelete"; then
+        splog "[D]($*) (KV byUid -> ${_SP_VOL})"
+    fi
+    # TODO: handdle temporary unavailable volumes/snapshots
+    if [[ -n "${ONLY_DELETE}" ]] || storpoolExist "${_SP_UID}"; then
+        DO_REMOTE="${X_CLUSTER_ID:+~${X_CLUSTER_ID}}"
+        case "${ONLY_DELETE,,}" in
+            volume)
+                _snapshot=""
+                _REMOTE=""
+                _DELAY_DELETE=""
+                ;;
+            snapshot)
+                _snapshot=1
+                _REMOTE=""
+                _DELAY_DELETE=""
+                ;;
+            *)
+                _DELAY_DELETE="${DELAY_DELETE}"
+                [[ "${X_FOUND_AS,,}" == "volume" ]] || _snapshot=1
+                DO_REMOTE="" storpoolDetach "${_SP_UID}" "${_FORCE}" "" "all" "" "${_snapshot}"
+                _ret=$?
+                ;;
+        esac
+
+        if [[ -n "${_REMOTE}" ]] && [[ -z "${_snapshot}" ]]; then
+            storpoolVolumeBackup "${_SP_UID}" "${_SP_VOL}" "${_REMOTE}"
+            _ret=$?
+            if [[ ${_ret} -ne 0 ]]; then
+                splog "[E] Failed to create a (remote) backup. (${_ret})"
+                return "${_ret}"
+            fi
+        fi
+        if [[ -n "${_DELAY_DELETE}" ]] && [[ -z "${_snapshot}" ]]; then
+            local DELAY_DELETE_tmp="${_DELAY_DELETE//[[:digit:]]/}"
             if [[ -n "${DELAY_DELETE_tmp}" ]] && [[ -z "${DELAY_DELETE_tmp/[smhd]/}" ]]; then
-                storpoolRetry volume "${_SP_VOL}" snapshot deleteAfter "${DELAY_DELETE}" >/dev/null
+                json="\"deleteAfter\":$(delayDeleteSeconds "${_DELAY_DELETE}")"
+                if [[ -n "${_DD_TAGS}" ]]; then
+                    json+=",\"tags\":{${_DD_TAGS}}"
+                fi
+                DO_REMOTE="" storpoolRetry VolumeSnapshot "${_SP_UID}" "${json}" >/dev/null
                 _ret=$?
                 if [[ ${_ret} -eq 0 ]]; then
-                    storpoolRetry volume "${_SP_VOL}" delete "${_SP_VOL}" >/dev/null
+                    DO_REMOTE="" storpoolRetry VolumeDelete "${_SP_UID}" >/dev/null
                     _ret=$?
                 else
-                   splog "Can't create anonymous snapshot for ${_SP_VOL}!"
+                   splog "[E]Can't create anonymous snapshot for ${_SP_UID} (${_SP_VOL})!"
                 fi
             else
-                _msg="Unsupported format in DELAY_DELETE='${DELAY_DELETE}'!"
-                _newName="${_SP_VOL}_DELETE$(date +%s)"
-                storpoolRetry volume "${_SP_VOL}" rename "${_newName}" update >/dev/null
+                local msg="Unsupported format in DELAY_DELETE='${_DELAY_DELETE}'!" newName=""
+                local _msgpx="E"
+                newName="${_SP_VOL#*~}_DELETE$(date +%s||true)"
+                DO_REMOTE="" storpoolVolumeRename "${_SP_UID}" "${_SP_VOL}" "${newName}" >/dev/null
                 _ret=$?
                 if [[ ${_ret} -ne 0 ]]; then
-                    storpoolRetry volume "${_newName}" freeze >/dev/null
+                    storpoolVolumeFreeze "${_SP_UID}" "volume"
                     _ret=$?
                     if [[ ${_ret} -eq 0 ]]; then
-                        _msg+=" ${_SP_VOL} converted to snapshot ${_newName}"
+                        msg+=" ${_SP_UID} converted to snapshot ${newName}"
+                        _msgpx="I"
                     else
-                        _msg+=" Unable to convert ${_SP_VOL} as snapshot ${_newName}"
+                        msg+=" Unable to convert ${_SP_UID} as snapshot ${newName}"
                     fi
                 else
-                    _msg+=" Unable to rename ${_SP_VOL} to ${_newName}."
+                    msg+=" Unable to rename ${_SP_UID} to ${newName}."
                 fi
-                splog "${_msg}"
+                splog "[${_msgpx}]${msg}"
             fi
         else
-            storpoolRetry volume "${_SP_VOL}" delete "${_SP_VOL}" >/dev/null
+            if [[ -n "${_snapshot}" ]]; then
+                DO_REMOTE="" storpoolRetry SnapshotDelete "${_SP_UID}" >/dev/null
+            else
+                DO_REMOTE="" storpoolRetry VolumeDelete "${_SP_UID}" >/dev/null
+            fi
             _ret=$?
         fi
+        if boolTrue "_UID_ONLY"; then
+            kvDel "" "${_SP_UID}"
+        else
+            kvDel "${_SP_VOL}" "${_SP_UID}"
+        fi
     else
-        splog "storpoolVolumeDelete: volume ${_SP_VOL} not found"
+        splog "[W] volume ${_SP_UID} (${_SP_VOL}) not found"
     fi
     if [[ ${_ret} -eq 0 ]]; then
         if [[ "${_SNAPSHOTS:0:5}" == "snaps" ]]; then
-            storpoolVolumeSnapshotsDelete "${_SP_VOL}-snap"
+            if [[ -z "${snapshot}" ]]; then
+                storpoolSnapshotsDelete "${_SP_VOL}" "snap"
+            else
+                splog "[-TBD-] SnapshotSnapshotsDelete?"
+            fi
         fi
     else
-        splog "Volume snapshots not deleted due to registered error (${_ret})!"
+        splog "[E] Volume snapshots not deleted due to registered error (${_ret})!"
+    fi
+    return "${_ret}"
+}
+
+function storpoolVolumeFreeze()
+{
+    local _VOL_UID="$1" _ONLY_DELETE="$2"
+    local _SP_NAME="" _TMP_NAME="" _RET=1
+    _SP_NAME="$(kvGet byUid "${_VOL_UID}")"
+    if [[ -z "${_SP_NAME}" ]]; then
+        splog "[E] Volume not found ${_VOL_UID}"
+        return "${_RET}"
+    fi
+    _TMP_NAME="${_SP_NAME}-TEMP-$(mktemp --dry-run XXXXXXXX)"
+    if storpoolVolumeInfo "${_VOL_UID}"; then
+        if storpoolSnapshotCreate "${_TMP_NAME}" "${_VOL_UID}" "${V_TAG_KEYS}" "${V_TAG_VALS}"; then
+            if ONLY_DELETE="${_ONLY_DELETE:+volume}" storpoolDelete "${_VOL_UID}"; then
+                DO_REMOTE="" storpoolSnapshotRename "${SP_UID}" "${_TMP_NAME}" "${_SP_NAME}"
+                _RET=$?
+            else
+                _RET=$?
+                splog "[E] Can't delete ${_VOL_UID}(${_SP_NAME})"
+            fi
+        else
+            _RET=$?
+            splog "[E] Can't create snapshot '${_TMP_NAME}' for ${_VOL_UID}(${_SP_NAME}) (${_RET})"
+        fi
+    else
+        _RET=$?
+        splog "[W] Volume not found ${_VOL_UID} (${_RET})"
+    fi
+    return "${_RET}"
+}
+
+function storpoolSnapshotRename()
+{
+    local _SNAP_UID="$1" _SP_SNAP="$2" _SP_NEW="$3" _SP_TEMPLATE="$4" _SP_TAGS_JSON="$5"
+    local _ret=1 _JSON=""
+    if [[ -z "${_SP_NEW}" ]]; then
+        splog "[E] Empty new snapshot name (args:$*)"
+        return "${_ret}"
+    fi
+    kvDel "${_SP_SNAP}"
+    kvPut "${_SP_NEW}" "${_SNAP_UID}"
+    _ret=$?
+    if [[ ${_ret} -eq 0 ]]; then
+        _JSON+="\"tags\":{\"img\":\"${_SP_NEW}\""
+        if [[ -n "${_SP_TAGS_JSON}" ]]; then
+            _JSON+="${_SP_TAGS_JSON}"
+        fi
+        _JSON+="}"
+        if [[ -n "${_SP_TEMPLATE}" ]]; then
+            _JSON+="\",template\":\"${_SP_TEMPLATE}\""
+        fi
+        storpoolRetry SnapshotUpdate "${_SNAP_UID}" "${_JSON}"
+        _ret=$?
+        splog "[I] ${_SNAP_UID} renamed ${_SP_SNAP} to ${_SP_NEW} (${_ret})"
     fi
     return "${_ret}"
 }
 
 function storpoolVolumeRename()
 {
-    local _SP_OLD="$1" _SP_NEW="$2" _SP_TEMPLATE="$3" _SP_TAG="$4"
-    # shellcheck disable=SC2086
-    storpoolRetry volume "${_SP_OLD}" rename "${_SP_NEW}" ${_SP_TEMPLATE:+template "${_SP_TEMPLATE}"} ${_SP_TAG} update >/dev/null
+    local _VOL_UID="$1" _SP_VOL="$2" _SP_NEW="$3" _SP_TEMPLATE="$4" _SP_TAGS_JSON="$5"
+    local _RET=1 _JSON=""
+    kvDel "${_SP_VOL}"
+    kvPut "${_SP_NEW}" "${_VOL_UID}"
+    _RET=$?
+    if [[ ${_RET} -eq 0 ]]; then
+        _JSON+="\"tags\":{\"img\":\"${_SP_NEW}\""
+        if [[ -n "${_SP_TAGS_JSON}" ]]; then
+            _JSON+="${_SP_TAGS_JSON}"
+        fi
+        _JSON+="}"
+        if [[ -n "${_SP_TEMPLATE}" ]]; then
+            _JSON+=",\"template\":\"${_SP_TEMPLATE}\""
+        fi
+        storpoolRetry VolumeUpdate "${_VOL_UID}" "${_JSON}"
+        _RET=$?
+        splog "[I] ${_VOL_UID} renamed ${_SP_VOL} to ${_SP_NEW} (${_RET})"
+    fi
+    return "${_RET}"
 }
 
 function storpoolVolumeClone()
 {
-    local _SP_PARENT="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
-
-    storpoolRetry volume "${_SP_VOL}" baseOn "${_SP_PARENT}" ${_SP_TEMPLATE:+template "${_SP_TEMPLATE}"} create >/dev/null
+    local _VOL_UID="$1" _SP_VOL="$2" _SP_TEMPLATE="$3" _TAG_KEY="$4" _TAG_VAL="$5"
+    local _RET=1 _DATA="" _TAGS=""
+    _TAGS="$(tagsHelper "img;${LOC_TAG};virt${_TAG_KEY:+;${_TAG_KEY}}" "${_SP_VOL};${LOC_TAG_VAL};one${_TAG_VAL:+;${_TAG_VAL}}")"
+    _DATA="\"baseOn\":\"${_VOL_UID}\",\"tags\":{${_TAGS}}"
+    [[ -z "${_SP_TEMPLATE}" ]] || _DATA+=",\"template\":\"${_SP_TEMPLATE}\""
+    SP_UID="$(DO_MULTICLUSTER=1 storpoolRetry VolumeCreate "${_DATA}")"
+    _RET=$?
+    if [[ -n "${SP_UID}" ]] && [[ ${_RET} -eq 0 ]]; then
+        kvPut "${_SP_VOL}" "${SP_UID}"
+        _RET=$?
+    fi
+    return "${_RET}"
 }
 
 function storpoolVolumeResize()
 {
-    local _SP_VOL="$1" _SP_SIZE="$2" _SP_SHRINKOK="$3"
+    local _SP_UID="$1" _SP_SIZE="$2" _SP_SHRINKOK="$3"
+    local _DATA="\"size\":\"${_SP_SIZE}\""
+    [[ -z "${_SP_SHRINKOK}" ]] || _DATA+=",\"shrinkOk\":true"
 
-    storpoolRetry volume "${_SP_VOL}" size "${_SP_SIZE}"${_SP_SHRINKOK:+ shrinkOk} update >/dev/null
-}
-
-function storpoolVolumeAttach()
-{
-    local _SP_VOL="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}" _SP_TARGET="${4:-volume}"
-    local _SP_CLIENT
-    if [[ -n "${_SP_HOST}" ]]; then
-        _SP_CLIENT="$(storpoolClientId "${_SP_HOST}" "${COMMON_DOMAIN}")"
-        if [[ -n "${_SP_CLIENT}" ]]; then
-           _SP_CLIENT="client ${_SP_CLIENT}"
-        else
-            splog "Error: Can't get remote CLIENT_ID from ${_SP_HOST}"
-            exit 255
-        fi
-    fi
-    storpoolRetry attach "${_SP_TARGET}" "${_SP_VOL}" ${_SP_MODE:+mode "${_SP_MODE}"} "${_SP_CLIENT:-here}" timeout "${ATTACH_TIMEOUT}" >/dev/null
+    DO_MULTICLUSTER=1 storpoolRetry VolumeUpdate "${_SP_UID}" "${_DATA}"
 }
 
 function storpoolVolumeJsonHelper()
 {
-    local _SP_VOL="$1" _SP_CLIENT="$2" _SP_MODE="${3:-rw}" _FORCE="$4" _SOFT_FAIL="$5"
+    local _UID="$1" _TYPE="$2" _SP_CLIENT="$3" _SP_MODE="${4:-rw}" _FORCE="$5" _SOFT_FAIL="$6" _DETACH_ALL="$7"
+    if boolTrue "DEBUG_storpoolVolumeJsonHelper"; then
+        splog "[D](${_UID},${_TYPE},${_SP_CLIENT},${_SP_MODE},${_FORCE},${_SOFT_FAIL},${_DETACH_ALL})"
+    fi
     if [[ -z "${_SP_CLIENT}" ]]; then
-        splog "Error: Unknown CLIENT_ID"
+        splog "[E] storpoolVolumeJsonHelper($*) Empty CLIENT_ID"
         exit 1
     fi
     if boolTrue "_SOFT_FAIL"; then
         _FORCE=
     fi
-    if boolTrue "DEBUG_storpoolVolumeJsonHelper"; then
-        splog "[D] storpoolVolumeJsonHelper(${_SP_VOL},${_SP_CLIENT},${_SP_MODE},${_FORCE})"
-    fi
-    echo "{\"volume\":\"${_SP_VOL}\",\"${_SP_MODE}\":[\"${_SP_CLIENT}\"]${_FORCE:+,\"force\":true}}"
+    echo "{\"${_TYPE}\":\"${_UID}\",\"${_SP_MODE}\":${_SP_CLIENT}${_FORCE:+,\"force\":true}${_DETACH_ALL:+,\"detach\":\"all\"}}"
 }
 
-function storpoolVolumeDetach()
+function storpoolAttach()
 {
-    local _SP_VOL="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _VOLUMES_GROUP="$6"
-    local _SP_CLIENT="" volume="" client="" xfh=""
-    if boolTrue "DEBUG_storpoolVolumeDetach"; then
-        splog "[D] storpoolVolumeDetach(_SP_VOL=$1 _FORCE=$2 _SP_HOST=$3 _DETACH_ALL=$4 _SOFT_FAIL=$5 _VOLUMES_GROUP=$6)"
+    local _VOL_UID="$1" _SP_HOST="$2" _SP_MODE="${3:-rw}" _SP_TARGET="${4:-volume}" _DETACH_ALL="$5"
+    local _SP_CLIENT="" _DATA=""
+    [[ -n "${_SP_HOST}" ]] || _SP_HOST="$(hostname)"
+    if boolTrue "DEBUG_storpoolAttach"; then
+        splog "storpoolAttach(_VOL_UID=$1 _SP_HOST=$2 _SP_MODE=$3 _SP_TARGET=$4 _DETACH_ALL=$5)"
     fi
-    if [[ "${_DETACH_ALL}" == "all" ]] && [[ -z "${_VOLUMES_GROUP}" ]]; then
-        _SP_CLIENT="all"
+    _SP_CLIENT="$(storpoolClientId "${_SP_HOST}" "${COMMON_DOMAIN}")"
+    if [[ -z "${_SP_CLIENT}" ]]; then
+        splog "[E] Can't get remote CLIENT_ID from ${_SP_HOST}"
+        exit 255
+    fi
+    if boolTrue "MULTICLUSTER"; then
+        oneHostInfo "${_SP_HOST}"
+        local DO_MULTICLUSTER=1
+        local DO_REMOTE="~${HOST_SP_CLUSTER_ID:-${SP_CLUSTER_ID}}"
+    fi
+    _DATA="$(storpoolVolumeJsonHelper "${_VOL_UID}" "${_SP_TARGET}" "[${_SP_CLIENT}]" "${_SP_MODE}" "force" 0 "${_DETACH_ALL}")"
+    storpoolRetry VolumesReassignWait "\"attachTimeout\":${ATTACH_TIMEOUT},\"reassign\":[${_DATA}]"
+}
+
+function storpoolDetach()
+{
+    local _VOL_UID="$1" _FORCE="$2" _SP_HOST="$3" _DETACH_ALL="$4" _SOFT_FAIL="$5" _SNAPSHOT="${6}" _VOLUMES_GROUP="$7"
+    local _SP_CLIENT="" _type="" DO_REMOTE="" DO_MULTICLUSTER=1 _name=""
+    if boolTrue "DEBUG_storpoolDetach"; then
+        splog "[D] storpoolDetach(_VOL_UID=$1 _FORCE=$2 _SP_HOST=$3 _DETACH_ALL=$4 _SOFT_FAIL=$5 _SNAPSHOT=${6:+snapshot} _VOLUMES_GROUP='$7')"
+    fi
+    [[ -n "${_SNAPSHOT}" ]] && _type='snapshot' || _type='volume'
+    if [[ "${_DETACH_ALL}" = "all" ]] && [[ -z "${_VOLUMES_GROUP}" ]] ; then
+        _SP_CLIENT="\"all\""
     else
         if [[ -n "${_SP_HOST}" ]]; then
             _SP_CLIENT="$(storpoolClientId "${_SP_HOST}" "${COMMON_DOMAIN}")"
-            if [[ "${_SP_CLIENT}" == "" ]]; then
-                splog "Error: Can't get SP_OURID for host ${_SP_HOST}"
+            if [[ -z "${_SP_CLIENT}" ]]; then
+                splog "[E] Can't get SP_OURID for host ${_SP_HOST}"
                 exit 255
+            fi
+            _SP_CLIENT="[${_SP_CLIENT}]"
+            if boolTrue "MULTICLUSTER"; then
+                oneHostInfo "${_SP_HOST}"
+                DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
             fi
         fi
     fi
-    if [[ -n "${_VOLUMES_GROUP}" ]] && [[ -n "${_SP_CLIENT}" ]]; then
-        local _JSON=
-        for volume in ${_VOLUMES_GROUP}; do
-            [[ -z "${_JSON}" ]] || _JSON+=","
-            _JSON+="$(storpoolVolumeJsonHelper "${volume}" "${_SP_CLIENT}" "detach" "force")"
-        done
-        storpoolRetry groupDetach "${_JSON}"
-        splog "detachGroup '${_JSON}' ($?)"
-    fi
-    if [[ "${_DETACH_ALL}" == "all" ]]; then
-        _SP_CLIENT="all"
-    fi
-    while IFS=',' read -r -u "${xfh}" volume client snapshot; do
-        if boolTrue "_SOFT_FAIL" "_SOFT_FAIL"; then
-            _FORCE=
-        fi
-        if [[ "${snapshot}" == "true" ]]; then
-            type="snapshot"
+    unset _DATA_A
+    declare -A _DATA_A  # _DATA_A[HOST_SP_CLUSTER_ID]=DATA
+    if [[ -n "${_SP_CLIENT}" ]]; then
+        if [[ -n "${_VOLUMES_GROUP}" ]]; then
+            for _name in ${_VOLUMES_GROUP}; do
+                [[ -z "${_DATA_A["${HOST_SP_CLUSTER_ID:--}"]}" ]] || _DATA_A["${HOST_SP_CLUSTER_ID:--}"]+=","
+                _DATA_A["${HOST_SP_CLUSTER_ID:--}"]+="$(storpoolVolumeJsonHelper "${_name}" "${_type}" "${_SP_CLIENT}" "detach" "force")"
+            done
         else
-            type="volume"
-        fi
-        volume="${volume//\"/}"
-        client="${client//\"/}"
-        case "${_SP_CLIENT}" in
-            all)
-                storpoolRetry detach "${type}" "${volume}" all ${_FORCE:+force yes} >/dev/null
-                break
-                ;;
-             '')
-                storpoolRetry detach "${type}" "${volume}" here ${_FORCE:+force yes} >/dev/null
-                break
-                ;;
-              *)
-                if [[ "${_SP_CLIENT}" == "${client}" ]]; then
-                    storpoolRetry detach "${type}" "${volume}" client "${client}" ${_FORCE:+force yes} >/dev/null
+            if boolTrue "_SOFT_FAIL"; then
+                _FORCE=
+            fi
+            if [[ "${_DETACH_ALL}" == "all" ]]; then
+                _DATA_A["${HOST_SP_CLUSTER_ID:--}"]=$(storpoolVolumeJsonHelper "${_VOL_UID}" "${_type}" "\"all\"" "detach" "${_FORCE}")
+            else
+                storpoolLocate "${_VOL_UID}" "Volume" 2
+                if [[ -n "${X_SIZE}" ]]; then
+                    if boolTrue "DEBUG_storpoolDetach"; then
+                        splog "Volume ${_VOL_UID} is in cluster '${X_CLUSTER_ID}'"
+                    fi
+                    [[ -z "${_DATA_A["${X_CLUSTER_ID:--}"]}" ]] || _DATA_A["${X_CLUSTER_ID:--}"]+=","
+                    _DATA_A["${X_CLUSTER_ID:--}"]+=$(storpoolVolumeJsonHelper "${_VOL_UID}" "${_type}" "${_SP_CLIENT}" "detach" "${_FORCE}")
+                else
+                    #ant: not sure is this here needed at all ... :/
+                    splog "[W] Volume ${_VOL_UID} not found?! Trying MC detach anyway..."
+                    _DATA_A["-"]+=$(storpoolVolumeJsonHelper "${_VOL_UID}" "${_type}" "${_SP_CLIENT}" "detach" "${_FORCE}")
+                    DO_REMOTE=
                 fi
-                ;;
-        esac
-    done {xfh}< <(storpoolRetry -j attach list|jq -r ".data|map(select(.volume==\"${_SP_VOL}\"))|.[]|[.volume,.client,.snapshot]|@csv"||true)
-    exec {xfh}<&-
+            fi
+        fi
+        if [[ ${#_DATA_A[*]} -gt 0 ]]; then
+            for _SP_CLUSTER_ID in "${!_DATA_A[@]}"; do
+                X_HOST_SP_CLUSTER_ID="${HOST_SP_CLUSTER_ID}"
+                [[ -z "${_SP_CLUSTER_ID#*-}" ]] || HOST_SP_CLUSTER_ID="${_SP_CLUSTER_ID}"
+                storpoolRetry VolumesReassignWait "\"reassign\":[${_DATA_A[${_SP_CLUSTER_ID}]}]"
+                HOST_SP_CLUSTER_ID="${X_HOST_SP_CLUSTER_ID}"
+            done
+        else
+            splog "[I] ${_VOL_UID} not attached"
+        fi
+    else
+        splog "[E] Can't get SP_OURID!"
+    fi
 }
 
+# storpoolVolumeTemplate NAME/UID TEMPLATE_NAME
 function storpoolVolumeTemplate()
 {
-    local _SP_VOL="$1" _SP_TEMPLATE="$2"
-    if [[ -z "${_SP_VOL}" ]]; then
-        splog "[E]storpoolVolumeTemplate($*): volume is empty"
-        exit 1
-    fi
-    if [[ -z "${_SP_TEMPLATE}" ]]; then
-        splog "[E]storpoolVolumeTemplate($*): template is empty"
-        exit 1
-    fi
-    storpoolRetry volume "${_SP_VOL}" template "${_SP_TEMPLATE}" update >/dev/null
+    local _VOLUME="$1" _TEMPLATE="$2"
+    DO_MULTICLUSTER=1 storpoolRetry VolumeUpdate "${_VOLUME}" "\"template\":\"${_TEMPLATE}\"" >/dev/null
 }
 
+# storpoolSnapshotInfo NAME/UID
 function storpoolSnapshotInfo()
 {
-    local _SP_SNAPSHOT="$1"
-    read -r -a SNAPSHOT_INFO <<< "$(storpoolRetry -j snapshot "${_SP_SNAPSHOT}" info | jq -r '.data|[.size,.templateName]|@csv' | tr ',"' ' '  || true)"
-    if boolTrue "DEBUG_storpoolSnapshotInfo"; then
-        splog "[D] storpoolSnapshotInfo(${_SP_SNAPSHOT}):${SNAPSHOT_INFO[*]}"
+    local _SP_UID="$1" ret=1
+    DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry Snapshot "${_SP_UID}"
+    ret=$?
+    unset X_NAME X_SIZE X_GLOBALID X_TEMPLATENAME X_CLUSTERID
+    if [[ ${ret} -eq 0 ]]; then
+        SNAPSHOT_INFO="$(jq -r '.data[]|"\(.size|tostring);\(.globalId);\(.name);\(.templateName);\(.clusterId)"' \
+                            "${TMPDIR}/Snapshot.json")"
+        IFS=';' read -r X_SIZE X_GLOBALID X_NAME X_TEMPLATENAME X_CLUSTERID <<< "${SNAPSHOT_INFO}"
+        export X_SIZE X_GLOBALID X_NAME X_TEMPLATENAME X_CLUSTERID
+    else
+        SNAPSHOT_INFO=""
     fi
+    export SNAPSHOT_INFO
+    if boolTrue "DEBUG_storpoolSnapshotInfo"; then
+        splog "[D] (${_SP_UID}):'${SNAPSHOT_INFO}' (${ret})"
+    fi
+    return "${ret}"
 }
 
+# storpoolSnapshotCreate SnapshotName VolumeUID TAG_NAME;... TAG_VALUE;...
 function storpoolSnapshotCreate()
 {
-    local _SP_SNAPSHOT="$1" _SP_VOL="$2"
-
-    storpoolRetry volume "${_SP_VOL}" snapshot "${_SP_SNAPSHOT}" >/dev/null
+    local _SP_SNAPSHOT="$1" _SP_UID="$2" _TAG_KEY="$3" _TAG_VAL="$4"
+    local _TAGS_JSON="" _DATAJ="" _RET="1"
+    _TAGS_JSON="$(tagsHelper "${_TAG_KEY}" "${_TAG_VAL}")"
+    if [[ -n "${_TAGS_JSON}" ]]; then
+        _DATAJ="\"tags\":{${_TAGS_JSON}}"
+    fi
+    SP_UID="$(DO_MULTICLUSTER=1 storpoolRetry VolumeSnapshot "${_SP_UID}" "${_DATAJ}")"
+    _RET=$?
+    if [[ ${_RET} -eq 0 ]]; then
+        if [[ -n "${SP_UID}" ]]; then
+            kvPut "${_SP_SNAPSHOT}" "${SP_UID}"
+            _RET=$?
+        else
+            _RET=1
+        fi
+    fi
+    export SP_UID
+    return "${_RET}"
 }
 
+# storpoolSnapshotDelete SnapshotUID [OnlyDeleteUID]
 function storpoolSnapshotDelete()
 {
-    local _SP_SNAPSHOT="$1"
-
-    storpoolRetry snapshot "${_SP_SNAPSHOT}" delete "${_SP_SNAPSHOT}" >/dev/null
-}
-
-function storpoolSnapshotClone()
-{
-    local _SP_SNAP="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
-
-    storpoolRetry volume "${_SP_VOL}" parent "${_SP_SNAP}" ${_SP_TEMPLATE:+template "${_SP_TEMPLATE}"} create >/dev/null
+    local _SP_UID="$1" _UID_ONLY="$2"
+    local _SP_SNAPSHOT_NAME="" _RET=1
+    if boolTrue "DEBUG_storpoolSnapshotDelete"; then
+        splog "[D](${_SP_UID}${_UID_ONLY:+, only UID})"
+    fi
+    DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry SnapshotDelete "${_SP_UID}" >/dev/null
+    _RET=$?
+    if [[ ${_RET} -eq 0 ]] && ! boolTrue "SKIP_KV_DATA" ; then
+        _SP_SNAPSHOT_NAME="$(kvGet byUid "${_SP_UID}")"
+        if [[ -z "${_SP_SNAPSHOT_NAME}" ]]; then
+            splog "[W] Can't get snapshot name for ${_SP_UID}"
+        fi
+        if [[ -n "${_UID_ONLY}" ]]; then
+            _SP_SNAPSHOT_NAME=""
+        fi
+        kvDel "${_SP_SNAPSHOT_NAME}" "${_SP_UID}"
+        _RET=$?
+    fi
+    return "${_RET}"
 }
 
 function storpoolSnapshotRevert()
 {
-    local _SP_SNAPSHOT="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
-    local _SP_TMP="" _SP_VOL_TMP=""
-    _SP_TMP="$(date +%s||true)-$(mktemp --dry-run XXXXXXXX||true)"
-    _SP_VOL_TMP="${_SP_VOL}-${_SP_TMP}"
+    local _SNAPSHOT_UID="$1" _SP_VOL="$2" _IS_SNAPSHOT="$3" _SP_TEMPLATE="$4"
+    local _VOL_UID=""
+    _VOL_UID=$(kvGet byName "${_SP_VOL}")
+    local ret=$?
+    if storpoolVolumeFromSnapshot "${_SNAPSHOT_UID}" "${_SP_VOL}" "${_SP_TEMPLATE}"; then
+        ret=$?
+        if [[ -n "${_IS_SNAPSHOT}" ]]; then
+            storpoolSnapshotDelete "${_VOL_UID}" "UID_only"
+            storpoolVolumeTag "${SP_UID}" "${LOC_TAG};virt;img" "${LOC_TAG_VAL};one;${_SP_VOL}"
+            storpoolVolumeFreeze "${SP_UID}"
+        else
+            storpoolDelete "${_VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${_SP_VOL}\",\"reason\":\"snap_revert\"" "1"  # TBD: tags
+        fi
+    else
+        ret=$?
+        splog "[E] storpoolSnapshotRevert($*) failed! (${ret})"
+    fi
+    return "${ret}"
+}
 
-    storpoolRetry volume "${_SP_VOL}" rename "${_SP_VOL_TMP}" update >/dev/null
+function storpoolSnapshotsDelete()
+{
+    local _NAME="$1" _SP_SNAPSHOTS_PREFIX="$2"
+    local _SP_NAME_SNAPSHOTS="${_NAME}-${_SP_SNAPSHOTS_PREFIX}"
+    local _SP_UID="" _RET=1 _name="" _spfh=""
+    if boolTrue "DEBUG_storpoolSnapshotsDelete"; then
+        splog "[D] storpoolSnapshotsDelete($*) DO_REMOTE=${DO_REMOTE}"
+    fi
+    while read -r -u "${kvfh}" _name; do
+        read -r -u "${kvfh}" _SP_UID
+        _name="${_name##*/}"
+        if boolTrue "DDEBUG_storpoolSnapshotsDelete"; then
+            splog "[DD] KV/LOOP _name:${_name} SP_UID:${_SP_UID}"
+        fi
+        if [[ ${#_name} -lt ${#_SP_NAME_SNAPSHOTS} ]]; then
+            splog "[I] storpoolSnapshotsDelete ${_name}(${#_name} chars) > ${_SP_NAME_SNAPSHOTS}(${#_SP_NAME_SNAPSHOTS} chars)"
+            continue
+        fi
+        storpoolSnapshotDelete "${_SP_UID}"
+    done {kvfh}< <(kvGet "byName" "${_SP_NAME_SNAPSHOTS}" "startswith" "KeysAndVals" || true)
+    # process storpool snapshots by tags too
+    if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList; then
+        while read -r -u "${_spfh}" _SP_UID deleted snap img tags; do
+            [[ "${deleted}" == "false" ]] || continue
+            [[ "${snap}" != "null" ]] || continue
+            if [[ "${_SP_VOL}" == "${img}" ]]; then
+                if boolTrue "DDEBUG_storpoolSnapshotsDelete"; then
+                    splog "[DD] storpoolSnapshotsDelete($*) ${_SP_UID} d:${deleted} '${snap}' '${img}' ${tags}"
+                fi
+                if [[ "${snap}" =~ ${_SP_SNAPSHOTS_PREFIX} ]]; then
+                    storpoolSnapshotDelete "${_SP_UID}"
+                fi
+            fi
+        done {_spfh}< <(jq -r --arg snap snap --arg img img \
+           '.data.clusters[].response.data[]|"\(.name) \(.deleted|tostring) \(.tags[$snap]|tostring) \(.tags[$img]|tostring) \(.tags|tostring)"' \
+            "${TMPDIR}/SnapshotsList.json" || true)
+        exec {_spfh}<&-
+    fi
+}
 
-    trapAdd "storpool volume \"${_SP_VOL_TMP}\" rename \"${_SP_VOL}\""
+function oneMvds()
+{
+    local _SP_VOL="$1" _SP_UID=""
+    for _SP_UID in $(kvGet "byName" "${_SP_VOL}" "startswith"); do
+        storpoolSnapshotTag "${_SP_UID}" \
+                "diskid;${VM_TAG};img;${LOC_TAG};virt" \
+                ";;${_SP_VOL};${LOC_TAG_VAL};one"
+    done
+}
 
-    storpoolSnapshotClone "${_SP_SNAPSHOT}" "${_SP_VOL}" "${_SP_TEMPLATE}"
+function storpoolVolumeRevert()
+{
+    local _SP_UID="$1" _SP_VOL="$2" _SNAP_UID="$3" _REMOTE="$4" _REVERT_SIZE="${5:-0}"
+    local _RET=1 DO_REMOTE=""
+    local _JSON_DATA="\"toSnapshot\":\"${_SNAP_UID}\""
+    if boolTrue "_REVERT_SIZE"; then
+        _JSON_DATA+=",\"revertSize\":true"
+    else
+        _JSON_DATA+=",\"revertSize\":false"
+    fi
+    if [[ -n "${_REMOTE}" ]]; then
+        storpoolVolumeBackup "${_SP_UID}" "${_SP_VOL}" "${_REMOTE}"
+        _RET=$?
+        if [[ ${_RET} -ne 0 ]]; then
+            splog "[E] Failed to create a (remote) backup. (${_RET})"
+            return "${_RET}"
+        fi
+    fi
+    if [[ -n "${DELAY_DELETE}" ]] && [[ -z "${_snapshot}" ]]; then
+        local DELAY_DELETE_tmp="${DELAY_DELETE//[[:digit:]]/}"
+        if [[ -n "${DELAY_DELETE_tmp}" ]] && [[ -z "${DELAY_DELETE_tmp/[smhd]/}" ]]; then
+            json="\"deleteAfter\":$(delayDeleteSeconds "${DELAY_DELETE}")"
+            json+=",\"tags\":{\"reason\":\"revert\"${_DD_TAGS:+,${_DD_TAGS}}}"
+            DO_REMOTE="" storpoolRetry VolumeSnapshot "${_SP_UID}" "${json}" >/dev/null
+            _ret=$?
+        fi
+    fi
+    SP_GLOBALID=$(DO_MULTICLUSTER=1 storpoolRetry VolumeRevert "${_SP_UID}" "${_JSON_DATA}")
+    _RET=$?
+    export SP_GLOBALID
+    splog "[I] revert ${_SP_UID} (${_SP_VOL}) to snapshot:${_SNAP_UID} -> ${SP_GLOBALID} (${_RET})"
+    return "${_RET}"
+}
 
-    trapReset
-
-    storpoolVolumeDelete "${_SP_VOL_TMP}"
+function storpoolVolumeFromSnapshot()
+{
+    local _SNAPSHOT_UID="$1" _SP_VOL="$2" _SP_TEMPLATE="$3"
+    local _TAG_KEY="${4:-img;${LOC_TAG};virt}" _TAG_VAL="${5:-${_SP_VOL};${LOC_TAG_VAL};one}"
+    local _RET=1 _TAGS=""
+    _TAGS="$(tagsHelper "${_TAG_KEY}" "${_TAG_VAL}")"
+    local _CMD="\"parent\":\"${_SNAPSHOT_UID}\",\"tags\":{${_TAGS}}"
+    [[ -z "${_SP_TEMPLATE}" ]] || _CMD+=",\"template\":\"${_SP_TEMPLATE}\"}"
+    SP_UID=$(DO_MULTICLUSTER=1 storpoolRetry VolumeCreate "${_CMD}" 2>/dev/null)
+    _RET=$?
+    export SP_UID
+    splog "[I] parent snapshot ${_SNAPSHOT_UID} -> created volume ${SP_UID} ${_SP_VOL} (${_RET})"
+    if [[ -n "${SP_UID}" ]] && [[ ${_RET} -eq 0 ]]; then
+        kvPut "${_SP_VOL}" "${SP_UID}" || _RET=$?
+    fi
+    return "${_RET}"
 }
 
 function storpoolVolumeTag()
 {
-    local _SP_VOL="$1" _TAG_KEY="${2:-${VM_TAG:-nvm}}" _TAG_VAL="$3"
-    local _tagCmd="" _tagKey=""
-    declare -a _tagVal_array _tagKey_array
-    IFS=';' read -r -a _tagVal_array <<< "${_TAG_VAL}"
-    IFS=';' read -r -a _tagKey_array <<< "${_TAG_KEY}"
-    if boolTrue "DEBUG_storpoolVolumeTag"; then
-        splog "[D] storpoolVolumeTag(${_SP_VOL},${_TAG_VAL},${_TAG_KEY})"
-    fi
-    for i in "${!_tagKey_array[@]}"; do
-        _tagKey="${_tagKey_array[i]//[[:space:]]/}"
-        [[ -n "${_tagKey}" ]] || continue
-        _tagCmd+="tag ${_tagKey}=${_tagVal_array[i]//[[:space:]]/} "
-    done
-    if [[ -n "${_tagCmd}" ]]; then
-        storpoolRetry volume "${_SP_VOL}" "${_tagCmd}" update >/dev/null
+    local _SP_UID="$1" _TAG_KEY="${2:-${VM_TAG}}" _TAG_VAL="$3"
+    local _DATAJSON=""
+    _DATAJSON="$(tagsHelper "${_TAG_KEY}" "${_TAG_VAL}")"
+    if [[ -n "${_DATAJSON}" ]]; then
+        DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumeUpdate \
+                                        "${_SP_UID}" "\"tags\":{${_DATAJSON}}"
+    else
+        return 0 # no tags to set
     fi
 }
 
 function storpoolSnapshotTag()
 {
-    local _SP_SNAP="$1" _TAG_KEY="${2:-${VM_TAG:-nvm}}" _TAG_VAL="$3"
-    local _tagCmd="" _tagKey=""
-    declare -a _tagVal_array _tagKey_array
-    IFS=';' read -r -a _tagVal_array <<< "${_TAG_VAL}"
-    IFS=';' read -r -a _tagKey_array <<< "${_TAG_KEY}"
-    for i in "${!_tagKey_array[@]}"; do
-        _tagKey="${_tagKey_array[i]//[[:space:]]/}"
-        [[ -n "${_tagKey}" ]] || continue
-        _tagCmd+="tag ${_tagKey}=${_tagVal_array[i]//[[:space:]]/} "
-    done
-    if [[ -n "${_tagCmd}" ]]; then
-        storpoolRetry snapshot "${_SP_SNAP}" "${_tagCmd}" >/dev/null
+    local _SP_UID="$1" _TAG_KEY="${2:-${VM_TAG}}" _TAG_VAL="$3"
+    local _DATAJSON=""
+    _DATAJSON="$(tagsHelper "${_TAG_KEY}" "${_TAG_VAL}")"
+    if [[ -n "${_DATAJSON}" ]]; then
+        DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry SnapshotUpdate \
+                                        "${_SP_UID}" "\"tags\":{${_DATAJSON}}" >/dev/null
+    else
+        return 0 # no tags to set
     fi
 }
 
 function oneSymlink()
 {
-    local _host="$1" _src="$2"
+    local _host="$1" _SP_UID="$2"
     shift 2
-    local _dst="$*" _remote_cmd=""
-    splog "${VM_ID:+VM ${VM_ID} }symlink ${_src} -> ${_host}:{${_dst//[[:space:]]/,}}${MONITOR_TM_MAD:+ (.monitor=${MONITOR_TM_MAD})}"
+    local _dst="$*" _src="" _remote_cmd=""
+    _src="/dev/storpool-byid/${_SP_UID#*~}"
+    splog "[I] ${VM_ID:+VM ${VM_ID} }symlink ${_src} -> ${_host}:{${_dst//[[:space:]]/,}}${MONITOR_TM_MAD:+ (.monitor=${MONITOR_TM_MAD})}"
     _remote_cmd=$(cat <<EOF
     #_SYMLINK
     for dst in ${_dst}; do
-        dst_dir=\$(dirname "\${dst}")
+        dst_dir="\$(dirname "\${dst}")"
         if [[ -d "\${dst_dir}" ]]; then
             true
         else
@@ -1285,17 +1961,17 @@ EOF
 
 function oneCheckpointSave()
 {
-    local _host="${1%%:*}"
-    local _path="${1#*:}"
+    local _host="${1%%:*}" _path="${1#*:}"
     local _vmid="" _dsid="" _checkpoint="" _template="" _volume="" _sp_link=""
     local _DELAY_DELETE="${DELAY_DELETE}" _SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
     local _remote_cmd="" _file_size=0 _volume_size=0
+    local _SP_UID=""
     _vmid="$(basename "${_path}")"
     _dsid="$(basename "$(dirname "${_path}")")"
     _checkpoint="${_path}/checkpoint"
     _template="${ONE_PX:-one}-ds-${_dsid}"
     _volume="${ONE_PX:-one}-sys-${_vmid}-checkpoint"
-    _sp_link="/dev/storpool/${_volume}"
+    _sp_link="/dev/storpool-byid/${_SP_UID#*~}"
     _file_size=$(${SSH:-ssh} "${_host}" "du -b \"${_checkpoint}\" | cut -f 1" || true)
     if [[ -n "${_file_size}" ]]; then
         _volume_size=$(( ((_file_size *2 +511) /512) *512 ))
@@ -1306,21 +1982,28 @@ function oneCheckpointSave()
     fi
     splog "checkpoint_size=${_file_size} volume_size=${_volume_size}M"
 
-    DELAY_DELETE=
-    if storpoolVolumeExists "${_volume}"; then
-        storpoolVolumeDelete "${_volume}" "force"
+    _SP_UID="$(kvGet byName "${_volume}")"
+    if [[ -n "${_SP_UID}" ]]; then
+        DELAY_DELETE=""
+        storpoolDelete "${_SP_UID}" "force"
     fi
+    storpoolVolumeCreate "${_volume}" "${_volume_size}" "${_template}"
+    _SP_UID="${SP_UID}"
+    if [[ -z "${_SP_UID}" ]]; then
+        DELAY_DELETE="${_DELAY_DELETE}"
+        splog "Can't get StorPool name for ${_volume}"
+        return 1
+    fi
+    _sp_link="/dev/storpool-byid/${_SP_UID#*~}"
 
-    storpoolVolumeCreate "${_volume}" "${_volume_size}M" "${_template}"
+    trapAdd "storpoolDelete \"${_SP_UID}\" \"force\""
 
-    trapAdd "storpoolVolumeDelete \"${_volume}\" \"force\""
-
-    storpoolVolumeAttach "${_volume}" "${_host}"
+    storpoolAttach "${_SP_UID}" "${_host}"
 
     _remote_cmd=$(cat <<EOF
     # checkpoint Save
     if [[ -f "${_checkpoint}" ]]; then
-        if tar --no-seek --use-compress-program="${_SP_COMPRESSION}" \
+        if tar --no-seek --use-compress-program="${SP_COMPRESSION}" \
                --create --file="${_sp_link}" "${_checkpoint}"; then
             splog "rm -f ${_checkpoint}"
             rm -f "${_checkpoint}"
@@ -1334,26 +2017,31 @@ function oneCheckpointSave()
 
 EOF
 )
-    splog "Saving ${_checkpoint} to ${_volume}"
+    splog "Saving ${_checkpoint} to ${_SP_UID} (${_volume})"
     ssh_exec_and_log "${_host}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
                  "Error in checkpoint save of VM ${_vmid} on host ${_host}"
 
     trapReset
     DELAY_DELETE="${_DELAY_DELETE}"
 
-    storpoolVolumeDetach "${_volume}" "" "${_host}" "all"
+    storpoolDetach "${_SP_UID}" "" "${_host}" "all"
 }
 
 function oneCheckpointRestore()
 {
-    local _host="${1%%:*}"
-    local _path="${1#*:}"
+    local _host="${1%%:*}" _path="${1#*:}" _monitor="${2}"
+    local _SP_UID=""
     local _vmid="" _checkpoint="" _volume="" _sp_link=""
     local _remote_cmd="" _SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
     _vmid="$(basename "${_path}")"
     _checkpoint="${_path}/checkpoint"
     _volume="${ONE_PX:-one}-sys-${_vmid}-checkpoint"
-    _sp_link="/dev/storpool/${_volume}"
+    _SP_UID=$(kvGet byName "${_volume}")
+    _sp_link="/dev/storpool-byid/${_SP_UID#*~}"
+    if [[ -z "${_SP_UID}" ]]; then
+        splog "Can't get StorPool name for ${_volume}"
+        return 1
+    fi
 
     _remote_cmd=$(cat <<EOF
     # checkpoint Restore
@@ -1362,7 +2050,7 @@ function oneCheckpointRestore()
     else
         mkdir -p "${_path}"
 
-        if [[ -n "$2" ]]; then
+        if [[ -n "${_monitor}" ]]; then
             [[ -f "${_path}/.monitor" ]] || echo "storpool" >"${_path}/.monitor"
         fi
 
@@ -1375,30 +2063,30 @@ function oneCheckpointRestore()
     fi
 EOF
 )
-    if storpoolVolumeExists "${_volume}"; then
-        storpoolVolumeAttach "${_volume}" "${_host}"
+    if storpoolVolumeExists "${_SP_UID}"; then
+        storpoolAttach "${_SP_UID}" "${_host}"
 
-        trapAdd "storpoolVolumeDetach \"${_volume}\" \"force\" \"${_host}\" \"all\""
+        trapAdd "storpoolDetach \"${_SP_UID}\" \"force\" \"${_host}\" \"all\""
 
-        splog "Restoring ${_checkpoint} from ${_volume}"
+        splog "Restoring ${_checkpoint} from ${_SP_UID} (${_volume})"
         ssh_exec_and_log "${_host}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
                  "Error in checkpoint restore of VM ${_vmid} on host ${_host}"
 
         trapReset
 
-        storpoolVolumeDelete "${_volume}" "force"
+        storpoolDelete "${_SP_UID}" "force"
     else
-        splog "Checkpoint volume ${_volume} not found"
+        splog "Checkpoint volume ${_SP_UID} (${_volume}) not found"
     fi
 }
 
 function oneBackupImageInfo()
 {
-    local _image_id="$1"
-    local _XPATH="" _element="" i=0 xfh=""
-    local _tmpXML="${TMPDIR:-/tmp}/oneimage-${_image_id}.XML"
+    local _IMAGE_ID="$1"
+    local _tmpXML="${TMPDIR:-/tmp}/oneimage-${_IMAGE_ID}.XML"
+    local _XPATH="" _element=""
 
-    oneCallXml oneimage show "${_image_id}" "${_tmpXML}"
+    oneCallXml oneimage show "${_IMAGE_ID}" "${_tmpXML}"
 
     _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
     declare -a _XPATH_A _XPATH_QUERY
@@ -1647,7 +2335,6 @@ function oneVmInfo()
     SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     TPM_MODEL="${XPATH_ELEMENTS[i++]}"
-
     IFS=';' read -r -a SP_QOSCLASS_A <<< "${SP_QOSCLASS_LINE}"
     unset DISKS_QC_A VM_DISK_SP_QOSCLASS VM_SP_QOSCLASS IMAGE_SP_QOSCLASS
     if [[ "${CLONE^^}" == "NO" ]]; then
@@ -2110,7 +2797,6 @@ function oneDsDriverAction()
         XPATH_ELEMENTS[i++]="${_element}"
     done {xfh}< <("${_XPATH_A[@]}" "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-
     unset i
     # shellcheck disable=SC2034
     {
@@ -2570,10 +3256,11 @@ function oneVmVolumes()
             xTYPE="VOL"
             case "${TYPE}" in
                 swap)
-                    oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-swap"
+                    oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
+                    xTYPE+="SWAP"
                     ;;
                 *)
-                    oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT:-raw}"
+                    oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
             esac
             if boolTrue "READONLY"; then
                 xTYPE+="RO"
@@ -2609,7 +3296,7 @@ function oneVmVolumes()
     fi
     DISK_ID="${CONTEXT_DISK_ID}"
     if [[ -n "${DISK_ID}" ]]; then
-        oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-iso"
+        oneName="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
         vmVolumes+="${oneName} "
         vmDisksMap+="${oneName}:${DISK_ID} "
         vmDisksTypeMap+="${oneName}:CNTXT "
@@ -2819,11 +3506,11 @@ function oneSnapshotLookup()
             volumeName+="-${_snap_a["VM"]}-${_snap_a["DISK"]}"
         fi
     elif [[ "${DISK_B^^}" == "FILE" ]] && [[ "${DISK_C^^}" == "FS" ]]; then
-        volumeName="${ONE_PX}-sys-${_snap_a["VM"]}-${_snap_a["DISK"]}-raw"
+        volumeName="${ONE_PX}-sys-${_snap_a["VM"]}-${_snap_a["DISK"]}"
     elif [[ "${CONTEXT_DISK_ID}" == "${_snap_a["DISK"]}" ]]; then
         # ONE can't register image with size less than 1MB
         # but it is possible to have bigger contextualization
-        volumeName="${ONE_PX}-sys-${_snap_a["VM"]}-${_snap_a["DISK"]}-iso"
+        volumeName="${ONE_PX}-sys-${_snap_a["VM"]}-${_snap_a["DISK"]}"
     fi
     if [[ -n "${volumeName}" ]] && [[ ${#HYPERVISOR_IDS_A[*]} -gt 0 ]]; then
         SNAPSHOT_NAME="${volumeName}-${HYPERVISOR_IDS_A[0]}"
@@ -2840,24 +3527,32 @@ function storpoolVmVolumes()
     local _vmTag="$1" _vmTagVal="$2" _locTag="${LOC_TAG:-nloc}"
     local _vol="" _loctagval="" xfh=""
     vmVolumes=
-    while read -r -u "${xfh}" _vol _loctagval; do
-        [[ "${_loctagval}" == "${LOC_TAG_VAL}" ]] || continue
-        [[ -n "${_vol%"${ONE_PX:-one}"*}" ]] || continue
-        vmVolumes+="${_vol} "
-    done {xfh}< <(storpoolRetry -j volume list |\
-        jq -r --arg vmtag "${_vmTag}" --arg vmtagval "${_vmTagVal}" --arg loctag "${_locTag}" \
-            '.data[]|select(.tags[$vmtag]==$vmtagval)|"\(.name) \(.tags[$loctag])"' || true)  # TBD: rework to use cache file...
-    exec {xfh}<&-
-    splog "storpoolVmVolumes(${_vmTag},${_vmTagVal}) ${vmVolumes}"
+    vmVolumeIds=
+    if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 storpoolRetry VolumesList; then
+        while read -r -u "${xfh}" name tag_img tag_vmsnaprevert loctagval; do
+            [[ "${loctagval}" == "${LOC_TAG_VAL}" ]] || continue
+            [[ -z "${tag_img%"${ONE_PX}"*}" ]] || continue
+            [[ "${tag_vmsnaprevert}" == "null" ]] || continue
+            [[ "${name:0:1}" == "~" ]] || continue
+            vmVolumes+="${tag_img} "
+            vmVolumeIds+="${name} "
+        done {xfh}< <(jq -r --arg tag "${_vmTag}" --arg val "${_vmTagVal}" --arg loctag "${_locTag}" \
+            '.data.clusters[].response.data[]|select(.tags[$tag]==$val)|"\(.name) \(.tags.img|tostring) \(.tags.vmsnaprevert|tostring) \(.tags[$loctag]|tostring)"' \
+            "${TMPDIR}/VolumesList.json" || true)
+        exec {xfh}<&-
+    fi
+    splog "storpoolVmVolumes(${_vmTag},${_vmTagVal}) ${vmVolumes} || ${vmVolumeIds} ($?)"
 }
 
 function forceDetachOther()
 {
     local VM_ID="$1" DST_HOST="$2" VOLUME="$3"
-    local SP_CLIENT="" xfh=""
-    SP_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
-    if [[ -z "${SP_CLIENT}" ]]; then
-        splog "Error: SP_CLIENT is empty!"
+    local _json="" volume_name=""
+    local DO_MULTICLUSTER=1
+    oneHostInfo "${DST_HOST}"
+    local DO_REMOTE="~${HOST_SP_CLUSTER_ID:-${SP_CLUSTER_ID}}"
+    if [[ -z "${HOST_SP_OURID}" ]]; then
+        splog "Error: HOST_SP_OURID is empty!"
         return 1
     fi
     if [[ -n "${VOLUME}" ]]; then
@@ -2869,28 +3564,21 @@ function forceDetachOther()
             oneVmVolumes "${VM_ID}"
         fi
     fi
+    if boolTrue "DEBUG_forceDetachOther"; then
+        splog "forceDetachOther($1,$2${3:+,$3}) ${vmVolumes}"
+    fi
     if [[ -z "${vmVolumes}" ]]; then
-        splog "forceDetachOther(${VM_ID},${DST_HOST}${VOLUME:+,${VOLUME}}): vmVolumes is empty!"
+        splog "Error: vmVolumes list is empty!"
         return 1
     fi
-    local jqStr="" _client="" _volume=""
-    for _volume in ${vmVolumes}; do
-        [[ -z "${jqStr}" ]] || jqStr+=" or "
-        jqStr+=".volume==\"${_volume}\""
+    for volume_name in ${vmVolumes}; do
+        kvGetUid "${volume_name}" fatal
+        [[ -z "${_json}" ]] || _json+=","
+        _json+="{\"volume\":\"${SP_UID}\",\"rw\":[${HOST_SP_OURID}],\"detach\":\"all\",\"force\":true}"
     done
-    if boolTrue "DEBUG_forceDetachOther"; then
-        splog "[D][forceDetachOther](${VM_ID},${DST_HOST}${VOLUME:+,${VOLUME}}) ${vmVolumes}"
+    if [[ -n "${_json}" ]]; then
+        storpoolRetry VolumesReassignWait "\"reassign\":[${_json}]"
     fi
-    while read -r -u "${xfh}" _client _volume; do
-        if boolTrue "DDEBUG_forceDetachOther"; then
-            splog "[DD][forceDetachOther]($*) DST=${SP_CLIENT} ${_client} ${_volume}"
-        fi
-        if [[ "${_client}" -ne "${SP_CLIENT}" ]]; then
-            storpoolRetry detach volume "${_volume}" client "${_client}" force yes >/dev/null
-        fi
-    done {xfh}< <(storpoolRetry -j attach list |\
-        jq -r ".data[]|select(${jqStr})|(.client|tostring) + \" \" + .volume" || true)  # TBD: rework to use cache file...
-    exec {xfh}<&-
 }
 
 # disable sp checkpoint transfer from file to block device
@@ -3067,6 +3755,31 @@ function isImmutable()
     echo "${_IMMUTABLE}"
 }
 
+function image_info()
+{
+    local _img="$1" _host="$2"
+    local _tmpjson="${TMPDIR:-/tmp}/qemu-img-info-${_img##*/}.json" ret=1
+    declare -a CMD
+    unset QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT STAT_IMAGE_SIZE
+    CMD=("${QEMU_IMG:-qemu-img}" info --output json "${_img}")
+    if [[ -n "${_host}" ]]; then
+        CMD=("${SSH:-ssh}" "${_host}" "${CMD[@]}")
+    fi
+    if [[ -f "${_img}" ]]; then
+        STAT_IMAGE_SIZE=$(${STAT:-stat} --printf="%s" "${_img}" || true)
+        "${CMD[@]}" > "${_tmpjson}" || true
+        if [[ -s "${_tmpjson}" ]]; then
+            IFS=";" read -r QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT <<< "$(jq -r '"\(."virtual-size"|tostring);\(."actual-size"|tostring);\(.format|tostring)"' "${_tmpjson}" || true)"
+            ret=0
+            splog "[I][qemu_img_info](${_img}${_host:+:,${_host}}): virtual-size:${QEMU_IMG_VIRTUAL_SIZE} actual-size:${QEMU_IMG_ACTUAL_SIZE} format:${QEMU_IMG_FORMAT} stat size:${STAT_IMAGE_SIZE}"
+        else
+            splog "[E][qemu_img_info](${_img}${_host:+:,${_host}}): Error: Can't get image info! (stat size:${STAT_IMAGE_SIZE})"
+        fi
+        rm -f "${_tmpjson}"
+    fi
+    return "${ret}"
+}
+
 function tpmSave()
 {
     local _VM_ID="$1" _VM_PATH="$2" _RHOST="$3"
@@ -3077,17 +3790,18 @@ function tpmSave()
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} ${_VM_PATH} ${_RHOST}"
     fi
-    if ! storpoolVolumeExists "${_SP_VOL}"; then
+    if ! storpoolVolumeExists "${_SP_VOL}" byName; then
         if boolTrue "DEBUG_tpm"; then
             splog "[D] Creating StorPool volume ${_SP_VOL}"
         fi
         storpoolVolumeCreate "${_SP_VOL}" "4M"
     else
         if boolTrue "DEBUG_tpm"; then
-            splog "[D] StorPool volume ${_SP_VOL} already exists"
+            splog "[D] StorPool volume ${SP_UID} ${_SP_VOL} already exists"
         fi
     fi
-    storpoolVolumeAttach "${_SP_VOL}" "${_RHOST}"
+    storpoolVolumeAttach "${SP_UID}" "${_RHOST}"
+    _SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
     _remote_cmd=$(cat <<EOF
     #
     if [[ -d "${_VM_PATH}/tpm" ]]; then
@@ -3098,13 +3812,13 @@ function tpmSave()
     fi
 EOF
 )
-    splog "VM ${_VM_ID} Saving TPM data to ${_SP_VOL} on host ${_RHOST}"
+    splog "VM ${_VM_ID} Saving TPM data to ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
     ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
-                "Error saving TPM data to ${_SP_VOL} on host ${_RHOST}"
+                "Error saving TPM data to ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
 
-    storpoolVolumeDetach "${_SP_VOL}" "" "${_RHOST}" "all"
+    storpoolVolumeDetach "${SP_UID}" "" "${_RHOST}" "all"
 
-    storpoolVolumeTag "${_SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${_VM_ID};${VC_POLICY};${SP_QOSCLASS};SWTPM"
+    storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${_VM_ID};${VC_POLICY};${SP_QOSCLASS};SWTPM"
 
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} END"
@@ -3120,21 +3834,22 @@ function tpmRestore()
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} ${_VM_PATH} ${_RHOST} ${_SP_VOL}"
     fi
-    if storpoolVolumeExists "${_SP_VOL}"; then
+    if storpoolVolumeExists "${_SP_VOL}" byName; then
         if boolTrue "DEBUG_tpm"; then
-            splog "[D] Attaching StorPool volume ${_SP_VOL} to host ${_RHOST}"
+            splog "[D] Attaching StorPool volume ${SP_UID} ${_SP_VOL} to host ${_RHOST}"
         fi
-        storpoolVolumeAttach "${_SP_VOL}" "${_RHOST}"
+        storpoolVolumeAttach "${SP_UID}" "${_RHOST}"
+        _SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
         _remote_cmd=$(cat <<EOF
     #
     splog "tar xzf ${_SP_LINK} -C ${_VM_PATH}"
     tar xzf "${_SP_LINK}" -C "${_VM_PATH}"
 EOF
 )
-        splog "VM ${_VM_ID} Restoring TPM data from ${_SP_VOL} on host ${_RHOST}"
+        splog "VM ${_VM_ID} Restoring TPM data from ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
         ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
-                    "Error restoring TPM data from ${_SP_VOL} on host ${_RHOST}"
-        storpoolVolumeDetach "${_SP_VOL}" "" "${_RHOST}" "all"
+                    "Error restoring TPM data from ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
+        storpoolVolumeDetach "${SP_UID}" "" "${_RHOST}" "all"
     fi
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} END"

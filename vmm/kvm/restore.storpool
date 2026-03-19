@@ -18,7 +18,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname "$0")
+DRIVER_PATH="{$(dirname "$0")"
 
 if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
     # shellcheck source=/dev/null
@@ -32,24 +32,24 @@ source "${DRIVER_PATH}/../../scripts_common.sh"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-FILE=$1
-HVHOST=$2
-DEPLOY_ID=$3
-
-VM_ID=$4
-DS_ID=$5
-export DS_ID
 export LOG_PREFIX="vmm"
+
+FILE="$1"
+HVHOST="$2"
+DEPLOY_ID="$3"
+VM_ID="$4"
+DS_ID="$5"
+export DS_ID
+
 splog "$*"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
-
-    if storpoolVolumeExists "${SP_VOL}"; then
-        storpoolVolumeAttach "${SP_VOL}" "${HVHOST}"
-        ln -sf "/dev/storpool/${SP_VOL}" "${FILE}"
-        splog "ln -sf /dev/storpool/${SP_VOL} ${FILE} ($?)"
+    if storpoolVolumeExists "${SP_VOL}" byName; then
+        storpoolVolumeAttach "${SP_UID}" "${HVHOST}"
+        SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
+        ln -sf "${SP_LINK}" "${FILE}"
+        ret=$?
+        splog "ln -sf ${SP_LINK} ${FILE} (${ret})"
     fi
-
 fi

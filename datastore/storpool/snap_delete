@@ -31,11 +31,11 @@ if [[ -n "${ONE_LOCATION}" ]]; then
 else
     LIB_LOCATION="/usr/lib/one"
 fi
-
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
+
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
@@ -60,6 +60,8 @@ oneDsDriverAction
 
 SP_SNAP="${SOURCE##*/}-snap${TARGET_SNAPSHOT}"
 
-storpoolSnapshotDelete "${SP_SNAP}"
+kvGetUid "${SP_SNAP}" fatal
 
-splog "END"
+storpoolSnapshotDelete "${SP_UID}"
+
+splog "END ${SP_UID} (${SP_SNAP})"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,18 +15,21 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
-from __future__ import print_function
+from typing import Optional, Dict
 import os
-from sys import argv, exit, stderr
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0"
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -44,92 +47,100 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
+xmlDomain: str = sys.argv[1]
+doc_et: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc_et.getroot()
 
-changed = 0
+xmlVm: str = sys.argv[2]
+vm_et: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_et.getroot()
+
+changed: bool = False
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-vcpu_e = root.find('./vcpu')
+vcpu: int = 1
+vcpu_e: Optional[ET.Element] = root.find('./vcpu')
 if vcpu_e is None:
     vcpu_e = ET.SubElement(root, 'vcpu')
     vcpu_e.attrib['placement'] = 'static'
     vcpu_e.text = '1'
-vcpu = int(vcpu_e.text)
+elif vcpu_e.text is not None:
+    vcpu = int(vcpu_e.text)
 
-vcpu_max = int(os.getenv('T_VCPU_MAX', vcpu))
-vcpu_max_e = vm.find('.//USER_TEMPLATE/T_VCPU_MAX')
-if vcpu_max_e is not None:
+vcpu_max: int = int(os.getenv('T_VCPU_MAX', vcpu))  # type: ignore[attr-defined] # noqa: E501
+xpath: str = './/USER_TEMPLATE/T_VCPU_MAX'
+vcpu_max_e: Optional[ET.Element] = vm.find(xpath)
+if vcpu_max_e is not None and vcpu_max_e.text is not None:
     try:
         vcpu_max = int(vcpu_max_e.text)
         if vcpu_max < 1:
             vcpu_max = 1
     except Exception as e:
         print("USER_TEMPLATE/T_VCPU_MAX is '{0}' Error:{1}".format(
-              cpu_threads.text,e), file=stderr)
-        exit(1)
+              vcpu_max_e.text, e), file=sys.stderr)
+        sys.exit(1)
 
-vcpu_current = vcpu_e.get('current')
-if vcpu_current is not None:
+vcpu_current_attr: Optional[str] = vcpu_e.get('current')
+
+if vcpu_current_attr is not None:
     print('VCPU already configured to "{0}" of "{1}" VCPUs'.format(
-          vcpu_current,vcpu), file=stderr)
+          vcpu_current_attr, vcpu), file=sys.stderr)
 else:
-    vcpu_current = vcpu
-    vcpu_e.text = "{}".format(vcpu_max)
-    vcpu_e.attrib['current'] = "{}".format(vcpu_current)
-    vcpus_e = ET.SubElement(root, 'vcpus')
-    hotpluggable = 'no'
-    enabled = 'yes'
+    vcpu_current: int = vcpu
+    vcpu_e.text = str(vcpu_max)
+    vcpu_e.attrib['current'] = str(vcpu_current)
+    vcpus_e: ET.Element = ET.SubElement(root, 'vcpus')
+    hotpluggable: str = 'no'
+    enabled: str = 'yes'
     for i in range(vcpu_max):
-        vcpus_ee = ET.SubElement(vcpus_e,'vcpu',{
-                'id' : "{}".format(i),
-                'enabled' : "{}".format(enabled),
-                'hotpluggable' : "{}".format(hotpluggable),
+        vcpus_ex: ET.Element = ET.SubElement(vcpus_e, 'vcpu', {
+                'id': str(i),
+                'enabled': enabled,
+                'hotpluggable': hotpluggable,
             })
         hotpluggable = "yes"
         if i == vcpu_current-1:
             enabled = 'no'
+    changed = True
 
-    changed = 1
-
-memUnits = {
-    'KiB' : 1024,
-    'MiB' : 1024*1024,
-    'GiB' : 1024*1024*1024,
-    'TiB' : 1024*1024*1024*1024,
+memUnits: Dict[str, int] = {
+    'KiB': 1024,
+    'MiB': 1024*1024,
+    'GiB': 1024*1024*1024,
+    'TiB': 1024*1024*1024*1024,
     }
 
-memory_e = root.find('./memory')
-unit = memory_e.get('unit')
-if unit is None:
-    unit = 'KiB'
-    memory_e.attrib['unit'] = unit
+memory: int = 0
+memory_unit: str = 'KiB'
+memory_e: Optional[ET.Element] = root.find('./memory')
+if memory_e is not None:
+    if memory_e.text is not None:
+        memory = int(memory_e.text)
+        memory_unit = memory_e.get('unit') or 'KiB'
+    else:
+        memory_unit = 'KiB'
+    memory_e.attrib['unit'] = memory_unit
 
-memory = int(memory_e.text)
-
-current_mem_e = root.find('./currentMemory')
-if current_mem_e is not None:
-    print("CurrentMemory already configured to '{}'". format(
-          current_mem_e.text), file=stderr)
-else:
-    current_mem_e = ET.SubElement(root,'currentMemory',{
-            'unit' : unit,
+    current_mem_e: Optional[ET.Element] = root.find('./currentMemory')
+    if current_mem_e is None:
+        current_mem_e = ET.SubElement(root, 'currentMemory', {
+            'unit': memory_unit,
         })
-    current_mem_e.text = "{}".format(memory)
-    t_mem_max_e = vm.find('.//USER_TEMPLATE/T_MEMORY_MAX')
-    if t_mem_max_e is not None:
-        t_mem_max = int(t_mem_max_e.text) * memUnits[unit]
-        if t_mem_max > memory:
-            memory_e.text = "{}".format(t_mem_max)
-    changed = 1
+        current_mem_e.text = str(memory)
+        t_mem_max_e: Optional[ET.Element] = vm.find(
+            './/USER_TEMPLATE/T_MEMORY_MAX')
+        if t_mem_max_e is not None and t_mem_max_e.text is not None:
+            t_mem_max: int = int(t_mem_max_e.text) * memUnits[memory_unit]
+            if t_mem_max > memory:
+                memory_e.text = str(t_mem_max)
+        changed = True
+    else:
+        print(f"CurrentMemory already configured to '{current_mem_e.text}'",
+              file=sys.stderr)
 
 if changed:
     indent(root)
-    doc.write(xmlDomain)
+    doc_et.write(xmlDomain)

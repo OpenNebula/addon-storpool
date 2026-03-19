@@ -19,20 +19,18 @@
 DRIVER_PATH=$(dirname "$0")
 
 DRV_ACTION="$(cat)"
-
-#shellcheck source=/dev/null
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
-#shellcheck source=tm/storpool/storpool_common.sh
-source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/storpool_common.sh"
 
-DEPLOY_ID=$1
-FILE=$2
-HVHOST=$3
-VM_ID=$4
-HVHOST2=$5
-export HVHOST2  #  TBD: remove
+DEPLOY_ID="$1"
+FILE="$2"
+HVHOST="$3"
+VM_ID="$4"
+HVHOST2="$5"
 
-splog "$*"
+splog "${DEPLOY_ID} ${FILE} ${HVHOST} ${VM_ID} ${HVHOST2} ${DRV_ACTION:0:8}"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
     read -r -a DS_ID_A <<< "${FILE//\// }"
@@ -41,27 +39,27 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "${SP_VOL}"; then
-        storpoolVolumeDelete "${SP_VOL}" "force"
+    if kvGetUid "${SP_VOL}"; then
+        storpoolDelete "${SP_UID}" "force" "" "" "\"sys\":\"${SP_VOL}\""
     fi
-    read -r -a DS_ID_A <<< "${FILE//\// }"
-    DS_ID="${DS_ID_A[-3]}"
-    _XPATH="${DRIVER_PATH}/../../datastore/xpath.rb"
-    declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "--stdin")
-    _XPATH_QUERY=("/VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY")
-    VM_MEMORY=$(echo "${DRV_ACTION}" | base64 -d | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
-    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*2))M" "${ONE_PX}-ds-${DS_ID}"
-    trapAdd "storpoolVolumeDelete \"${SP_VOL}\" \"force\""
-
-    storpoolVolumeAttach "${SP_VOL}" "${HVHOST}"
-
-    "${SSH:-ssh}" "${HVHOST}" "ln -sf \"/dev/storpool/${SP_VOL}\" \"${FILE}\""
-    splog "${SSH:-ssh} ${HVHOST} ln -sf '/dev/storpool/${SP_VOL}' '${FILE}' ($?)"
+    XPATH="${DRIVER_PATH}/../../datastore/xpath.rb"
+    VM_MEMORY=$(echo "${DRV_ACTION}" | base64 -d | \
+                      "${XPATH}" --stdin /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
 
     oneVmInfo "${VM_ID}"
 
-    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
+    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*1024*1024*2))" "${ONE_PX}-ds-${DS_ID}" \
+            "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" \
+            "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
+    kvGetUid "${SP_VOL}" fatal
+    trapAdd APPEND "storpoolDelete \"${SP_UID}\" \"force\""
+
+    oneHostInfo "${HVHOST}"
+    DO_REMOTE="~${HOST_SP_CLUSTER_ID}" storpoolAttach "${SP_UID}" "${HVHOST}"
+
+    SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
+    ${SSH:-ssh} "${HVHOST}" "ln -sf \"${SP_LINK}\" \"${FILE}\""
+    splog "${SSH:-ssh} ${HVHOST} ln -sf \"${SP_LINK}\" \"${FILE}\" ($?)"
 
     trapReset
 fi

@@ -32,6 +32,12 @@ if [[ "$(declare -p CP_ARGS)" == "declare -a" ]]; then
     read -r -a CP_ARGS <<< "${CP_ARG:-"-v -L -f"}"
 fi
 
+ONE_VAR="${ONE_VAR:+/var/lib/one}"
+ONE_VER="${ONE_VER:+0.0.0}"
+ONE_MAJOR="${ONE_MAJOR:+0}"
+ONE_MINOR="${ONE_MINOR:+0}"
+ONE_USER="${ONE_USER:-oneadmin}"
+
 function patch_hook()
 {
     local _hook="$1"
@@ -55,12 +61,6 @@ function patch_hook()
         fi
     fi
 }
-
-if ! boolTrue "ONED"; then
-    echo "*** Skipping oned integration"
-    [[ -n "${end_msg}" ]] && echo "*** Please restart ${end_msg} service"
-    exit;
-fi
 
 # install datastore and tm MAD
 for MAD in datastore tm; do
@@ -120,29 +120,38 @@ systemctl enable monitor_helper-sync.timer --now
 systemctl enable vc-policy.timer --now
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
-cp -a "${CP_ARGS[@]}" "${CWD}/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
+# shellcheck disable=SC2154
+cp "${CP_ARGS[@]}" -a "${CWD}/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
 mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
-pushd "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d" || exit 1
-for tweak in volatile2dev.py persistent-cdrom.py; do
-    if [[ -L "./${tweak}" ]]; then
-        rm -vf "./${tweak}"
+if pushd "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"; then
+    read -r -a DEFAULT_TWEAKS <<< "volatile2dev.py persistent-cdrom.py ${DEFAULT_TWEAKS[*]}"
+    for tweak in "${DEFAULT_TWEAKS[@]}"; do
+        if [[ -L "./${tweak}" ]]; then
+            rm -vf "./${tweak}"
+        fi
+        cp "${CP_ARGS[@]}" "../deploy-tweaks.d.example/${tweak}" "./${tweak}"
+    done
+    if ! popd; then
+        echo "ERROR!" >&2
+        exit 1
     fi
-    cp "${CP_ARGS[@]}" "../deploy-tweaks.d.example/${tweak}" "./${tweak}"
-done
-popd || exit 1
+fi
 
 echo "*** Copy {attach,detach}_disk.{storpool,cdrom} to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 for vmm in {attach,detach}_disk.{storpool,cdrom}; do
-    cp -a "${CP_ARGS[@]}" "${CWD}/vmm/kvm/${vmm}" "${ONE_VAR}/remotes/vmm/kvm/"
+    # shellcheck disable=SC2154
+    cp "${CP_ARGS[@]}" -a "${CWD}/vmm/kvm/${vmm}" "${ONE_VAR}/remotes/vmm/kvm/"
     chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/${vmm}"
 done
 
-echo "*** Copy tmsaverestore script and symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+echo "*** Copy tmsaverestore script ant symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+# shellcheck disable=SC2154
 cp "${CP_ARGS[@]}" "${CWD}/vmm/kvm/"tm* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"tm*
 
 echo "*** Copy VM snapshot scripts to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+# shellcheck disable=SC2154
 cp "${CP_ARGS[@]}" "${CWD}/vmm/kvm/"snapshot_*-storpool "${ONE_VAR}/remotes/vmm/kvm/"
 chmod a+x "${ONE_VAR}/remotes/vmm/kvm/"snapshot_*-storpool
 
@@ -164,7 +173,10 @@ for mad in im vmm vnm; do
             do_patch "${patchfile}" "backup"
         done {patchfh}< <(ls -1 "${patchdir}"/*.patch || true)
         exec {patchfh}<&-
-        popd || exit 1
+        if ! popd; then
+            echo "ERROR!" >&2
+            exit 1
+        fi
         break 1
     done
 done
@@ -192,8 +204,6 @@ else
     # Prepare and use autoconf.rb
     echo "*** Copy augeas lenses ..."
     cp -vf "${CWD}/misc/augeas"/*.aug "${AUGEAS_LENSES}"/
-    mkdir -p "${AUGEAS_LENSES}/tests"
-    cp -vf "${CWD}/misc/augeas/tests"/*.aug "${AUGEAS_LENSES}/tests"/
     declare -a AUTOCONF_FILES_ARRAY
     for yaml in "${DEFAULT_AUTOCONF:-/etc/one/addon-storpool.autoconf}" "${CWD}/misc/autoconf-${ONE_MAJOR}.${ONE_MINOR}.yaml"; do
         if [[ -f "${yaml}" ]]; then

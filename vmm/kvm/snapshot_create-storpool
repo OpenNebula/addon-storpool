@@ -63,21 +63,26 @@ EOF
     fi
 }
 
-splog "$0 $*"
+splog "${DOMAIN} ${SNAP_ID} ${VM_ID} ${VMHOST}"
 
 if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     oneVmVolumes "${VM_ID}"
     oneDatastoreInfo "${VM_DS_ID}"
 
-    splog "vmDisks:${vmDisks} vmVolumes:${vmVolumes}"
-
+    splog "vmDisks:${vmDisks} vmVolumes:'${vmVolumes}'"
+    if [[ -n ${oneVmVolumesShareable} ]]; then
+        res="VM Snapshot of shareable disk is not supported!(${oneVmVolumesShareable})"
+        error_message "${res}"
+        splog "${res} (exit 1)"
+        exit 1
+    fi
     if boolTrue "VMSNAPSHOT_ENABLE_LIMIT"; then
         if [[ -n "${VM_VMSNAPSHOT_LIMIT}" ]]; then
             VMSNAPSHOT_LIMIT="${VM_VMSNAPSHOT_LIMIT}"
         fi
         if [[ -n "${VMSNAPSHOT_LIMIT}" ]]; then
             if [[ -z "${VMSNAPSHOT_LIMIT//[[:digit:]]}" ]]; then
-                if [[ "${VMSNAPSHOT_LIMIT}" -lt "${#SNAPSHOT_ID_A[@]}" ]]; then
+                if [[ ${VMSNAPSHOT_LIMIT} -lt ${#SNAPSHOT_ID_A[@]} ]]; then
                     res="VMSNAPSHOT_LIMIT of ${VMSNAPSHOT_LIMIT} snaphosts exceeded!"
                     splog "${res}"
                     error_message "${res}"
@@ -96,113 +101,43 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         fi
     fi
     ts=$(date +%s)
-    res="${VMSNAPSHOT_TAG}-${SNAP_ID}-${ts}"
+    snap_name="${VMSNAPSHOT_TAG}-${SNAP_ID}-${ts}"
+    snapjson=""
     for volume in ${vmVolumes}; do
-        snap="${volume}-${res}"
-        list+=("${volume}" "${snap}")
+        sp_uid=$(kvGet "byName" "${volume}")
+        snap="${volume}-${snap_name}"
+        #list+=("${volume}" "${snap}")
+        [[ -z "${snapjson}" ]] || snapjson+=","
+        snaptags="$(tagsHelper "snap;img;${VM_TAG};${LOC_TAG};virt" "${snap_name};${volume};${VM_ID};${LOC_TAG_VAL};one")"
+        snapjson+="{\"volume\":\"${sp_uid}\",\"tags\":{${snaptags}},\"name\":\"\"}"
     done
-    if boolTrue "VMSNAPSHOT_WITH_CHECKPOINT"; then
-        getVmDomxml "${DOMAIN}" "${VMHOST}"
-        domMem="$(echo "${DOMXML}" | xmlstarlet sel -t -v domain/memory)"
-        MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-        storpoolVolumeCreate "${MEM_VOL}" "$((domMem * 2))K" "${ONE_PX}-ds-${VM_DS_ID}"
-        RET=$?
-        if [[ ${RET} -ne 0 ]]; then
-            splog "Can't create checkpoint volume! Domain memory ${domMem}K"
-        fi
-        storpoolVolumeAttach "${MEM_VOL}" "${VMHOST}"
-        if [[ ${RET} -ne 0 ]]; then
-            splog "Can't attach checkpoint volume to ${VMHOST}!"
-        fi
-        list+=("${MEM_VOL}" "${MEM_VOL}-${res}")
-        json="$(volumesGroupSnapshotJson "tag:${VM_TAG:-nvm}=${VM_ID}" "tag:${LOC_TAG:-nloc}=${LOC_TAG_VAL}" "tag:virt=one" "${list[@]}")"
-        apiCmd="$(storpoolApiCmdline=1 storpoolApi "VolumesGroupSnapshot" "${json}")"
-        MEM_LNK="/dev/storpool/${MEM_VOL}"
-        TDIR="$(mktemp -d)"
-        trapAdd "rm -rf ${TDIR}"
-        VM_XML="${TDIR}/one-${VM_ID}.XML"
-        rCMD=$(cat <<EOF
- mkdir "${TDIR}"
- RET=\$?
- logger -t "${0##*/}_r[$$]" -- "mkdir ${TDIR}(\${RET})"
- [[ \${RET} -eq 0 ]] || exit "\${RET}"
- [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
- virsh --connect \${LIBVIRT_URI:-qemu:///system} save "${DOMAIN}" "${MEM_LNK}"
- RET=\$?
- logger -t "${0##*/}_r[$$]" -- "virsh save ${DOMAIN} ${MEM_LNK} (\$RET)"
- [[ \${RET} -eq 0 ]] || exit "\${RET}"
- virsh --connect \${LIBVIRT_URI:-qemu:///system} save-image-dumpxml "${MEM_LNK}" >"${VM_XML}"
- RET=\$?
- logger -t "${0##*/}_r[$$]" -- "virsh save-image-dumpxml ${MEM_LNK} >${VM_XML} (\$RET)"
- [[ \${RET} -eq 0 ]] || exit "\${RET}"
- ${apiCmd} >"${TDIR}/curl.out" 2>"${TDIR}/curl.err"
- RET=\$?
- APIRET=42
- logger -t "${0##*/}_r[$$]" -- "volumeGroupSnapshot (\${RET}) \$(cat "${TDIR}/curl.out")"
- if [[ \${RET} -eq 0 ]]; then
-   OK=\$(jq -r '.data.ok' "${TDIR}/curl.out" 2>/dev/null)
-   if [[ "\${OK}" == "true" ]]; then
-     APIRET=0
-   else
-     logger -t "${0##*/}_r[$$]" -- "Error: OK='\${OK}'"
-   fi
- else
-   logger -t "${0##*/}_r[$$]" -- "Curl error: \$(cat "${TDIR}/curl.err")"
-   exit "\${RET}"
- fi
- for i in 0 1 2; do
-   virsh --connect \${LIBVIRT_URI:-qemu:///system} restore "${MEM_LNK}" --xml "${VM_XML}" &>>/tmp/one-${VM_ID}-\${i}.log
-   RET=\$?
-   logger -t "${0##*/}_r[$$]" -- "[\${i}] virsh restore ${MEM_LNK} --xml ${VM_XML} (\${RET})"
-   [[ \${RET} -ne 0 ]] || break
-   sleep 0.5
- done
- logger -t "${0##*/}_r[$$]" -- "END ${VM_ID} (\${APIRET}::\${RET})"
- rm -rf "${TDIR}"
- exit "\$((RET + APIRET))"
-EOF
-)
-        if ${SSH:-ssh} "${VMHOST}" "${rCMD}" >"${TDIR}/ssh.out" 2>"${TDIR}/ssh.err"; then
-            splog "OK ssh ${VMHOST} ($?)"
-            RET=0
-        else
-            splog "ssh ${VMHOST} failed! ($?)"
-            splog "DEBUG_OUT:$(cat "${TDIR}/ssh.out"||true)"
-            splog "DEBUG_ERR:$(cat "${TDIR}/ssh.err"||true)"
-            RET=1
-        fi
-        storpoolVolumeDelete "${MEM_VOL}" "force"
-        if [[ ${RET} -eq 0 ]]; then
-            echo "${res}"
-        fi
-        splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID} suffix:${res} (${RET})"
-        exit "${RET}"
-    fi
-
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
         rCMD=$(cat <<EOF
-    PARENTPID=\${PPID}
+    PARENTPID=\$PPID
     #echo "${DOMAIN}"
-    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-    trap 'virsh --connect \${LIBVIRT_URI:-qemu:///system} qemu-agent-command "'${DOMAIN}'" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null ;\
+    [ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+    trap 'virsh --connect '\$LIBVIRT_URI' qemu-agent-command "'${DOMAIN}'" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null ;\
     logger -t "vmm_sp_snapshot_create_r[\$\$]" "fsthaw '${DOMAIN}' ret:\$? \$(date +%s.%N) trap"' EXIT QUIT TERM INT HUP
-    virsh --connect \${LIBVIRT_URI:-qemu:///system} qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null
+    virsh --connect \$LIBVIRT_URI qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-freeze\"}" 2>&1 >/dev/null
     logger -t "vmm_sp_snapshot_create_r[\$\$]" "fsfreeze ${DOMAIN} ret:\$? \$(date +%s.%N)"
-    while [ -d /proc/\$PARENTPID ]; do
-        logger -t "vmm_sp_snapshot_create_r[\$\$]" "${DOMAIN} \$(virsh --connect \${LIBVIRT_URI:-qemu:///system} qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)"
+    while [[ -d /proc/\$PARENTPID ]]; do
+        logger -t "vmm_sp_snapshot_create_r[\$\$]" "${DOMAIN} \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)"
         sleep ${VMSNAPSHOT_SLEEP_REMOTE:-.1}
     done
-    virsh --connect \${LIBVIRT_URI:-qemu:///system} qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null
+    virsh --connect \$LIBVIRT_URI qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-thaw\"}" 2>&1 >/dev/null
     logger -t "vmm_sp_snapshot_create_r[\$\$]" "fsthaw ${DOMAIN} ret:\$? \$(date +%s.%N)"
-    logger -t "vmm_sp_snapshot_create_r[\$\$]" \$(virsh --connect \${LIBVIRT_URI:-qemu:///system} qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
+    logger -t "vmm_sp_snapshot_create_r[\$\$]" \$(virsh --connect \$LIBVIRT_URI qemu-agent-command "${DOMAIN}" "{\"execute\":\"guest-fsfreeze-status\"}") \$(date +%s.%N)
     #trap - TERM INT QUIT HUP
 EOF
 )
-        # shellcheck disable=SC2064
-        trap "trap - SIGTERM && kill -- -$$" TERM INT QUIT HUP EXIT
+        trapAdd "trap - SIGTERM && kill -- -\$\$"
         ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>/dev/null >/dev/null &
         splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} is frosen"
         sleep "${VMSNAPSHOT_SLEEP:-.3}"
+    fi
+    if boolTrue "MULTICLUSTER"; then
+        oneHostInfo "${VMHOST}"
+        DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
     fi
 
     if [[ -n "${TPM_MODEL}" ]]; then
@@ -217,7 +152,9 @@ EOF
                 oneTpmBackup "${VM_ID}" "${VM_PATH}" "${VMHOST}"
                 tpmSave "${VM_ID}" "${VM_PATH}" "${VMHOST}"
                 _SP_VOL="${ONE_PX}-sys-${VM_ID}-SWTPM"
-                list+=("${_SP_VOL}" "${_SP_VOL}-${res}")
+                [[ -z "${snapjson}" ]] || snapjson+=","
+                snaptags="$(tagsHelper "snap;img;${VM_TAG};${LOC_TAG};virt;type" "${snap_name};${_SP_VOL};${VM_ID};${LOC_TAG_VAL};one;SWTPM")"
+                snapjson+="{\"volume\":\"${SP_UID}\",\"tags\":{${snaptags}},\"name\":\"\"}"
             fi
         else
             errmsg="VM ${VM_ID} TPM_MODEL=${TPM_MODEL}, butONE_TPM_SAVE is not enabled in addon-storpoolrc"
@@ -226,28 +163,42 @@ EOF
             exit 1
         fi
     fi
-    storpoolRetry groupSnapshot "tag:${VM_TAG:-nvm}=${VM_ID}" "tag:${LOC_TAG:-nloc}=${LOC_TAG_VAL}" "tag:virt=one" "${list[@]}"
+
+    tags="$(tagsHelper "virt;${VM_TAG};${LOC_TAG}" "one;${VM_ID};${LOC_TAG_VAL}")"
+    json="\"volumes\":[${snapjson}],\"tags\":{${tags}}"
+    snapshots="$(storpoolRetry VolumesGroupSnapshot "${json}")"
+    ret=$?
+    if [[ ${ret} -eq 0 ]]; then
+        while read -r -u 5 name snapshot_globalid; do
+            vname="$(echo "{${json}}" | jq -r --arg volume "${name}" \
+                        '.volumes[]|select(.volume==$volume)|"\(.tags.img)-\(.tags.snap)"')"
+            kvPut "${vname}" "~${snapshot_globalid}"
+        done 5< <(echo "${snapshots}" | jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId)"' || true)
+    fi
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
-        pids="$(jobs -p)"
-        if [[ -n "${pids}" ]]; then
-            # shellcheck disable=SC2086
-            kill ${pids} 2>/dev/null >/dev/null
+        declare -a pids_a
+        unset i
+        while read -r -u "${jfh}" pid; do
+            pids_a[i++]="${pid}"
+        done {jfh}< <(jobs -p || true)
+        if [[ ${#pids_a[*]} -gt 0 ]]; then
+            kill "${pids_a[@]}" 2>/dev/null >/dev/null
             ret=$?
-            splog "kill ${pids} (${ret})"
+            splog "kill ${pids_a[*]} (${ret})"
             if [[ ${ret} -eq 0 ]]; then
                 splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} is thawed"
-                trap - TERM INT QUIT HUP EXIT
+                trapReset
             else
                 splog "Unable to kill the process holding the VM with freezed filesystem VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN}"
             fi
         fi
     fi
-    echo "${res}"
+    echo "${snap_name}"
     splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID} suffix:${res}"
     exit 0
 else
     res="VMSNAPSHOT_OVERRIDE is not set"
-    splog "${res}"
+    splog "[E] ${res}"
     error_message "${res}"
     exit 1
 fi

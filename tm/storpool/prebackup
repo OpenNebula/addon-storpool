@@ -17,13 +17,12 @@
 #--------------------------------------------------------------------------- #
 
 DRIVER_PATH="$(dirname "$0")"
+umask 077
 
-#shellcheck source=/dev/null
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
 #shellcheck source=tm/storpool/storpool_common.sh
 source "${ONE_LOCATION:-/var/lib/one/remotes}/tm/storpool/storpool_common.sh"
-
-splog "$*"
 
 if [[ -t 0 ]]; then
     msg="Interactive mode not supported"
@@ -45,39 +44,42 @@ if [[ -n "$6" ]]; then
 fi
 export BJ_ID  #  TBD: remove
 
+splog "${KVMHOST} ${VMDIR} ${DISKS} ${DEPLOY_ID}${BJ_ID:+ ${BJ_ID}} ${VM_ID} ${SYSDS_ID}"
+
 B_DIR="${VMDIR}/backup"
-
-oneHostInfo "${KVMHOST}"
-
-oneDatastoreInfo "${SYSDS_ID}"
-
-umask 077
 
 VM_XML="$(mktemp -t "prebackup-${VM_ID}-XXXXXXXX")"
 trapAdd "rm -f \"${VM_XML}\""
 cat > "${VM_XML}"
 
+oneHostInfo "${KVMHOST}"
+
+oneDatastoreInfo "${SYSDS_ID}"
+
 oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
 
+SNAPSHOTS_LIST="${B_DIR}/.storpool_snapshots"
+
 if [[ -d "${B_DIR}" ]]; then
-    splog "pre-clean ${B_DIR} ..."
-    snapshots_list="${B_DIR}/.storpool_snapshots"
-    if [[ -f "${snapshots_list}" ]]; then
-        while read -r -u "${snpfh}" snp; do
-            storpoolVolumeDetach "${snp}" "force" "" "all"
-            storpoolSnapshotDelete "${snp}"
-        done {snpfh}< <(cat "${snapshots_list}" || true)
-        exec {snpfh}<&-
+    splog "[I] pre-clean ${B_DIR} ..."
+    if [[ -f "${SNAPSHOTS_LIST}" ]]; then
+        while read -r -u "${spfh}" volume sGlobalId sName; do
+            splog "[I] Removing snapshot ${sName}, volume ${volume}"
+            json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
+            DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
+            SKIP_KV_DATA=1 storpoolSnapshotDelete "${sName}"
+        done {spfh}< <(cat "${SNAPSHOTS_LIST}" || true)
+        exec {spfh}<&-
     fi
     rm -rf "${B_DIR}"
-    splog "pre-clean competed ($?)"
+    splog "[I] pre-clean completed ($?)"
 fi
 
 mkdir -p "${B_DIR}"
 splog "mkdir -p ${B_DIR}"
 
 base64 -w 60 "${VM_XML}" >"${B_DIR}/vm.xml"
-splog "base64 VM XML to ${B_DIR}/vm.xml ($?)"
+splog "base64 ${VM_XML} to ${B_DIR}/vm.xml ($?)"
 
 rm -f "${VM_XML}"
 trapDel "rm -f \"${VM_XML}\""
@@ -87,35 +89,54 @@ for disk in ${DISKS//:/ }; do
     D_ARR["${disk}"]="${disk}"
 done
 
-read -ra vmDisksMap_a <<< "${vmDisksMap}"
-
-B_SUFFIX="ONEBACKUP-$(date +%s)"
+B_SUFFIX="ONEBACKUP-$(date +%s || true)"
 echo "${B_SUFFIX}" >"${B_DIR}/.snapshot_suffix"
-list=()
-backups=()
-for map in "${vmDisksMap_a[@]}"; do
+declare -a list_a
+backups=
+
+json_volumes=""
+for map in ${vmDisksMap}; do
     img="${map%:*}"
     did="${map#*:}"
+    kvGetUid "${img}" fatal
     if [[ -n "${D_ARR["${did}"]}" ]]; then
+        tags=$(tagsHelper "${VM_TAG};${LOC_TAG};virt;img;bak" "${VM_ID};${LOC_TAG_VAL};one;${img};${B_SUFFIX}")
+        json_volumes+="${json_volumes:+,}{\"volume\":\"${SP_UID}\",\"tags\":{${tags}}}"
         snapshot="${img}-${B_SUFFIX}"
-        list+=("${img}" "${snapshot}")
-        backups+=("${snapshot}:${did}")
-        echo "${snapshot}" >>"${B_DIR}/.storpool_snapshots"
+        list_a+=("${SP_UID}" "${snapshot}")
+        backups+="${SP_UID}:${snapshot}:${did} "
     fi
 done
-
-storpoolRetry groupSnapshot "tag:${VM_TAG:-nvm}=${VM_ID}" "tag:${LOC_TAG:-nloc}=${LOC_TAG_VAL}" "tag:virt=one" "${list[@]}"
+json="\"volumes\":[${json_volumes}]"
+DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesGroupSnapshot "${json}" >/dev/null
+ret=$?
+if [[ ${ret} -ne 0 ]]; then
+    splog "Error: Can't create volumes group snapshots (${ret})"
+    exit 1
+fi
+while read -r -u "${xfh}" volume snapshotGlobalId snapshotName; do
+    echo "${volume} ${snapshotGlobalId} ${snapshotName}" >>"${SNAPSHOTS_LIST}"
+done {xfh}< <(jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId) \(.snapshotName)"' "${TMPDIR}/VolumesGroupSnapshot.json" || true)
+exec {xfh}<&-
 
 if [[ -n "${TPM_MODEL}" ]]; then
     oneTpmBackup "${VM_ID}" "${VMDIR}" "${KVMHOST}" "${B_DIR}/disk.tpm.0"
 fi
 
-for b in "${backups[@]}"; do
-    snap="${b%:*}"
-    did="${b#*:}"
-    json="{\"snapshot\":\"${snap}\",\"ro\":[\"${HOST_SP_OURID}\"]}"
-    storpoolRetry groupAttach "${json}"
-    snapPath="/dev/storpool/${snap}"
+for bak in ${backups}; do
+    IFS=: read -r volume snapshot did <<< "${bak}"
+    read -r vName sGlobalId sName <<< "$(grep "${volume} " "${SNAPSHOTS_LIST}" || true)"
+    if boolTrue "DEBUG_BACKUP"; then
+        splog "[D] did=${did} volume=${volume} snapshot=${snapshot} vName=${vName} sGlobalId=${sGlobalId} sName=${sName}"
+    fi
+    json="{\"snapshot\":\"${sName}\",\"ro\":[${HOST_SP_OURID}]}"
+    DO_MULTICLUSTER=1 DO_REMOTE="~${HOST_SP_CLUSTER_ID:-${SP_CLUSTER_ID}}" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
+    ret=$?
+    if [[ ${ret} -ne 0 ]]; then
+        splog "[E] Error: Can't attach ${sName} to ${KVMHOST}"
+        exit 1
+    fi
+    snapPath="/dev/storpool-byid/${sGlobalId}"
     dstFile="${B_DIR}/disk.${did}.0"
     RCMD=$(cat <<EOF
 umask 077
@@ -123,13 +144,13 @@ mkdir -p "${B_DIR}"
 qemu-img convert -T none -t none -O qcow2 "${snapPath}" "${dstFile}"
 EOF
 )
-    splog "${KVMHOST}::${RCMD}"
+    splog "[I] RCMD ${KVMHOST}::$(echo "${RCMD}" | tr '\n' ';' || true)"
     ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" "Error extracting ${RCMD} on ${KVMHOST}"
-    json="{\"snapshot\":\"${snap}\",\"detach\":\"all\",\"force\":true}"
-    storpoolRetry groupDetach "${json}"
+    json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
+    DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
 done
 
-rsync -a "${B_DIR}/" "${KVMHOST}:${B_DIR}/"
-splog "rsync -a ${B_DIR}/ ${KVMHOST}:${B_DIR}/ ($?)"
+${RSYNC:-rsync} -a "${B_DIR}"/ "${KVMHOST}:${B_DIR}"/
+splog "[I] ${RSYNC:-rsync} -a ${B_DIR}/ ${KVMHOST}:${B_DIR}/ ($?)"
 
-splog "END"
+splog "END ${VM_ID}"

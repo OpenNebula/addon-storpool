@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,17 +15,20 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
-from __future__ import print_function
-from sys import argv, stderr
+from typing import Optional
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  ") -> None:
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -43,22 +46,22 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
+
+xmlDomain: str = sys.argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-changed = 0
-for disk in root.findall('./devices/disk[@type="file"][@device="cdrom"]'):
-    try:
-        driver = disk.find('./driver')
+changed: bool = False
+xpath: str = './devices/disk[@type="file"][@device="cdrom"]'
+for disk in root.findall(xpath):
+    driver: Optional[ET.Element] = disk.find('./driver')
+    if driver is not None:
         driver.attrib['cache'] = 'none'
         driver.attrib['io'] = 'native'
-        changed = 1
-    except Exception as e:
-        print("Error: {e}".format(e=e), file=stderr)
+        changed = True
 
 if changed:
     indent(root)

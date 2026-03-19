@@ -32,7 +32,7 @@ else
     LIB_LOCATION="/usr/lib/one"
 fi
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
 # shellcheck source=/dev/null
@@ -60,18 +60,23 @@ oneDsDriverAction
 #-------------------------------------------------------------------------------
 # Remove Image from Datastore
 #-------------------------------------------------------------------------------
-
-SP_VOL="${ONE_PX:-one}-img-${ID}"
-
-storpoolVolumeDelete "${SP_VOL}" "force" "snaps" "${REMOTE_BACKUP_DELETE}"
-
-if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+SP_VOL="${ONE_PX}-img-${ID}"
+VOL_UID=$(kvGet byName "${SP_VOL}")
+STORPOOL_EXIST_HINT="Snapshot Volume"
+if [[ -n "${VOL_UID}" ]]; then
+    storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"datastore_delete\""
+    if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+        storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
+    fi
+else
+    splog "No globalId for ${SP_VOL} (byName)"
+fi
+# Remove the temp volume in case of stale broken import
+SP_TEMP_VOL="${SP_VOL}-$(echo "${SP_VOL}" | md5sum | awk '{print $1}')"
+TEMP_VOL_UID=$(kvGet byName "${SP_TEMP_VOL}")
+if [[ -n "${TEMP_VOL_UID}" ]]; then
+    storpoolDelete "${TEMP_VOL_UID}" "force" "" "" "\"img\":\"${SP_TEMP_VOL}\",\"reason\":\"datastore_delete\""
 fi
 
-# Remove the temp volume in case of stale broken import
-SP_TEMP_VOL="${SP_VOL}-$(echo "${SP_VOL}" | md5sum | awk '{print $1}' || true)"
-storpoolVolumeDelete "${SP_TEMP_VOL}" "force"
-
-splog "END ${SP_VOL}"
+splog "END ${VOL_UID} (${SP_VOL})"
 exit 0

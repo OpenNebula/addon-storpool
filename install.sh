@@ -16,7 +16,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-set -e
+set -e -o pipefail
 
 PATH="/bin:/usr/bin:/sbin:/usr/sbin:${PATH}"
 
@@ -79,9 +79,10 @@ function do_patch()
                 DO_PATCH="failed"
                 patch_err="${_patch}"
             fi
+            export DO_PATCH
         else
-            echo "   *** Note! Can't apply patch ${_patch}! Please merge manually."
             patch_err="${_patch}"
+            echo "   *** Note! Can't apply patch ${patch_err}! Please merge manually."
         fi
         export patch_err DO_PATCH
     fi

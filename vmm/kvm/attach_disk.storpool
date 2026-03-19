@@ -16,14 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname "$0")
+WORKDIR="$(dirname "$0")"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../scripts_common.sh"
-if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
-    # shellcheck source=addon-storpoolrc
-    source "${DRIVER_PATH}/../../addon-storpoolrc"
+source "${WORKDIR}/../../scripts_common.sh"
+if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
+    # shellcheck source=tm/storpool/storpool_common.sh
+    source "${WORKDIR}/../../addon-storpoolrc"
 fi
 
 set -o pipefail
@@ -94,10 +94,10 @@ if [[ "${TM_MAD:0:8}" == "storpool" ]]; then
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v "${NEW_TYPE}" |\
                    base64 -w 0 || true)"
-        if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
+        if boolTrue "DDDEBUG_ATTACH_DISK"; then
             echo "${DRV_ACTION}" >/tmp/atach_disk_out.b64
         fi
     fi
 fi
 
-${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk $1 $2 $3 $4 ${DRV_ACTION}"
+${SSH:-ssh} "${KVMHOST}" "\"${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk\" \"$1\" \"$2\" \"$3\" \"$4\" \"${DRV_ACTION}\""

@@ -36,7 +36,7 @@ if [ -n "$1" ]; then
 else
     echo "+ Lookup for latest release ..."
     API_URL="https://api.github.com/repos/OpenNebula/addon-storpool/releases/latest"
-    JSON="$(mktemp -t sp-tmp-XXXXXXXX)"
+    JSON="$(mktemp --tmpdir sp-tmp-XXXXXXXX)"
     trap "rm -f \"${JSON}\"" EXIT QUIT INT HUP KILL
     if curl --silent --location -o "$JSON" "$API_URL"; then
         TAG_NAME=$(jq -r .tag_name "$JSON")

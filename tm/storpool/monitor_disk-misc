@@ -1,5 +1,4 @@
 #!/bin/bash
-#
 
 # -------------------------------------------------------------------------- #
 # Copyright 2016-2025, StorPool (storpool.com)                               #
@@ -61,7 +60,8 @@ if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
 fi
 
 if [[ -b "${DISK_DEV}" ]]; then
-	disk_size="$(${BLOCKDEV_GET_SIZE} "${DISK_DEV}" || true)"
+    read -r -a BLOCKDEV_CMD <<< "${BLOCKDEV_GET_SIZE}"
+	disk_size="$("${BLOCKDEV_CMD[@]}" "${DISK_DEV}" || true)"
 	if [[ -n "${disk_size}" ]]; then
 		if boolTrue "DDEBUG_TM_MONITOR_DISK_MISC"; then
 			splog "[DD] ${DISK} ID:${DISK_ID} SIZE:${disk_size} in MiB:$((disk_size/1024/1024))"

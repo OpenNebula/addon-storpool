@@ -27,7 +27,7 @@ if dbg:
 	syslog.openlog('vmTweakVirtioBlkDataPlane.py', syslog.LOG_PID)
 
 try:
-	import lxml.etree as ET
+	import lxml.etree as ET  # type: ignore
 except ImportError:
 	raise RuntimeError("lxml Python module not found! Install from distribution package or pip install lxml")
 

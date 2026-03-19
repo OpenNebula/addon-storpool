@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,17 +15,21 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
 from __future__ import print_function
+from typing import Optional
 from sys import argv, stderr
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0"
+    }
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -43,50 +47,53 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
+xmlDomain: str = argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
+
+xmlVm: str = argv[2]
+vm_e: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_e.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-changed = 0
+changed: bool = False
 for disk in root.findall('./devices/disk'):
     try:
-        source = disk.find('./source')
-        if 'file' in source.attrib:
-            diskPath = source.attrib['file']
-        elif 'dev' in source.attrib:
-            diskPath = source.attrib['dev']
-        else:
-            print("Unknown source attribute:{a}".format(a=source.attrib),
-                  file=stderr)
+        source_e: Optional[ET.Element] = disk.find('./source')
+        if source_e is None:
             continue
-        diskId = diskPath.split('.')[-1]
-        tm_mad = vm.find('./TEMPLATE/DISK[DISK_ID="{i}"]/TM_MAD'.format(
-                             i=diskId))
-        if tm_mad is None:
-            contextId = vm.find('./TEMPLATE/CONTEXT[DISK_ID="{i}"]'.format(
-                                    i=diskId))
-            if contextId is not None:
-                tm_mad = vm.find('./HISTORY_RECORDS/HISTORY[last()]/TM_MAD')
-
-        if tm_mad is not None:
-            if tm_mad.text.lower() == 'storpool':
-                driver = disk.find('./driver')
-                driver.attrib['cache'] = 'none'
-                driver.attrib['io'] = 'native'
-                changed = 1
+        diskPath: str = ""
+        if 'file' in source_e.attrib:
+            diskPath = source_e.attrib['file']
+        elif 'dev' in source_e.attrib:
+            diskPath = source_e.attrib['dev']
         else:
-            tm_mad = vm.find('./HISTORY_RECORDS/HISTORY[first()]/TM_MAD')
-            print("Can't get TM_MAD for disk '{d}'".format(d=diskPath),
-                  file=stderr)
+            print(f"Unknown source attribute:{source_e.attrib}", file=stderr)
+            continue
+        diskId: int = int(diskPath.split('.')[-1])
+        xpath: str = f"./TEMPLATE/DISK[DISK_ID='{diskId}']/TM_MAD"
+        tm_mad_e: Optional[ET.Element] = vm.find(xpath)
+        if tm_mad_e is None:
+            xpath = f"./TEMPLATE/CONTEXT[DISK_ID='{diskId}']"
+            contextDiskId_e: Optional[ET.Element] = vm.find(xpath)
+            if contextDiskId_e is not None:
+                # this is the context disk, get the tm_mad from the history
+                xpath = './HISTORY_RECORDS/HISTORY[last()]/TM_MAD'
+                tm_mad_e = vm.find(xpath)
+        if tm_mad_e is not None:
+            if (tm_mad_e.text is not None
+                    and tm_mad_e.text.lower() == 'storpool'):
+                driver_e: Optional[ET.Element] = disk.find('./driver')
+                if driver_e is None:
+                    continue
+                driver_e.attrib['cache'] = 'none'
+                driver_e.attrib['io'] = 'native'
+                changed = True
     except Exception as e:
-        print("Error: {e}".format(e=e), file=stderr)
+        print(f"Error: {e}", file=stderr)
 
 if changed:
     indent(root)

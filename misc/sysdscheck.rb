@@ -130,15 +130,15 @@ end
 
 cmd = <<-EOF
 set -e -o pipefail
-declare -A vd
+declare -A vd_a
 while read -r -d ' ' v; do
-    vd[\$v]=\$v
+    vd_a[\$v]=\$v
 done
 if [ -d "ONE_DS_HOME" ]; then
     cd "ONE_DS_HOME"
     while read -u 4 v; do
         [ -d "\$v" ] || continue
-        if [ -z "\${vd[\$v]}" ]; then
+        if [ -z "\${vd_a[\$v]}" ]; then
             if [ "DO_CLEANUP" = "DO CLEANUP" ]; then
                 logger -t "misc_sp_sysdscheck[\$\$]" -- "REMOVED ONE_DS_HOME/\$v"
                 rm -vf "ONE_DS_HOME/\$v"/*

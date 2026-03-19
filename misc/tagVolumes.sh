@@ -31,21 +31,17 @@ cd "${ONE_PATH}/tm/storpool"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${ONE_PATH}/tm/storpool/storpool_common.sh"
 
-LOG_PREFIX="misc"
-export LOG_PREFIX
-
-vmPoolXml="${TMPDIR:-/tmp}/vmPool.xml"
-dsPoolXml="${TMPDIR:-/tmp}/dsPool.xml"
-snapshotsJson="${TMPDIR:-/tmp}/snapshots.json"
+snapshotsJson="${TMPDIR}/snapshots.json"
+vmPoolXml="${TMPDIR}/vmPool.xml"
+dsPoolXml="${TMPDIR}/dsPool.xml"
 
 oneCallXml onevm list --extended "${vmPoolXml}"
 oneCallXml onedatastore list "" "${dsPoolXml}"
 
-declare -A datastoreSpAuthToken  # datastoreSpAuthToken[DATASTORE_ID]=SP_AUTH_TOKEN
-declare -A datastoreSpApiHttpHost  # datastoreSpApiHttpHost[DATASTORE_ID]=SP_API_HTTP_HOST
-declare -A datastoreSpApiHttpPort  # datastoreSpApiHttpPort[DATASTORE_ID]=SP_API_HTTP_PORT
+storpool -B -j snapshot list >"${snapshotsJson}" # TBD remove
 
-while read -r -u "${vmfh}" VM_ID; do
+declare -i VM_ID
+while read -r -u "${vmfh}" -d' ' VM_ID; do
     vmVolumes=
     oneVmVolumes "${VM_ID}" "${vmPoolXml}"
     echo "# VM ${VM_ID} SYSTEM_DS_ID=${VM_DS_ID} vmVolumes=${vmVolumes}"
@@ -57,7 +53,6 @@ while read -r -u "${vmfh}" VM_ID; do
     for entry in ${vmDisksTypeMap}; do
         disksType_a["${entry%%:*}"]="${entry#*:}"
     done
-
     if [[ -z "${datastoreSpAuthToken["${VM_DS_ID}"]+found}" ]]; then
         oneDatastoreInfo "${VM_DS_ID}" "${dsPoolXml}"
         if [[ -n "${SP_AUTH_TOKEN}" ]]; then
@@ -90,19 +85,25 @@ while read -r -u "${vmfh}" VM_ID; do
     snapshotsJsonFile="${snapshotsJson}-${SP_API_HTTP_HOST:-0.0.0.0}"
     if [[ ! -f "${snapshotsJsonFile}" ]]; then
         storpool -B -j snapshot list >"${snapshotsJsonFile}"
+        ret=$?
+        if [[ ${ret} -ne 0 ]]; then
+            splog "Can't get snapshot list from ${SP_API_HTTP_HOST:-0.0.0.0}"
+            exit 1
+        fi
     fi
 
-    for volume in ${vmVolumes}; do
-        diskid="${disks_a["${volume}"]}"
-        xType="${disksType_a["${volume}"]}"
-        if [[ "${volume%iso}" == "${volume}" ]]; then
-            storpoolVolumeTag "${volume}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${xType};${diskid}"
-            while read -r -u "${snapfh}" snap; do
-                storpoolSnapshotTag "${snap}" "virt;${LOC_TAG:-nloc};${VM_TAG}" "one;${LOC_TAG_VAL};${VM_ID}"
-            done {snapfh}< <( jq -r --arg name "${volume}-ONESNAP" ".data[]|select(.name|startswith(\$name))|.name" "${snapshotsJsonFile}" || true)
-            exec {snapfh}<&-
+    for vol in ${vmVolumes}; do
+        if [[ "${vol%iso}" == "${vol}" ]]; then
+            storpoolVolumeTag "${vol}" \
+                "virt;${LOC_TAG:-nloc}:${VM_TAG:-nvm};diskid;type" \
+                "one;${LOC_TAG_VAL}:${VM_ID};${disks_a["${vol}"]};${disksType_a["${vol}"]}"
+            while read -r -u 5 snap; do
+                storpoolSnapshotTag "${snap}" \
+                    "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};diskid;type" \
+                    "one;${LOC_TAG_VAL};${VM_ID};${disks_a["${vol}"]};${disksType_a["${vol}"]}"
+            done 5< <( jq -r --arg n "${vol}-ONESNAP" '.data[]|select(.name|startswith($n))|.name' "${snapshotsJson}" || true)
         else
-            echo "# skipping ${volume}"
+            echo "# skipping ${vol}"
         fi
     done
 done {vmfh}< <(xmlstarlet sel -t -m //VM -v ID -n "${vmPoolXml}" || true)

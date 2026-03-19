@@ -40,15 +40,13 @@ DS_ID="$5"
 export HOST FILE DS_ID
 export LOG_PREFIX="vmm"
 
-splog "$*"
+splog "${FILE} ${HOST} ${DEPLOY_ID} ${VM_ID} ${DS_ID}"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
-
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
-
-    if storpoolVolumeExists "${SP_VOL}"; then
-        storpoolVolumeDelete "${SP_VOL}" "force"
-        splog "Delete ${SP_VOL} ($?)"
+    if storpoolVolumeExists "${SP_VOL}" byName; then
+        storpoolDelete "${SP_UID}" "force"
+        ret=$?
+        splog "Delete ${SP_UID} (${SP_VOL}) (${ret})"
     fi
-
 fi

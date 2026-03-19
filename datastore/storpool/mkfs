@@ -26,16 +26,17 @@
 # Set up the environment to source common tools
 #-------------------------------------------------------------------------------
 
+SIZE=0
+
 if [[ -n "${ONE_LOCATION}" ]]; then
     LIB_LOCATION="${ONE_LOCATION}/lib"
 else
     LIB_LOCATION="/usr/lib/one"
 fi
-
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH="$(dirname "${0}")"
+DRIVER_PATH="$(dirname "$0")"
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
@@ -54,25 +55,22 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 #-------------------------------------------------------------------------------
 
 if [[ -n "${2}" ]]; then
-    DRV_ACTION="$1"
-    ID="$2"
+    DRV_ACTION="${1}"
+    ID="${2}"
 else
     DRV_ACTION="$(cat)"
-    ID="$1"
+    ID="${1}"
 fi
 
 export DRV_ACTION
 
-dumpTemplate "${DRV_ACTION}"
-
 oneDsDriverAction
 
-if [[ -n "${DRIVER}" && "${DRIVER,,}" != "raw" ]]; then
+if [[ -n "${DRIVER}" ]] && [[ "${DRIVER,,}" != "raw" ]]; then
     log_error "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
     splog "Unsupported DRIVER format '${DRIVER}'! Please use 'raw'."
     exit 1
 fi
-
 
 #-------------------------------------------------------------------------------
 # Get datastore host, validate variables and set up datastore
@@ -87,14 +85,12 @@ if [[ -n "${BRIDGE_LIST}" ]]; then
     fi
 fi
 
-set_up_datastore "${BASE_PATH}" "${RESTRICTED_DIRS:-/}" "${SAFE_DIRS:-/var/tmp}"
+set_up_datastore "${BASE_PATH:-/var/lib/one}" "${RESTRICTED_DIRS:+/etc}" "${SAFE_DIRS:+/var/tmp}"
 
-IMAGE_HASH="$(generate_image_hash)"
-export IMAGE_HASH
+#IMAGE_HASH="$(generate_image_hash)"
 
 SP_VOL="${ONE_PX}-img-${ID}"
-SP_LINK="/dev/storpool/${SP_VOL}"
-SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID}"
+SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID:-}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
 
 #-------------------------------------------------------------------------------
@@ -107,7 +103,7 @@ case "${FSTYPE,,}" in
         ;;
     save_as)
         echo "${SP_DST}"
-        splog "END (${FSTYPE}) return:${SP_DST}"
+        splog "END FSTYPE=${FSTYPE} return:${SP_DST}"
         exit 0
         ;;
     *)
@@ -116,48 +112,59 @@ case "${FSTYPE,,}" in
         exit 1
 esac
 
-storpoolVolumeCheck "${SP_VOL}"
+if [[ ${FORMAT,,} == "save_as" ]]; then
+    echo "${SP_DST}"
+    splog "END FORMAT=${FORMAT} return:${SP_DST}"
+    exit 0
+fi
+
+if boolTrue "SAVE_AS_HOT"; then
+    echo "${SP_DST}"
+    splog "END SAVED_VM_ID=${SAVED_VM_ID} SAVED_DISK_ID=${SAVED_DISK_ID} return:${SP_DST} (SAVE_AS_HOT)"
+    exit 0
+fi
+
+storpoolVolumeCheck "${SP_VOL}" byName
 
 #-------------------------------------------------------------------------------
 # Create the image in the datastore
 #-------------------------------------------------------------------------------
 
-storpoolTemplate "${SP_TEMPLATE}"
+if storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${SP_TEMPLATE}"; then
+    VOL_UID="${SP_UID}"
+    SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
+else
+    splog "[E] Failed to create volume ${SP_VOL} ($?)"
+    exit 1
+fi
 
-storpoolVolumeCreate "${SP_VOL}" "${SIZE}"M "${SP_TEMPLATE}"
-
-if type -t contains &>/dev/null; then
-    if [[ -n "${SUPPORTED_FS}" ]]; then
-        if contains "${SUPPORTED_FS}" "${FS}" ","; then
+if [[ -n "${FS}" ]]; then
+    if type -t contains &>/dev/null; then
+        if contains "${SUPPORTED_FS:+ext2,ext3,ext4,xfs}" "${FS}" ","; then
             splog "FS:'${FS}' is SUPPORTED_FS:${SUPPORTED_FS}"
         else
             splog "FS:'${FS}' not in SUPPORTED_FS:${SUPPORTED_FS}"
-            FS=
+            FS=""
         fi
     else
-        if boolTrue "DEBUG_DS_MKFS"; then
-            splog "[D] FS:'${FS}' but SUPPORTED_FS is empty."
-        fi
-        FS=
+        FS=""
     fi
-else
-    FS=
 fi
 
 if [[ -n "${FSTYPE}" && "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
     if boolTrue "DEBUG_DS_MKFS"; then
-        splog "[D] FSTYPE='${FSTYPE}' FS='${FS}'"
+        splog "FSTYPE='${FSTYPE}' FS='${FS}'"
     fi
-    trapAdd "storpoolVolumeDelete \"${SP_VOL}\" force snaps"
+    trapAdd "storpoolVolumeDelete \"${VOL_UID}\" force snaps"
     trapAdd "splog \"trap errno \$? \""
 
-    storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
+    storpoolAttach "${VOL_UID}" "${DST_HOST}"
 
     if [[ -n "${FS}" ]]; then
-        FS_OPTS=$(eval "echo \$FS_OPTS_${FS}")
-        MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${FS_OPTS} \"${SP_LINK}\""
+        FS_OPTS="FS_OPTS_${FS}"
+        MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${!FS_OPTS} \"${SP_LINK}\""
     else
-        MKFS_CMD=$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}")
+        MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}")"
     fi
 
     if [[ -n "${DST_HOST}" ]]; then
@@ -173,14 +180,14 @@ if [[ -n "${FSTYPE}" && "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
 
     trapReset
 
-    storpoolVolumeDetach "${SP_VOL}" "" "${DST_HOST}"
-else
-    splog "created raw image ${SP_VOL}"
+    storpoolDetach "${VOL_UID}" "" "${DST_HOST}"
 fi
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+storpoolVolumeTag "${VOL_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
 
-splog "END:${SP_DST}"
+storpoolVolumeFreeze "${VOL_UID}" "volume"
+
+splog "END ${SP_DST} ${VOL_UID}"

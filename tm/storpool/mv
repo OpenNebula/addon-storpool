@@ -46,7 +46,7 @@ DST_PATH=$(arg_path "${DST}")
 DST_HOST=$(arg_host "${DST}")
 DST_DIR=$(dirname "${DST_PATH}")
 # shellcheck disable=SC2016
-DISK_ID=$(echo "${DST_PATH}" | ${AWK:-awk} -F. '{print $NF}')
+DISK_ID=$(echo "${DST_PATH}" | ${AWK:-awk} -F. '{print $NF}' || true)
 IS_DISK=$(is_disk "${DST_PATH}")
 
 #-------------------------------------------------------------------------------
@@ -68,17 +68,28 @@ oneDatastoreInfo "${DS_ID}"
 oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 SP_VOL="${SOURCE##*/}"
-if boolTrue "CLONE"; then
+if boolTrue "CLONE" || [[ ${TYPE^^} == "CDROM" ]]; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
-SP_LINK="/dev/storpool/${SP_VOL}"
-SP_TEMPLATE="${SOURCE%%/*}"
-export SP_TEMPLATE
-LCM_STATE_TXT="${LCM_STATE}(${LcmState[${LCM_STATE}]})"
-STATE_TXT="${VMSTATE}(${VmState[${VMSTATE}]})"
+LCM_STATE_TXT="${LCM_STATE}(${LcmState["${LCM_STATE}"]})"
+STATE_TXT="${VMSTATE}(${VmState["${VMSTATE}"]})"
 msg="VM ${VM_ID} STATE=${STATE_TXT} LCM_STATE=${LCM_STATE_TXT}"
 splog "${msg}"
+
+if [[ -z "${SP_VOL}" ]]; then
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
+fi
+
+msg="VM ${VM_ID} moving ${SRC} to ${DST} SP_VOL ${SP_VOL}"
+
+if boolTrue "IS_DISK"; then
+    kvGetUid "${SP_VOL}" fatal
+    VOL_UID="${SP_UID}"
+    msg+=" VOL_UID=${SP_UID} #IS_DISK"
+fi
+
+msg+="${SP_CHECKPOINT:+ SP_CHECKPOINT=${SP_CHECKPOINT}}"
 
 # is checkpoint on storpool enabled?
 case "${SP_CHECKPOINT}" in
@@ -91,20 +102,20 @@ case "${SP_CHECKPOINT}" in
         else
             SP_CHECKPOINT=""
             CHECKPOINT_SAVE=""
-            CHECKPOINT_RESTORE=""
         fi
     ;;
 esac
 
+log "${msg}"
+splog "${msg}"
+
 MIGRATE_UNKNOWN=""
 DETACH_ALL=""
 DO_SYMLINK=""
-SKIP_CONTEXT=""
 DO_CONTEXT="yes"
 IS_UNDEPLOY=""
 TPM_SAVE=""
 TPM_RESTORE=""
-export SKIP_CONTEXT  #  TBD: remove
 case "${LCM_STATE}" in
     8)
         #-----------------------------------------------------------------------
@@ -112,7 +123,6 @@ case "${LCM_STATE}" in
         #-----------------------------------------------------------------------
         if [[ "${SP_CHECKPOINT}" == "migrate" ]]; then
             CHECKPOINT_SAVE="yes"
-            CHECKPOINT_RESTORE="yes"
         fi
         TPM_SAVE="yes"
     ;;
@@ -121,10 +131,7 @@ case "${LCM_STATE}" in
         # only attach and restore checkpoint on PROLOG_RESUME
         #-----------------------------------------------------------------------
         ATTACH_ONLY="ATTACH_ONLY (LCM_STATE=${LCM_STATE} PROLOG_RESUME)"
-        if [[ -n "${SP_CHECKPOINT}" ]]; then
-            CHECKPOINT_RESTORE="yes"
-        fi
-        if boolTrue "SKIP_UNDEPLOY_SSH"; then
+        if boolTrue "SKIP_UNDEPLOY_SSH" "${SKIP_UNDEPLOY_SSH}"; then # make shellcheck happy
             IS_UNDEPLOY=1
         fi
         DO_SYMLINK="yes"
@@ -140,7 +147,7 @@ case "${LCM_STATE}" in
         fi
         # apply Undeploy logic on Suspend -> Stop
         if boolTrue "SKIP_UNDEPLOY_SSH"; then
-            IS_UNDEPLOY=1
+            IS_UNDEPLOY="1"
         fi
         TPM_SAVE="yes"
     ;;
@@ -181,13 +188,13 @@ case "${LCM_STATE}" in
         TPM_RESTORE="yes"
     ;;
     *)
-        errmsg="ERROR: VM ${VM_ID} unhandled STATE=${STATE_TXT} LCM_STATE=${LCM_STATE_TXT}"
-        log "${errmsg}"
-        splog "${errmsg}"
-        exit 1
+        splog ">>> STATE=${VMSTATE}(${VmState[${VMSTATE}]}) LCM_STATE=${LCM_STATE}(${LcmState[${LCM_STATE}]}) <<< "
     ;;
 esac
 
+if boolTrue "DEBUG_TM_MV"; then
+    splog "LCM_STATE=${LCM_STATE}${CHECKPOINT_SAVE:+ CHECKPOINT_SAVE}${IS_UNDEPLOY:+ IS_UNDEPLOY}${DETACH_ALL:+ DETACH_ALL}${DO_SYMLINK:+ DO_SYMLINK}${ATTACH_ONLY:+ ATTACH_ONLY=${ATTACH_ONLY}}${DETACH_ONLY:+ DETACH_ONLY=${DETACH_ONLY}}"
+fi
 
 #-------------------------------------------------------------------------------
 # check if it is called in SYSTEM_DS context
@@ -233,7 +240,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     if [[ "${IS_DISK}" == "0" ]]; then
         # check DISK_TM_MADS
         STORPOOL_ONLY=0
-        if boolTrue "SP_CHECKPOINT_BD"; then
+        if boolTrue "SP_CHECKPOINT_BD" "${SP_CHECKPOINT_BD}"; then
             STORPOOL_ONLY=1
             for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
                 if [[ "${tm_mad/storpool/}" == "${tm_mad}" ]]; then
@@ -241,8 +248,8 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 fi
             done
         fi
-        if boolTrue "IS_UNDEPLOY" "${IS_UNDEPLOY}"; then
-            if boolTrue "STORPOOL_ONLY"; then
+        if boolTrue "IS_UNDEPLOY" "${IS_UNDEPLOY}"; then # make shellcheck happy
+            if boolTrue "STORPOOL_ONLY" "${STORPOOL_ONLY}"; then #  make shellcheck happy
                 SKIP_UNDEPLOY_SSH=1
             fi
         fi
@@ -266,76 +273,75 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
             fi
         fi
         # context ISO. Do detach/attach only when hosts differ
-        if boolTrue "DO_CONTEXT" "${DO_CONTEXT}"; then
+        if boolTrue "DO_CONTEXT" "${DO_CONTEXT}"; then # make shellcheck happy
             if [[ -n "${CONTEXT_DISK_ID}" ]]; then
-                SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
+                SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}"
+                kvGetUid "${SP_VOL}" fatal
+                VOL_UID="${SP_UID}"
                 if [[ "${SRC_HOST}" != "${DST_HOST}" ]]; then
-                    SP_LINK="/dev/storpool/${SP_VOL}"
                     CTX_PATH="${DST_DIR}/${VM_ID}/disk.${CONTEXT_DISK_ID}"
                     if [[ -n "${ATTACH_ONLY}" ]]; then
                         splog "${ATTACH_ONLY}"
                     else
-                        storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "${DETACH_ALL}"
+                        storpoolDetach "${VOL_UID}" "force" "${SRC_HOST}" "${DETACH_ALL}"
                     fi
                     if [[ -n "${DETACH_ONLY}" ]]; then
                         splog "${DETACH_ONLY}"
                     else
-                        storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${READONLY_MODE,,}"
-                        if boolTrue "DO_SYMLINK"; then
-                            oneSymlink "${DST_HOST}" "${SP_LINK}" "${CTX_PATH}"
+                        storpoolAttach "${VOL_UID}" "${DST_HOST}" "${READONLY_MODE}"
+                        if boolTrue "DO_SYMLINK" "${DO_SYMLINK}"; then # make shellcheck happy
+                            oneSymlink "${DST_HOST}" "${VOL_UID}" "${CTX_PATH}"
                         fi
                     fi
                 fi
-                if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
-                    if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                        storpoolVolumeTemplate "${SP_VOL}" "${ONE_PX}-ds-${DS_ID}"
-                    fi
+            fi
+            if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
+                if ! boolTrue "NO_VOLUME_TEMPLATE"; then
+                    storpoolVolumeTemplate "${VOL_UID}" "${ONE_PX}-ds-${DS_ID}"
                 fi
             fi
         fi
         # NVRAM volume
         if [[ -n "${T_OS_NVRAM}" ]]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
+            kvGetUid "${SP_VOL}"
+            VOL_UID="${SP_UID}"
             if [[ "${SRC_HOST}" != "${DST_HOST}" ]]; then
-                if storpoolVolumeExists "${SP_VOL}"; then
+                if [[ -n "${VOL_UID}" ]]; then
                     if [[ -n "${ATTACH_ONLY}" ]]; then
                         splog "${ATTACH_ONLY}"
                     else
-                        storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "${DETACH_ALL}"
+                        storpoolDetach "${VOL_UID}" "force" "${SRC_HOST}" "${DETACH_ALL}"
                     fi
-#                if [ -n "$DETACH_ONLY" ]; then
-#                    splog "$DETACH_ONLY"
-#                else
-#                    storpoolVolumeAttach "$SP_VOL" "$DST_HOST" "rw"
-#                fi
                  else
-                    splog "Warning: T_OS_NVRAM='${T_OS_NVRAM}' but there is volume ${SP_VOL}"
+                    splog "Warning: T_OS_NVRAM='${T_OS_NVRAM}' but there is no volume ${SP_VOL}"
                  fi
             fi
             if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
                 if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                    storpoolVolumeTemplate "${SP_VOL}" "${ONE_PX}-ds-${DS_ID}"
+                    if [[ -n "${VOL_UID}" ]]; then
+                        storpoolVolumeTemplate "${VOL_UID}" "${ONE_PX}-ds-${DS_ID}"
+                    fi
                 fi
             fi
         fi
         # other files in the VM home
-        SRC_DS_DIR=$(dirname "${SRC_PATH}")
+        SRC_DS_DIR=$(dirname  "${SRC_PATH}")
         SRC_VM_DIR=$(basename -- "${SRC_PATH}")
-        SYSTEM_DS_TRANSFER=
+        SYSTEM_DS_TRANSFER=""
         if [[ -n "${SRC_SP_SYSTEM}" ]]; then
             if [[ "${SRC_SP_SYSTEM^^}" == "SSH" || "${SRC_DS_SHARED^^}" != "YES" ]]; then
                 SYSTEM_DS_TRANSFER=1
             fi
         fi
-
-        if ! boolTrue "DS_SHARED" || [[ "${SP_SYSTEM^^}" == "SSH" ]] || [[ -n "${SYSTEM_DS_TRANSFER}" ]]; then
+        if ! boolTrue "DS_SHARED" || [[ "${SP_SYSTEM^^}" = "SSH" ]] || [[ -n "${SYSTEM_DS_TRANSFER}" ]]; then
             if boolTrue "MIGRATE_UNKNOWN"; then
                 splog "MIGRATE_UNKNOWN: ${SRC_HOST} is in ERROR state"
             elif [[ "${SRC_HOST}" == "${DST_HOST}" ]]; then
-                RANDOM_FILE=$(${SSH:-ssh} "${DST_HOST}" "mktemp -p \"${DST_DIR}\"")
-                trapAdd "${SSH:-ssh} ${DST_HOST} \"rm -f ${RANDOM_FILE}\""
-                if "${SSH:-ssh}" "${SRC_HOST}" "test -f ${RANDOM_FILE}"; then
-                    msg="VM ${VM_ID} on same path(${SRC_PATH})${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
+                RANDOM_FILE="$(${SSH:-ssh} "${DST_HOST}" "mktemp --tmpdir=\"${DST_DIR}\"" || true)"
+                trapAdd "${SSH:-ssh} ${DST_HOST} \"rm -f '${RANDOM_FILE}'\""
+                if ${SSH:-ssh} "${SRC_HOST}" "test -f '${RANDOM_FILE}'"; then
+                    msg "VM ${VM_ID} on same path(${SRC_PATH})${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
                     log "${msg}"
                     splog "${msg}"
                 else
@@ -360,7 +366,7 @@ if [[ -d "${SRC_PATH}" ]]; then
   logger -t "tm_sp_mv_r[\$\$]" -- "${TAR:-tar} -C ${SRC_DS_DIR} --sparse -cf - ${SRC_VM_DIR} | ${SSH:-ssh} ${DST_HOST} '${TAR:-tar} -C ${DST_DIR} --sparse -xf -'"
   ${TAR:-tar} -C "${SRC_DS_DIR}" --sparse -cf - "${SRC_VM_DIR}" | ${SSH:-ssh} "${DST_HOST}" '${TAR:-tar} -C "${DST_DIR}" --sparse -xf -'
   ret=\$?
-  if [[ \${ret} -eq 0 ]]; then
+  if [[ \$ret -eq 0 ]]; then
       logger -t "tm_sp_mv_r[\$\$]" -- "rm -rf ${SRC_PATH}"
       rm -rf "${SRC_PATH}"
   else
@@ -399,40 +405,38 @@ EOF
                 if boolTrue "DEBUG_TM_MV"; then
                     dbg="IS_DISK=${IS_DISK} DISK_ID:${DISK_ID} DISK_PATH=${DISK_PATH} FORMAT=${FORMAT}"
                     dbg+="// DISK_TYPE_A:${DISK_TYPE_ARRAY[i]} // DISK_ID_A:${DISK_ID_ARRAY[i]}"
-                    splog "[D] ${dbg}"
-                fi
-                if [[ "${DISK_TYPE_ARRAY[i]}" == "swap" ]]; then
-                    FORMAT="swap"
+                    splog "${dbg}"
                 fi
                 if boolTrue "IS_DISK"; then
-                    if [[ "${DISK_ID_ARRAY[i]}" != "${DISK_ID}" ]]; then
+                    if [[ ${DISK_ID_ARRAY[i]} != "${DISK_ID}" ]] ; then
                         continue
                     fi
                 else
                     DISK_PATH="${DST_PATH}/disk.${DISK_ID_ARRAY[i]}"
                 fi
-                SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
-                SP_LINK="/dev/storpool/${SP_VOL}"
+                SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}"
+                kvGetUid "${SP_VOL}" fatal
+                VOL_UID="${SP_UID}"
                 if [[ -n "${ATTACH_ONLY}" ]]; then
                     splog "${ATTACH_ONLY}"
                 else
-                    storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "${DETACH_ALL}"
+                    storpoolDetach "${VOL_UID}" "force" "${SRC_HOST}" "${DETACH_ALL}"
                 fi
                 if [[ -n "${DETACH_ONLY}" ]]; then
                     splog "${DETACH_ONLY}"
                 else
-                    storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}"
-                    storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm}" "${VM_ID}"
+                    storpoolAttach "${VOL_UID}" "${DST_HOST}"
+                    storpoolVolumeTag "${VOL_UID}" "diskid;${VM_TAG}" "${DISK_ID};${VM_ID}"
                     if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
                         forceDetachOther "${VM_ID}" "${DST_HOST}" "${SP_VOL}"
                     fi
                     if boolTrue "DO_SYMLINK"; then
-                        oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
+                        oneSymlink "${DST_HOST}" "${VOL_UID}" "${DST_PATH}"
                     fi
                 fi
                 if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
                     if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                        storpoolVolumeTemplate "${SP_VOL}" "${ONE_PX}-ds-${DS_ID}"
+                        storpoolVolumeTemplate "${VOL_UID}" "${ONE_PX}-ds-${DS_ID}"
                     fi
                 fi
             fi
@@ -450,12 +454,14 @@ else
                 oneVmVolumes "${VM_ID}"
             fi
         fi
-        if [[ "${TYPE}" == "CDROM" ]]; then
-            # backward compatibility ...
-            storpoolVolumeDetach "${SP_VOL}" "" "${SRC_HOST}" "" "${READONLY}"
-            SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-        fi
-        storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "${DETACH_ALL}" "${READONLY}" "${vmVolumes}"
+#        if [[ ${TYPE} == "CDROM" ]]; then
+#            # backward compatibility ...
+#            storpoolDetach "${VOL_UID}" "" "${SRC_HOST}" "" "${READONLY}"
+#            SP_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
+#            kvGetUid "${SP_VOL}" fatal
+#            VOL_UID="${SP_UID}"
+#        fi
+        storpoolDetach "${VOL_UID}" "force" "${SRC_HOST}" "${DETACH_ALL}" "${READONLY}" "" "${vmVolumes}"
     fi
 fi
 
@@ -478,45 +484,52 @@ if boolTrue "CLONE"; then
     xTYPE="NPERS"
 fi
 
+if [[ -z ${SP_VOL} ]]; then
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
+fi
+
+kvGetUid "${SP_VOL}" fatal
+VOL_UID="${SP_UID}"
+
 if [[ "${TYPE}" == "CDROM" ]]; then
     CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-    if ! storpoolVolumeExists "${CDROM_VOL}"; then
+    if ! kvGetUid "${CDROM_VOL}"; then
         if booltTrue "NO_VOLUME_TEMPLATE"; then
-            SP_TEMPLATE_CD=
+            SP_TEMPLATE_CD=""
         else
             SP_TEMPLATE_CD="${ONE_PX}-ds-${DS_ID}"
         fi
-        storpoolVolumeClone "${SP_VOL}" "${CDROM_VOL}" "${SP_TEMPLATE_CD}"
-        storpoolVolumeTag "${CDROM_VOL}" "type" "CDROM"
+        storpoolVolumeClone "${VOL_UID}" "${CDROM_VOL}" "${SP_TEMPLATE_CD}"
+        kvGetUid "${CDROM_VOL}" fatal
+        VOL_UID="${SP_UID}"
+        storpoolVolumeTag "${VOL_UID}" \
+                "virt;${LOC_TAG};diskid;type" \
+                "one;${LOC_TAG_VAL};${DISK_ID};CDROM"
     fi
-    SP_VOL="${CDROM_VOL}"
-    xTYPE="CDROM"
-fi
-
-if boolTrue "READONLY"; then
     SP_MODE="${READONLY_MODE,,}"
-    [[ "${xTYPE}" == "CDROM" ]] || xTYPE="${xTYPE}RO"
-else
-    SP_MODE="rw"
+    SP_VOL="${CDROM_VOL}"
+    VOL_UID="${SP_UID}"
+#else
+#    SP_MODE="${READONLY_MODE,,}"
 fi
+storpoolAttach "${VOL_UID}" "${DST_HOST}" "${SP_MODE}"
 
-storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${SP_MODE}"
-
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${xTYPE};${DISK_ID}"
+storpoolVolumeTag "${VOL_UID}" \
+        "virt;${LOC_TAG};diskid;${VM_TAG}" \
+        "one;${LOC_TAG_VAL};${DISK_ID};${VM_ID}"
 
 if boolTrue "FORCE_DETACH_OTHER_MV" && boolTrue "IS_UNDEPLOY"; then
     forceDetachOther "${VM_ID}" "${DST_HOST}" "${SP_VOL}"
 fi
 
-SP_LINK="/dev/storpool/${SP_VOL}"
-if boolTrue "DO_SYMLINK" "${DO_SYMLINK}"; then  # make shellcheck happy
+if boolTrue "DO_SYMLINK"; then
     # Get SYSTEM datastore info
     oneDatastoreInfo "${VM_DS_ID}"
     MONITOR_TM_MAD=
     if ! boolTrue "DS_SHARED"; then
         MONITOR_TM_MAD="${VM_TM_MAD}"
     fi
-    oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
+    oneSymlink "${DST_HOST}" "${VOL_UID}" "${DST_PATH}"
 fi
 
 splog "END ${VM_ID} [IMAGE_DS]"

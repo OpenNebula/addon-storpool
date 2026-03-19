@@ -41,7 +41,7 @@ DS_ID="$5"
 
 export LOG_PREFIX="vmm"
 
-splog "$*"
+splog "${DEPLOY_ID} ${FILE} ${HVHOST} ${VM_ID} ${DS_ID}"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
 
@@ -49,24 +49,28 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "${SP_VOL}"; then
-        storpoolVolumeDelete "${SP_VOL}" "force"
+    if storpoolVolumeExists "${SP_VOL}" byName; then
+        storpoolDelete "${SP_UID}" "force"
     fi
-    read -r -a DS_ID_A <<< "${FILE//\// }"
+
+    IFS='/' read -r -a DS_ID_A <<< "${FILE}"
     DS_ID="${DS_ID_A[-3]}"
     XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-    VM_MEMORY=$(echo "${DRV_MESSAGE}" | "${XPATH}" /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
-    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*2))M" "${ONE_PX}-ds-${DS_ID}"
-    trapAdd "storpoolVolumeDelete \"${SP_VOL}\" \"force\""
+    VM_MEMORY=$(echo "${DRV_MESSAGE}" | ${XPATH} --stdin /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
+    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*2))M" "${ONE_PX}-ds-${DS_ID}" \
+            "type;img;virt;${LOC_TAG};${VM_TAG}" \
+            "CHECKPOINT;${SP_VOL};one;${LOC_TAG_VAL};${VM_ID}"
+    trapAdd "storpoolDelete \"${SP_UID}\" \"force\""
 
-    storpoolVolumeAttach "${SP_VOL}" "${HVHOST}"
+    storpoolVolumeAttach "${SP_UID}" "${HVHOST}"
     trapReset
 
-    ln -sf "/dev/storpool/${SP_VOL}" "${FILE}"
-    splog "ln -sf /dev/storpool/${SP_VOL} ${FILE} ($?)"
+    SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
+    ln -sf "${SP_LINK}" "${FILE}"
+    ret=$?
+    splog "ln -sf ${SP_LINK} ${FILE} (${ret})"
 
     oneVmInfo "${VM_ID}"
 
-    storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
-
+    storpoolVolumeTag "${SP_UID}" "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
 fi

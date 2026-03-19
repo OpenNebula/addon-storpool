@@ -29,33 +29,35 @@
 
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:${PATH}
 
-if [[ -f "../../etc/im/kvm-probes.d/reserved_resources.conf" ]]; then
+if [[ -f ../../etc/im/kvm-probes.d/reserved_resources.conf ]]; then
     # shellcheck source=/dev/null
-    source "../../etc/im/kvm-probes.d/reserved_resources.conf"
+    source ../../etc/im/kvm-probes.d/reserved_resources.conf
 fi
 
-eval "$(storpool_confshow -e SP_CLUSTER_ID SP_CLUSTER_NAME SP_OURID 2>/dev/null || true)"
+eval "$(storpool_confshow -e SP_CLUSTER_ID SP_CLUSTER_NAME SP_OURID MULTICLUSTER_NAME 2>/dev/null || true)"
 
 echo "SP_CLUSTER_ID=\"${SP_CLUSTER_ID:-}\""
 echo "SP_CLUSTER_NAME=\"${SP_CLUSTER_NAME:-}\""
-echo "SP_OURID=\"${SP_OURID:-}\""
+echo "SP_OURID=\"${SP_OURID:-0}\""
 
 cgroup="${cgroup:-machine.slice}"
 
 function count_cpus()
 {
-        local _list="$1" _cpu=0 _c="" _arr=()
-        for _c in ${_list//,/ }; do
-                read -r -a _arr <<< "${_c//-/ }"
-                if [[ ${#_arr[@]} -eq 2 ]]; then
-                        _cpu=$((_cpu + _arr[1] - _arr[0]))
+        local _cpu=0 _c=""
+        declare -a _arr_a _list_a
+        read -r -a _list_a <<< "${1//,/ }"
+        for _c in "${_list_a[@]}"; do
+                read -r -a _arr_a <<< "${_c//-/ }"
+                if [[ ${#_arr_a[@]} -gt 1 ]]; then
+                        _cpu=$((_cpu + _arr_a[1] - _arr_a[0]))
                 fi
                 _cpu=$((_cpu + 1))
         done
         echo "${_cpu}"
 }
 
-cpuset_cpus="$(cgget -v -n -r cpuset.cpus "${cgroup}")"
+cpuset_cpus="$(cgget -v -n -r cpuset.cpus "${cgroup}" 2>/dev/null)"
 ret=$?
 if [[ ${ret} -eq 0 ]]; then
     echo "SP_LIBVIRT_CPUS=$(count_cpus "${cpuset_cpus}" || true)"

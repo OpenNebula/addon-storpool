@@ -33,7 +33,7 @@ else
 fi
 
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
 # shellcheck source=/dev/null
@@ -63,6 +63,14 @@ SP_VOL="${ONE_PX:-one}-img-${ID}"
 SP_PARENT="${IMAGE_PATH##*/}"
 SP_TEMPLATE="${ONE_PX:-one}-ds-${DATASTORE_ID}"
 SP_DST="${SP_TEMPLATE}/${SP_VOL}"
+PARENT_UID=$(kvGet byName "${SP_PARENT}")
+
+if [[ -z "${PARENT_UID}" ]]; then
+    errmsg="Error: Can't get StorPool UID for image ${SP_PARENT}!"
+    splog "${errmsg}"
+    log "${errmsg}"
+    exit 255
+fi
 
 echo "${SP_DST}"
 
@@ -97,19 +105,19 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
     #SRC_SP_PLACEHEAD="${SP_PLACEHEAD}"
     #SRC_SP_IOPS="${SP_IOPS}"
     #SRC_SP_BW="${SP_BW}"
-
+    splog "${SP_PARENT} --> ${SP_VOL}"
     if [[ "${DS_TM_MAD}" != "${TM_MAD}" ]]; then
         splog "Clone from ${TM_MAD} to ${DS_TM_MAD} is not supported!"
         log "Clone from ${TM_MAD} to ${DS_TM_MAD} is not supported!"
         exit 255
     fi
 
-    if [[ "${SRC_SP_AUTH_TOKEN}" != "${DST_SP_AUTH_TOKEN}" ]]; then
+    if [[ ${SRC_SP_AUTH_TOKEN} != "${DST_SP_AUTH_TOKEN}" ]]; then
         #attach SRC volume to BRIDGE_LIST or here
         if [[ -n "${BRIDGE_LIST}" ]]; then
             SRC_HOST="$(get_destination_host "${ID}")"
             if [[ -z "${SRC_HOST}" ]]; then
-                error_message "Can't get bridge host for datastore ${ID} from BRIDGE_LIST:${BRIDGE_LIST}"
+                error_message "Can't get datastore host from BRIDGE_LIST:${BRIDGE_LIST}"
                 exit 255
             fi
         fi
@@ -119,10 +127,13 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
             SRC_SP_CLONE_GW="${SRC_HOST}"
         fi
         CLONE_GW="${SRC_SP_CLONE_GW}"
-        storpoolVolumeAttach "${SP_PARENT}" "${SRC_SP_CLONE_GW}" "ro"
+        storpoolAttach "${PARENT_UID}" "${SRC_SP_CLONE_GW}" "ro" snapshot
 
         oneDsDriverAction
         IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
+
+        SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+        debug_sp_qosclass
 
         if [[ -n "${BRIDGE_LIST}" ]]; then
             DST_HOST="$(get_destination_host "${ID}")"
@@ -137,36 +148,35 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
             DST_SP_CLONE_GW="${DST_HOST}"
         fi
         CLONE_GW="${DST_SP_CLONE_GW}"
+        export CLONE_GW
 
         #create DST volume with the given SIZE
-        storpoolTemplate "${ONE_PX}-ds-${DATASTORE_ID}"
-        storpoolVolumeCreate "${SP_VOL}" "${SIZE}"M "${ONE_PX}-ds-${DATASTORE_ID}"
+        storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${ONE_PX}-ds-${DATASTORE_ID}"
+        DST_VOL_UID="${SP_UID}"
         #attach DST volume to BRIDGE_LIST or here
-        storpoolVolumeAttach "${SP_VOL}" "${DST_SP_CLONE_GW}"
+        storpoolAttach "${DST_VOL_UID}" "${DST_SP_CLONE_GW}"
 
         # SRC_HOST  dd if=SRC_VOL | ssh DST_HOST dd of=DST_VOL
-        DST_CMD="dd of=/dev/storpool/${SP_VOL} bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
+        DST_CMD="dd of=/dev/storpool-byid/${DST_VOL_UID#*~} bs=1M conv=fdatasync status=none iflag=fullblock oflag=direct"
         if [[ -n "${DST_SP_CLONE_GW}" ]]; then
             DST_CMD="${SSH:-ssh} ${CLONE_COMPRESSION:+-C} ${DST_SP_CLONE_GW} '${DST_CMD}'"
         fi
-        SRC_CMD="dd if=/dev/storpool/${SP_PARENT} bs=1M status=none | ${DST_CMD}"
+        SRC_CMD="dd if=/dev/storpool-byid/${PARENT_UID#*~} bs=1M status=none | ${DST_CMD}"
+        splog "${SRC_SP_CLONE_GW} ${SRC_CMD} ..."
         if [[ -n "${SRC_SP_CLONE_GW}" ]]; then
-            ${SSH:-ssh} "${SRC_SP_CLONE_GW}" "eval '${SRC_CMD}'"
-            splog "ssh ${SRC_SP_CLONE_GW} 'eval ${SRC_CMD}' ($?)"
+            ${SSH:-ssh} "${SRC_SP_CLONE_GW}" "eval ${SRC_CMD}"
+            splog "${SSH:-ssh} ${SRC_SP_CLONE_GW} 'eval ${SRC_CMD}' ($?)"
         else
             eval "${SRC_CMD}"
             splog "${SRC_CMD} ($?)"
         fi
 
-        #detach DST_VOL
-        storpoolVolumeDetach "${SP_VOL}" "" "${DST_SP_CLONE_GW}"
+        # detach DST_VOL
+        storpoolDetach "${DST_VOL_UID}" "" "${DST_SP_CLONE_GW}"
 
-        SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
-        debug_sp_qosclass
+        storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
 
-        storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
-
-        #detach SRC_VOL
+        storpoolVolumeFreeze "${DST_VOL_UID}" "volume"
 
         if [[ -n "${SRC_SP_API_HTTP_HOST}" ]]; then
             export SP_API_HTTP_HOST="${SRC_SP_API_HTTP_HOST}"
@@ -183,30 +193,30 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         else
             unset SP_AUTH_TOKEN
         fi
-        CLONE_GW="${SRC_SP_CLONE_GW}"
-        storpoolVolumeDetach "${SP_PARENT}" "" "${SRC_SP_CLONE_GW}"
 
+        CLONE_GW="${SRC_SP_CLONE_GW}"
+        export CLONE_GW
+
+        # detach SRC_VOL
+        storpoolDetach "${PARENT_UID}" "force" "${SRC_SP_CLONE_GW}" "all" "" "snapshot"
+
+        splog "DS ${SRC_DS_ID} --> ${DATASTORE_ID}, ${PARENT_UID} -> ${DST_VOL_UID}"
         exit 0
     else
-        # reset environment and fallback to default routine
+        # reset environment and fallback to the default routine
         oneDsDriverAction
-        IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
     fi
 fi
 
-storpoolVolumeCheck "${SP_VOL}"
+storpoolVolumeCheck "${SP_VOL}" byName
 
-if boolTrue "NO_VOLUME_TEMPLATE"; then
-    SP_TEMPLATE=
-else
-    storpoolTemplate "${SP_TEMPLATE}"
-fi
-
-storpoolVolumeClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
+storpoolVolumeFromSnapshot "${PARENT_UID}" "${SP_VOL}"
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+
+storpoolVolumeFreeze "${SP_UID}" "volume"
 
 splog "END ${SP_DST}"

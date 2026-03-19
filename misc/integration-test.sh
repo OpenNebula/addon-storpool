@@ -30,7 +30,7 @@ DATA_DIR="${0}.DATA"
 #KEEP_DATA_DIR=
 #KEEP_TEST_TEMPLATE=
 
-trap 'echo "PID:$$ exit status:$?"' EXIT QUIT
+trap 'echo;echo "   PID:$$ exit status:$?"' EXIT QUIT
 
 function hdr()
 {
@@ -51,40 +51,45 @@ function xmlget()
 
 function do_waitfor()
 {
-	local vmid="$1" CMD="$2" STATE="$3" TIMEOUT="${4:-60}"
-	local SEC=0 CSTATE="" DO_CMD=""
-    DO_CMD="${CMD} list --list STAT,ID,NAME --csv"
+    local vmid="$1" CMD="$2" STATE="$3" TIMEOUT="${4:-60}"
+    local SEC=0 CSTATE="" DO_CMD="${CMD} list --list STAT,ID,NAME --csv"
+    local _ret=1
 
-	while [[ "${SEC}" -lt "${TIMEOUT}" ]]; do
-		CSTATE=$(${DO_CMD} | grep -E ",${vmid}\$|,${vmid}," | cut -d, -f1) || true
-        [[ -z "${DEBUG}" ]] || echo "  ${vmid} state '${CSTATE}' waiting for '${STATE}' #${SEC}::${TIMEOUT} //${DO_CMD}"
-        [[ -n "${CSTATE}" ]] || hdr "[Warn] Can't get ${CMD} '${vmid}' state! (${STATE})"
-		if [[ "${CSTATE}" == "${STATE}" ]]; then
-            [[ -z "${DEBUG}" ]] || hdr "[DBG] cstate match"
+    while [[ ${SEC} -lt ${TIMEOUT} ]]; do
+        CSTATE=$(${DO_CMD} | grep -E ",${vmid}\$|,${vmid}," | cut -d, -f1 || true)
+        _ret=$?
+        [[ -z "${DEBUG}" ]] || echo "  ${vmid} state '${CSTATE}' waiting for '${STATE}' #${SEC}::${TIMEOUT} //${DO_CMD} ${_ret}"
+        if [[ -z "${CSTATE}" ]]; then
+            hdr "[Warn] Can't get ${CMD} '${vmid}' state! (${STATE})"
+        fi
+        if [[ "${CSTATE}" == "${STATE}" ]]; then
+            if [[ -n "${DEBUG}" ]]; then
+                hdr "[DBG] cstate match"
+            fi
             return 0
-		fi
-		sleep "${SLP}"
-		SEC=$((SEC + SLP))
-	done
-    hdr "Timeout waiting for '${STATE}'. Last is '${CSTATE}'"
+        fi
+        sleep "${SLP:-1}"
+        SEC=$((SEC + SLP))
+    done
+    hdr "Timeout waiting for '${STATE}'. Last state was '${CSTATE}'"
     return 1
 }
 
 function waitforimg()
 {
-	do_waitfor "$1" oneimage "$2" "$3"
+    do_waitfor "$1" oneimage "$2" "$3"
 }
 
 function waitforvm()
 {
-	do_waitfor "$1" onevm "$2" "$3"
+    do_waitfor "$1" onevm "$2" "$3"
 }
 
 function die()
 {
-	echo -e "\nERROR: $*!"
+    echo -e "\nERROR: $*!"
     logger -t test_sp_test -- "[ERROR] $*! //${FUNCNAME[*]:1}"
-	exit 5
+    exit 5
 }
 
 function ipsetTest()
@@ -111,11 +116,11 @@ function ipsetTest()
 function ipPing() {
     local hst="$1" rcmd=""
     shift
-    hdr "Ping $* via '${hst}'"
+    hdr "Ping $* via '${hst}' //SLP:${SLP:-1}*180"
     rcmd=$(cat <<EOF
     set -e
     i=0
-    while [[ \${i} -lt 120 ]]; do
+    while [[ \${i} -lt 180 ]]; do
       if ping -q -c 1 ${1} >/dev/null; then
         for ip in $*; do
           ping -q -c 2 \${ip} >/dev/null
@@ -411,27 +416,27 @@ function imageDelete()
 
 # shellcheck disable=SC2230
 if ! which storpool &>/dev/null; then
-	echo "storpool cli not installed?"
-	exit 2
+    echo "storpool cli not installed?"
+    exit 2
 fi
 
 # shellcheck disable=SC2230
 if ! which onevm &>/dev/null; then
-	echo "ONE cli not installed?"
-	exit 2
+    echo "ONE cli not installed?"
+    exit 2
 fi
 
 if ! [[ -d /var/lib/one/remotes/datastore/storpool ]] ||\
    ! [[ -d /var/lib/one/remotes/tm/storpool ]]; then
-	echo "addon-storpool not installed?"
-	exit 2
+    echo "addon-storpool not installed?"
+    exit 2
 fi
 
 if [[ -z "$2" ]]; then
-	echo "Usage: $0 host1 host2 '[templateid]'"
-	echo
-	onehost list
-	exit 2
+    echo "Usage: $0 host1 host2 '[templateid]'"
+    echo
+    onehost list
+    exit 2
 fi
 
 mkdir -p "${DATA_DIR}"
@@ -448,8 +453,8 @@ CLUSTER_ID2="$(onehost show "${HOST2}" --xml |\
 export CLUSTER_ID2
 
 if [[ "${CLUSTER_ID1}" != "${CLUSTER_ID2}" ]]; then
-	echo "cluster IDs of both hosts do not match, exiting."
-	exit 2
+    echo "cluster IDs of both hosts do not match, exiting."
+    exit 2
 fi
 
 IMAGE_DS_ID="$(onedatastore list --xml |\
@@ -469,44 +474,46 @@ else
     hdr "vmTerminate status $?"
 fi
 
+# shellcheck disable=SC2310
+if [[ -n "${VN_NAME//disabled/}" ]]; then
+    hdr "Looking for network '${VN_NAME}'"
+    VN_ID="$(onevnet list --xml |\
+        tee "${DATA_DIR}/vnet-list.XML" |\
+        xmlget "//VNET[NAME=\"${VN_NAME}\"]" ID || true)"
+    [[ -z "${VN_ID}" ]] || msg "VNet ID ${VN_ID}"
+else
+    hdr "SKIP Network Test"
+fi
+
 hdr "Using IMAGE datastore: ${IMAGE_DS_ID} (${IMAGE_DS_NAME})"
 
 ###############################################################################
 # VM Template
 
 if [[ -n "${3}" ]]; then
-	VM_TEMPLATE_NAME="${3}"
-	deltemplate=n
+    VM_TEMPLATE_NAME="${3}"
+    deltemplate=n
 else
-	VM_TEMPLATE_NAME="t-${VM_NAME}-tmpl"
+    VM_TEMPLATE_NAME="t-${VM_NAME}-tmpl"
 
-	if ! onetemplate show "${VM_TEMPLATE_NAME}" &>/dev/null; then
+    if ! onetemplate show "${VM_TEMPLATE_NAME}" &>/dev/null; then
         imageDelete "${VM_TEMPLATE_NAME}"
-		TEMPLATE_ID="$(onemarketapp list -f NAME~'Alpine Linux' -l ID,NAME,TYPE,STAT --csv |\
+        TEMPLATE_ID="$(onemarketapp list -f NAME~'Alpine Linux' -l ID,NAME,TYPE,STAT --csv |\
             grep 'img,rdy' | tail -n 1 | cut -d, -f 1)"
-		hdr "Downloading template ${TEMPLATE_ID} from OpenNebula Marketplace as '${VM_TEMPLATE_NAME}'"
-		if onemarketapp export "${TEMPLATE_ID}" "${VM_TEMPLATE_NAME}" --datastore "${IMAGE_DS_ID}" \
+        hdr "Downloading template ${TEMPLATE_ID} from OpenNebula Marketplace as '${VM_TEMPLATE_NAME}'"
+        if onemarketapp export "${TEMPLATE_ID}" "${VM_TEMPLATE_NAME}" --datastore "${IMAGE_DS_ID}" \
             &>"${DATA_DIR}/export-${VM_TEMPLATE_NAME}"; then
-    	    hdr "Waiting for template image '${VM_TEMPLATE_NAME}' to become ready"
+            hdr "Waiting for template image '${VM_TEMPLATE_NAME}' to become ready"
             # shellcheck disable=SC2310
-        	waitforimg "${VM_TEMPLATE_NAME}" rdy 300 \
+            waitforimg "${VM_TEMPLATE_NAME}" rdy 300 \
                 || die "VM Tmeplate download timed out"
         else
             cat "${DATA_DIR}/export-${VM_TEMPLATE_NAME}"
             die "Download failed!"
         fi
-	fi
+    fi
 
-	deltemplate=y
-fi
-
-if [[ -n "${VN_NAME}" ]]; then
-    hdr "Looking for network '${VN_NAME}'"
-    # shellcheck disable=SC2310
-    VN_ID="$(onevnet list --xml |\
-        tee "${DATA_DIR}/vnet-list.XML" |\
-        xmlget "//VNET[NAME=\"${VN_NAME}\"]" ID || true)"
-    [[ -z "${VN_ID}" ]] || msg "VNet ID ${VN_ID}"
+    deltemplate=y
 fi
 
 ###############################################################################
@@ -657,7 +664,7 @@ vmTerminate
 
 if [[ "${deltemplate}" == "y" ]] && [[ -z "${KEEP_TEST_TEMPLATE}" ]]; then
     hdr "Deleting VM Template '${VM_TEMPLATE_NAME}'"
-	onetemplate delete "${VM_TEMPLATE_NAME}" --recursive
+    onetemplate delete "${VM_TEMPLATE_NAME}" --recursive
 fi
 if [[ -z "${KEEP_DATA_DIR}" ]]; then
     rm -rf "${DATA_DIR}"

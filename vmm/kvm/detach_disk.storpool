@@ -16,14 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname "$0")
+WORKDIR="$(dirname "$0")"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../scripts_common.sh"
-if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
+source "${WORKDIR}/../../scripts_common.sh"
+if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${DRIVER_PATH}/../../addon-storpoolrc"
+    source "${WORKDIR}/../../addon-storpoolrc"
 fi
 
 function splog()
@@ -32,20 +32,19 @@ function splog()
 }
 
 # 51c00be9-545c-41ae-a79c-6dd54bc4479a /var/lib/one//datastores/0/0/disk.2 hdb 1 0 kvm2
-DOMAIN="$1"
-SOURCE="$2"
-TARGET="$3"
-DISK_ID="$4"
-VM_ID="$5"
-KVMHOST="$6"
-export DOMAIN SOURCE TARGET DISK_ID VM_ID
+export DOMAIN="$1"
+export SOURCE="$2"
+export TARGET="$3"
+export DISK_ID="$4"
+export VM_ID="$5"
+export KVMHOST="$6"
 
 if [[ -n "${DEBUG_DETACH_DISK}" ]]; then
     splog "[D] $0 $*"
 fi
 
-export T_PERSISTENT_CDROM
-${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM}"
+${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM:-0}"
 ret=$?
-splog "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM} (ret:${ret})"
+splog "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM:-0} (ret:${ret})"
+
 exit "${ret}"

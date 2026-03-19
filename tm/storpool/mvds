@@ -40,13 +40,13 @@ splog "SRC=${SRC} DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 # Compute the destination image name
 #-------------------------------------------------------------------------------
 
-SRC_HOST="$(arg_host "${SRC}")"
-SRC_PATH="$(arg_path "${SRC}")"
-SRC_DIR="${SRC_PATH%/*}"
-DST_HOST="$(arg_host "${SRC}")"
-DST_PATH="$(arg_path "${SRC}")"
-export SRC_DIR DST_PATH  #  TBD: remove
-DISK_ID="$(echo "${SRC_PATH}" | awk -F. '{print $NF}')"
+SRC_HOST=$(arg_host "${SRC}")
+SRC_PATH=$(arg_path "${SRC}")
+DST_HOST=$(arg_host "${DST}")
+
+DISK_ID=$(echo "${SRC_PATH}" | awk -F. '{print $NF}' || true)
+
+DEFERRED=""
 
 #-------------------------------------------------------------------------------
 # Get Datastore information
@@ -66,13 +66,16 @@ if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
+kvGetUid "${SP_VOL}" fatal
+VOL_UID="${SP_UID}"
+
 SP_NEW="${DST##*/}"
 if [[ "${SP_VOL}" != "${SP_NEW}" ]]; then
     DEFERRED=1
 fi
 
 if boolTrue "NO_VOLUME_TEMPLATE"; then
-    SP_TEMPLATE=
+    SP_TEMPLATE=""
 else
     SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
 fi
@@ -82,23 +85,27 @@ oneImageQc "${IMAGE_ID}"
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-splog "SRC_HOST=${SRC_HOST} ${SP_VOL} ${DEFERRED:+DEFERRED} SP_NEW=${SP_NEW} SP_TEMPLATE=${SP_TEMPLATE}${SP_QOSCLASS:+ SP_QOSCLASS=${SP_QOSCLASS}}"
+splog "SRC_HOST=${SRC_HOST} ${VOL_UID} (${SP_VOL}) ${DEFERRED:+DEFERRED SP_NEW=${SP_NEW} SP_TEMPLATE=${SP_TEMPLATE}}${SHAREABLE:+ SHAREABLE=${SHAREABLE}}"
 
 #-------------------------------------------------------------------------------
 # Detach and if it is deferred OpenNebula snapshot "convert" to Image
 #-------------------------------------------------------------------------------
 
-storpoolVolumeDetach "${SP_VOL}" "force" "${SRC_HOST}" "all" "${READONLY}"
+storpoolDetach "${VOL_UID}" "force" "${SRC_HOST}" "all" "${READONLY}"
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};vc-policy;qc;type;diskid" "one;${LOC_TAG_VAL};;;${SP_QOSCLASS};;"
+storpoolVolumeTag "${VOL_UID}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};vc-policy;qc;type;diskid" "one;${LOC_TAG_VAL};;;${SP_QOSCLASS};;"
 
 if boolTrue "DEFERRED"; then
-    storpoolVolumeRename "${SP_VOL}" "${SP_NEW}" "${SP_TEMPLATE}"
+    storpoolVolumeRename "${VOL_UID}" "${SP_VOL}" "${SP_NEW}" "${SP_TEMPLATE}"
 fi
 
+storpoolVolumeFreeze "${VOL_UID}" "volume"
+
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+    storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}" "VMSNAPSHOT_DELETE_ON_TERMINATE"
 fi
+
+oneMvds "${SP_VOL}"
 
 splog "deleting ${SRC_PATH} on ${SRC_HOST}"
 ssh_exec_and_log "${SRC_HOST}" "rm -vf ${SRC_PATH}*" \

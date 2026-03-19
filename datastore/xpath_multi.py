@@ -73,7 +73,7 @@ for arg in args:
         eAll = e.findall(a)
         if len(eAll) > 1:
             for entry in eAll:
-                out.append("{0}".format(entry.text))
+                out.append('{0}'.format(entry.text))
         else:
-            out.append("{0}".format(e.findtext(a, "")))
-    print(";".join(out))
+            out.append('{0}'.format(e.findtext(a, '')))
+    print(';'.join(out))

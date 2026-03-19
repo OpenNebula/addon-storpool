@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,14 +15,17 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
-from __future__ import print_function
-from sys import argv, exit, stderr
+from typing import Optional, List
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
+
 
 def indent(elem, level=0, ind="  "):
     i = "\n" + level * ind
@@ -43,57 +46,68 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
+xmlDomain: str = sys.argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
+
+xmlVm: str = sys.argv[2]
+vm_e: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_e.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-
-t_iothreads_e = vm.find('.//T_IOTHREADS_OVERRIDE')
+t_iothreads_e: Optional[ET.Element] = vm.find('.//T_IOTHREADS_OVERRIDE')
 if t_iothreads_e is not None:
     if t_iothreads_e.text == '0':
-        print('T_IOTHREADS_OVERRIDE=0, Bail out!', file=stderr)
-        exit(1)
-iothreads = root.find('./iothreads')
-if iothreads is None:
-    iothreads = ET.SubElement(root, 'iothreads')
+        print('T_IOTHREADS_OVERRIDE=0, Bail out!', file=sys.stderr)
+        sys.exit(1)
+iothreads_e: Optional[ET.Element] = root.find('./iothreads')
+if iothreads_e is None:
+    iothreads_e = ET.SubElement(root, 'iothreads')
 else:
     if t_iothreads_e is None:
-        print('Found iothreads={}, but T_IOTHREADS_OVERRIDE is not set'.format(iothreads.text), file=stderr)
-        exit(1)
+        print(f"Found iothreads={iothreads_e.text}"
+              f", but T_IOTHREADS_OVERRIDE is not set", file=sys.stderr)
+        sys.exit(1)
 
-iothreads.text = "1"
+iothreads_e.text = "1"
+
+driver_e: Optional[ET.Element] = None
+target_e: Optional[ET.Element] = None
+device_e: Optional[ET.Element] = None
+scsi_e: Optional[ET.Element] = None
 
 # virtio-blk
 for disk in root.findall('./devices/disk'):
-    target = disk.find('./target')
-    if target.attrib['dev'][:2] != 'vd' :
+    target_e = disk.find('./target')
+    if target_e is None or target_e.attrib['dev'][:2] != 'vd':
         continue
-    driver = disk.find('./driver')
-    driver.attrib['io'] = 'native'
-    driver.attrib['iothread'] = '1'
+    driver_e = disk.find('./driver')
+    if driver_e is None:
+        driver_e = ET.SubElement(disk, 'driver')
+    driver_e.attrib['io'] = 'native'
+    driver_e.attrib['iothread'] = '1'
 
 # virtio-scsi
-controllers = root.findall("./devices/controller[@type='scsi']")
-if controllers is None:
-    device = root.find('./devices')
-    scsi = ET.SubElement(device, 'controller', {
+controllers: List[ET.Element] = root.findall(
+    "./devices/controller[@type='scsi']")
+if not controllers:
+    device_e = root.find('./devices')
+    if device_e is None:
+        raise RuntimeError("Can't find devices element")
+    scsi_e = ET.SubElement(device_e, 'controller', {
             'type': 'scsi',
             'model': 'virtio-scsi'
         })
-    controllers = [scsi]
+    controllers = [scsi_e]
 
 for scsi in controllers:
-    driver = scsi.find('./driver')
-    if driver is None:
-        driver = ET.SubElement(scsi, 'driver')
-    driver.attrib['iothread'] = '1'
+    driver_e = scsi.find('./driver')
+    if driver_e is None:
+        driver_e = ET.SubElement(scsi, 'driver')
+    driver_e.attrib['iothread'] = '1'
 
 indent(root)
 doc.write(xmlDomain)

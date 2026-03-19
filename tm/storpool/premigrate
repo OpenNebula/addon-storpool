@@ -39,9 +39,11 @@ SYSTEM_MAD="$7"
 source "${ONE_LOCATION:-/var/lib/one/remotes}/tm/storpool/storpool_common.sh"
 
 if [[ ! -t 0 ]]; then
-    tmpxml="$(mktemp -t "premigrate-${VM_ID}-XXXXXXXX")"
+    tmpxml="$(mktemp --tmpdir "premigrate-${VM_ID}-XXXXXXXX")"
     trapAdd "rm -rf \"${tmpxml}\""
-    cat > "${tmpxml}"
+    # TEMPLATE_64 is for compatibility with migrate_other()
+    TEMPLATE_64="$(tee "${tmpxml}" || true)"
+    export TEMPLATE_64
     if [[ -s "${tmpxml}" ]]; then
         SYSTEM_MAD="$6"
         TEMPLATE="${tmpxml}"
@@ -54,6 +56,19 @@ if [[ "${SYSTEM_MAD:0:8}" == "storpool" ]]; then
     fi
     exit 0
 fi
+
+if boolTrue "MULTICLUSTER"; then
+    oneHostInfo "${DST_HOST}"
+    DO_MULTICLUSTER=1
+    DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+fi
+
+if boolTrue "NO_VOLUME_TEMPLATE"; then
+    SP_TEMPLATE=""
+else
+    SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
+fi
+
 
 splog "SRC_HOST=${SRC_HOST} DST_HOST=${DST_HOST} VM_PATH=${VM_PATH} VM_ID=${VM_ID} DS_ID=${DS_ID} SYSTEM_MAD=${SYSTEM_MAD} ${tmpxml:+${tmpxml}}"
 
@@ -76,7 +91,7 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]] && [[ "${SP_SYSTEM^^}" == "SSH" ]]; th
         msg="Can't get VM disk info!"
     fi
     if [[ -n "${msg}" ]]; then
-        splog "${msg}"
+        splog "[E] ${msg}"
         log_error "${msg}"
         exit 1
     fi
@@ -121,32 +136,37 @@ oneTemplateInfo "${TEMPLATE}"
 #-------------------------------------------------------------------------------
 json=
 for i in "${!DISK_ID_ARRAY[@]}"; do
-    if [[ "${DISK_TM_MAD_ARRAY[i]}" == "storpool" ]]; then
-        DISK_ID="${DISK_ID_ARRAY[i]}"
+    DISK_ID="${DISK_ID_ARRAY[i]}"
+    if [[ "${DISK_TM_MAD_ARRAY[i]:0:8}" == "storpool" ]]; then
         DISK_SOURCE="${DISK_SOURCE_ARRAY[i]}"
         if [[ -n "${DISK_SOURCE}" ]]; then
             SP_VOL="${DISK_SOURCE##*/}"
             if boolTrue "DISK_CLONE_ARRAY[i]"; then
-                SP_VOL+="-${VM_ID}-${DISK_ID_ARRAY[i]}"
+                SP_VOL+="-${VM_ID}-${DISK_ID}"
             elif [[ "${DISK_TYPE_ARRAY[i]}" == "CDROM" ]]; then
                 CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-                if ! storpoolVolumeExists "${CDROM_VOL}"; then
-                    storpoolVolumeClone "${SP_VOL}" "${CDROM_VOL}"
-                    storpoolVolumeTag "${CDROM_VOL}" "type;diskid" "CDROM;${DISK_ID}"
-                    SP_LINK="/dev/storpool/${SP_VOL}"
+                if ! kvGetUid "${CDROM_VOL}"; then
+                    kvGetUid "${SP_VOL}" fatal
+                    storpoolVolumeClone "${SP_UID}" "${CDROM_VOL}" "${SP_TEMPLATE}"
+                    kvGetUid "${CDROM_VOL}" fatal
+                    storpoolVolumeTag "${SP_UID}" "diskid;type" "${DISK_ID};CDROM"
                     DST_PATH="${VM_PATH}/disk.${DISK_ID}"
-                    oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
+                    oneSymlink "${DST_HOST}" "${SP_UID}" "${DST_PATH}"
                 fi
                 SP_VOL="${CDROM_VOL}"
             fi
             if boolTrue "DISK_READONLY_ARRAY[i]"; then
                 SP_MODE="${READONLY_MODE,,}"
             else
-                SP_MODE="rw"
+                SP_MODE=""
             fi
-            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}" || true)"
+            kvGetUid "${SP_VOL}" fatal
             [[ -z "${json}" ]] || json+=","
-            json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "${SP_MODE}")"
+            json+="$(storpoolVolumeJsonHelper "${SP_UID}" volume "[${DST_CLIENT}]" "${SP_MODE}")"
+            if boolTrue "DEBUG_MIGRATE_LIVE"; then
+                splog "VM ${VM_ID} DISK_ID ${DISK_ID} ${SP_VOL} ${SP_UID} attach ${DST_CLIENT}"
+            fi
         else
             if boolTrue "DEBUG_MIGRATE_LIVE"; then
                 splog "[D] skip volatile disk for ${DS_ID}/${VM_ID}/disk.${DISK_ID}"
@@ -160,33 +180,36 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     # Attach volatile disk volumes
     #-------------------------------------------------------------------------------
     for i in "${!DISK_ID_ARRAY[@]}"; do
-        if [[ "${DISK_TM_MAD_ARRAY[i]}" == "" ]] || [[ "${DISK_SOURCE_ARRAY[i]}" == "" ]]; then
-            FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
-            DISK_ID="${DISK_ID_ARRAY[i]}"
-            if [[ "${DISK_TYPE_ARRAY[i]}" == "swap" ]]; then
-                FORMAT="swap"
-            fi
-            SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT}"
-            SP_LINK="/dev/storpool/${SP_VOL}"
+        DISK_ID="${DISK_ID_ARRAY[i]}"
+        if [[ -z "${DISK_TM_MAD_ARRAY[i]}" ]] || [[ -z "${DISK_SOURCE_ARRAY[i]}" ]]; then
+            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}" || true)"
             DST_PATH="${VM_PATH}/disk.${DISK_ID}"
-            [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
+            kvGetUid "${SP_VOL}" fatal
             [[ -z "${json}" ]] || json+=","
-            json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}")"
-#            oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+            json+="$(storpoolVolumeJsonHelper "${SP_UID}" volume "[${DST_CLIENT}]")"
+#            oneSymlink "${DST_HOST}" "${SP_VOL}" "${DST_PATH}"
+            if boolTrue "DEBUG_MIGRATE_LIVE"; then
+                splog "VM ${VM_ID} DISK_ID ${DISK_ID} ${SP_VOL} ${SP_UID} attach ${DST_CLIENT}"
+            fi
         fi
     done
 
+    [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}" || true)"
     #-------------------------------------------------------------------------------
     # Attach context ISO volume
     #-------------------------------------------------------------------------------
     if [[ -n "${CONTEXT_DISK_ID}" ]]; then
-        SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
-        SP_LINK="/dev/storpool/${SP_VOL}"
-        DST_PATH="${VM_PATH}/disk.${CONTEXT_DISK_ID}"
-        [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+        DISK_ID="${CONTEXT_DISK_ID}"
+        DST_PATH="${VM_PATH}/disk.${DISK_ID}"
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
+        kvGetUid "${SP_VOL}" fatal
         [[ -z "${json}" ]] || json+=","
-        json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "${READONLY_MODE,,}")"
-#        oneSymlink "$DST_HOST" "$SP_LINK" "$DST_PATH"
+        json+="$(storpoolVolumeJsonHelper "${SP_UID}" volume "[${DST_CLIENT}]" "${READONLY_MODE}" || true)"
+#        oneSymlink "${DST_HOST}" "${SP_VOL}" "${DST_PATH}"
+        if boolTrue "DEBUG_MIGRATE_LIVE"; then
+            splog "VM ${VM_ID} DISK_ID ${DISK_ID} ${SP_VOL} ${SP_UID} attach ${DST_CLIENT}"
+        fi
     fi
 
     #-------------------------------------------------------------------------------
@@ -194,9 +217,12 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
     #-------------------------------------------------------------------------------
     if [[ -n "${T_OS_NVRAM}" ]]; then
         SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-        [[ -n "${DST_CLIENT}" ]] || DST_CLIENT="$(storpoolClientId "${DST_HOST}" "${COMMON_DOMAIN}")"
+        kvGetUid "${SP_VOL}" fatal
         [[ -z "${json}" ]] || json+=","
-        json+="$(storpoolVolumeJsonHelper "${SP_VOL}" "${DST_CLIENT}" "rw")"
+        json+="$(storpoolVolumeJsonHelper "${SP_UID}" volume "[${DST_CLIENT}]" "rw" || true)"
+        if boolTrue "DEBUG_MIGRATE_LIVE"; then
+            splog "VM ${VM_ID} ${SP_VOL} ${SP_UID} attach ${DST_CLIENT}"
+        fi
     fi
 
     #-------------------------------------------------------------------------------
@@ -208,9 +234,7 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
 fi
 
 if [[ -n "${json}" ]]; then
-    storpoolRetry groupAttach "${json}"
-else
-    splog "Nothing to attach!?!"
+    storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
 fi
 
 splog "END ${VM_ID}"

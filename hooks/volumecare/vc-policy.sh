@@ -17,6 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 ONE_HOME="${ONE_HOME:-/var/lib/one}"
+ONE_LOCATION="${ONE_LOCATION:-/var/lib/one/remotes}"
 
 XML="$(base64 -d - 2>/dev/null)"
 
@@ -27,6 +28,15 @@ if [[ -z "${VMID}" ]]; then
     exit 1
 fi
 
-logger -t vc_sp_vc-policy.sh -- "${ONE_HOME}/remotes/hooks/volumecare/volumecare ${VMID}"
+if [[ -f "${ONE_LOCATION}/addon-storpoolrc" ]]; then
+    # shellcheck source=addon-storpoolrc
+    source "${ONE_LOCATION}/addon-storpoolrc"
+fi
 
-"${ONE_HOME}/remotes/hooks/volumecare/volumecare" "${VMID}"
+VC_SCRIPT="${ONE_LOCATION}/hooks/volumecare/volumecare"
+
+if [[ -n "${DEBUG_VOLUMECARE}" ]] && [[ "${DEBUG_VOLUMECARE}" == "1" || "${DEBUG_VOLUMECARE:0:1}" == "Y" ]]; then
+    logger -t vc_sp_vc-policy.sh -- "${VC_SCRIPT} '${VMID}'"
+fi
+
+"${VC_SCRIPT}" "${VMID}"

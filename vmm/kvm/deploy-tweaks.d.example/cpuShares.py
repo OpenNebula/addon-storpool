@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,18 +15,21 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
-
+"""
 from __future__ import print_function
-from sys import argv, stderr
+from typing import Optional
+from sys import argv
 from xml.etree import ElementTree as ET
 from math import ceil
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0"
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  ") -> None:
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -44,42 +47,46 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-changed = 0
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
+changed: bool = False
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
+xmlDomain: str = argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
+
+xmlVm: str = argv[2]
+vm_e: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_e.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-cputune_mul = 0.1
-t_cputune_mul_e = vm.find('./USER_TEMPLATE/T_CPUTUNE_MUL')
+cputune_mul: float = 0.1
+xpath: str = './USER_TEMPLATE/T_CPUTUNE_MUL'
+t_cputune_mul_e: Optional[ET.Element] = vm.find(xpath)
 if t_cputune_mul_e is not None:
-    #print( "T_CPUTUNE_MUL={s}".format(s=t_cputune_mul_e.text),file=stderr)
-    cputune_mul = float(t_cputune_mul_e.text)
+    cputune_mul = float(t_cputune_mul_e.text or "0.1")
 
-vcpu_e = vm.find('./TEMPLATE/VCPU')
-vcpu = 1
-if vcpu_e is not None:
-    vcpu = vcpu_e.text
-set_cputune_shares = ceil((float(vcpu) * cputune_mul) * 1024.0)
+vcpu: int = 1
+vcpu_e: Optional[ET.Element] = vm.find('./TEMPLATE/VCPU')
+if (vcpu_e is not None and
+        vcpu_e.text is not None and
+        vcpu_e.text.isnumeric()):
+    vcpu = int(vcpu_e.text)
+set_cputune_shares: int = ceil((float(vcpu) * cputune_mul) * 1024.0)
 
-for t_cputune_shares_e in vm.findall('./USER_TEMPLATE/T_CPUTUNE_SHARES'):
-    if t_cputune_shares_e.text:
-        #print( "T_CPUTUNE_SHARES={s}".format(s=t_cputune_shares_e.text),file=stderr)
-        set_cputune_shares = t_cputune_shares_e.text
+xpath = './USER_TEMPLATE/T_CPUTUNE_SHARES'
+for t_cputune_shares_e in vm.findall(xpath):
+    if (t_cputune_shares_e is not None and
+            t_cputune_shares_e.text is not None and
+            t_cputune_shares_e.text.isnumeric()):
+        set_cputune_shares = int(t_cputune_shares_e.text)
 
-cputune_shares_e = root.find('./cputune/shares')
+cputune_shares_e: Optional[ET.Element] = root.find('./cputune/shares')
 if cputune_shares_e is not None:
-    if int(cputune_shares_e.text) != set_cputune_shares:
-        #print( "cputune/shares={s}<<{n}".format(s=cputune_shares_e.text,n=set_cputune_shares),file=stderr)
-        cputune_shares_e.text = str(int(set_cputune_shares))
-        changed = 1
+    if int(cputune_shares_e.text or "0") != set_cputune_shares:
+        cputune_shares_e.text = str(set_cputune_shares)
+        changed = True
 
 if changed:
     indent(root)

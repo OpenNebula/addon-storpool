@@ -31,14 +31,15 @@ SNAP_ID="$2"
 VM_ID="$3"
 DS_ID="$4"
 
-DRIVER_PATH="$(dirname "$0")"
+TM_PATH="$(dirname "$0")"
+
 #shellcheck source=tm/storpool/storpool_common.sh
-source "${DRIVER_PATH}/storpool_common.sh"
+source "${TM_PATH}/storpool_common.sh"
 
-splog "SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
+splog "[I] SRC=${SRC} SNAP_ID=${SNAP_ID} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
-SRC_HOST=$(arg_host "${SRC}")
-SRC_PATH=$(arg_path "${SRC}")
+SRC_HOST="$(arg_host "${SRC}")"
+SRC_PATH="$(arg_path "${SRC}")"
 
 DISK_ID=$(echo "${SRC##*/}" | awk -F. '{print $NF}')
 
@@ -58,7 +59,7 @@ oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 if [[ "${TYPE}" == "CDROM" ]]; then
     # shellcheck source=/dev/null
-    source "${DRIVER_PATH}/../../scripts_common.sh"
+    source "${TM_PATH}/../../scripts_common.sh"
     error_message "${0##*/}: CDROM snapshot operation not supported"
     exit 1
 fi
@@ -72,23 +73,22 @@ if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
-SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
+ONE_SNAP="snap${SNAP_ID}"
+SP_SNAP="${SP_VOL}-${ONE_SNAP}"
 DST_HOST="${SRC_HOST}"
-DST_PATH="${SRC_PATH}"
-export DST_PATH  #  TBD: remove
 
 #-------------------------------------------------------------------------------
 # Check snapshots limits
 #-------------------------------------------------------------------------------
 
 if [[ -n "${DISKSNAPSHOT_LIMIT}" ]] && [[ -z "${DISKSNAPSHOT_LIMIT//[[:digit:]]/}" ]]; then
-    if [[ "${DISKSNAPSHOT_LIMIT}" -ge 0 ]]; then
+    if [[ ${DISKSNAPSHOT_LIMIT} -ge 0 ]]; then
         oneVmDiskSnapshots "${VM_ID}" "${DISK_ID}"
-        if [[ ${#DISK_SNAPSHOTS_A[@]} -gt ${DISKSNAPSHOT_LIMIT} ]]; then
+        if [[ ${#DISK_SNAPSHOTS_A[*]} -gt ${DISKSNAPSHOT_LIMIT} ]]; then
             # shellcheck source=/dev/null
-            source "${DRIVER_PATH}/../../scripts_common.sh"
+            source "${TM_PATH}/../../scripts_common.sh"
             msg="DISKSNAPSHOT_LIMIT of ${DISKSNAPSHOT_LIMIT} snaphosts exceeded!"
-            splog "${msg}"
+            splog "[E]${msg}"
             error_message "${msg}"
             exit 1
         fi
@@ -99,7 +99,21 @@ fi
 # Create snapshot
 #-------------------------------------------------------------------------------
 
-storpoolSnapshotCreate "${SP_SNAP}" "${SP_VOL}"
+kvGetUid "${SP_VOL}" fatal
+
+if [[ "$0" =~ "_live" ]] && boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
+    oneFsfreeze "${DST_HOST}" "${DEPLOY_ID}"
+    trapAdd APPEND "oneFsthaw \"${DST_HOST}\" \"${DEPLOY_ID}\""
+fi
+
+storpoolSnapshotCreate "${SP_SNAP}" "${SP_UID}" \
+        "img;snap;${VM_TAG};${LOC_TAG};virt" \
+        "${SP_VOL};${ONE_SNAP};${VM_ID};${LOC_TAG_VAL};one"
+
+if [[ "$0" =~ "_live" ]] && boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
+    oneFsthaw "${DST_HOST}" "${DEPLOY_ID}"
+    trapReset
+fi
 
 splog "END ${VM_ID}"
 exit 0

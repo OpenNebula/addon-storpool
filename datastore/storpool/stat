@@ -31,11 +31,11 @@ if [[ -n "${ONE_LOCATION}" ]]; then
 else
     LIB_LOCATION="/usr/lib/one"
 fi
-
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
+
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
@@ -63,9 +63,11 @@ SIZE=0
 #-------------------------------------------------------------------------------
 # Test file
 #-------------------------------------------------------------------------------
-[[ -r "${IMAGE_PATH}" ]] || splog "Not readable file: ${IMAGE_PATH}"
-[[ -w "${IMAGE_PATH}" ]] || splog "Not writable file: ${IMAGE_PATH}"
-[[ -s "${IMAGE_PATH}" ]] || splog "Zero size file: ${IMAGE_PATH}"
+[[ -r "${IMAGE_PATH}" ]] || splog "[W] Not readable file: ${IMAGE_PATH}"
+[[ -w "${IMAGE_PATH}" ]] || splog "[W] Not writable file: ${IMAGE_PATH}"
+[[ -s "${IMAGE_PATH}" ]] || splog "[W] Zero size file: ${IMAGE_PATH}"
+[[ ! -L "${IMAGE_PATH}" ]] || splog "[W] Is symlink: ${IMAGE_PATH}"
+[[ ! -b "${IMAGE_PATH}" ]] || splog "[W] Is block device: ${IMAGE_PATH}"
 
 #-------------------------------------------------------------------------------
 # Compute the size
@@ -73,37 +75,54 @@ SIZE=0
 
 case "${IMAGE_PATH,,}" in
     *vmdk|*vhdx)
-        if ! SIZE=$(${QEMU_IMG:-qemu-img} info "${IMAGE_PATH}" | sed -n 's/.*(\([0-9]*\) bytes).*/\1/p' || true); then
-            SIZE=0
+        image_info "${IMAGE_PATH}" || true
+        if [[ -n "${QEMU_IMG_VIRTUAL_SIZE}" ]] && [[ ${QEMU_IMG_VIRTUAL_SIZE} -gt 0 ]]; then
+            # round up to 1MiB
+            SIZE=$(((QEMU_IMG_VIRTUAL_SIZE+1048575)/1048576))
         else
-            SIZE=$(echo "${SIZE}" | tr -d "\r")
-            SIZE=$(((SIZE+1048575)/1048576))
+            SIZE=0
         fi
         ;;
     *)
         SIZE="$(fs_size "${IMAGE_PATH}")"
         RET=$?
-        if [[ "${RET}" -ne 0 ]]; then
+        if [[ ${RET} -ne 0 ]]; then
             SIZE=0
         fi
         ;;
 esac
 
-if [[ "${SIZE}" == "0" ]]; then
+if [[ ${SIZE} -eq 0 ]]; then
     oneSnapshotLookup "${IMAGE_PATH##*/}"
-    if [[ -n "${SNAPSHOT_NAME}" ]]; then
-        storpoolSnapshotInfo "${SNAPSHOT_NAME}"
-        SIZE="${SNAPSHOT_INFO[0]}"
+    if [[ -n ${SNAPSHOT_NAME} ]]; then
+        if kvGetUid "${SNAPSHOT_NAME}"; then
+            ENTRY="${SP_UID}"
+        else
+            ENTRY="${SNAPSHOT_NAME}"
+        fi
+        if ! storpoolSnapshotInfo "${ENTRY}"; then
+            msg="Can't get StorPool Snapshot data for '${ENTRY}' ($?)"
+            splog "[E] ${msg}"
+            log "${msg}"
+            exit 254
+        fi
+        if [[ ${ENTRY:0:1} == "~" ]]; then
+            SP_UID="${ENTRY}"
+        else
+            SP_UID="~${X_GLOBALID}"
+        fi
+        SIZE="${X_SIZE}"
         SIZE=$((SIZE/1024**2))
-        splog "${SNAPSHOT_NAME} SIZE:${SIZE}"
+        splog "[I] ${SP_UID} (${SNAPSHOT_NAME}) SIZE:${SIZE} cluster ${X_CLUSTERID}"
     fi
 fi
 
-if [[ "${SIZE}" == "0" ]]; then
-    log_error "Cannot determine size for ${IMAGE_PATH}"
-    splog "Cannot determine size for ${IMAGE_PATH}"
+if [[ -z "${SIZE}" ]] || [[ "${SIZE}" == "0" ]]; then
+    _msg="Cannot determine size for ${IMAGE_PATH}"
+    log_error "${_msg}"
+    splog "[E] ${_msg}"
     exit 255
 fi
 
-splog "END:${SIZE}"
+splog "END SIZE='${SIZE}'"
 echo "${SIZE}"

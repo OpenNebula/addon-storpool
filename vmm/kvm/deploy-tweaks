@@ -17,46 +17,83 @@
 #--------------------------------------------------------------------------- #
 
 export LOG_PREFIX="vmm"
-TMPDIR="$(mktemp -t -d deploy-tweaks-XXXXXXXX)"
-trap 'rm -rf "${TMPDIR}"' EXIT QUIT TERM HUP INT
+TMPDIR="$(mktemp --tmpdir -d deploy-tweaks-XXXXXXXX)"
+# shellcheck disable=SC2064
+trap "rm -rf '${TMPDIR}'" EXIT QUIT TERM HUP INT
 ERR_FILE="${TMPDIR}/error"
 
-if [[ -f ./config ]]; then
+if [[ -f "./config" ]]; then
     eval "$(grep -E 'DATASTORE_LOCATION|SCRIPTS_REMOTE_DIR' ./config || true)"
-elif [[ -f /var/lib/one/config ]]; then
+elif [[ -f "/var/lib/one/config" ]]; then
     eval "$(grep -E 'DATASTORE_LOCATION|SCRIPTS_REMOTE_DIR' /var/lib/one/config || true)"
 fi
 
-set -a
+set -a -o pipefail
 
-DRIVER_PATH="$(dirname "$0")"
-if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
+SCRIPT_PATH="$(dirname "$0")"
+if [[ -f "${SCRIPT_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
     # shellcheck source=/dev/null
-    source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
-elif [[ -f "${DRIVER_PATH}/kvmrc" ]]; then
+    source "${SCRIPT_PATH}/../../etc/vmm/kvm/kvmrc"
+elif [[ -f "${SCRIPT_PATH}/kvmrc" ]]; then
     # shellcheck source=/dev/null
-    source "${DRIVER_PATH}/kvmrc"
+    source "${SCRIPT_PATH}/kvmrc"
 fi
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../scripts_common.sh"
+source "${SCRIPT_PATH}/../../scripts_common.sh"
 
-if [[ -f "${DRIVER_PATH}/../../addon-storpoolrc" ]]; then
+if [[ -f "${SCRIPT_PATH}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${DRIVER_PATH}/../../addon-storpoolrc"
+    source "${SCRIPT_PATH}/../../addon-storpoolrc"
 fi
 
 for var in ONE_PX NVRAM_TEMPLATE_PATH TMPDIR ERR_FILE; do
     [[ -z "${!var}" ]] || export "${var?}"
 done
 
+function oneCallXml()
+{
+    local _CALL="$1" _METHOD="$2" _ID="$3" _OUT_FILE="$4"
+    local _ERR_FILE="${TMPDIR}/${_CALL}-${_ID}.error"
+    local _TIMEFILE="${TMPDIR}/${_CALL}-${_ID}.time"
+    local _RET=1 _ONETRY=${ONE_CALL_RETRIES:-3} _TIME="" _XML_LINES=0
+    case "${_CALL}" in
+        onevm|onehost|onedatastore)
+            read -r -a _ONECMD <<< "${_CALL} ${_METHOD} ${ONE_ARGS:-} -x ${_ID}"
+            ;;
+        *)
+            echo "oneCallXml($*) Error: Unknown call'"
+            return 1
+            ;;
+    esac
+    while :; do
+        time ("${_ONECMD[@]}" >"${_OUT_FILE}" 2>"${_ERR_FILE}") 2>"${_TIMEFILE}"
+        _RET=$?
+        _TIME="$(tr '\n' ' ' <"${_TIMEFILE}" | tr '\t' ' ' ||true)"
+        _XML_LINES=$(wc -l "${_OUT_FILE}")
+        splog "${_ONECMD[*]} # ret=${_RET} time:${_TIME} xmlLines:${_XML_LINES}"
+        if [[ ${_RET} -eq 0 ]]; then
+            break
+        fi
+        if [[ ${_ONETRY} -lt 1 ]]; then
+            splog "'${_ONECMD[*]} ${_ID}' retry:${_ONETRY} Error: Timeout"
+            exit "${_RET}"
+        fi
+        _ONETRY=$((_ONETRY-1))
+        sleep 0.5
+    done
+    return "${_RET}"
+}
+
 if [[ -d /opt/storpool/python3/bin ]]; then
-    PATH="/opt/storpool/python3/bin:${PATH}"
-    export PATH
+    export PATH="/opt/storpool/python3/bin:${PATH}"
+    if [[ -n "${DEBUG_DEPLOY_TWEAKS}" ]]; then
+        splog "[D] appending /opt/storpool/python3/bin to PATH=${PATH}"
+    fi
 fi
 
 function splog()
 {
-    logger -t "vmm_sp_${0##*/}" "[$$] ${DEBUG_LINENO:+[${BASH_LINENO[-2]}]}$*"
+    logger -t "${LOG_PREFIX:-vmm}_sp_${0##*/}" "[$$] $*${DEBUG_LINENO:+ //[${BASH_LINENO[-2]}]}"
 }
 
 DEP_FILE="$1"
@@ -68,19 +105,16 @@ VM_XML="${TMPDIR}/vm.xml"
 
 cp -f "${DEP_FILE}" "${DEP_XML}"
 
-onevm show "${VM_ID}" -x >"${VM_XML}" 2>"${ERR_FILE}"
-ret=$?
-if [[ ${ret} -ne 0 ]]; then
-    errmsg="[deploy-tweaks] Can't get VM ${VM_ID} XML, VM_XML=${VM_XML}"
-    error_message "${errmsg}"
-    cat "${ERR_FILE}" >&2
-    splog "${errmsg}"
-    exit 255
+oneCallXml onevm show "${VM_ID}" "${VM_XML}"
+RET=$?
+if [[ ${RET} -ne 0 ]]; then
+    error_message "[E][deploy-tweaks] Error: Can't query VM ${VM_ID} (${TM_MAD},${DEPLOY_ID})"
+    exit "${_RET}"
 fi
 
 declare -a _XPATH_A _XPATH_QUERY
 _XPATH_A=(
-    "${DRIVER_PATH}/../../datastore/xpath.rb"
+    "${SCRIPT_PATH}/../../datastore/xpath.rb"
     "--stdin"
 )
 _XPATH_QUERY=(
@@ -89,36 +123,44 @@ _XPATH_QUERY=(
     "/VM/HISTORY_RECORDS/HISTORY[last()]/DS_ID"
 )
 
+sed '/\/>$/d' "${VM_XML}" >"${TMPDIR}/vmX.xml"
 unset i XPATH_ELEMENTS
-while IFS='' read -r -u "${xpathfh}" -d '' element; do
+while IFS='' read -r -u "${xfh}" -d '' element; do
     XPATH_ELEMENTS[i++]="${element}"
-done {xpathfh}< <( sed '/\/>$/d' "${VM_XML}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
-exec {xpathfh}<&-
+done {xfh}< <("${_XPATH_A[@]}" <"${TMPDIR}/vmX.xml" "${_XPATH_QUERY[@]}" || true)
+exec {xfh}<&-
 unset i
-export DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
-export TM_MAD="${XPATH_ELEMENTS[i++]}"
-export DS_ID="${XPATH_ELEMENTS[i++]}"
+DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
+TM_MAD="${XPATH_ELEMENTS[i++]}"
+DS_ID="${XPATH_ELEMENTS[i++]}"
 
 if [[ -z "${DS_ID}" ]]; then
-    error_message "[deploy-tweaks] Can't get SYSTEM datastore ID for one-${VM_ID} VM_XML=${VM_XML} [${_XPATH_A[*]}] -- ${XPATH_ELEMENTS[*]}"
+    error_message "[E][deploy-tweaks] Can't get SYSTEM datastore ID for one-${VM_ID} (${TM_MAD},${DEPLOY_ID})"
     cat "${ERR_FILE}" >&2
     exit 255
 fi
 
 if [[ -d "${0}.d" ]]; then
-    while read -r -u "${hookfh}" hook; do
-        [[ -x "${0}.d/${hook}" ]] || continue
+    while read -r -u "${dtfh}" hook; do
+        [[ -x  "${hook}" ]] || continue
         cp -f "${DEP_XML}" "${TMPDIR}/deployment.xml"
-        splog "cp -f ${DEP_XML} ${TMPDIR}/deployment.xml ($?)"
-        splog "Calling ${0}.d/${hook} ${TMPDIR}/deployment.xml ${TMPDIR}/vm.xml ..."
-        "${0}.d/${hook}" "${TMPDIR}/deployment.xml" "${TMPDIR}/vm.xml" 2>"${ERR_FILE}"
         ret=$?
-        splog "${hook} (${ret})"
         if [[ -n "${DEBUG_DEPLOY_TWEAKS}" ]]; then
-            while read -r -u "${errfh}" line; do
-                splog "[D][${hook}]stderr:${line}"
+            splog "[D] cp -f ${DEP_XML} ${TMPDIR}/deployment.xml (${ret})"
+            splog "[D] Calling ${hook} ${TMPDIR}/deployment.xml ${TMPDIR}/vm.xml ..."
+        fi
+        "${hook}" "${TMPDIR}/deployment.xml" "${TMPDIR}/vm.xml" 2>"${ERR_FILE}"
+        ret=$?
+        splog "[I] ${hook} (${ret})"
+        if [[ -n "${DEBUG_DEPLOY_TWEAKS}" ]]; then
+            while read -r -u "${errfh}" errline; do
+                splog "[D] stderr:${errline} //${hook}"
             done {errfh}< <(cat "${ERR_FILE}" || true)
             exec {errfh}<&-
+            if [[ -n "${DDEBUG_DEPLOY_TWEAKS}" ]]; then
+                cp "${TMPDIR}/deployment.xml" "/tmp/deployment-${hook##*/}.xml"
+                cp "${TMPDIR}/vm.xml" "/tmp/vm-${hook##*/}.xml"
+            fi
         fi
         if [[ ${ret} -eq 0 ]]; then
             xmllint --noout "${TMPDIR}/deployment.xml" 2>"${ERR_FILE}"
@@ -127,32 +169,32 @@ if [[ -d "${0}.d" ]]; then
                 mv -f "${TMPDIR}/deployment.xml" "${DEP_XML}"
                 continue
             else
-                splog "Error: ${hook} succeeded but xmllint failed with exit code ${ret}"
+                splog "[W] Error: ${hook} succeeded but xmllint failed with exit code ${ret}"
             fi
         else
-            splog "${hook} failed with exit code ${ret}"
+            splog "[W] ${hook} failed with exit code ${ret}"
         fi
         if [[ -z "${DEBUG_DEPLOY_TWEAKS}" ]]; then
-            while read -r -u "${errfh}" line; do
-                splog "[D][${hook}]stderr:${line}"
-            done {errfh}< <(cat "${ERR_FILE}" || true)
-            exec {errfh}<&-
+            while read -r -u "${errfd}" errline; do
+                splog "[W] stderr:${errline}"
+            done {errfd}< <(cat "${ERR_FILE}" || true)
+            exec {errfd}<&-
         fi
-    done {hookfh}< <(ls -A "${0}.d" 2>"${ERR_FILE}" || true)
-    exec {hookfh}<&-
+    done {dtfh}< <(find "${0}.d/" -type f -o -type l || true)
+    exec {dtfh}<&-
 else
-    splog "Directory ${0}.d not found!"
+    splog "[W] Directory ${0}.d not found!"
 fi
 
-splog "Sending ${DEP_XML} to ${HOST} for ${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME} ..."
-DOMAIN_ID="$(${SSH:-ssh} "${HOST}" "${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm/deploy ${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME}" 2>>"${ERR_FILE}" <"${DEP_XML}")"
+splog "[I] Sending ${DEP_XML} to ${HOST} for ${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME} ..."
+DOMAIN_ID="$(${SSH:-ssh} "${HOST}" "\"${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm/deploy\" \"${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME}\"" < "${DEP_XML}" 2>>"${ERR_FILE}")"
 ret=$?
-splog "VM ${VM_ID} deploy on ${HOST} returned (${ret}) DOMAIN_ID=${DOMAIN_ID}"
+splog "VM ${VM_ID} deploy on ${HOST} DOMAIN_ID=${DOMAIN_ID} (${ret})"
 
 if [[ ${ret} -eq 0 ]]; then
     echo "${DOMAIN_ID}"
 else
-    error_message "[deploy-tweaks] VM ${VM_ID} could not create domain from ${DEP_XML}"
+    error_message "[deploy-tweaks] VM ${VM_ID} could not create domain from ${DEP_FILE}"
     cat "${ERR_FILE}" >&2
     exit 255
 fi

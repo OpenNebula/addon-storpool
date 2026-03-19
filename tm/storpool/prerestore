@@ -30,9 +30,8 @@ HVHOST="$2"
 DEPLOY_ID="$3"
 VM_ID="$4"
 HVHOST2="$5"
-export HVHOST2  #  TBD: remove
 
-splog "$*"
+splog "${FILE} ${HVHOST} ${DEPLOY_ID} ${VM_ID} ${HVHOST2} ${DRV_ACTION:0:8}"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
     read -r -a DS_ID_A <<< "${FILE//\// }"
@@ -41,12 +40,16 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if storpoolVolumeExists "${SP_VOL}"; then
-        storpoolVolumeAttach "${SP_VOL}" "${HVHOST}"
-        "${SSH:-ssh}" "${HVHOST}" "ln -sf \"/dev/storpool/${SP_VOL}\" \"${FILE}\""
-        splog "${SSH:-ssh} ${HVHOST} ln -sf '/dev/storpool/${SP_VOL}' '${FILE}' ($?)"
+    if kvGetUid "${SP_VOL}"; then
+        oneHostInfo "${HVHOST}"
+        DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+        storpoolAttach "${SP_UID}" "${HVHOST}"
+        SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
+        ${SSH:-ssh} "${HVHOST}" "ln -sf \"${SP_LINK}\" \"${FILE}\""
+        splog "${SSH:-ssh} ${HVHOST} ln -sf '${SP_LINK}' '${FILE}' ($?)"
+    else
+        splog "[W] Can't get StorPool UID for ${SP_VOL}"
     fi
-
 fi
 
 splog "END ${VM_ID}"

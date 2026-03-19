@@ -43,7 +43,7 @@ splog "DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 DST_PATH="$(arg_path "${DST}")"
 DST_HOST="$(arg_host "${DST}")"
 # shellcheck disable=SC2016
-DISK_ID="$(echo "${DST_PATH}" | "${AWK:-awk}" -F. '{print $NF}' || true)"
+DISK_ID="$(echo "${DST_PATH}" | ${AWK:-awk} -F. '{print $NF}' || true)"
 IS_DISK="$(is_disk "${DST_PATH}")"
 
 #-------------------------------------------------------------------------------
@@ -52,30 +52,37 @@ IS_DISK="$(is_disk "${DST_PATH}")"
 
 oneDatastoreInfo "${DS_ID}"
 
+if boolTrue "IS_DISK"; then
+    oneVmInfo "${VM_ID}" "${DISK_ID}"
+    SP_VOL="${SOURCE##*/}"
+    if [[ -z ${SP_VOL} ]]; then
+        SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
+    fi
+fi
+
 if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
-    TEMPLATE=""  # "$(onevm show -x "${VM_ID}" | base64 -w0 || true)"
-    oneTemplateInfo "${TEMPLATE}"
+    TEMPLATE=""
+    oneTemplateInfo "${TEMPLATE}" #TBD
     LCM_STATE="${VM_LCM_STATE}"
     for i in "${!DISK_ID_ARRAY[@]}"; do
         if [[ -z "${DISK_TM_MAD_ARRAY[i]}" ]]; then
 #            splog "[SYSTEM_DS] $i id:${DISK_ID_ARRAY[i]} type:${DISK_TYPE_ARRAY[i]} format:$FORMAT tm:${DISK_TM_MAD_ARRAY[i]}"
-            if [[ ${IS_DISK} == 1 ]]; then
+            if [[ "${IS_DISK}" == 1 ]]; then
                 if [[ "${DISK_ID_ARRAY[i]}" != "${DISK_ID}" ]]; then
 #                    splog "[SYSTEM_DS] skip ${DISK_ID_ARRAY[i]} != $DISK_ID"
                     continue
                 fi
             fi
-            FORMAT="${DISK_FORMAT_ARRAY[i]:-raw}"
-            if [[ "${DISK_TYPE_ARRAY[i]}" == "swap" ]]; then
-                FORMAT="swap"
-            fi
-            SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}-${FORMAT}"
-            storpoolVolumeDelete "${SP_VOL}" "force" "snaps" "${REMOTE_BACKUP_DELETE}"
-            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                if [[ ${LCM_STATE} -ne 15 ]]; then
-                    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
-                else
-                    splog "VMSNAPSHOT(s) not edeleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}"
+            if kvGetUid "${SP_VOL}"; then
+                VOL_UID="${SP_UID}"
+                storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+                if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+                    if [[ ${LCM_STATE} -ne 15 ]]; then
+                        storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
+                    else
+                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=${LCM_STATE}"
+                    fi
                 fi
             fi
             RM_CMD="rm -rf '${DST_PATH}/disk.${DISK_ID_ARRAY[i]}'"
@@ -88,13 +95,11 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     done
 
     if boolTrue "IS_DISK"; then
-        SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
-#        splog "[SYSTEM_DS] delete volatile $SP_VOL"
-        for SP_VOL in $(storpoolVolumeStartswith "${SP_VOL}"); do
-            storpoolVolumeDelete "${SP_VOL}" "force" "" "${REMOTE_BACKUP_DELETE}"
+        for VOL_UID in $(storpoolVolumeStartswith "${SP_VOL}"); do
+            storpoolDelete "${VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
             if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
                 if [[ ${LCM_STATE} -ne 15 ]]; then
-                    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+                    storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
                 else
                     splog "VMSNAPSHOT(s) not edeleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
                 fi
@@ -106,31 +111,44 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
             splog "VM ${VM_ID} TPM_MODEL=${TPM_MODEL}"
             if [[ -n "${TPM_MODEL}" ]]; then
                 SP_VOL="${ONE_PX}-sys-${VM_ID}-SWTPM"
-                storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
+                if kvGetUid "${SP_VOL}"; then
+                    VOL_UID="${SP_UID}"
+                    storpoolDelete "${VOL_UID}" "force" "snaps" "" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+                fi
             fi
         fi
-#        splog "[SYSTEM_DS] delete context iso"
         DELAY_DELETE=
-        SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}-iso"
-        storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
-        if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-            if [[ ${LCM_STATE} -ne 15 ]]; then
-                storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
-            else
-                splog "VMSNAPSHOT(s) not edeleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
+        if [[ -n "${CONTEXT_DISK_ID}" ]]; then
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}"
+            if kvGetUid "${SP_VOL}"; then
+                VOL_UID="${SP_UID}"
+                storpoolDelete "${VOL_UID}" "force" "snaps" "" "\"img\":\"${SP_VOL}\""
+                if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+                    if [[ ${LCM_STATE} -ne 15 ]]; then
+                        storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
+                    else
+                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}* not deleted LCM_STATE=${LCM_STATE}"
+                    fi
+                fi
             fi
         fi
         if boolTrue "SP_CHECKPOINT_BD"; then
-            storpoolVolumeDelete "${ONE_PX}-sys-${VM_ID}-rawcheckpoint" "force"
+            SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
+            if kvGetUid "${SP_VOL}"; then
+                storpoolDelete "${SP_UID}" "force" "" "" "\"sys\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+            fi
         fi
         if [[ -n "${T_OS_NVRAM}" ]]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-            storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
-            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                if [[ ${LCM_STATE} -ne 15 ]]; then
-                    storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
-                else
-                    splog "VMSNAPSHOT(s) not edeleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
+            if kvGetUid "${SP_VOL}"; then
+                VOL_UID="${SP_UID}"
+                storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"sys\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+                if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+                    if [[ ${LCM_STATE} -ne 15 ]]; then
+                        storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
+                    else
+                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=${LCM_STATE}"
+                    fi
                 fi
             fi
         fi
@@ -139,7 +157,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     if hostReachable "${DST_HOST}"; then
         splog "run RM_CMD on ${DST_HOST} (${DST_PATH})"
         ssh_exec_and_log "${DST_HOST}" "${RM_CMD}" \
-              "Error deleting ${DST_PATH} in ${DST_HOST}"
+              "Error deleting ${SP_VOL} in ${DST_HOST}(${DST_PATH})"
     else
         splog "Host unreachable: ${DST_HOST}, skipping ${RM_CMD}"
     fi
@@ -148,29 +166,26 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     exit 0
 fi
 
-#-------------------------------------------------------------------------------
-# Get Image information
-#-------------------------------------------------------------------------------
-
 oneVmInfo "${VM_ID}" "${DISK_ID}"
-
-SP_VOL="${SOURCE##*/}"
 
 IMMUTABLE="$(isImmutable "${CLONE}" "${SAVE}" "${READONLY}")"
 
 if boolTrue "CLONE"; then
-    # NON_PERSISTENT
     SP_VOL+="-${VM_ID}-${DISK_ID}"
-    log "Deleting ${DST_PATH} (${SP_VOL})"
-    storpoolVolumeDelete "${SP_VOL}" "force" "snaps" "${REMOTE_BACKUP_DELETE}"
+    if kvGetUid "${SP_VOL}"; then
+        VOL_UID="${SP_UID}"
+        log "Deleting ${DST_PATH} ${VOL_UID} (${SP_VOL})"
+        storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+    fi
 elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
     if [[ "${TYPE}" == "CDROM" ]]; then
         # DISK/TYPE="CDROM"
         # backward compatibility
-        if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then
-            if storpoolVolumeExists "${SP_VOL}"; then
-                storpoolVolumeDetach "${SP_VOL}" "force" "${DST_HOST}" "" "${READONLY}"
-                storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;diskid" ";;${DEFAULT_QOSCLASS};;"
+        if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then #TBD
+            if kvGetUid "${SP_VOL}"; then
+                VOL_UID="${SP_UID}"
+                storpoolDetach "${VOL_UID}" "force" "${DST_HOST}" "" "${READONLY}"
+                storpoolVolumeTag "${VOL_UID}" "diskid;${VM_TAG};vc-policy;qc" ";;;${DEFAULT_QOSCLASS}"
             fi
         fi
         _LOGMSG="CDROM image"
@@ -181,22 +196,41 @@ elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
     log "${_LOGMSG}"
     DELAY_DELETE=
     SP_VOL+="-${VM_ID}-${DISK_ID}"
-    storpoolVolumeDelete "${SP_VOL}" "force" "snaps"
-else
-    _LOGMSG="Not CLONE ${DST_PATH}. Only detaching ${SP_VOL}"
-    log "${_LOGMSG}"
-    splog "${_LOGMSG}"
-
-    storpoolVolumeDetach "${SP_VOL}" "force" "" "all" "${READONLY}"
-
-	storpoolVolumeTag "${SP_VOL}" "${VM_TAG:-nvm};vc-policy;qc;type;diskid" ";;${DEFAULT_QOSCLASS};;"
+    if kvGetUid "${SP_VOL}"; then
+        VOL_UID="${SP_UID}"
+        storpoolDelete "${VOL_UID}" "force" "snaps" "" "\"img\":\"${SP_VOL}\",\"type\":\"CDROM\",\"reason\":\"tm_delete\""
+    fi
+else # image persist
+    if kvGetUid "${SP_VOL}"; then
+        msg="Not CLONE ${DST_PATH} PERSISTENT ${SP_UID} (${SP_VOL})"
+        log "${msg}"
+        splog "${msg}"
+        storpoolLocate "${SP_UID}"
+        case "${X_FOUND_AS,,}" in
+            snapshot)
+                storpoolDetach "${SP_UID}" "force" "" "all" "${READONLY}" snapshot
+                storpoolSnapshotTag "${SP_UID}" "diskid;${VM_TAG};vc-policy;qc;type" ";;;${DEFAULT_QOSCLASS};"
+                ;;
+            volume)
+                storpoolDetach "${SP_UID}" "force" "" "all" "${READONLY}"
+                storpoolVolumeTag "${SP_UID}" "diskid;${VM_TAG};vc-policy;qc;type" ";;;${DEFAULT_QOSCLASS};"
+                storpoolVolumeFreeze "${SP_UID}" "volume"
+                ;;
+            *)
+                splog "WARNING ${DST_PATH} not found ${SP_UID} (${SP_VOL})"
+                ;;
+        esac
+    fi
 fi
+
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     if [[ ${LCM_STATE} -ne 15 ]]; then
-        storpoolVolumeSnapshotsDelete "${SP_VOL}-${VMSNAPSHOT_TAG}-"
+        storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
     else
         splog "VMSNAPSHOT(s) not edeleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
     fi
+else
+    splog "skipped VMSNAPSHOT_DELETE_ON_TERMINATE"
 fi
 
 RM_CMD=$(cat <<EOF
@@ -210,7 +244,7 @@ EOF
 if hostReachable "${DST_HOST}"; then
     splog "run RM_CMD on ${DST_HOST} (${DST_PATH})"
     ssh_exec_and_log "${DST_HOST}" "${RM_CMD}" \
-              "Error deleting ${DST_PATH} in ${DST_HOST}"
+              "Error deleting ${SP_VOL} in ${DST_HOST}(${DST_PATH})"
 else
     splog "Host unreachable: ${DST_HOST}, skipping ${RM_CMD}"
 fi

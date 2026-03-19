@@ -20,18 +20,18 @@ DRIVER_PATH="$(dirname "$0")"
 
 DRV_ACTION="$(cat)"
 
-#shellcheck source=/dev/null
+# shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
-#shellcheck source=tm/storpool/storpool_common.sh
-source "/var/lib/one/remotes/tm/storpool/storpool_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/storpool_common.sh"
 
-DEPLOY_ID=$1
-FILE=$2
-HVHOST=$3
-VM_ID=$4
-HVHOST2=$5
-export HVHOST2  #  TBD: remove
-splog "$*"
+DEPLOY_ID="$1"
+FILE="$2"
+HVHOST="$3"
+VM_ID="$4"
+HVHOST2="$5"
+
+splog "[I] ${DEPLOY_ID} ${FILE} ${HVHOST} ${VM_ID} ${HVHOST2} ${DRV_ACTION:0:8}"
 
 if boolTrue "SP_CHECKPOINT_BD"; then
     read -r -a DS_ID_A <<< "${FILE//\// }"
@@ -39,15 +39,15 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     oneDatastoreInfo "${DS_ID}"
 
     SP_VOL="${ONE_PX:-one}-sys-${VM_ID}-rawcheckpoint"
-
-    if storpoolVolumeExists "${SP_VOL}"; then
-        storpoolVolumeDetach "${SP_VOL}" "" "${HVHOST}"
-        splog "Detach ${SP_VOL} from ${HVHOST} ($?)"
+    SP_UID=""
+    if kvGetUid "${SP_VOL}"; then
+        storpoolDetach "${SP_UID}" "" "${HVHOST}" "all"
+    else
+        splog "[W] Can't get StorPool UID for ${SP_VOL}"
     fi
 
-    "${SSH:-ssh}" "${HVHOST}" "rm -f \"${FILE}\""
-    splog "${SSH:-ssh} ${HVHOST} rm -f '${FILE}' ($?)"
-
+    ${SSH:-ssh} "${HVHOST}" "rm -f \"${FILE}\""
+    splog "[I] ${SSH:-ssh} ${HVHOST} rm -f '${FILE}' ($?)"
 fi
 
 splog "END ${VM_ID}"

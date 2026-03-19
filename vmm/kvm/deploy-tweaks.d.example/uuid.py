@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,21 +15,24 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
+"""
 
 # an example to define UUID
 # USER_TEMPLATE/T_UUID="7969a13e-5ab0-4751-8244-562e6ecace16"
 #
 
-from __future__ import print_function
-from sys import argv,stderr
+from typing import Optional
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -47,25 +50,28 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-domain = doc.getroot()
 
-xmlVm = argv[2]
-vm_doc = ET.parse(xmlVm)
-vm = vm_doc.getroot()
+xmlDomain: str = sys.argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+domain: ET.Element = doc.getroot()
+
+xmlVm: str = sys.argv[2]
+vm_et: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_et.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-changed = 0
-t_uuid = vm.find(".//USER_TEMPLATE/T_UUID")
-if t_uuid is not None:
-    uuid_e = domain.find('./uuid')
+changed: bool = False
+
+xpath: str = ".//USER_TEMPLATE/T_UUID"
+t_uuid_e: Optional[ET.Element] = vm.find(xpath)
+if t_uuid_e is not None and t_uuid_e.text is not None:
+    uuid_e: Optional[ET.Element] = domain.find('./uuid')
     if uuid_e is None:
         uuid_e = ET.SubElement(domain, 'uuid')
-    uuid_e.text = t_uuid.text
-    changed = 1
+    uuid_e.text = t_uuid_e.text
+    changed = True
 
 if changed:
     indent(domain)

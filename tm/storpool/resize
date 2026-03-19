@@ -41,12 +41,8 @@ splog "SRC=${SRC} NEWSIZE=${NEWSIZE} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 # Compute the destination image name
 #-------------------------------------------------------------------------------
 
-SRC_HOST=$(arg_host "${SRC}")
-SRC_PATH=$(arg_path "${SRC}")
-SRC_DIR="${SRC_PATH%/*}"
-export SRC_HOST SRC_DIR  # TBD: remove
-
-DISK_ID="$(echo "${SRC_PATH}" | awk -F. '{print $NF}')"
+SRC_PATH="$(arg_path "${SRC}")"
+DISK_ID=$(echo "${SRC_PATH}" | awk -F. '{print $NF}')
 
 oneDatastoreInfo "${DS_ID}"
 
@@ -56,24 +52,29 @@ oneDatastoreInfo "${DS_ID}"
 
 oneVmInfo "${VM_ID}" "${DISK_ID}"
 
+if [[ "${TYPE^^}" == "CDROM" ]]; then
+    msg="CDROM type can't resize."
+    log_error "${msg}"
+    splog "${msg}"
+    exit 1
+fi
+
 SP_VOL="${SOURCE##*/}"
 if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
 fi
 
 if [[ -z "${SP_VOL}" ]] && [[ "${FORMAT,,}" == "raw" ]]; then
-    FORMAT="raw"
-    if [[ "${TYPE,,}" == "swap" ]]; then
-        FORMAT="swap"
-    fi
-    SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}-${FORMAT}"
+    SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 fi
+
+kvGetUid "${SP_VOL}" fatal
 
 #-------------------------------------------------------------------------------
 # Resize the volume
 #-------------------------------------------------------------------------------
 
-storpoolVolumeResize "${SP_VOL}" "${NEWSIZE}M"
+storpoolVolumeResize "${SP_UID}" "$((NEWSIZE*1024*1024))"
 
 splog "END ${VM_ID}"
 exit 0

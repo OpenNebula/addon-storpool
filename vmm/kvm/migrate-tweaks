@@ -25,9 +25,11 @@ source "${workdir}/../../scripts_common.sh"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${workdir}/../../tm/storpool/storpool_common.sh"
 
-deploy_id=$1
-dest_host=$2
-src_host=$3
+deploy_id="$1"
+dest_host="$2"
+src_host="$3"
+
+QEMU_PROTOCOL="${QEMU_PROTOCOL:-qemu+ssh}"
 
 # migration can't be done with domain snapshots, drop them first
 snaps=$(monitor_and_log \
@@ -36,45 +38,37 @@ snaps=$(monitor_and_log \
 
 for snap in ${snaps}; do
     exec_and_log \
-        "virsh --connect ${QEMU_PROTOCOL:-qemu}://${src_host}/system snapshot-delete ${deploy_id} --snapshotname ${snap} --metadata" \
+        "virsh --connect ${QEMU_PROTOCOL}://${src_host}/system snapshot-delete ${deploy_id} --snapshotname ${snap} --metadata" \
         "Failed to delete snapshot ${snap} from ${deploy_id}"
 done
 
-tmpDir="$(mktemp -d -p "${ONE_RUNDIR:-/var/run/one}" migrate-XXXXXXXX)"
-# shellcheck disable=SC2064
-trap "rm -rf ${tmpDir}" EXIT QUIT
-
-deployXML="${tmpDir}/${deploy_id}.xml"
-virsh --connect "${QEMU_PROTOCOL:-qemu}://${src_host}/system" dumpxml --migratable "${deploy_id}" >"${deployXML}"
-splog "($?) virsh --connect ${QEMU_PROTOCOL:-qemu}://${src_host}/system dumpxml"
+deployXML="${TMPDIR}/${deploy_id}.xml"
+virsh --connect "${QEMU_PROTOCOL}://${src_host}/system" dumpxml --migratable "${deploy_id}" >"${deployXML}"
+splog "($?) virsh --connect ${QEMU_PROTOCOL}://${src_host}/system dumpxml --migratable ${deploy_id}"
 
 vm_id="${deploy_id#one-}"
-vmMetaXml="${tmpDir}/${vm_id}.XML"
+vmMetaXml="${TMPDIR}/${vm_id}.XML"
 onevm show -x "${vm_id}" >"${vmMetaXml}"
 
 if [[ -d "${0}.d" ]]; then
     while read -r -u "${helperfh}" helper; do
-        if [[ -x "${helper}" ]]; then
-            "${helper}" "${deployXML}" "${vmMetaXml}"
-            splog "($?) ${helper} ${deployXML} ${vmMetaXml}"
-        fi
+        [[ -x  "${helper}" ]] || continue
+        "${helper}" "${deployXML}" "${vmMetaXml}"
+        splog "($?) ${helper} ${deployXML} ${vmMetaXml}"
     done {helperfh}< <(find "${0}.d" -type f -o -type l || true)
     exec {helperfh}<&-
 fi
 
 rm -f "${vmMetaXml}"
-
 # shellcheck disable=SC2086
-virsh --connect "${QEMU_PROTOCOL:-qemu}://${src_host}/system" \
-    migrate --live ${MIGRATE_OPTIONS:-} "${deploy_id}" "${QEMU_PROTOCOL:-qemu}://${dest_host}/system" --xml "${deployXML}"
+virsh --connect "${QEMU_PROTOCOL}://${src_host}/system" \
+    migrate --live ${MIGRATE_OPTIONS:-} "${deploy_id}" "${QEMU_PROTOCOL}://${dest_host}/system" --xml "${deployXML}"
 ret=$?
 splog "(${ret}) virsh --connect ${QEMU_PROTOCOL}://${src_host}/system migrate --live ${MIGRATE_OPTIONS} ${deploy_id} ${QEMU_PROTOCOL}://${dest_host}/system --xml ${deployXML}"
 
-rm -rf "${tmpDir}"
-
 if [[ ${ret} -eq 0 ]]; then
-    if [[ "${SYNC_TIME:-no}" == "yes" ]]; then
-        virsh --connect "${QEMU_PROTOCOL}://${dest_host}/system" domtime --sync "${deploy_id}" >/dev/null 2>/dev/null || :
+    if [[ "${SYNC_TIME:+no}" == "yes" ]]; then
+        virsh --connect "${QEMU_PROTOCOL}://${dest_host}/system" domtime --sync "${deploy_id}" >/dev/null 2>/dev/null || true
     fi
 else
     exit "${ret}"

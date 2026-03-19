@@ -37,12 +37,10 @@ source "${TM_PATH}/storpool_common.sh"
 
 splog "SRC=${SRC} DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 
-DST_HOST="$(arg_host "${DST}")"
-DST_PATH="$(arg_path "${DST}")"
-DST_DIR="$(dirname "${DST_PATH}")"
-export DST_DIR  # TBD: remove
+DST_HOST=$(arg_host "${DST}")
+DST_PATH=$(arg_path "${DST}")
 
-DISK_ID="$(echo "${DST}" | awk -F. '{print $NF}')"
+DISK_ID=$(echo "${DST##*/}" | awk -F. '{print $NF}')
 
 #-------------------------------------------------------------------------------
 # Get Image information
@@ -68,16 +66,19 @@ IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 # Compute variables
 #-------------------------------------------------------------------------------
 
-SRC_PATH="$(arg_path "${SRC}")"
+SRC_PATH=$(arg_path "${SRC}")
 SP_PARENT="${SRC_PATH##*/}"
-SP_SNAP="${SRC_PATH##*/}-${DISK_ID}"
+PARENT_UID="$(kvGet byName "${SP_PARENT}")"
 SP_VOL="${SP_PARENT}-${VM_ID}-${DISK_ID}"
-SP_LINK="/dev/storpool/${SP_VOL}"
 
-export SP_SNAP  # TBD: remove
+if [[ -z ${PARENT_UID} ]]; then
+    errmsg="Error: Can't get globalId for ${SP_PARENT}"
+    splog "${errmsg}"
+    exit 1
+fi
 
 if boolTrue "NO_VOLUME_TEMPLATE"; then
-    SP_TEMPLATE=
+    SP_TEMPLATE=""
 else
     SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
 fi
@@ -95,15 +96,24 @@ debug_sp_qosclass
 # Action
 #-------------------------------------------------------------------------------
 
-storpoolVolumeCheck "${SP_VOL}"
+storpoolVolumeCheck "${SP_VOL}" byName
 
-storpoolVolumeClone "${SP_PARENT}" "${SP_VOL}" "${SP_TEMPLATE}"
+storpoolVolumeFromSnapshot "${PARENT_UID}" "${SP_VOL}" "${SP_TEMPLATE}"
+RET=$?
+if kvGetUid "${SP_VOL}"; then
+    VOL_UID="${SP_UID}"
+else
+    errmsg="Error: Can't get StorPool UID for ${SP_VOL}!"
+    [[ ${RET} -eq 0 ]] || errmsg+=" VolumeClone failed with ${RET}"
+    splog "${errmsg}"
+    exit 1
+fi
 
-trapAdd "storpoolVolumeDelete \"${SP_VOL}\" \"force\""
+trapAdd "storpoolVolumeDelete \"${VOL_UID}\" \"force\""
 
 if [[ -n "${SIZE}" ]]; then
-    if [[ "${SIZE}" -gt "${ORIGINAL_SIZE:-0}" ]]; then
-        storpoolVolumeResize "${SP_VOL}" "${SIZE}M"
+    if [[ ${SIZE} -gt ${ORIGINAL_SIZE:-0} ]]; then
+        storpoolVolumeResize "${VOL_UID}" "$((SIZE*1024*1024))"
     fi
 fi
 
@@ -114,11 +124,13 @@ if boolTrue "READONLY"; then
     xTYPE+="RO"
 fi
 
-storpoolVolumeAttach "${SP_VOL}" "${DST_HOST}" "${mode}"
+storpoolAttach "${VOL_UID}" "${DST_HOST}" "${mode}"
 
-trapAdd "storpoolVolumeDetach \"${SP_VOL}\" \"\" \"${DST_HOST}\""
+trapAdd "storpoolVolumeDetach \"${VOL_UID}\" \"\" \"${DST_HOST}\""
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${xTYPE};${DISK_ID}"
+storpoolVolumeTag "${VOL_UID}" \
+        "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
+        "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${xTYPE};${DISK_ID}"
 
 #-------------------------------------------------------------------------------
 # Get SYSTEM Datastore information
@@ -131,7 +143,7 @@ if ! boolTrue "DS_SHARED"; then
     MONITOR_TM_MAD="${DS_TM_MAD}"
 fi
 
-oneSymlink "${DST_HOST}" "${SP_LINK}" "${DST_PATH}"
+oneSymlink "${DST_HOST}" "${VOL_UID}" "${DST_PATH}"
 
 trapReset
 

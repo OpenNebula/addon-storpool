@@ -17,6 +17,7 @@
 #--------------------------------------------------------------------------- #
 
 DRIVER_PATH="$(dirname "${0}")"
+
 #shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
 #shellcheck source=tm/storpool/storpool_common.sh
@@ -46,6 +47,10 @@ export DISKS BJ_ID
 
 B_DIR="${VMDIR}/backup"
 
+if boolTrue "DEBUG_POSTBACKUP"; then
+    splog "${KVMHOST} ${VMDIR} ${DISKS} ${DEPLOY_ID}${BJ_ID:+ ${BJ_ID}} ${VM_ID} ${SYSDS_ID}"
+fi
+
 oneDatastoreInfo "${SYSDS_ID}"
 
 oneHostInfo "${KVMHOST}"
@@ -55,26 +60,33 @@ trapAdd "rm -f \"${VM_XML}\""
 cat > "${VM_XML}"
 
 if [[ -d "${B_DIR}" ]]; then
-    splog "post-clean ${B_DIR} ..."
+    splog "[I] post-clean ${B_DIR} ..."
     snapshots_list="${B_DIR}/.storpool_snapshots"
-    if [[ -f "${snapshots_list}" ]]; then
-        while read -r -u "${snpfh}" snp; do
-            storpoolVolumeDetach "${snp}" "force" "" "all"
-            storpoolSnapshotDelete "${snp}"
-        done {snpfh}< <(cat "${snapshots_list}" || true)
-        exec {snpfh}<&-
+    if [[ -f ${snapshots_list} ]]; then
+        while read -r -u "${spfh}" volume sGlobalId sName; do
+            if boolTrue "DEBUG_BACKUP"; then
+                splog "[D] Removing snapshot ${sName}(${sGlobalId}) volume ${volume}"
+            else
+                splog "[I]Removing snapshot ${sName} volume ${volume}"
+            fi
+            json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
+            DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
+            SKIP_KV_DATA=1 storpoolSnapshotDelete "${sName}"
+        done {spfh}< <(cat "${snapshots_list}" || true)
+        exec {spfh}<&-
     fi
     rm -rf "${B_DIR}"
-    splog "post-clean completed ($?)"
+    splog "[I] post-clean completed ($?)"
 else
-    splog "Folder not found. ${B_DIR}"
+    splog "[W] Folder not found. ${B_DIR}"
 fi
 
 RCMD=$(cat <<EOF
 rm -rf "${B_DIR}"
 EOF
 )
-splog "${KVMHOST}::${RCMD}"
-ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" "Error extracting ${RCMD} on ${KVMHOST}"
+splog "[I]RCMD ${KVMHOST}::${RCMD}"
+ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" \
+                  "Error extracting ${RCMD} on ${KVMHOST}"
 
 splog "END"

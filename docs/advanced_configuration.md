@@ -127,7 +127,7 @@ systemctl restart opennebula
 ## Send volume snapshot to a remote StorPool cluster when deleting a volume
 
 ```
-REMOTE_BACKUP_DELETE=<remote_location>:<optional_argumets>
+REMOTE_BACKUP_DELETE=<remote_location>:<optional_tags>
 ```
 
 There is an option to send last snapshot to a remote StorPool cluster when deleting a disk image. The configuration is as follow:
@@ -138,7 +138,7 @@ There is an option to send last snapshot to a remote StorPool cluster when delet
 For example, to send volume snapshot to a remote cluster with name _clusterB_ and tag the volumes with tag _del=y_ set:
 
 ```
-REMOTE_BACKUP_DELETE="clusterB:tag del=y"
+REMOTE_BACKUP_DELETE="clusterB:del=y"
 ```
 
 ## Monitoring space usage

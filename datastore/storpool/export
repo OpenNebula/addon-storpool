@@ -25,10 +25,11 @@ if [[ -z "${ONE_LOCATION}" ]]; then
 else
     LIB_LOCATION="${ONE_LOCATION}/lib"
 fi
-# shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
 
-DRIVER_PATH="$(dirname "${0}")"
+# shellcheck source=/dev/null
+source "${LIB_LOCATION}/sh/scripts_common.sh"
+
+DRIVER_PATH="$(dirname "$0")"
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
@@ -38,7 +39,6 @@ export LOG_PREFIX="ds"
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 # -------- Get tm and datastore arguments from OpenNebula core ------------
-
 if [[ -n "${2}" ]]; then
     DRV_ACTION="$1"
     ID="$2"
@@ -68,7 +68,6 @@ fi
 
 SP_VOL="${SOURCE#*/}"
 SP_SNAPSHOT="${SP_VOL}-export-$(mktemp --dry-run XXXXXX)"
-SP_LINK="/dev/storpool/${SP_SNAPSHOT}"
 
 DISPOSE="YES"
 
@@ -90,11 +89,10 @@ if [[ -n "${EXPORT_FILE_FORMAT}" ]]; then
 fi
 
 EXPORT_DELETE="${ONE_LOCATION:-/var/lib/one}/remotes/datastore/storpool/export.delete"
+VOL_UID=$(kvGet byName "${SP_VOL}")
 
-storpoolVolumeInfo "${SP_VOL}"
-
-if [[ -n "${V_SIZE}" ]]; then
-    SIZE="$((V_SIZE/1024/1024))"
+if storpoolLocate "${VOL_UID}"; then
+    SIZE="$((X_SIZE/1024/1024))"
 else
     msg="Error: Can't get the SIZE of volume ${SP_VOL}"
     splog "${msg}"
@@ -102,31 +100,40 @@ else
     exit 255
 fi
 
-storpoolSnapshotCreate "${SP_SNAPSHOT}" "${SP_VOL}"
+if storpoolVolumeClone "${VOL_UID}" "${SP_SNAPSHOT}"; then
+    EXPORT_UID="${SP_UID}"
+else
+    msg="Error: Can't create export volume for ${VOL_UID} (${SP_VOL})"
+    splog "${msg}"
+    error_message "${msg}"
+    exit 255
+fi
 
-storpoolVolumeAttach "${SP_SNAPSHOT}" "${DST_HOST}" "ro" "snapshot"
+SP_LINK="/dev/storpool-byid/${EXPORT_UID#*~}"
+
+storpoolAttach "${EXPORT_UID}" "${DST_HOST}" "ro"
 
 if [[ -n "${EXPORT_FILE_FORMAT}" ]]; then
     FORMAT="${EXPORT_FILE_FORMAT}"
     EXPORT_FILE="${STAGING_DIR:-/var/tmp}/${SP_SNAPSHOT}"
-    CMD=$(cat <<EOF
+    RCMD=$(cat <<EOF
 set -o pipefail
 logger -t "ds_sp_export_r[$$]" -- "Begin ${EXPORT_FILE} (\$?)"
-${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} 2>&1 >"/tmp/export$$.log"
-logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$?)"
-while read -u "\${logfh}" l; do
-  logger -t "ds_sp_export_r[$$]" -- "LOG:\$l"
+${QEMU_IMG:-qemu-img} convert ${EXPORT_QEMU_IMG_ARGS:-} -O "${FORMAT}" "${SP_LINK}" "${EXPORT_FILE}" 2>&1 >"/tmp/export$$.log"
+logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG} convert ${EXPORT_QEMU_IMG_ARGS} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$?)"
+while read -u "\${logfh}" line; do
+  logger -t "ds_sp_export_r[$$]" -- "LOG:\$line"
 done {logfh}< <("cat /tmp/export$$.log")
 exec {logfh}<&-
 rm -f "/tmp/export$$.log"
 ${DU:-du} -Lm "${EXPORT_FILE}" | cut -f1
 EOF
 )
-    splog "CMD=${CMD}"
-    QCOW_SIZE=$(ssh_monitor_and_log "${DST_HOST}" "${CMD}" "export file convert ")
+    splog "RCMD=${RCMD}"
+    QCOW_SIZE="$(ssh_monitor_and_log "${DST_HOST}" "${RCMD}" "export file convert ")"
     splog "${EXPORT_FILE} SIZE=${SIZE} QCOW_SIZE=${QCOW_SIZE} ($?)"
-    storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"
-    storpoolSnapshotDelete "${SP_SNAPSHOT}"
+    storpoolDetach "${EXPORT_UID}" "force" "${DST_HOST}"
+    storpoolDelete "${EXPORT_UID}"
     DISPOSE_CMD="${EXPORT_DELETE} ${DST_HOST} ${EXPORT_FILE}"
 else
     FORMAT="raw"
@@ -135,7 +142,7 @@ else
 fi
 
 splog "${EXPORT_FILE} calculating checksum ..."
-CHECKSUM=$(${SSH:-ssh} "${DST_HOST}" "set -o pipefail&&openssl dgst -md5 ${EXPORT_FILE} | cut -d' ' -f2")
+CHECKSUM=$(${SSH:-ssh} "${DST_HOST}" "set -o pipefail && openssl dgst -md5 '${EXPORT_FILE}' | cut -d' ' -f2")
 RET=$?
 splog "${EXPORT_FILE} CHECKSUM ${CHECKSUM} (${RET})"
 if [[ ${RET} -ne 0 ]]; then
@@ -143,8 +150,8 @@ if [[ ${RET} -ne 0 ]]; then
     splog "${msg}"
     error_message "${msg}"
     if [[ -z "${EXPORT_FILE_FORMAT}" ]]; then
-        storpoolVolumeDetach "${SP_SNAPSHOT}" "force" "${DST_HOST}"
-        storpoolSnapshotDelete "${SP_SNAPSHOT}"
+        storpoolDetach "${EXPORT_UID}" "force" "${DST_HOST}"
+        storpoolDelete "${EXPORT_UID}"
     fi
     exit 255
 fi
@@ -163,3 +170,4 @@ cat <<EOF
     <DISPOSE_CMD><![CDATA[${DISPOSE_CMD}]]></DISPOSE_CMD>
 </IMPORT_INFO>
 EOF
+splog "END ${SP_VOL}"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and        #
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
-
+# noqa: E501
 # with T_VF_MACS=1e:68:63:c5:ba:be
 # From
 # ---
@@ -40,17 +40,20 @@
 #    <address type='pci' domain='0x0000' bus='0x01' slot='0x01' function='0'/>
 #  </interface>
 #</devices>
+"""
 
-
-from sys import argv
+from typing import Optional, List
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -68,64 +71,71 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlVm = argv[2]
-vm_element = ET.parse(xmlVm)
-vm = vm_element.getroot()
 
-xmlDomain = argv[1]
+xmlDomain: str = sys.argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
 
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
+xmlVm: str = sys.argv[2]
+vm_et: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_et.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-vf_macs = vm.find('.//USER_TEMPLATE/T_VF_MACS')
-
-hit = 0
+xpath: str = './/USER_TEMPLATE/T_VF_MACS'
+vf_macs: Optional[ET.Element] = vm.find(xpath)
+macs: List[str] = []
+changed: bool = False
+hit: bool = False
 if vf_macs is None:
-    macs = []
-    for pci in vm.findall('.//TEMPLATE/PCI'):
-        mac_e = pci.find('./MAC')
-        if mac_e is not None:
+    for t_pci_e in vm.findall('.//TEMPLATE/PCI'):
+        mac_e: Optional[ET.Element] = t_pci_e.find('./MAC')
+        if mac_e is not None and mac_e.text is not None:
             macs.append(mac_e.text)
-            hit = 1
+            hit = True
         else:
             macs.append('')
     if hit:
         vf_macs = ET.Element('T_VF_MACS')
         vf_macs.text = ','.join(macs)
 
-if vf_macs is not None:
-    i = 0
-    changed = 0
+if vf_macs is not None and vf_macs.text is not None:
+    i: int = 0
     macs = vf_macs.text.split(",")
-    for device in root.findall("./devices"):
-        for hostdev in device.findall("./hostdev[@type='pci']"):
+    for device_e in root.findall("./devices"):
+        for hostdev_e in device_e.findall("./hostdev[@type='pci']"):
             try:
                 if macs[i] != '':
-                    interface = ET.Element('interface',{
-                                             'type': 'hostdev',
-                                             'managed': 'yes',
-                                             })
-                    driver = ET.SubElement(interface,'driver',{
-                                                     'name':'vfio',
-                                                     })
-                    tmp = ET.SubElement(interface,'mac',{
-                                                  'address': macs[i],
-                                                  })
-                    source = hostdev.find("./source")
-                    sourceAddress = source.find("./address")
-                    sourceAddress.set('type', 'pci')
-                    interface.append(source)
-                    pciaddress = hostdev.find("./address")
-                    interface.append(pciaddress)
-                    device.remove(hostdev)
-                    device.append(interface)
-                    changed = 1
-            except Exception as e:
+                    interface_e: ET.Element = ET.Element(
+                        'interface', {'type': 'hostdev', 'managed': 'yes'}
+                    )
+                    driver_e: ET.Element = ET.SubElement(
+                        interface_e, 'driver', {'name': 'vfio'}
+                    )
+                    tmp_e: ET.Element = ET.SubElement(
+                        interface_e, 'mac', {'address': macs[i]}
+                    )
+                    source_e: Optional[ET.Element] = hostdev_e.find("./source")
+                    if source_e is not None:
+                        interface_e.append(source_e)
+                        sourceAddress_e: Optional[ET.Element] = source_e.find(
+                            "./address"
+                        )
+                        if sourceAddress_e is not None:
+                            sourceAddress_e.set("type", "pci")
+                    pciaddress_e: Optional[ET.Element] = hostdev_e.find(
+                        "./address"
+                    )
+                    if pciaddress_e is not None:
+                        interface_e.append(pciaddress_e)
+                    device_e.remove(hostdev_e)
+                    device_e.append(interface_e)
+                    changed = True
+            except Exception:
                 pass
             i += 1
-    if changed:
-        indent(root)
-        doc.write(xmlDomain)
+
+if changed:
+    indent(root)
+    doc.write(xmlDomain)

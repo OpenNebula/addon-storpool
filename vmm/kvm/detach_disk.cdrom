@@ -16,14 +16,14 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH=$(dirname "$0")
+WORKDIR="$(dirname "$0")"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc"
+source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
-source "${DRIVER_PATH}/../../scripts_common.sh"
-if [[ -f "${DRIVER_PATH}/addon-storpoolrc" ]]; then
+source "${WORKDIR}/../../scripts_common.sh"
+if [[ -f "${WORKDIR}/addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${DRIVER_PATH}/addon-storpoolrc"
+    source "${WORKDIR}/addon-storpoolrc"
 fi
 
 set -o pipefail
@@ -35,16 +35,14 @@ function splog()
 
 # args: 51c00be9-545c-41ae-a79c-6dd54bc4479a /var/lib/one//datastores/0/0/disk.2 hdb 1 0 kvm2
 
-DOMAIN="$1"
-SOURCE="$2"
-TARGET="$3"
-DISK_ID="$4"
-VM_ID="$5"
-KVMHOST="$6"
-export TARGET DISK_ID VM_ID KVMHOST
-splog "$0 $*"
+export DOMAIN="$1"
+export SOURCE="$2"
+export TARGET="$3"
+export DISK_ID="$4"
+export VM_ID="$5"
+export KVMHOST="$6"
 
-set -o pipefail
+splog "$0 $*"
 
 # virsh dumpxml one-0 | xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -n
 # hda /var/lib/one//datastores/0/0/disk.1

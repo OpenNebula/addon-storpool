@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+"""
 # -------------------------------------------------------------------------- #
 # Copyright 2015-2025, StorPool (storpool.com)                               #
 #                                                                            #
@@ -19,17 +19,20 @@
 # an example to define QXL
 # USER_TEMPLATE/T_VIDEO_MODE="type=qxl primary=yes"
 #
+"""
 
-from __future__ import print_function
-from sys import argv,stderr
+from typing import Optional, Dict, List
+import sys
 from xml.etree import ElementTree as ET
 
-ns = {'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
-       'one': "http://opennebula.org/xmlns/libvirt/1.0"
-     }
+ns = {
+    'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
+    'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -47,41 +50,45 @@ def indent(elem, level=0, ind="  "):
         if not elem.tail or not elem.tail.strip():
             elem.tail = i
 
-xmlDomain = argv[1]
-doc = ET.parse(xmlDomain)
-root = doc.getroot()
 
-xmlVm = argv[2]
-vm_doc = ET.parse(xmlVm)
-vm = vm_doc.getroot()
+xmlDomain: str = sys.argv[1]
+doc: ET.ElementTree = ET.parse(xmlDomain)
+root: ET.Element = doc.getroot()
+
+xmlVm: str = sys.argv[2]
+vm_doc: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_doc.getroot()
 
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 
-changed = 0
-t_video_e = vm.find(".//USER_TEMPLATE/T_VIDEO_MODEL")
-if t_video_e is not None:
-    attributes = {}
-    acceleration = {}
+changed: bool = False
+xpath: str = ".//USER_TEMPLATE/T_VIDEO_MODEL"
+t_video_e: Optional[ET.Element] = vm.find(xpath)
+if t_video_e is not None and t_video_e.text is not None:
+    attributes: Dict[str, str] = {}
+    acceleration: Dict[str, str] = {}
     for v_option in t_video_e.text.split():
-        data = v_option.split('=')
-        if data[0] in ['accel2d','accel3d','rendernode']:
+        data: List[str] = v_option.split('=')
+        if data[0] in ['accel2d', 'accel3d', 'rendernode']:
             acceleration[data[0]] = data[1]
         else:
             attributes[data[0]] = data[1]
-    devices_e = root.find('./devices')
-    video_e = devices_e.find('./video')
+    devices_e: Optional[ET.Element] = root.find('./devices')
+    if devices_e is None:
+        print("domain/devices element not found", file=sys.stderr)
+        sys.exit(1)
+    video_e: Optional[ET.Element] = devices_e.find('./video')
     if video_e is None:
         video_e = ET.SubElement(devices_e, 'video')
-    model_e = video_e.find('./model')
+    model_e: Optional[ET.Element] = video_e.find('./model')
     if model_e is not None:
         video_e.remove(model_e)
     model_e = ET.SubElement(video_e, 'model', attributes)
     if acceleration:
         acceleration_e = ET.SubElement(model_e, 'acceleration', acceleration)
-    
-    changed = 1
+    changed = True
 
 if changed:
     indent(root)

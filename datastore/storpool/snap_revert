@@ -31,11 +31,11 @@ if [[ -n "${ONE_LOCATION}" ]]; then
 else
     LIB_LOCATION="/usr/lib/one"
 fi
-
 # shellcheck source=/dev/null
-. "${LIB_LOCATION}/sh/scripts_common.sh"
+source "${LIB_LOCATION}/sh/scripts_common.sh"
 
 DRIVER_PATH="$(dirname "$0")"
+
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../libfs.sh"
 
@@ -60,16 +60,15 @@ oneDsDriverAction
 
 SP_VOL="${SOURCE##*/}"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
-SP_TMPVOL="${SP_VOL}-$(date +%s || true)-$(mktemp --dry-run XXXXXX || true)"
-SP_TEMPLATE="${ONE_PX:-one}-ds-${DATASTORE_ID}"
-
-export SP_TMPVOL SP_TEMPLATE  # TBD: remove
-
-storpoolSnapshotRevert "${SP_SNAP}" "${SP_VOL}"
+if kvGetUid "${SP_SNAP}"; then
+    storpoolSnapshotRevert "${SP_UID}" "${SP_VOL}" "IS_SNAPSHOT"
+else
+    splog "Can't find ${SP_SNAP} for ${SP_VOL}"
+fi
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${SP_VOL}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+storpoolVolumeTag "${SP_UID}" "one;${LOC_TAG_VAL};${SP_QOSCLASS}" "virt;${LOC_TAG};qc"
 
 splog "END"
