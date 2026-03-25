@@ -187,7 +187,7 @@ else
     #-------------------------------------------------------------------------------
 
     TEMP_SIZE="${SIZE}M"
-    image_info "${IMAGE_PATH}" || true
+    qemu_img_info "${IMAGE_PATH}" || true
     if [[ -n "${STAT_IMAGE_SIZE}" ]] && [[ ${STAT_IMAGE_SIZE} -gt 0 ]]; then
         if [[ "${QEMU_IMG_FORMAT}" != "raw" ]]; then
             # use the actual file size
