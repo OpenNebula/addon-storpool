@@ -178,7 +178,7 @@ else
     if [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
         TEMP_SIZE=$((1*1024*1024))
     else
-        image_info "${IMAGE_PATH}"
+        qemu_img_info "${IMAGE_PATH}"
         if [[ -n "${STAT_IMAGE_SIZE}" ]] && [[ ${STAT_IMAGE_SIZE} -gt 0 ]]; then
             if [[ "${QEMU_IMG_FORMAT}" != "raw" ]]; then
                 # use the actual file size
@@ -283,11 +283,11 @@ else
     # Process imported image
     #-------------------------------------------------------------------------------
 
-    image_info "${SP_TEMP_LINK}" "${DST_HOST}"
+    qemu_img_info "${SP_TEMP_LINK}" "${DST_HOST}"
     FORMAT="${QEMU_IMG_FORMAT}"
 
     if [[ "${FORMAT}" != "${DRIVER:-undefined}" ]]; then
-        splog "${QEMU_IMG} detected format ${FORMAT} but DRIVER=${DRIVER} in the image template"
+        splog "${QEMU_IMG} detected format '${FORMAT}' but DRIVER=${DRIVER} in the image template"
     fi
 
     if [[ "${FORMAT}" == "raw" ]]; then
