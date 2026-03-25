@@ -94,7 +94,7 @@ if [[ "${TM_MAD:0:8}" == "storpool" ]]; then
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
                    xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v "${NEW_TYPE}" |\
                    base64 -w 0 || true)"
-        if boolTrue "DDDEBUG_ATTACH_DISK"; then
+        if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
             echo "${DRV_ACTION}" >/tmp/atach_disk_out.b64
         fi
     fi
