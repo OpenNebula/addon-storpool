@@ -75,7 +75,7 @@ SIZE=0
 
 case "${IMAGE_PATH,,}" in
     *vmdk|*vhdx)
-        image_info "${IMAGE_PATH}" || true
+        qemu_img_info "${IMAGE_PATH}" || true
         if [[ -n "${QEMU_IMG_VIRTUAL_SIZE}" ]] && [[ ${QEMU_IMG_VIRTUAL_SIZE} -gt 0 ]]; then
             # round up to 1MiB
             SIZE=$(((QEMU_IMG_VIRTUAL_SIZE+1048575)/1048576))

@@ -3786,7 +3786,7 @@ function isImmutable()
     echo "${_IMMUTABLE}"
 }
 
-function image_info()
+function qemu_img_info()
 {
     local _img="$1" _host="$2"
     local _tmpjson="${TMPDIR:-/tmp}/qemu-img-info-${_img##*/}.json" ret=1
@@ -3802,9 +3802,10 @@ function image_info()
         if [[ -s "${_tmpjson}" ]]; then
             IFS=";" read -r QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT <<< "$(jq -r '"\(."virtual-size"|tostring);\(."actual-size"|tostring);\(.format|tostring)"' "${_tmpjson}" || true)"
             ret=0
-            splog "[I][qemu_img_info](${_img}${_host:+:,${_host}}): virtual-size:${QEMU_IMG_VIRTUAL_SIZE} actual-size:${QEMU_IMG_ACTUAL_SIZE} format:${QEMU_IMG_FORMAT} stat size:${STAT_IMAGE_SIZE}"
+            splog "[I](${_img}${_host:+:,${_host}}): virtual-size:${QEMU_IMG_VIRTUAL_SIZE} actual-size:${QEMU_IMG_ACTUAL_SIZE} format:'${QEMU_IMG_FORMAT}' stat size:${STAT_IMAGE_SIZE}"
+            export QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT
         else
-            splog "[E][qemu_img_info](${_img}${_host:+:,${_host}}): Error: Can't get image info! (stat size:${STAT_IMAGE_SIZE})"
+            splog "[E](${_img}${_host:+:,${_host}}): Error: Can't get image info! (stat size:${STAT_IMAGE_SIZE})"
         fi
         rm -f "${_tmpjson}"
     fi
