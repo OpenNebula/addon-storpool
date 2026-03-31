@@ -1,6 +1,6 @@
 # StorPool naming convention
 
-Here you can find how the OpenNebula's datastores and images are mapped to the StorPool Templates, Volumes, and Snapshots.
+Here you can find how OpenNebula datastores and images are mapped to StorPool Templates, Volumes, and Snapshots.
 
 ## Addon version
 
@@ -8,44 +8,65 @@ The addon uses the `YY.MM.R` versioning schema, where `YY` is the year of the re
 
 ## Datastore templates
 
-Each Datastore in Opennebula has a StorPool template with the following format:
+Each datastore in OpenNebula has a StorPool template with the following format:
 ```bash
 ${ONE_PX}-ds-${DATASTORE_ID}
 ```
 
 ## Images
 
-The Images in the Image Datastore(s) are mapped to StorPool snapshot with tag:
-```bash
-img=${ONE_PX}-img-${IMAGE_ID}
+Images in OpenNebula are mapped to unnamed StorPool snapshots. For convenience and debugging purposes, tags are provided.
+
 ```
+img=${ONE_PX}-img-${IMAGE_ID}
+nloc=${ONE_PX}
+virt=one
+```
+
+Please note that it is possible to have multiple volumes or snapshots with the same tags. The ones used by the OpenNebula driver are stored as key/value in the etcd service.
 
 #### PERSISTENT images
 
-When a persistent Image is assigned to a VM, the StorPool snapshot is converted to a Volume and the follwing tags are added:
+When a persistent image is assigned to a VM, the StorPool snapshot is converted to a volume with the following tags:
 ```bash
 img=${ONE_PX}-img-${IMAGE_ID}
 diskid=${VMDISK_ID}
 nvm=${VM_ID}
+type=PERS
+nloc=${ONE_PX}
+virt=one
+```
+
+Note: when detached, the volume is converted to a new StorPool snapshot with the "default" tags:
+```
+img=${ONE_PX}-img-${IMAGE_ID}
+nloc=${ONE_PX}
+virt=one
 ```
 
 ### Non-PERSISTENT images
 
-The non-persistent images are clones of a image registered in the IMAGE datastore mapped to StorPool volume:
+The non-persistent images attached to a VM are StorPool volumes that are clones of an image (StorPool snapshot) registered in the IMAGE datastore with the following tags:
+
 ```bash
 img=${ONE_PX}-img-${IMAGE_ID}-${VM_ID}-${VMDISK_ID}
 diskid=${VMDISK_ID}
 nvm=${VM_ID}
+type=NPERS
+nloc=${ONE_PX}
+virt=one
 ```
 
 ### CDROM images
 
-The images of type CDROM are created like non-persistent images - cloned volumes with additional StorPool tag `type=CDROM`:
+The images of type CDROM are created like the non-persistent images - cloned volumes with additional StorPool tag `type=CDROM`:
 ```bash
 img=${ONE_PX}-img-${IMAGE_ID}-${VM_ID}-${VMDISK_ID}
 diskid=${VMDISK_ID}
 nvm=${VM_ID}
 type=CDROM
+nloc=${ONE_PX}
+virt=one
 ```
 
 ### VOLATILE images
@@ -55,18 +76,24 @@ The volatile images are registered in the StorPool-backed SYSTEM datastore as a 
 img=${ONE_PX}-sys-${VM_ID}-${VMDISK_ID}
 diskid=${VMDISK_ID}
 nvm=${VM_ID}
-type=[FS|SWAP]
+type=VOL
 *fs=${CREATED_FILESYSTEM}
+nloc=${ONE_PX}
+virt=one
 ```
+
+Note: The `fs` tag is optional and shows the filesystem formatted when requested by OpenNebula.
 
 ### CONTEXTUALIZATION images
 
-Each contextualization image registered in a StorPool-backed SYSTEM datastore is mapped to StorPool volume:
+Each contextualization image registered in a StorPool-backed SYSTEM datastore is mapped to a StorPool volume:
 ```bash
 img=${ONE_PX}-sys-${VM_ID}-${VMDISK_ID}
 diskid=${VMDISK_ID}
 nvm=${VM_ID}
-type=CDROM
+type=CNTXT
+nloc=${ONE_PX}
+virt=one
 ```
 
 ### CHECKPOINT images
@@ -76,13 +103,17 @@ When the addon is configured in `qemu-kvm-ev`-backed flavor (`SP_CHECKPOINT_BD=1
 img=${ONE_PX}-sys-${VM_ID}-rawcheckpoint
 nvm=${VM_ID}
 type=CHKPNT
+nloc=${ONE_PX}
+virt=one
 ```
 
 ### Staging images
 
-In the process of importing of an image to a StorPool-backed IMAGE datastore, the source is stored temporary on a StorPool volume name suffixed with the md5sum of it's name:
+In the process of importing an image to a StorPool-backed IMAGE datastore, the source is stored temporarily on a StorPool volume whose name is suffixed with the md5sum of its name:
 ```bash
 img=${ONE_PX}-img-${IMAGE_ID}-${MD5SUM}
+nloc=${ONE_PX}
+virt=one
 ```
 
 ## Snapshots
@@ -93,6 +124,8 @@ img=${ONE_PX}-img-${IMAGE_ID}-${MD5SUM}
 vol=${VM_VOLUME_NAME}
 snap=snap${SNAP_ID}
 nvm=${VM_ID}
+nloc=${ONE_PX}
+virt=one
 ```
 
 ### VM snapshot
@@ -101,6 +134,8 @@ nvm=${VM_ID}
 vol=${VM_VOLUME_NAME}
 snap=ONESNAP-${VM_SNAPSHOT_ID}-${TIMESTAMP}
 nvm=${VM_ID}
+nloc=${ONE_PX}
+virt=one
 ```
 
 ## NVRAM
@@ -110,4 +145,6 @@ A StorPool volume with tags:
 img=${ONE_PX}-sys-${VM_ID}-NVRAM
 nvm=${VM_ID}
 type=NVRAM
+nloc=${ONE_PX}
+virt=one
 ```
