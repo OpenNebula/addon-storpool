@@ -57,12 +57,33 @@ done {lvfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAI
     xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
 exec {lvfh}<&-
 
-if [[ -n "${available_a[${TARGET}]}" ]]; then
-    TARGET_DEVICE="${TARGET}"
-else
-    keys=( "${!available_a[@]}" )
-    TARGET_DEVICE="${keys[0]}"
-fi
+# Prefer persistent empty slots: q35 sdzz..sdzw, then pc hda..hdd.
+PREFERRED_CDROM_SLOTS=(
+    sdzz sdzy sdzx sdzw
+    hda hdb hdc hdd
+)
+
+pick_empty_cdrom_device()
+{
+    local dev=""
+    if [[ -n "${available_a[${TARGET}]}" ]]; then
+        echo "${TARGET}"
+        return 0
+    fi
+    for dev in "${PREFERRED_CDROM_SLOTS[@]}"; do
+        if [[ -n "${available_a[${dev}]}" ]]; then
+            echo "${dev}"
+            return 0
+        fi
+    done
+    for dev in "${!available_a[@]}"; do
+        echo "${dev}"
+        return 0
+    done
+    return 1
+}
+
+TARGET_DEVICE="$(pick_empty_cdrom_device || true)"
 
 if [[ -z "${TARGET_DEVICE}" ]]; then
     errmsg="Error: No free CDROM device found!"

@@ -65,15 +65,18 @@ fi
 
 if [[ -n "${PERSISTENT_CDROM}" ]]; then
     if [[ "${TYPE^^}" == "CDROM" ]]; then
-        if [[ "${DEV_PREFIX,,}" == "hd" ]]; then
-            set -o pipefail
-            ${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom" "$@"
-            ret=$?
-            splog "(${ret}) ${SSH:-ssh} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
-            exit "${ret}"
-        else
-            splog "VM ${VM_ID:-} DISK_ID=${DISK_ID} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' != 'hd'"
-        fi
+        case "${DEV_PREFIX,,}" in
+            hd|sd)
+                set -o pipefail
+                ${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom" "$@"
+                ret=$?
+                splog "(${ret}) ${SSH:-ssh} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
+                exit "${ret}"
+                ;;
+            *)
+                splog "VM ${VM_ID:-} DISK_ID=${DISK_ID} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} DEV_PREFIX='${DEV_PREFIX}' not supported for persistent CDROM"
+                ;;
+        esac
     fi
 fi
 
