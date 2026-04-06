@@ -26,7 +26,7 @@
 # .//USER_TEMPLATE/T_PERSISTENT_CDROM_TYPE = block
 """
 
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Tuple
 import os
 import sys
 from xml.etree import ElementTree as ET
@@ -78,10 +78,172 @@ def log_dbg(logmsg):
         print("[D]" + logmsg, file=sys.stderr)
 
 
+def sata_persistent_slot(index: int) -> str:
+    return "sdz" + chr(122 - index)
+
+
+def is_persistent_sata_slot(dev: str) -> bool:
+    return (
+        dev.startswith("sdz")
+        and len(dev) == 4
+        and 'w' <= dev[3] <= 'z'
+    )
+
+
+def cdrom_has_source(disk_e: ET.Element) -> bool:
+    source_e = disk_e.find('./source')
+    if source_e is None:
+        return False
+    for attr in ('dev', 'file'):
+        val = source_e.get(attr)
+        if val:
+            return True
+    return False
+
+
+def get_free_ide_device(used_devices: List[str]) -> Optional[str]:
+    for i in range(max_cdrom_devices):
+        dev = "hd" + chr(97 + i)
+        if dev in used_devices:
+            continue
+        used_devices.append(dev)
+        log_dbg(f"get_free_ide_device({used_devices=}) = {dev} // {i=}")
+        return dev
+    return None
+
+
+def get_free_sata_device(used_devices: List[str]) -> Optional[str]:
+    for i in range(max_cdrom_devices):
+        dev = sata_persistent_slot(i)
+        if dev in used_devices:
+            continue
+        used_devices.append(dev)
+        log_dbg(f"get_free_sata_device({used_devices=}) = {dev} // {i=}")
+        return dev
+    return None
+
+
+def add_cdrom(
+    devices_e: ET.Element,
+    cdrom_bus: str,
+    disk_cdrom_type: str,
+    dev: str,
+) -> bool:
+    log_dbg(f"add_cdrom({cdrom_bus=}, {disk_cdrom_type=}, {dev=})")
+    disk_e = ET.SubElement(
+        devices_e,
+        'disk',
+        {
+            "type": disk_cdrom_type,
+            "device": "cdrom",
+        },
+    )
+    _ = ET.SubElement(  # type: ignore[attr-defined] # noqa: E501
+        disk_e,
+        "target",
+        {
+            "dev": dev,
+            "bus": cdrom_bus,
+        },
+    )
+    _ = ET.SubElement(  # type: ignore[attr-defined] # noqa: E501
+        disk_e,
+        "driver",
+        {
+            "name": "qemu",
+            "type": "raw",
+            "cache": "none",
+            "io": "native",
+        },
+    )
+    _ = ET.SubElement(disk_e, "readonly", {})  # type: ignore[attr-defined] # noqa: E501
+    log_inf(f"added CDROM device: {dev}"
+            f" type:{disk_cdrom_type} bus:{cdrom_bus}")
+    return True
+
+
+def change_cdrom(
+    disk_e: ET.Element,
+    cdrom_bus: str,
+    disk_cdrom_type: str,
+    dev: str,
+) -> bool:
+    changed: bool = False
+    type_e = disk_e.get('type')
+    if type_e is not None and type_e != disk_cdrom_type:
+        disk_e.set('type', disk_cdrom_type)
+        changed = True
+    target_e = disk_e.find('./target')
+    if target_e is not None:
+        target_bus = target_e.get('bus')
+        if target_bus is not None and target_bus != cdrom_bus:
+            target_e.set('bus', cdrom_bus)
+            changed = True
+        target_dev = target_e.get('dev')
+        if target_dev is not None and target_dev != dev:
+            target_e.set('dev', dev)
+            changed = True
+            address_e = disk_e.find('./address')
+            if address_e is not None:
+                disk_e.remove(address_e)
+    return changed
+
+
+def collect_cdroms(
+    root: ET.Element,
+) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
+    all_cdroms: List[Dict[str, Any]] = []
+    used_hd_devices: List[str] = []
+    used_sd_devices: List[str] = []
+
+    for disk_e in root.findall('.//devices/disk'):
+        if disk_e.get('device') != 'cdrom':
+            continue
+
+        info: Dict[str, Any] = {"element": disk_e}
+        target_e = disk_e.find('./target')
+        if target_e is None:
+            continue
+
+        target_dev = target_e.get('dev')
+        if target_dev is None:
+            continue
+
+        info["target_dev"] = target_dev
+        target_prefix = target_dev[0:2]
+        info["target_prefix"] = target_prefix
+        if target_prefix == 'hd':
+            used_hd_devices.append(target_dev)
+        elif target_prefix == 'sd':
+            used_sd_devices.append(target_dev)
+
+        target_bus = target_e.get('bus')
+        if target_bus is not None:
+            info["target_bus"] = target_bus
+
+        info["has_source"] = cdrom_has_source(disk_e)
+        if info["has_source"]:
+            disk_type = disk_e.get('type')
+            if disk_type == 'block':
+                source_entry = "dev"
+            elif disk_type == 'file':
+                source_entry = "file"
+            else:
+                source_entry = None
+            source_e = disk_e.find('./source')
+            if source_e is not None and source_entry is not None:
+                source = source_e.get(source_entry)
+                if source is not None and 'disk.' in source:
+                    info["disk_id"] = int(source.rsplit('disk.')[1])
+
+        all_cdroms.append(info)
+
+    return all_cdroms, used_hd_devices, used_sd_devices
+
+
 test_env = os.getenv('TEST_ENV', None)  # type: ignore[attr-defined]
 # The pc type has 1 IDE controller so 4 devices max
 max_cdrom_devices = int(os.getenv('MAX_CDROM_DEVICES', '4'))  # type: ignore[attr-defined] # noqa: E501
-
 xmlDomain = sys.argv[1]
 doc = ET.parse(xmlDomain)
 root = doc.getroot()
@@ -94,40 +256,16 @@ for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 changed: bool = False
-msg: str = ""
-target_e: Optional[ET.Element] = None
-disk_e: Optional[ET.Element] = None
-source_e: Optional[ET.Element] = None
-readonly_e: Optional[ET.Element] = None
-driver_e: Optional[ET.Element] = None
 
-used_ide_devices: List[str] = []
-dom_cdroms: Dict[str, Any] = {}
-xpath: str = './/devices/disk[@device="cdrom"]'
-cdrom_elements: List[ET.Element] = root.findall(xpath)
-for cdrom_e in cdrom_elements:
-    info: Dict[str, Any] = {"element": cdrom_e}
-    target_e = cdrom_e.find('./target')
-    if target_e is not None:
-        target_dev: Optional[str] = target_e.get('dev')
-        if target_dev is not None:
-            info["target_dev"] = target_dev
-            if target_dev[0:2] == 'hd':
-                used_ide_devices.append(info["target_dev"])
-        target_bus: Optional[str] = target_e.get('bus')
-        if target_bus is not None:
-            info["target_bus"] = target_bus
-    if cdrom_e.get('type') == 'block':
-        info["source_entry"] = "dev"
-    source_e = cdrom_e.find('./source')
-    if source_e is not None:
-        info["source_entry"] = "file"
-        info["source"] = source_e.get(info["source_entry"])
-        if info["source"] is not None:
-            info["disk_id"] = int(info["source"].rsplit('disk.')[1])
-            dom_cdroms[info["disk_id"]] = info
+context_disk_id: Optional[int] = None
+context_disk_id_e: Optional[ET.Element] = vm_root.find(
+    './/TEMPLATE/CONTEXT/DISK_ID',  # type: ignore[attr-defined] # noqa: E501
+)
+if context_disk_id_e is not None:
+    context_disk_id = int(context_disk_id_e.text)
 
-dom_cdroms_count = len(dom_cdroms)
+all_cdroms, used_hd_devices, used_sd_devices = collect_cdroms(root)
+total_cdroms_count = len(all_cdroms)
 
 cdrom_bus: str = 'ide'
 os_type_e: Optional[ET.Element] = root.find('./os/type')
@@ -136,8 +274,9 @@ if os_type_e is not None:
     if machine is not None:
         if 'q35' in machine:
             cdrom_bus = 'sata'
+        log_dbg(f"{machine=} {cdrom_bus=}")
 
-# find first devices element
+# find first devices element. Will add the new cdrom devices to this element.
 devices_e: ET.Element = root.findall('.//devices')[0]
 
 pers_cdroms_count: int = 0
@@ -148,12 +287,13 @@ t_pers_cdrom_e: Optional[ET.Element] = vm_root.find(
     './/USER_TEMPLATE/T_PERSISTENT_CDROM')
 if t_pers_cdrom_e is not None:
     if t_pers_cdrom_e.text is not None and t_pers_cdrom_e.text.isnumeric():
+        log_dbg(f"{t_pers_cdrom_e.text=} USER_TEMPLATE")
         pers_cdroms_count = int(t_pers_cdrom_e.text)
 
 disk_cdrom_type: str = "block"
 pers_cdroms_type_env: str = os.getenv('T_PERSISTENT_CDROM_TYPE', 'block')  # type: ignore[attr-defined] # noqa: E501
 if pers_cdroms_type_env.lower() in ['file', 'block']:
-    pers_cdroms_type = pers_cdroms_type_env.lower()
+    disk_cdrom_type = pers_cdroms_type_env.lower()
 t_pers_cdrom_type_e: Optional[ET.Element] = vm_root.find(
     './/USER_TEMPLATE/T_PERSISTENT_CDROM_TYPE'
 )
@@ -162,71 +302,67 @@ if t_pers_cdrom_type_e is not None:
             t_pers_cdrom_type_e.text.lower() in ['file', 'block']):
         disk_cdrom_type = t_pers_cdrom_type_e.text.lower()
 
-pers_cdroms: List[ET.Element] = []
-
 if pers_cdroms_count > 0:
-    if pers_cdroms_count > max_cdrom_devices:
-        log_inf(f"persistent cdroms count {pers_cdroms_count} >"
+    target_count = pers_cdroms_count
+    if target_count > max_cdrom_devices:
+        log_inf(f"persistent cdroms count {target_count} >"
                 f" {max_cdrom_devices}! Setting {max_cdrom_devices} devices.")
-        pers_cdroms_count = max_cdrom_devices
+        target_count = max_cdrom_devices
 
-    if dom_cdroms_count > max_cdrom_devices - 1:
-        msg = f"already have {dom_cdroms_count} >0. nothing to do"
-        print(msg, file=sys.stderr)
-        log_inf(msg)
-        exit(0)
+    log_dbg(f"{cdrom_bus=} {target_count=} {total_cdroms_count=}"
+            f" {used_hd_devices=} {used_sd_devices=}")
 
-    cdroms_count: int = max_cdrom_devices - dom_cdroms_count
-    if cdroms_count < 1:
-        msg = f"{cdroms_count} < 1. nothing to do"
-        print(msg, file=sys.stderr)
-        log_inf(msg)
-        exit(0)
+    if cdrom_bus == 'ide':
+        if total_cdroms_count >= target_count:
+            msg = (f"already have {total_cdroms_count} cdrom devices"
+                   f" (target {target_count}). nothing to do")
+            print(msg, file=sys.stderr)
+            log_inf(msg)
+            exit(0)
 
-    if cdroms_count > pers_cdroms_count:
-        cdroms_count = pers_cdroms_count
+        while total_cdroms_count < target_count:
+            dev = get_free_ide_device(used_hd_devices)
+            if dev is None:
+                log_inf(f"no free IDE CDROM slot left at {total_cdroms_count}"
+                        f"/{target_count}")
+                break
+            if add_cdrom(devices_e, cdrom_bus, disk_cdrom_type, dev):
+                changed = True
+                total_cdroms_count += 1
 
-    for idx in range(cdroms_count):
-        # get free target_dev
-        dev = None
-        for i in range(max_cdrom_devices):
-            dev = "hd" + chr(97 + i)
-            if dev in used_ide_devices:
-                dev = None
+    elif cdrom_bus == 'sata':
+        for cdrom in all_cdroms:
+            if not cdrom.get("has_source"):
                 continue
-            used_ide_devices.append(dev)
-            break
-        if dev is not None:
-            disk_e = ET.SubElement(
-                    devices_e,
-                    'disk',
-                    {
-                        "type": disk_cdrom_type,
-                        "device": "cdrom",
-                    },
-            )
-            target_e = ET.SubElement(
-                disk_e,
-                "target",
-                {
-                    "dev": dev,
-                    "bus": cdrom_bus,
-                },
-            )
-            driver_e = ET.SubElement(
-                disk_e,
-                "driver",
-                {
-                    "name": "qemu",
-                    "type": "raw",
-                    "cache": "none",
-                    "io": "native",
-                },
-            )
-            readonly_e = ET.SubElement(disk_e, "readonly", {})
-            changed = True
-            log_inf(f"added cdrom device: {dev}"
-                    f" type:{disk_cdrom_type} bus:{cdrom_bus}")
+            disk_id = cdrom.get("disk_id")
+            if disk_id is not None and disk_id == context_disk_id:
+                log_dbg(f"Skipping CONTEXTUALIZATION CDROM"
+                        f" {cdrom['target_dev']} {disk_id=} {context_disk_id=}")
+                continue
+            if is_persistent_sata_slot(cdrom["target_dev"]):
+                continue
+            log_dbg(f"{disk_id=} {context_disk_id=} {used_sd_devices=}")
+            dev = get_free_sata_device(used_sd_devices)
+            if dev is not None:
+                if change_cdrom(
+                    cdrom['element'],
+                    cdrom_bus,
+                    disk_cdrom_type,
+                    dev,
+                ):
+                    changed = True
+                    cdrom["target_dev"] = dev
+
+        while total_cdroms_count < target_count:
+            dev = get_free_sata_device(used_sd_devices)
+            if dev is None:
+                log_inf(f"no free SATA CDROM slot left at {total_cdroms_count}"
+                        f"/{target_count}")
+                break
+            if add_cdrom(devices_e, cdrom_bus, disk_cdrom_type, dev):
+                changed = True
+                total_cdroms_count += 1
+
 
 if changed:
     indent(root)
