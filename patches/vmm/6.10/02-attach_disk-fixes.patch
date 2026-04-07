@@ -1,0 +1,64 @@
+diff -urN remotes.orig/vmm/kvm/attach_disk remotes/vmm/kvm/attach_disk
+--- remotes.orig/vmm/kvm/attach_disk	2025-11-24 09:30:00.000000000 +0000
++++ remotes/vmm/kvm/attach_disk	2026-04-07 12:19:51.267820817 +0000
+@@ -77,12 +77,43 @@
+ WRITE_IOPS_SEC_MAX_LENGTH=${WRITE_IOPS_SEC_MAX_LENGTH:-${DEFAULT_ATTACH_WRITE_IOPS_SEC_MAX_LENGTH}}
+ WRITE_IOPS_SEC_MAX=${WRITE_IOPS_SEC_MAX:-${DEFAULT_ATTACH_WRITE_IOPS_SEC_MAX}}
+ SIZE_IOPS_SEC=${SIZE_IOPS_SEC:-${DEFAULT_ATTACH_SIZE_IOPS_SEC}}
+-VIRTIO_BLK_QUEUES=${VIRTIO_BLK_QUEUES:-${DEFAULT_ATTACH_VIRTIO_BLK_QUEUES}}
++[[ ${TARGET:0:2} == "vd" ]] && VIRTIO_BLK_QUEUES=${VIRTIO_BLK_QUEUES:-${DEFAULT_ATTACH_VIRTIO_BLK_QUEUES}}
+ 
+ if [ "${VIRTIO_BLK_QUEUES}" = "auto" ]; then
+     VIRTIO_BLK_QUEUES="$VCPU"
+ fi
+ 
++if [[ "${TARGET:0:2}" == "vd" ]]; then
++    # get the defined iothreads for the domain
++    read -r DOMAIN_IOTHREADS <<<"$(virsh --connect "${LIBVIRT_URI}" dumpxml "${DOMAIN}" | \
++                                     xmllint --xpath '/domain/iothreads/text()' - 2>/dev/null)"
++    if [[ -n "${DOMAIN_IOTHREADS}" ]] && [[ ${DOMAIN_IOTHREADS} -gt 0 ]]; then
++        if [[ -z "${IOTHREAD}" ]] ; then
++            # There is no explicit iothread id defined.
++            # Apply the default one from the kvmrc file
++            _DEFAULT_IOTHREAD="${DEFAULT_ATTACH_VIRTIO_BLK_IOTHREAD//[^[:digit:]]}"
++            if [[ -n "${_DEFAULT_IOTHREAD}" ]]; then
++                if [[ ${_DEFAULT_IOTHREAD} -gt ${DOMAIN_IOTHREADS} ]]; then
++                    # Floor when the default threadid is bigger
++                    # than the defined number of threads
++                    IOTHREAD="${DOMAIN_IOTHREAD}"
++                elif [[ ${_DEFAULT_IOTHREAD} -gt 0 ]]; then
++                    IOTHREAD="${_DEFAULT_IOTHREAD}"
++                fi
++            fi
++        elif [[ -z "${IOTHREAD//[[:digit:]-]}" ]]; then
++            if [[ ${IOTHREAD} -gt ${DOMAIN_IOTHREADS} ]]; then
++                IOTHREAD="${DOMAIN_IOTHREADS}"
++            elif [[ ${IOTHREAD} -lt 1 ]]; then
++                IOTHREAD=""
++            fi
++        else
++            # The value is not numeric
++            IOTHREAD=""
++        fi
++    fi
++fi
++
+ # disk XML
+ XML=''
+ 
+@@ -118,7 +149,14 @@
+ 
+ [ -n "${AUTH}" ] && XML+=" ${AUTH}"
+ 
+-XML+="<target dev='$(xml_esc "${TARGET}")'/>"
++if [[ -n "${SD_DISK_BUS}" ]] && [[ "${TARGET:0:2}" == "sd" ]]; then
++    if [[ "${SD_DISK_BUS,,}" == "sata" ]]; then
++        log_error "The SATA disks are not hot-pluggable!"
++        exit 1
++    fi
++    TARGET_BUS="bus='$(xml_esc "${SD_DISK_BUS,,}")'"
++fi
++XML+="<target dev='$(xml_esc "${TARGET}")'${TARGET_BUS:+ ${TARGET_BUS}}/>"
+ [ -n "${ORDER}" ] && XML+=" <boot order='$(xml_esc "${ORDER}")'/>"
+ [ "${READONLY}" = 'yes' ] && XML+="<readonly/>"
+ [ "${SHAREABLE}" = 'yes' ] && XML+="<shareable/>"
