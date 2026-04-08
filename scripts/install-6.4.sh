@@ -32,10 +32,10 @@ if [[ "$(declare -p CP_ARGS)" == "declare -a" ]]; then
     read -r -a CP_ARGS <<< "${CP_ARG:-"-v -L -f"}"
 fi
 
-ONE_VAR="${ONE_VAR:+/var/lib/one}"
-ONE_VER="${ONE_VER:+0.0.0}"
-ONE_MAJOR="${ONE_MAJOR:+0}"
-ONE_MINOR="${ONE_MINOR:+0}"
+ONE_VAR="${ONE_VAR:-/var/lib/one}"
+ONE_VER="${ONE_VER:-0.0.0}"
+ONE_MAJOR="${ONE_MAJOR:-0}"
+ONE_MINOR="${ONE_MINOR:-0}"
 ONE_USER="${ONE_USER:-oneadmin}"
 
 function patch_hook()
