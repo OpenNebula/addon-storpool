@@ -162,9 +162,11 @@ export TMPDIR
 trap "rm -rf \"${TMPDIR}\"" EXIT QUIT TERM
 
 if [[ -f "scripts/install-${ONE_VER}.sh" ]]; then
+    echo "*** Using scripts/install-${ONE_VER}.sh"
     # shellcheck source=scripts/install-6.4.sh
     source "scripts/install-${ONE_VER}.sh"
 elif [[ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]]; then
+    echo "*** Using scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
     # shellcheck source=scripts/install-6.4.sh
     source "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
 else
