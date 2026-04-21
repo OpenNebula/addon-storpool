@@ -162,7 +162,7 @@ for f in {save,restore}.storpool{,-pre,-post}; do
     fi
 done
 
-for mad in im vmm vnm; do
+for mad in im vmm vnm datastore; do
     [[ -d "patches/${mad}" ]] || continue
     for ver in "${ONE_VER:-}" "${ONE_MAJOR:-}.${ONE_MINOR:-}"; do
         patchdir="${PWD}/patches/${mad}/${ver}"
