@@ -6,4 +6,4 @@
       :method: sudoers_cmnd_alias
       :element: ONE_NETNS
       :arguments:
-        /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.conf.*: /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.conf.*
+        /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.conf.*.arp_ignore=0: /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.conf.*.arp_ignore=0
