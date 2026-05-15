@@ -382,6 +382,115 @@ def simple_conf(aug, c, name=nil)
     end
 end
 
+def sudoers_cmnd_alias(aug, c, name=nil)
+    alias_name = c[:element]
+    if alias_name.nil? || alias_name.to_s.empty?
+        log "#ERR# No 'element' (Cmnd_Alias name). Skipped."
+        return
+    end
+
+    # Locate an existing Cmnd_Alias by name (any aliases group, any position)
+    alias_path = aug.match("Cmnd_Alias/alias[name='#{alias_name}']").first
+    log "#DBG# Cmnd_Alias '#{alias_name}' path=#{alias_path.inspect}",2
+
+    # Unconditional removal of the whole Cmnd_Alias entry
+    if c[:delete]
+        if alias_path.nil?
+            log "#OK# Cmnd_Alias #{alias_name} not present"
+            return
+        end
+        parent = alias_path.sub(/\/alias(\[\d+\])?\z/, '')
+        siblings = aug.match("#{parent}/alias")
+        if siblings.size > 1
+            log "[DEL] Cmnd_Alias #{alias_name} (#{alias_path})",0
+            aug.rm(alias_path)
+        else
+            log "[DEL] Cmnd_Alias #{alias_name} (#{parent}, only alias in group)",0
+            aug.rm(parent)
+        end
+        return
+    end
+
+    if c[:arguments].nil?
+        log "#ERR# No 'arguments'. Skipped."
+        return
+    end
+
+    # Snapshot current commands of the alias
+    cur_cmds = {}
+    if alias_path
+        aug.match("#{alias_path}/command").each do |p|
+            cur_cmds[aug.get(p)] = true
+        end
+    end
+    log "#DBG# current commands of #{alias_name}: #{cur_cmds.keys}",2
+
+    to_add = []
+    to_remove = []
+    c[:arguments].each do |k, v|
+        if v.nil?
+            if cur_cmds.key?(k)
+                to_remove << k unless to_remove.include?(k)
+            else
+                log "#OK# '#{k}' not in Cmnd_Alias #{alias_name}",1
+            end
+        else
+            if cur_cmds.key?(v)
+                log "#OK# '#{v}' in Cmnd_Alias #{alias_name}",1
+            else
+                to_add << v unless to_add.include?(v)
+            end
+        end
+    end
+
+    if alias_path.nil?
+        if to_add.empty?
+            log "#OK# Cmnd_Alias #{alias_name} not present and nothing to add"
+            return
+        end
+        # Append a brand new Cmnd_Alias = NAME line at the end of the file
+        aug.set("Cmnd_Alias[last()+1]/alias/name", alias_name)
+        new_path = aug.match("Cmnd_Alias/alias[name='#{alias_name}']").first
+        log "#ADD# Cmnd_Alias #{alias_name} (#{new_path})",0
+        to_add.each do |cmd|
+            log "#ADD# #{new_path}/command += #{cmd}",0
+            aug.set("#{new_path}/command[last()+1]", cmd)
+        end
+        return
+    end
+
+    # Existing alias: remove first (predicate-by-value avoids re-index issues),
+    # then append any new commands at the end.
+    to_remove.each do |cmd|
+        aug.match("#{alias_path}/command[.='#{cmd}']").each do |p|
+            log "[DEL] #{p} (was #{cmd})",0
+            aug.rm(p)
+        end
+    end
+    to_add.each do |cmd|
+        log "#ADD# #{alias_path}/command += #{cmd}",0
+        aug.set("#{alias_path}/command[last()+1]", cmd)
+    end
+
+    if to_add.empty? && to_remove.empty?
+        log "#OK# Cmnd_Alias #{alias_name} unchanged",1
+    end
+
+    # If the alias has no commands left, drop the alias node (and the whole
+    # Cmnd_Alias group when it has no other aliases) to keep the file valid.
+    if aug.match("#{alias_path}/command").empty?
+        parent = alias_path.sub(/\/alias(\[\d+\])?\z/, '')
+        siblings = aug.match("#{parent}/alias")
+        if siblings.size > 1
+            log "[DEL] #{alias_path} (no commands left)",0
+            aug.rm(alias_path)
+        else
+            log "[DEL] #{parent} (no commands left)",0
+            aug.rm(parent)
+        end
+    end
+end
+
 def loadYaml(yamlfile)
     begin
         log "#INF# Loading #{yamlfile}",1
@@ -397,6 +506,7 @@ end
     "oned_conf_array" => method(:oned_conf_array),
     "oned_conf_vector" => method(:oned_conf_vector),
     "simple_conf" => method(:simple_conf),
+    "sudoers_cmnd_alias" => method(:sudoers_cmnd_alias),
 }
 
 merge = []
@@ -529,9 +639,13 @@ default_config.each do |conf_file, cfg|
             next
         end
         if write
-            conf_file_bak = conf_file + "-backup-" +  timestamp
-            puts "#BAK# backup #{conf_file} #{conf_file_bak}"
-            FileUtils.cp(conf_file, conf_file_bak)
+            if cfg[:no_backup]
+                puts "#BAK# skipped (#{conf_file}: :no_backup is set)"
+            else
+                conf_file_bak = conf_file + "-backup-" +  timestamp
+                puts "#BAK# backup #{conf_file} #{conf_file_bak}"
+                FileUtils.cp(conf_file, conf_file_bak)
+            end
             puts "#MOV# mv #{temp_file} #{conf_file}"
             FileUtils.mv(temp_file, conf_file)
             puts "#MSG# chmod #{mode.to_s(8)} #{conf_file}"

@@ -1,0 +1,9 @@
+/etc/sudoers.d/opennebula:
+  :lens: Sudoers.lns
+  :no_backup: true
+  :apply:
+    tproxy_fixture:
+      :method: sudoers_cmnd_alias
+      :element: ONE_NETNS
+      :arguments:
+        /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.conf.*: /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.conf.*
