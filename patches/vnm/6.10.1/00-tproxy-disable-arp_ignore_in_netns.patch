@@ -1,0 +1,18 @@
+# Needs to whitelist 
+# Cmnd_Alias ONE_NETNS = ..., /var/tmp/one/vnm/ip_netns_exec sysctl -w net.ipv4.*
+
+--- remotes/vnm/tproxy.rb.orig	2026-05-13 13:01:04.968214499 +0000
++++ remotes/vnm/tproxy.rb	2026-05-14 13:57:02.597646025 +0000
+@@ -97,6 +97,11 @@
+ 
+             ip_netns_exec(brdev, "ip route replace default dev #{brdev}a")
+ 
++            # [LOCAL PATCH]: Loosen inherited ARP strictness. This ensures the namespace
++            # replies to the VM's cross-subnet ARP requests for the 169.254.16.9 IP.
++            ip_netns_exec(brdev, "sysctl -w net.ipv4.conf.all.arp_ignore=0")
++            ip_netns_exec(brdev, "sysctl -w net.ipv4.conf.#{brdev}a.arp_ignore=0")
++
+             # Prevent ARP requests from being propagated to other HV machines.
+             # It reduces network traffic and ensures that the closest HV handles
+             # proxied packets.
+
