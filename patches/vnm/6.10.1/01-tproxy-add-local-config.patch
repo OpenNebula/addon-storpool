@@ -1,0 +1,20 @@
+--- remotes/vnm/tproxy.rb.orig	2026-05-13 13:01:04.968214499 +0000
++++ remotes/vnm/tproxy.rb	2026-05-13 13:03:00.545073021 +0000
+@@ -43,7 +43,16 @@
+                      && (nets & nic.slice(:network, :network_id).values.map(&:to_s)).empty?
+ 
+                 next if conf[:service_port].nil?
+-                next if conf[:remote_addr].nil? || conf[:remote_addr] !~ Resolv::IPv4::Regex
++                next if conf[:remote_addr].nil? || conf[:remote_addr].to_s.strip.empty?
++                unless conf[:remote_addr] =~ Resolv::IPv4::Regex
++                    begin
++                        remote_ip = Resolv.getaddress(conf[:remote_addr])
++                        next unless remote_ip =~ Resolv::IPv4::Regex
++                        conf[:remote_addr] = remote_ip
++                    rescue Resolv::ResolvError
++                        next
++                    end
++                end
+                 next if conf[:remote_port].nil?
+ 
+                 opts = {
