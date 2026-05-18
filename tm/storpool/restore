@@ -74,14 +74,20 @@ BACKUP_MAD_LS="${DRIVER_PATH}/../../datastore/${DS_DS_MAD:?}/ls"
 
 declare -A disksUrl_a
 declare -A disksMap_a
+declare -A diskTypeMap_a  # diskTypeMap_a[oneName]=DISK_TYPE
 declare -A disksOldUid_a
 declare -A disksNewUid_a
 
 while IFS=' ' read -r -u "${jqfh}" did url; do
+    if [[ -z "${did}" ]]; then
+        continue
+    fi
     disksUrl_a["${did}"]="${url}"
-done {jqfh}< <(cat "${DS_DRIVER_ACTION}"||true | \
-          "${BACKUP_MAD_LS}" -i "${INC_ID}" |\
-          jq -r 'to_entries[]|"\(.key) \(.value)"'||true)
+done {jqfh}< <(
+    "${BACKUP_MAD_LS}" -i "${INC_ID}" <"${DS_DRIVER_ACTION}" \
+    | jq -r 'to_entries[]|"\(.key) \(.value)"' \
+    || true
+)
 exec {jqfh}<&-
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}"
@@ -90,7 +96,8 @@ for entry in ${vmDisksMap:-}; do
     disksMap_a["${entry##*:}"]="${entry%:*}"
 done
 for entry in ${vmDisksTypeMap}; do
-    disksTypeMap["${entry%:*}"]="${entry##*:}"
+    # vmDisksTypeMap: 'oneName:DISK_TYPE ...'
+    diskTypeMap_a["${entry%%:*}"]="${entry#*:}"  # diskTypeMap_a[oneName]=DISK_TYPE
 done
 _TMP_NAME=$(mktemp --dry-run tmRestoreXXXXXXXX)
 ERROR=0
@@ -103,7 +110,7 @@ for did in ${!disksUrl_a[*]}; do
     fi
     if [[ "${did}" == "tpm" ]]; then
         disksMap_a["${did}"]="${ONE_PX}-sys-${VM_ID}-SWTPM"
-        disksTypeMap["${did}"]="SWTPM"
+        diskTypeMap_a["${disksMap_a[${did}]}"]="SWTPM"
         DISK_ID=""
     fi
     SP_VOL="${disksMap_a[${did}]}"
@@ -127,7 +134,7 @@ for did in ${!disksUrl_a[*]}; do
     RET=$?
     if [[ ${RET} -eq 0 ]]; then # 1
         disksOldUid_a["${did}"]="${VOL_UID}"
-        xTYPE="${disksTypeMap[${did}]}"
+        xTYPE="${diskTypeMap_a[${SP_VOL}]}"
         storpoolVolumeCreate "${SP_VOL}" "${V_SIZE}" "${V_TEMPLATE_NAME:?}" \
             "virt;${LOC_TAG};diskid;${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" \
             "one;${LOC_TAG_VAL};${did};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${xTYPE}"  # TBD: tag after image operation to improve performance
