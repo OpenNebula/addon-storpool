@@ -287,7 +287,7 @@ else
     FORMAT="${QEMU_IMG_FORMAT}"
 
     if [[ "${FORMAT}" != "${DRIVER:-undefined}" ]]; then
-        splog "${QEMU_IMG} detected format '${FORMAT}' but DRIVER=${DRIVER} in the image template"
+        splog "${QEMU_IMG} detected format '${FORMAT}' but DRIVER='${DRIVER}' in the image template"
     fi
 
     if [[ "${FORMAT}" == "raw" ]]; then
@@ -322,7 +322,7 @@ EOF
 )
         tStart=$(date +%s)
         if [[ -n "${DST_HOST}" ]]; then
-            splog "convert from ${FORMAT} to raw at ${DST_HOST}"
+            splog "convert from '${FORMAT}' to raw at ${DST_HOST}"
             ssh_exec_and_log "${DST_HOST}" "${POST_COPY_CMD}" \
                              "Error converting image on ${DST_HOST}"
         else
