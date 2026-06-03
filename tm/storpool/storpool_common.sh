@@ -97,7 +97,7 @@ export SP_CHECKPOINT_BD=0
 export SP_IMPORT_CGROUPS=""
 # override datastore bridge list for datastore/export script
 export EXPORT_BRIDGE_LIST=""
-# do no copy th eVM home back to sunstone on undeploy
+# do not copy the VM home back to sunstone on undeploy
 export SKIP_UNDEPLOY_SSH=0
 # cleanup the VM home on undeploy
 export CLEAN_SRC_ON_UNDEPLOY=1
