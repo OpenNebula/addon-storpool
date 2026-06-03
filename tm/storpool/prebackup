@@ -93,12 +93,23 @@ B_SUFFIX="ONEBACKUP-$(date +%s || true)"
 echo "${B_SUFFIX}" >"${B_DIR}/.snapshot_suffix"
 declare -a list_a
 backups=
+declare -A diskTypeMap_a
+for map in ${vmDisksTypeMap}; do
+    diskTypeMap_a["${map%:*}"]="${map#*:}"
+done
 
 json_volumes=""
 for map in ${vmDisksMap}; do
     img="${map%:*}"
     did="${map#*:}"
     kvGetUid "${img}" fatal
+    if boolTrue "BACKUP_VOLATILE"; then
+        diskType="${diskTypeMap_a["${img}"]}"
+        if [[ "${diskType:0:3}" == "VOL" ]]; then
+            splog "disk_id:${did} ${img} diskType=${diskType} ADD (${D_ARR["${did}"]:-not in DISKS list})"
+            D_ARR[${did}]="${did}"
+        fi
+    fi
     if [[ -n "${D_ARR["${did}"]}" ]]; then
         tags=$(tagsHelper "${VM_TAG};${LOC_TAG};virt;img;bak" "${VM_ID};${LOC_TAG_VAL};one;${img};${B_SUFFIX}")
         json_volumes+="${json_volumes:+,}{\"volume\":\"${SP_UID}\",\"tags\":{${tags}}}"
