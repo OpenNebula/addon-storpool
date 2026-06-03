@@ -583,7 +583,6 @@ function oneHostInfo()
             XPATH_ELEMENTS[i++]="${_element}"
         done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" 2>/dev/null || true)
         exec {xfh}<&-
-        rm -f "${_tmpXML}"
         unset i
         HOST_ID="${XPATH_ELEMENTS[i++]}"
         HOST_NAME="${XPATH_ELEMENTS[i++]}"
@@ -2114,7 +2113,7 @@ EOF
 function oneBackupImageInfo()
 {
     local _IMAGE_ID="$1"
-    local _tmpXML="${TMPDIR:-/tmp}/oneimage-${_IMAGE_ID}.XML"
+    local _tmpXML="${TMPDIR:-/tmp}/oneBackupImageInfo-${_IMAGE_ID}.XML"
     local _XPATH="" _element=""
 
     oneCallXml oneimage show "${_IMAGE_ID}" "${_tmpXML}"
@@ -2137,7 +2136,6 @@ function oneBackupImageInfo()
         XPATH_ELEMENTS[i++]="${_element}"
     done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-    rm -f "${_tmpXML}"
     unset i
     B_IMAGE_NAME="${XPATH_ELEMENTS[i++]}"
     B_IMAGE_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -2218,7 +2216,7 @@ function oneImageInfo()
         XPATH_ELEMENTS[i++]="${_element}"
     done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-    rm -f "${_tmpXML}"
+    #rm -f "${_tmpXML}"
 
     unset i
     IMAGE_NAME="${XPATH_ELEMENTS[i++]}"
@@ -2312,7 +2310,6 @@ function oneVmInfo()
         XPATH_ELEMENTS[i++]="${_element}"
     done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-    rm -f "${_tmpXML}"
     unset i
     DEPLOY_ID="${XPATH_ELEMENTS[i++]}"
     VMSTATE="${XPATH_ELEMENTS[i++]}"
@@ -2519,8 +2516,6 @@ function oneDatastoreInfo()
         XPATH_ELEMENTS[i++]="${_element}"
     done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-    rm -f "${_tmpXML}"
-
     unset i
     DS_NAME="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
@@ -2618,8 +2613,8 @@ function oneTemplateInfo()
         dumpTemplate "${_TEMPLATE}"
     fi
     if [[ -z "${_TEMPLATE}" ]]; then
-        _TEMPLATE="${TMPDIR:-/tmp}/onevm-${VM_ID}.XML.b64"
-        _ONEVMXML="${TMPDIR:-/tmp}/onevm-${VM_ID}.XML"
+        _TEMPLATE="${TMPDIR:-/tmp}/oneTemplateInfo-${VM_ID}.XML.b64"
+        _ONEVMXML="${TMPDIR:-/tmp}/oneTemplateInfo-${VM_ID}.XML"
         if [[ ! -f "${_ONEVMXML}" ]]; then
             oneCallXml onevm show "${VM_ID}" "${_ONEVMXML}"
             _ret=$?
@@ -3411,7 +3406,7 @@ function oneVmDiskSnapshots()
         XPATH_ELEMENTS[i++]="${_element}"
     done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-    rm -f "${_tmpXML}"
+    # rm -f "${_tmpXML}"
 
     unset i
     local _DISK_SNAPSHOTS="${XPATH_ELEMENTS[i++]}"
@@ -3479,7 +3474,7 @@ function oneVmSnapshots()
         XPATH_ELEMENTS[i++]="${element}"
     done {xfh}< <("${_XPATH_A[@]}" < "${_tmpXML}" "${_XPATH_QUERY[@]}" || true)
     exec {xfh}<&-
-    rm -f "${_tmpXML}"
+    # rm -f "${_tmpXML}"
 
     unset i
     VM_UID="${XPATH_ELEMENTS[i++]}"

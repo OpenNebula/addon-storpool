@@ -33,13 +33,13 @@ export SYSTEM_DS_PATH  # TBD: remove
 
 #splog "$* //${#DRV_ACTION}"
 oneVmInfo "${VM_ID}" "${DISK_ID}"
-VM_XML="${TMPDIR}/onevm-${VM_ID}.XML"
+VM_XML="${TMPDIR}/oneVmInfo-${VM_ID}.XML"
 
 oneBackupImageInfo "${IMG_ID}"
-BACKUP_IMG_XML="${TMPDIR}/oneimage-${IMG_ID}.XML"
+BACKUP_IMG_XML="${TMPDIR}/oneBackupImageInfo-${IMG_ID}.XML"
 
 oneDatastoreInfo "${B_DATASTORE_ID:?}"
-BACKUP_DS_XML="${TMPDIR}/onedatastore-${B_DATASTORE_ID}.XML"
+BACKUP_DS_XML="${TMPDIR}/oneDatastoreInfo-${B_DATASTORE_ID}.XML"
 
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
 debug_sp_qosclass
