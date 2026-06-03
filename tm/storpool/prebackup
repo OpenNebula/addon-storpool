@@ -44,7 +44,7 @@ if [[ -n "$6" ]]; then
 fi
 export BJ_ID  #  TBD: remove
 
-splog "${KVMHOST} ${VMDIR} ${DISKS} ${DEPLOY_ID}${BJ_ID:+ ${BJ_ID}} ${VM_ID} ${SYSDS_ID}"
+splog "${VM_ID} ${KVMHOST} ${VMDIR} DISKS='${DISKS}' ${DEPLOY_ID}${BJ_ID:+ JOB_ID=${BJ_ID}} SYSDS_ID=${SYSDS_ID}"
 
 B_DIR="${VMDIR}/backup"
 
