@@ -476,6 +476,9 @@ class DataProcessing(BaseManager):
             ret = True
         if one_data["state"] == 8:
             ret = True
+        if one_data["state"] == 9:
+            ret = True
+        self.dbg(9, f"is_vm_undeployed {one_data['state']=} {one_data['lcm_state']=} {ret=}")  # noqa: E501
         return ret
 
     def _analyze_storpool_legacy(
@@ -641,7 +644,8 @@ class DataProcessing(BaseManager):
             if sp_record["snapshot"] is False:
                 response["action"].insert(0, "VolumeFreeze")
             else:
-                response["data"]["snap"] = one_record["snap"]
+                if "snap" in one_record:
+                    response["data"]["snap"] = one_record["snap"]
         self.dbg(3, f"UPDATE_RECORD [{to_globalid=}] {response=}")
         if to_globalid:
             return response
