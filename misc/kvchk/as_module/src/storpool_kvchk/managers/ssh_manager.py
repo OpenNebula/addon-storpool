@@ -100,6 +100,15 @@ class SshManager(BaseManager):
         target: str = action_data["symlink"]["target"].replace(
             "_SP_UID_", action_data["uid"]
         )
+        link: str = action_data["symlink"]["link"]
+        link_dir: str = link.rsplit("/", 1)[0]
+        mkdir_cmd = (
+            "ssh",
+            action_data["symlink"]["host"],
+            "mkdir",
+            "-p",
+            link_dir,
+        )
         ssh_cmd = (
             "ssh",
             action_data["symlink"]["host"],
@@ -107,13 +116,20 @@ class SshManager(BaseManager):
             "-v",
             "-sf",
             target,
-            action_data["symlink"]["link"],
+            link,
         )
         try:
             if self.args.execute:
                 if self.args.dry_run:
+                    self.dbg(0, f"[dry-run] {mkdir_cmd=}")
                     self.dbg(0, f"[dry-run] {ssh_cmd=}")
                 else:
+                    if link_dir:
+                        subprocess.run(
+                            mkdir_cmd,
+                            capture_output=True,
+                            check=True,
+                        )
                     response = subprocess.run(
                         ssh_cmd,
                         capture_output=True,
@@ -122,7 +138,7 @@ class SshManager(BaseManager):
                     if self.args.verbose > 0:
                         self.dbg(0, f"create_symlink {ssh_cmd}: {response}")
         except Exception as error:
-            self.err(f"create_symlink Error! {ssh_cmd=} {error=}")
+            self.err(f"create_symlink Error! {mkdir_cmd=} {ssh_cmd=} {error=}")
             raise error
 
     def _get_spdev(self, action_data: Dict[str, Any]) -> None:

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 from storpool_kvchk.managers.ssh_manager import SshManager
 from storpool_kvchk.models.exceptions import SshManagerError
 import subprocess
@@ -228,15 +228,18 @@ class TestSshManagerCreateSymlink:
 
         ssh_manager.create_symlink(action_data)
 
-        # Verify the SSH command was called correctly
+        expected_mkdir_cmd = (
+            "ssh", "test-host", "mkdir", "-p", "/path/to"
+        )
         expected_cmd = (
             "ssh", "test-host", "ln", "-v", "-sf",
             "/path/to/123/target",  # _SP_UID_ should be replaced with uid
             "/path/to/link"
         )
-        mock_run.assert_called_once_with(
-            expected_cmd, capture_output=True, check=True
-        )
+        mock_run.assert_has_calls([
+            call(expected_mkdir_cmd, capture_output=True, check=True),
+            call(expected_cmd, capture_output=True, check=True),
+        ])
 
     @patch('subprocess.run')
     def test_create_symlink_dry_run_mode(self, mock_run, ssh_manager):
@@ -348,10 +351,10 @@ class TestSshManagerCreateSymlink:
             mock_run.return_value = Mock(returncode=0)
             ssh_manager.create_symlink(action_data)
 
-            # Check that the target path has uid replacement
-            called_cmd = mock_run.call_args[0][0]
-            assert '/storpool/abc123/volume' in called_cmd
-            assert '_SP_UID_' not in str(called_cmd)
+            # Check that the target path has uid replacement in the ln command
+            ln_cmd = mock_run.call_args_list[-1][0][0]
+            assert '/storpool/abc123/volume' in ln_cmd
+            assert '_SP_UID_' not in str(ln_cmd)
 
 
 class TestSshManagerAction:
