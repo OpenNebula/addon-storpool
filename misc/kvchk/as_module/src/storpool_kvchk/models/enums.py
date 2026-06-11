@@ -20,3 +20,4 @@ class ImageType(IntEnum):
     KERNEL = 3
     RAMDISK = 4
     CONTEXT = 5
+    BACKUP = 6
