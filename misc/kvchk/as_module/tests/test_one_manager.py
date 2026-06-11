@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import subprocess
 import os
 
-from storpool_kvchk.managers.one_manager import oneManager
+from storpool_kvchk.managers.one_manager import oneManager as OpenNebulaManager
 from storpool_kvchk.models.enums import DiskType, ImageType
 
 
@@ -620,11 +620,58 @@ class TestoneManager:
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')
-    @patch.object(oneManager, '_host_symlinks')
-    @patch.object(oneManager, '_get_vm_snapshots')
-    @patch.object(oneManager, '_get_disk_snapshots')
-    @patch.object(oneManager, '_process_vm_disks')
-    @patch.object(oneManager, '_process_vm_system_disks')
+    def test_init_ds_images_skips_backup_type(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
+    ):
+        """Test that images with TYPE >= 6 are skipped"""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+
+        snapshot_mock = Mock()
+        snapshot_mock.ID = 1
+        snapshot_mock.SIZE = 1024
+
+        regular_image = Mock()
+        regular_image.ID = 1
+        regular_image.TYPE = ImageType.OS
+        regular_image.PERSISTENT = DiskType.PERSISTENT
+        regular_image.STATE = 1
+        regular_image.NAME = "regular-image"
+        regular_image.DATASTORE_ID = 1
+        regular_image.VMS.get_ID.return_value = [123]
+        regular_image.TEMPLATE.get.return_value = "img-qos"
+        regular_image.SNAPSHOTS.SNAPSHOT = [snapshot_mock]
+
+        backup_image = Mock()
+        backup_image.ID = 2
+        backup_image.TYPE = ImageType.BACKUP
+        backup_image.PERSISTENT = DiskType.PERSISTENT
+        backup_image.STATE = 1
+        backup_image.NAME = "backup-image"
+        backup_image.DATASTORE_ID = 1
+        backup_image.VMS.get_ID.return_value = []
+        backup_image.TEMPLATE.get.return_value = "img-qos"
+        backup_image.SNAPSHOTS.SNAPSHOT = []
+
+        imagepool_mock = Mock()
+        imagepool_mock.get_IMAGE.return_value = [regular_image, backup_image]
+        mock_pyone_api.imagepool.info.return_value = imagepool_mock
+
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+
+        assert "one-img-1" in manager.ds_images
+        assert "one-img-2" not in manager.ds_images
+        assert len(manager.ds_images) == 1
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    @patch.object(OpenNebulaManager, '_host_symlinks')
+    @patch.object(OpenNebulaManager, '_get_vm_snapshots')
+    @patch.object(OpenNebulaManager, '_get_disk_snapshots')
+    @patch.object(OpenNebulaManager, '_process_vm_disks')
+    @patch.object(OpenNebulaManager, '_process_vm_system_disks')
     def test_get_vm_disks(
         self, mock_system_disks, mock_process_disks, mock_disk_snaps,
         mock_vm_snaps, mock_host_symlinks, mock_run, mock_pyone,
