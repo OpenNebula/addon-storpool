@@ -312,6 +312,8 @@ class oneManager(BaseManager):
         oneimg: Any = self.api.imagepool.info(-1, -1, -1, -1)
         for img_e in oneimg.get_IMAGE():
             spname: str = f"{self.args.one_px}-img-{img_e.ID}"
+            if int(img_e.TYPE) >= 6:
+                continue
             img_dict: Dict[str, Any] = {
                 "image_id": int(img_e.ID),
                 "legacy": spname,
