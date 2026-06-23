@@ -172,9 +172,6 @@ else
     SP_TEMP_VOL="${SP_VOL}-$(echo "${SP_VOL}" | md5sum | awk '{print $1}')"
     CREATE_SIZE="$((SIZE*1024*1024))"
     TEMP_SIZE="${CREATE_SIZE}"
-
-    CREATE_SIZE="$((SIZE*1024*1024))"
-    TEMP_SIZE="${CREATE_SIZE}"
     if [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
         TEMP_SIZE=$((1*1024*1024))
     else
