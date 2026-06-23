@@ -3791,8 +3791,13 @@ function qemu_img_info()
     if [[ -n "${_host}" ]]; then
         CMD=("${SSH:-ssh}" "${_host}" "${CMD[@]}")
     fi
-    if [[ -f "${_img}" ]]; then
-        STAT_IMAGE_SIZE=$(${STAT:-stat} --printf="%s" "${_img}" || true)
+    if boolTrue "DEBUG_qemu_img_info"; then
+        splog "[D] qemu_img_info(${_img}${_host:+:,${_host}}) CMD:${CMD[*]}"
+    fi
+    if [[ -f "${_img}" ]] || [[ -n "${_host}" ]]; then
+        if [[ -f "${_img}" ]]; then
+            STAT_IMAGE_SIZE=$(${STAT:-stat} --printf="%s" "${_img}" || true)
+        fi
         "${CMD[@]}" > "${_tmpjson}" || true
         if [[ -s "${_tmpjson}" ]]; then
             IFS=";" read -r QEMU_IMG_VIRTUAL_SIZE QEMU_IMG_ACTUAL_SIZE QEMU_IMG_FORMAT <<< "$(jq -r '"\(."virtual-size"|tostring);\(."actual-size"|tostring);\(.format|tostring)"' "${_tmpjson}" || true)"
