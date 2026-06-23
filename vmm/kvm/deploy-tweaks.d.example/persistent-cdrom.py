@@ -169,23 +169,30 @@ def change_cdrom(
     dev: str,
 ) -> bool:
     changed: bool = False
+    msg: str = ""
     type_e = disk_e.get('type')
     if type_e is not None and type_e != disk_cdrom_type:
         disk_e.set('type', disk_cdrom_type)
+        msg += f" type:{type_e} -> {disk_cdrom_type}"
         changed = True
     target_e = disk_e.find('./target')
     if target_e is not None:
         target_bus = target_e.get('bus')
         if target_bus is not None and target_bus != cdrom_bus:
             target_e.set('bus', cdrom_bus)
+            msg += f" bus:{target_bus} -> {cdrom_bus}"
             changed = True
         target_dev = target_e.get('dev')
         if target_dev is not None and target_dev != dev:
             target_e.set('dev', dev)
+            msg += f" dev:{target_dev} -> {dev}"
             changed = True
             address_e = disk_e.find('./address')
             if address_e is not None:
                 disk_e.remove(address_e)
+                msg += " removed address"
+    if msg:
+        log_inf(f"change_cdrom(){msg}")
     return changed
 
 
@@ -274,7 +281,7 @@ if os_type_e is not None:
     if machine is not None:
         if 'q35' in machine:
             cdrom_bus = 'sata'
-        log_dbg(f"{machine=} {cdrom_bus=}")
+        log_inf(f"{machine=} {cdrom_bus=}")
 
 # find first devices element. Will add the new cdrom devices to this element.
 devices_e: ET.Element = root.findall('.//devices')[0]
@@ -333,13 +340,18 @@ if pers_cdroms_count > 0:
     elif cdrom_bus == 'sata':
         for cdrom in all_cdroms:
             if not cdrom.get("has_source"):
+                log_dbg(f"Skipping CDROM without source"
+                        f" '{cdrom['target_dev']}'")
                 continue
             disk_id = cdrom.get("disk_id")
             if disk_id is not None and disk_id == context_disk_id:
                 log_dbg(f"Skipping CONTEXTUALIZATION CDROM"
-                        f" {cdrom['target_dev']} {disk_id=} {context_disk_id=}")
+                        f" {cdrom['target_dev']} {disk_id=}"
+                        f" {context_disk_id=}")
                 continue
             if is_persistent_sata_slot(cdrom["target_dev"]):
+                log_dbg(f"Skipping PERSISTENT SATA CDROM"
+                        f" {cdrom['target_dev']} {disk_id=}")
                 continue
             log_dbg(f"{disk_id=} {context_disk_id=} {used_sd_devices=}")
             dev = get_free_sata_device(used_sd_devices)
@@ -352,7 +364,11 @@ if pers_cdroms_count > 0:
                 ):
                     changed = True
                     cdrom["target_dev"] = dev
-
+            else:
+                log_dbg(f"Failed to change CDROM"
+                        f" {cdrom['target_dev']} {disk_id=}")
+        log_dbg(f"Adding remaining {target_count - total_cdroms_count}"
+                f" cdrom devices to {target_count}")
         while total_cdroms_count < target_count:
             dev = get_free_sata_device(used_sd_devices)
             if dev is None:

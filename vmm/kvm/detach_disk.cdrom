@@ -21,9 +21,9 @@ WORKDIR="$(dirname "$0")"
 source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
 source "${WORKDIR}/../../scripts_common.sh"
-if [[ -f "${WORKDIR}/addon-storpoolrc" ]]; then
+if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source "${WORKDIR}/addon-storpoolrc"
+    source "${WORKDIR}/../../addon-storpoolrc"
 fi
 
 set -o pipefail
@@ -53,11 +53,9 @@ while read -r -u "${domfh}" target_dev source_x; do
     if [[ -n "${DEBUG_DETACH_DISK}" ]]; then
         splog "[D] ${DOMAIN} target/@dev=${target_dev} source_x=${source_x}"
     fi
-    if [[ "${target_dev:0:2}" == "hd" ]]; then
-        if [[ "${source_x##*/}" == "${SOURCE##*/}" ]]; then
-            TARGET_DEVICE="${target_dev}"
-            break
-        fi
+    if [[ "${source_x##*/}" == "${SOURCE##*/}" ]]; then
+        TARGET_DEVICE="${target_dev}"
+        break
     fi
 done {domfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
     xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
@@ -81,6 +79,9 @@ if [[ -n "${TARGET_DEVICE}" ]]; then
     exec {virshfh}<&-
 else
     localscript="$(dirname "$(realpath "${0}"||true)")/detach_disk"
+    if [[ -n "${DEBUG_DETACH_DISK}" ]]; then
+        splog "[D] ${localscript} $* ..."
+    fi
     "${localscript}" "$@"
     ret=$?
     splog "${localscript} $* (${ret}) //END native"
