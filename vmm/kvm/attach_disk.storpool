@@ -56,6 +56,8 @@ T_PERSISTENT_CDROM_VM="$(echo "${DRV_ACTION}" | base64 -d | \
 
 PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
 
+DEV_PREFIX="${DEV_PREFIX:-${3:0:2}}"  # workaround a bug in 7.2.[0-1]
+
 if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     splog "[D] KVMHOST=${KVMHOST} TM_MAD=${TM_MAD} DISK_TYPE=${DISK_TYPE} TYPE=${TYPE} PERSISTENT_CDROM=${PERSISTENT_CDROM} DEV_PREFIX=${DEV_PREFIX}"
     if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
@@ -66,7 +68,7 @@ fi
 if [[ -n "${PERSISTENT_CDROM}" ]]; then
     if [[ "${TYPE^^}" == "CDROM" ]]; then
         case "${DEV_PREFIX,,}" in
-            hd|sd)
+            hd|sd|[a-z])
                 set -o pipefail
                 ${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom" "$@"
                 ret=$?
