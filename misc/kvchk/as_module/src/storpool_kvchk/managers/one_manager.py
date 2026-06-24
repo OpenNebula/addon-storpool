@@ -150,7 +150,12 @@ class oneManager(BaseManager):
             datastore_r["disk_type"] = datastore_e.DISK_TYPE
             datastore_r["ZDBG"] = "_init_datastores"
             datastore_r["qosclass"] = datastore_e.TEMPLATE.get("SP_QOSCLASS", self.args.default_qosclass)  # noqa: E501
-            self.one_datastores[datastore_e.ID] = datastore_r
+            datastore_r["SP_API_HTTP_HOST"] = datastore_e.TEMPLATE.get("SP_API_HTTP_HOST")  # noqa: E501
+            datastore_r["SP_API_HTTP_PORT"] = datastore_e.TEMPLATE.get("SP_API_HTTP_PORT", "81")  # noqa: E501
+            datastore_r["SP_AUTH_TOKEN"] = datastore_e.TEMPLATE.get("SP_AUTH_TOKEN")  # noqa: E501
+            datastore_r["SP_CLUSTER_ID"] = datastore_e.TEMPLATE.get("SP_CLUSTER_ID")  # noqa: E501
+            datastore_r["SP_REMOTE_LOCATION"] = datastore_e.TEMPLATE.get("SP_REMOTE_LOCATION")  # noqa: E501
+            self.one_datastores[int(datastore_e.ID)] = datastore_r
         self.dbg(2, f"self.one_datastores = \n{pprint.pformat(self.one_datastores)}")  # noqa: E501
 
     def _host_symlinks(self, vm_e: Any) -> Dict[str, Any]:

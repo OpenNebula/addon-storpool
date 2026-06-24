@@ -25,8 +25,8 @@ class DataProcessing(BaseManager):
     ):
         super().__init__(args)
         self.etcd: etcdManager = etcd_manager
-        self.sp: spManager = sp_manager
         self.one: oneManager = one_manager
+        self.sp: spManager = sp_manager
         self.ssh: SshManager = ssh_manager
         self.update_data: Dict[str, Dict[str, Any]] = {}
         self.update_entry: Dict[str, Any] = {}
@@ -210,7 +210,12 @@ class DataProcessing(BaseManager):
                     f" byName[{name}]={self.etcd.data['byName'][name]}",
                 )
                 self.dbg(0, f"etcdctl del /byUid/{uid}")
-                self.dbg(0, f"storpool -M -B volume {uid} delete {uid}")
+                sp_api_http_host = self.sp.data[uid]["sp_api_http_host"]
+                self.dbg(
+                    0,
+                    f"storpool -M -B volume {uid} delete {uid}"
+                    f" # API: {sp_api_http_host}",
+                )
         else:
             self.dbg(0, f"etcdctl del /byUid/{uid}")
 
@@ -604,6 +609,7 @@ class DataProcessing(BaseManager):
                 "sptags": sp_record["tags"],
                 "legacy": one_record["legacy"],
                 "tags": {},
+                "sp_api_http_host": sp_record["sp_api_http_host"],
             },
         }
         if "link" in one_record:

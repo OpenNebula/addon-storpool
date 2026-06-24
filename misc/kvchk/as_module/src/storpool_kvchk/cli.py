@@ -124,7 +124,7 @@ def main() -> int:
 
         ssh_manager = SshManager(arguments)
         one_manager = oneManager(arguments, ssh_manager)
-        sp_manager = spManager(arguments)
+        sp_manager = spManager(arguments, one_manager.one_datastores)
         etcd_manager = etcdManager(arguments)
 
         data_processing = DataProcessing(
