@@ -118,8 +118,8 @@ class oneManager(BaseManager):
     def _init_hosts(self) -> None:
         """Get OpenNebula hosts"""
         self.dbg(6, "get_hosts")
-        onehosts = self.api.hostpool.info(-1, -1, -1, -1)
-        for host_e in onehosts.get_HOST():
+        one_hosts_info = self.api.hostpool.info(-1, -1, -1, -1)
+        for host_e in one_hosts_info.get_HOST():
             host_r: Dict[str, Any] = {}
             hostname: str = host_e.NAME
             host_r["name"] = hostname
@@ -140,8 +140,8 @@ class oneManager(BaseManager):
     def _init_datastores(self) -> None:
         """Get OpenNebula datastores"""
         self.dbg(6, "get_datastores")
-        one_datastores = self.api.datastorepool.info(-1, -1, -1, -1)
-        for datastore_e in one_datastores.get_DATASTORE():
+        one_datastores_info = self.api.datastorepool.info(-1, -1, -1, -1)
+        for datastore_e in one_datastores_info.get_DATASTORE():
             datastore_r: Dict[str, Any] = {}
             datastore_r["name"] = datastore_e.NAME
             datastore_r["id"] = int(datastore_e.ID)
