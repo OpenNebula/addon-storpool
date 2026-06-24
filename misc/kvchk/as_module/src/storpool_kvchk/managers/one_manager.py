@@ -400,6 +400,7 @@ class oneManager(BaseManager):
         vm_disks: Dict[str, Any] = {}
         vm_id: int = int(vm_e.ID)
         host: str = vm_e.HISTORY_RECORDS.HISTORY[-1].HOSTNAME
+        tm_mad: str = vm_e.HISTORY_RECORDS.HISTORY[-1].TM_MAD
         state: int = int(vm_e.STATE)
         lcm_state: int = int(vm_e.LCM_STATE)
         # CONTEXTUALIZATION disk
@@ -424,6 +425,7 @@ class oneManager(BaseManager):
                 "vc-policy": vc_policy,
                 "state": state,
                 "lcm_state": lcm_state,
+                "tm_mad": tm_mad,
                 # fmt: off
                 "link": (f"/var/lib/one/datastores/{sys_ds_id}/{vm_id}"
                          f"/disk.{disk_id}"),
@@ -572,6 +574,7 @@ class oneManager(BaseManager):
                     "img_ds_id": img_ds_id,
                     "qosclass": vm_qosclass,
                     "vc-policy": vc_policy,
+                    "tm_mad": disk.get("TM_MAD"),
                 }
             )
             v_info["state"] = vm_details["state"]
