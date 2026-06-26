@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import Mock, patch
-from storpool_kvchk.managers.etcd_manager import EtcdManager  # type: ignore[import-untyped] # noqa: E501
+from storpool_kvchk.managers.etcd_manager import etcdManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.models.exceptions import KvByNameError, KvByUidError  # type: ignore[import-untyped] # noqa: E501
 
 
@@ -34,34 +34,34 @@ def sample_etcd_data():
 
 @pytest.fixture
 def etcd_manager_with_mock_data(mock_args, sample_etcd_data):
-    """Create EtcdManager with mocked data loading"""
-    with patch.object(EtcdManager, '_load_data'):
-        manager = EtcdManager(mock_args)
+    """Create etcdManager with mocked data loading"""
+    with patch.object(etcdManager, '_load_data'):
+        manager = etcdManager(mock_args)
         manager.data = sample_etcd_data
         return manager
 
 
 @pytest.fixture
 def dummy_etcd_manager(mock_args):
-    """Create EtcdManager in dummy mode (no etcd loading)"""
+    """Create etcdManager in dummy mode (no etcd loading)"""
     mock_args.dummy_etcd = 1
-    manager = EtcdManager(mock_args)
+    manager = etcdManager(mock_args)
     # Reset data to empty state for dummy mode
     manager.data = {"byName": {}, "byUid": {}}
     return manager
 
 
-class TestEtcdManagerInit:
-    """Test EtcdManager initialization"""
+class TestetcdManagerInit:
+    """Test etcdManager initialization"""
 
     @patch('etcd3.client')
-    @patch.object(EtcdManager, '_load_data')
+    @patch.object(etcdManager, '_load_data')
     def test_init_normal_mode(self, mock_load_data, mock_etcd_client,
                               mock_args):
         """Test initialization in normal mode calls _load_data"""
         mock_args.dummy_etcd = 0
 
-        manager = EtcdManager(mock_args)
+        manager = etcdManager(mock_args)
 
         mock_load_data.assert_called_once()
         assert manager.args == mock_args
@@ -70,14 +70,14 @@ class TestEtcdManagerInit:
         """Test initialization in dummy mode skips _load_data"""
         mock_args.dummy_etcd = 1
 
-        with patch.object(EtcdManager, '_load_data') as mock_load_data:
-            manager = EtcdManager(mock_args)
+        with patch.object(etcdManager, '_load_data') as mock_load_data:
+            manager = etcdManager(mock_args)
 
             mock_load_data.assert_not_called()
             assert manager.args == mock_args
 
 
-class TestEtcdManagerLoadData:
+class TestetcdManagerLoadData:
     """Test _load_data method"""
 
     @patch('etcd3.client')
@@ -103,7 +103,7 @@ class TestEtcdManagerLoadData:
 
         # Create manager and load data
         mock_args.dummy_etcd = 0
-        manager = EtcdManager(mock_args)
+        manager = etcdManager(mock_args)
 
         # Verify data was loaded correctly
         assert manager.data["byName"]["ans-sys-26-1"] == "~fir.b.jm"
@@ -130,13 +130,13 @@ class TestEtcdManagerLoadData:
         mock_args.dummy_etcd = 0
         mock_args.verbose = 1  # Enable debug output
 
-        manager = EtcdManager(mock_args)
+        manager = etcdManager(mock_args)
 
         # The second value should overwrite the first
         assert manager.data["byName"]["test-vol"] == "~uid2"
 
 
-class TestEtcdManagerValidation:
+class TestetcdManagerValidation:
     """Test validate_kv method"""
 
     def test_validate_kv_success(self, etcd_manager_with_mock_data):
@@ -183,7 +183,7 @@ class TestEtcdManagerValidation:
         assert "fir.b.jm ans-sys-26-1" in str(exc_info.value)
 
 
-class TestEtcdManagerKvData:
+class TestetcdManagerKvData:
     """Test kv_data method"""
 
     def test_kv_data_normal_mode(
@@ -206,7 +206,7 @@ class TestEtcdManagerKvData:
         assert result == {"byName": {}, "byUid": {}}
 
 
-class TestEtcdManagerWriteKvData:
+class TestetcdManagerWriteKvData:
     """Test write_kv_data method"""
 
     @patch('etcd3.client')
@@ -326,7 +326,7 @@ class TestEtcdManagerWriteKvData:
         assert "Connection failed" in str(exc_info.value)
 
 
-class TestEtcdManagerAction:
+class TestetcdManagerAction:
     """Test action method"""
 
     def test_action_kvupdate(self, etcd_manager_with_mock_data):
@@ -374,8 +374,8 @@ class TestEtcdManagerAction:
             mock_write.assert_not_called()
 
 
-class TestEtcdManagerIntegration:
-    """Integration tests for EtcdManager"""
+class TestetcdManagerIntegration:
+    """Integration tests for etcdManager"""
 
     @patch('etcd3.client')
     def test_full_workflow(self, mock_etcd_client, mock_args):
@@ -401,7 +401,7 @@ class TestEtcdManagerIntegration:
         mock_args.dummy_etcd = 0
         mock_args.execute = True
         mock_args.dry_run = False
-        manager = EtcdManager(mock_args)
+        manager = etcdManager(mock_args)
 
         # Test validation of existing data
         assert manager.validate_kv("existing.uid", "existing-vol") is True

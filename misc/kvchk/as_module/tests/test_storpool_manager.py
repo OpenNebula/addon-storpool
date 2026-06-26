@@ -1,13 +1,32 @@
 import pytest
 from unittest.mock import Mock, patch
-from storpool_kvchk.managers.storpool_manager import StorPoolManager  # type: ignore[import-untyped] # noqa: E501
+from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.models.exceptions import UnknownApiCall  # type: ignore[import-untyped] # noqa: E501
+
+
+# StorPool is now multisite aware: the manager keeps a per-host Api in
+# `api_host` and a per-datastore mapping in `api_dsid`, built from the
+# `datastore_config` passed to the constructor.
+TEST_HOST = "localhost"
+DS_CONFIG = {
+    0: {
+        "SP_API_HTTP_HOST": TEST_HOST,
+        "SP_API_HTTP_PORT": "81",
+        "SP_AUTH_TOKEN": "test-token-12345",
+    }
+}
 
 
 # Module-level patches that apply to all tests
 @pytest.fixture(autouse=True)
 def mock_storpool_modules():
     """Auto-applied fixture that mocks StorPool modules for all tests"""
+
+    # `data`, `api_host` and `api_dsid` are class-level attributes shared
+    # across instances; reset them so tests do not leak into each other.
+    spManager.data = {}
+    spManager.api_host = {}
+    spManager.api_dsid = {}
 
     # Create comprehensive SPConfig mock
     config_dict = {
@@ -36,6 +55,7 @@ def mock_storpool_modules():
     mock_volume = Mock()
     mock_volume.globalId = "vol-123-global-id"
     mock_volume.name = "test-volume"
+    mock_volume.clusterId = "1"
     mock_volume.tags = {"type": "PERS", "kvcheck": "test"}
     mock_volume.size = 10737418240  # 10GB in bytes
 
@@ -43,6 +63,7 @@ def mock_storpool_modules():
     mock_snapshot = Mock()
     mock_snapshot.globalId = "snap-456-global-id"
     mock_snapshot.name = "test-snapshot"
+    mock_snapshot.clusterId = "1"
     snap_tags = {"type": "PERS", "snap": "0", "kvcheck": "test"}
     mock_snapshot.tags = snap_tags
     mock_snapshot.size = 10737418240  # 10GB in bytes
@@ -103,8 +124,8 @@ def mock_args():
 
 @pytest.fixture
 def sp_manager(mock_args, mock_storpool_modules):
-    """Create StorPoolManager with mocked dependencies"""
-    manager = StorPoolManager(mock_args)
+    """Create spManager with mocked dependencies"""
+    manager = spManager(mock_args, DS_CONFIG)
     # Attach mock references for direct access in tests
     manager._mock_api = mock_storpool_modules['api']
     manager._mock_config = mock_storpool_modules['config']
@@ -124,7 +145,7 @@ def mock_api_error():
 
 
 class TestStorPoolManager:
-    """Test StorPoolManager functionality"""
+    """Test spManager functionality"""
 
     def test_init_with_config(self, sp_manager):
         """Test initialization with mocked StorPool configuration"""
@@ -133,8 +154,10 @@ class TestStorPoolManager:
         assert sp_manager.args.dry_run is False
         assert sp_manager.args.execute is False
 
-        # Verify API was initialized correctly
-        assert hasattr(sp_manager, 'api')
+        # Verify per-host/per-datastore Api maps were initialized
+        assert TEST_HOST in sp_manager.api_host
+        assert 0 in sp_manager.api_dsid
+        assert sp_manager.api_dsid[0] is sp_manager.api_host[TEST_HOST]
 
     def test_load_data_populates_data_structures(self, sp_manager):
         """Test that _load_data() properly populates volumes, snapshots,
@@ -150,6 +173,7 @@ class TestStorPoolManager:
         assert volume_data["tags"] == {"type": "PERS", "kvcheck": "test"}
         assert volume_data["size"] == 10737418240
         assert volume_data["snapshot"] is False
+        assert volume_data["sp_api_http_host"] == TEST_HOST
 
         # Verify snapshot data structure
         snapshot_data = sp_manager.data["test-snapshot"]
@@ -159,6 +183,7 @@ class TestStorPoolManager:
         assert snapshot_data["tags"] == tags
         assert snapshot_data["size"] == 10737418240
         assert snapshot_data["snapshot"] is True
+        assert snapshot_data["sp_api_http_host"] == TEST_HOST
 
         # Verify attachments were processed correctly
         assert hasattr(sp_manager, 'attachments')
@@ -166,12 +191,15 @@ class TestStorPoolManager:
 
         attachment = sp_manager.attachments["test-volume"]
         assert attachment["globalId"] == "vol-123-global-id"
-        assert attachment["clusterId"] == "1"
+        # multisite: clusterId and sp_api_http_host are accumulated lists
+        assert attachment["clusterId"] == ["1"]
         assert attachment["cluster"] == "test-cluster"
         assert attachment["client"] == [1]  # Should be converted to list
         assert attachment["rights"] == ["rw"]  # Should be converted to list
         assert attachment["volume"] == "test-volume"
         assert attachment["snapshot"] is False
+        assert attachment["sp_api_http_host"] == [TEST_HOST]
+        assert attachment["count"] == 1
 
     def test_api_list_methods_called(self, sp_manager):
         """Test that all required API list methods are called during init"""
@@ -196,6 +224,7 @@ class TestStorPoolManager:
         action_data = {
             "uid": "test-uid-123",
             "snapshot": snapshot,
+            "sp_api_http_host": TEST_HOST,
             "tags": {"type": "PERS", "kvcheck": "test"}
         }
 
@@ -223,7 +252,8 @@ class TestStorPoolManager:
 
         action_data = {
             "uid": "test-uid-123",
-            "snapshot": False
+            "snapshot": False,
+            "sp_api_http_host": TEST_HOST,
         }
 
         with pytest.raises(UnknownApiCall) as exc_info:
@@ -238,6 +268,7 @@ class TestStorPoolManager:
         action_data = {
             "uid": "test-uid-123",
             "snapshot": False,
+            "sp_api_http_host": TEST_HOST,
             "tags": {"type": "PERS"}
         }
 
@@ -258,6 +289,7 @@ class TestStorPoolManager:
         action_data = {
             "uid": "test-uid-123",
             "snapshot": False,
+            "sp_api_http_host": TEST_HOST,
             "tags": {"type": "PERS"}
         }
 
@@ -277,6 +309,7 @@ class TestStorPoolManager:
         in_data = {
             "uid": "vol-123-global-id",
             "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
             "sptags": {"type": "PERS"},
             "tags": {"kvcheck": "test"}
         }
@@ -284,10 +317,15 @@ class TestStorPoolManager:
         # Execute volumefreeze
         sp_manager.volumefreeze(in_data, "freeze")
 
-        # Verify snapshot creation was called
+        # Verify snapshot creation was called; the volume name is added as
+        # an `img` tag on the new snapshot.
         expected_payload = {
             "name": "",
-            "tags": {"type": "PERS", "kvcheck": "test"}
+            "tags": {
+                "type": "PERS",
+                "kvcheck": "test",
+                "img": "test-volume",
+            }
         }
         sp_manager._mock_api.snapshotCreate.assert_called_once_with(
             "test-volume",
@@ -311,6 +349,7 @@ class TestStorPoolManager:
         in_data = {
             "uid": "vol-123-global-id",
             "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
             "sptags": {"type": "PERS"},
             "tags": {"kvcheck": "test"}
         }
@@ -341,6 +380,7 @@ class TestStorPoolManager:
         action_data = {
             "uid": "test-uid-123",
             "snapshot": False,
+            "sp_api_http_host": TEST_HOST,
             "tags": {"type": "PERS"}
         }
 
@@ -381,13 +421,14 @@ class TestStorPoolManager:
         mock_storpool_modules['api'].snapshotsList.return_value = []
 
         # Create a fresh manager
-        fresh_manager = StorPoolManager(mock_args)
+        fresh_manager = spManager(mock_args, DS_CONFIG)
 
         # Verify multiple attachments are handled correctly
         assert "multi-attach-volume" in fresh_manager.attachments
         attachment = fresh_manager.attachments["multi-attach-volume"]
         assert attachment["client"] == [1, 2]  # Both clients
         assert attachment["rights"] == ["rw", "ro"]  # Both rights
+        assert attachment["count"] == 2
 
     def test_config_access_methods(self, mock_storpool_modules):
         """Test that SPConfig mock supports all expected access methods"""
