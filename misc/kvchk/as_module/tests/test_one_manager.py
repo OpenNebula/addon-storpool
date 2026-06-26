@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import subprocess
 import os
 
-from storpool_kvchk.managers.one_manager import OpenNebulaManager
+from storpool_kvchk.managers.one_manager import oneManager
 from storpool_kvchk.models.enums import DiskType, ImageType
 
 
@@ -120,7 +120,7 @@ def mock_pyone_api():
     return api
 
 
-class TestOpenNebulaManager:
+class TestoneManager:
     """Test OpenNebula manager functionality"""
 
     @patch.dict(os.environ, {"ONE_AUTH": "/tmp/test_auth"})
@@ -134,7 +134,7 @@ class TestOpenNebulaManager:
 
         with patch('storpool_kvchk.managers.one_manager.pyone'):
             with patch('subprocess.run'):
-                manager = OpenNebulaManager.__new__(OpenNebulaManager)
+                manager = oneManager.__new__(oneManager)
                 manager.args = mock_args
 
                 token = manager.get_one_token()
@@ -148,10 +148,10 @@ class TestOpenNebulaManager:
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = b"123\n456\n789\n"
 
-        with patch.object(OpenNebulaManager, '_init_hosts'):
-            with patch.object(OpenNebulaManager, '_init_ds_images'):
-                with patch.object(OpenNebulaManager, '_get_vm_disks'):
-                    manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+        with patch.object(oneManager, '_init_hosts'):
+            with patch.object(oneManager, '_init_ds_images'):
+                with patch.object(oneManager, '_get_vm_disks'):
+                    manager = oneManager(mock_args, mock_ssh_manager)
 
         assert manager.vm_ids == [123, 456, 789]
 
@@ -162,11 +162,11 @@ class TestOpenNebulaManager:
         """Test VM IDs initialization with command error"""
         mock_run.side_effect = subprocess.CalledProcessError(1, 'cmd')
 
-        with patch.object(OpenNebulaManager, '_init_hosts'):
-            with patch.object(OpenNebulaManager, '_init_ds_images'):
-                with patch.object(OpenNebulaManager, '_get_vm_disks'):
+        with patch.object(oneManager, '_init_hosts'):
+            with patch.object(oneManager, '_init_ds_images'):
+                with patch.object(oneManager, '_get_vm_disks'):
                     with pytest.raises(subprocess.CalledProcessError):
-                        OpenNebulaManager(mock_args, mock_ssh_manager)
+                        oneManager(mock_args, mock_ssh_manager)
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')
@@ -178,7 +178,7 @@ class TestOpenNebulaManager:
 
         mock_pyone.OneServer.return_value = mock_pyone_api
 
-        manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+        manager = oneManager(mock_args, mock_ssh_manager)
 
         assert "test-host" in manager.one_hosts
         assert manager.one_hosts["test-host"]["name"] == "test-host"
@@ -203,13 +203,13 @@ class TestOpenNebulaManager:
         mock_pyone.OneServer.return_value = mock_pyone_api
 
         # Should not raise exception, just print error
-        manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+        manager = oneManager(mock_args, mock_ssh_manager)
 
         assert "test-host" in manager.one_hosts
 
     def test_prepare_vm_disk_nonpersistent(self, mock_args):
         """Test preparing non-persistent VM disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {}
         manager.ds_images = {}
@@ -239,7 +239,7 @@ class TestOpenNebulaManager:
 
     def test_prepare_vm_disk_persistent(self, mock_args):
         """Test preparing persistent VM disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {}
         manager.ds_images = {}
@@ -267,7 +267,7 @@ class TestOpenNebulaManager:
 
     def test_prepare_vm_disk_cdrom(self, mock_args):
         """Test preparing CDROM disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {}
         manager.ds_images = {}
@@ -295,7 +295,7 @@ class TestOpenNebulaManager:
 
     def test_prepare_vm_disk_volatile(self, mock_args):
         """Test preparing volatile disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {}
         manager.ds_images = {}
@@ -325,7 +325,7 @@ class TestOpenNebulaManager:
 
     def test_get_vm_snapshots_single(self, mock_args):
         """Test getting VM snapshots - single snapshot"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.args.verbose = 10
 
@@ -339,7 +339,7 @@ class TestOpenNebulaManager:
 
     def test_get_vm_snapshots_multiple(self, mock_args):
         """Test getting VM snapshots - multiple snapshots"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         vm_mock = Mock()
@@ -355,7 +355,7 @@ class TestOpenNebulaManager:
 
     def test_get_vm_snapshots_none(self, mock_args):
         """Test getting VM snapshots when none exist"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         vm_mock = Mock()
@@ -367,7 +367,7 @@ class TestOpenNebulaManager:
 
     def test_get_disk_snapshots(self, mock_args):
         """Test getting disk snapshots"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         vm_mock = Mock()
@@ -384,7 +384,7 @@ class TestOpenNebulaManager:
 
     def test_get_disk_snapshots_none(self, mock_args):
         """Test getting disk snapshots when none exist"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         vm_mock = Mock()
@@ -396,7 +396,7 @@ class TestOpenNebulaManager:
 
     def test_process_vm_system_disks_context(self, mock_args):
         """Test processing VM system disks - context disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"}
@@ -405,7 +405,10 @@ class TestOpenNebulaManager:
         vm_mock = Mock()
         vm_mock.ID = 123
         vm_mock.STATE = 3
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(HOSTNAME="test-host")]
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.TEMPLATE.get.side_effect = lambda key: {
             "CONTEXT": {"DISK_ID": 1}
         }.get(key)
@@ -422,7 +425,7 @@ class TestOpenNebulaManager:
 
     def test_process_vm_system_disks_nvram(self, mock_args):
         """Test processing VM system disks - NVRAM"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"}
@@ -431,7 +434,10 @@ class TestOpenNebulaManager:
         vm_mock = Mock()
         vm_mock.ID = 123
         vm_mock.STATE = 3
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(HOSTNAME="test-host")]
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "T_OS_LOADER": "OVMF",
@@ -447,7 +453,7 @@ class TestOpenNebulaManager:
 
     def test_process_vm_system_disks_checkpoint(self, mock_args):
         """Test processing VM system disks - checkpoint"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"}
@@ -456,7 +462,10 @@ class TestOpenNebulaManager:
         vm_mock = Mock()
         vm_mock.ID = 123
         vm_mock.STATE = 4  # STOPPED
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(HOSTNAME="test-host")]
+        vm_mock.LCM_STATE = 0
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": None,
@@ -470,15 +479,15 @@ class TestOpenNebulaManager:
         assert expected_name in vm_disks
         assert vm_disks[expected_name]["disktype"] == DiskType.CHECKPOINT
 
-    @patch.object(OpenNebulaManager, '_prepare_vm_disk')
-    @patch.object(OpenNebulaManager, '_get_disk_symlink')
-    @patch.object(OpenNebulaManager, '_get_vm_disks_list')
+    @patch.object(oneManager, '_prepare_vm_disk')
+    @patch.object(oneManager, '_get_disk_symlink')
+    @patch.object(oneManager, '_get_vm_disks_list')
     def test_process_vm_disks(
         self, mock_get_disks_list, mock_get_symlink, mock_prepare_disk,
         mock_args
     ):
         """Test processing VM disks"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         mock_get_disks_list.return_value = [
@@ -495,7 +504,11 @@ class TestOpenNebulaManager:
 
         vm_mock = Mock()
         vm_mock.ID = 123
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(DS_ID=1, HOSTNAME="test-host")]
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(DS_ID=1, HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": "vm-qos",
             "VC_POLICY": None
@@ -514,7 +527,7 @@ class TestOpenNebulaManager:
 
     def test_get_disk_symlink_found(self, mock_args):
         """Test getting disk symlink when found"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         links = {"disk.0": "/path/to/symlink"}
@@ -523,7 +536,7 @@ class TestOpenNebulaManager:
 
     def test_get_disk_symlink_not_found(self, mock_args):
         """Test getting disk symlink when not found"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         links = {"disk.1": "/path/to/symlink"}
@@ -532,7 +545,7 @@ class TestOpenNebulaManager:
 
     def test_get_by_legacy_direct_match(self, mock_args):
         """Test getting by legacy name - direct match"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         test_dict = {
@@ -544,7 +557,7 @@ class TestOpenNebulaManager:
 
     def test_get_by_legacy_legacy_match(self, mock_args):
         """Test getting by legacy name - legacy field match"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         test_dict = {
@@ -556,7 +569,7 @@ class TestOpenNebulaManager:
 
     def test_get_by_legacy_snapshot_match(self, mock_args):
         """Test getting by legacy name - snapshot match"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         test_dict = {
@@ -575,7 +588,7 @@ class TestOpenNebulaManager:
 
     def test_get_by_legacy_not_found(self, mock_args):
         """Test getting by legacy name - not found"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         test_dict = {
@@ -596,7 +609,7 @@ class TestOpenNebulaManager:
 
         mock_pyone.OneServer.return_value = mock_pyone_api
 
-        manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+        manager = oneManager(mock_args, mock_ssh_manager)
 
         # Check that image was processed
         expected_name = "one-img-1"
@@ -607,11 +620,11 @@ class TestOpenNebulaManager:
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')
-    @patch.object(OpenNebulaManager, '_host_symlinks')
-    @patch.object(OpenNebulaManager, '_get_vm_snapshots')
-    @patch.object(OpenNebulaManager, '_get_disk_snapshots')
-    @patch.object(OpenNebulaManager, '_process_vm_disks')
-    @patch.object(OpenNebulaManager, '_process_vm_system_disks')
+    @patch.object(oneManager, '_host_symlinks')
+    @patch.object(oneManager, '_get_vm_snapshots')
+    @patch.object(oneManager, '_get_disk_snapshots')
+    @patch.object(oneManager, '_process_vm_disks')
+    @patch.object(oneManager, '_process_vm_system_disks')
     def test_get_vm_disks(
         self, mock_system_disks, mock_process_disks, mock_disk_snaps,
         mock_vm_snaps, mock_host_symlinks, mock_run, mock_pyone,
@@ -628,7 +641,7 @@ class TestOpenNebulaManager:
         mock_process_disks.return_value = {"disk1": {"data": "test"}}
         mock_system_disks.return_value = {"sys1": {"data": "test"}}
 
-        manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+        manager = oneManager(mock_args, mock_ssh_manager)
         assert manager is not None
 
         # Verify methods were called
@@ -644,7 +657,7 @@ class TestQosClassSelector:
 
     def test_qosclass_persistent_disk_qosclass(self, mock_args):
         """Test QoS class selection for persistent disk with disk QoS"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -664,7 +677,7 @@ class TestQosClassSelector:
 
     def test_qosclass_persistent_img_qosclass(self, mock_args):
         """Test QoS class selection for persistent disk with image QoS"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -684,7 +697,7 @@ class TestQosClassSelector:
 
     def test_qosclass_persistent_vm_qosclass(self, mock_args):
         """Test QoS class selection for persistent disk with VM QoS"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -704,7 +717,7 @@ class TestQosClassSelector:
 
     def test_qosclass_volatile_priority(self, mock_args):
         """Test QoS class selection priority for volatile disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -726,7 +739,7 @@ class TestQosClassSelector:
 
     def test_qosclass_cdrom_vm_qosclass(self, mock_args):
         """Test QoS class selection for CDROM disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -745,7 +758,7 @@ class TestQosClassSelector:
 
     def test_qosclass_nvram_vm_qosclass(self, mock_args):
         """Test QoS class selection for NVRAM disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -765,7 +778,7 @@ class TestQosClassSelector:
 
     def test_qosclass_default_fallback(self, mock_args):
         """Test QoS class fallback to default"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {}
 
@@ -782,7 +795,7 @@ class TestQosClassSelector:
 
     def test_qosclass_parse_perdisk_format(self, mock_args):
         """Test parsing per-disk QoS class format"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {}
 
@@ -800,7 +813,7 @@ class TestQosClassSelector:
 
     def test_qosclass_sys_ds_priority(self, mock_args):
         """Test QoS class priority for system datastore"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -832,7 +845,7 @@ class TestInitDatastores:
 
         mock_pyone.OneServer.return_value = mock_pyone_api
 
-        manager = OpenNebulaManager(mock_args, mock_ssh_manager)
+        manager = oneManager(mock_args, mock_ssh_manager)
 
         # Check that datastore was processed
         assert 1 in manager.one_datastores
@@ -846,7 +859,7 @@ class TestHostSymlinks:
 
     def test_host_symlinks_running_vm(self, mock_args):
         """Test getting symlinks for running VM"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_hosts = {
             "test-host": {
@@ -870,7 +883,7 @@ class TestHostSymlinks:
 
     def test_host_symlinks_poweroff_vm(self, mock_args):
         """Test getting symlinks for powered off VM"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_hosts = {
             "test-host": {
@@ -894,7 +907,7 @@ class TestHostSymlinks:
 
     def test_host_symlinks_no_host_data(self, mock_args):
         """Test getting symlinks when host not in hosts data"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_hosts = {}
 
@@ -912,7 +925,7 @@ class TestHostSymlinks:
 
     def test_host_symlinks_wrong_vm_state(self, mock_args):
         """Test getting symlinks for VM in wrong state"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_hosts = {
             "test-host": {
@@ -936,7 +949,7 @@ class TestHostSymlinks:
 
     def test_host_symlinks_no_links_in_host(self, mock_args):
         """Test getting symlinks when host has no links data"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_hosts = {
             "test-host": {
@@ -960,7 +973,7 @@ class TestGetVMDisksList:
 
     def test_get_vm_disks_list_single(self, mock_args):
         """Test getting VM disks list with single disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         vm_mock = Mock()
@@ -972,7 +985,7 @@ class TestGetVMDisksList:
 
     def test_get_vm_disks_list_multiple(self, mock_args):
         """Test getting VM disks list with multiple disks"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         vm_mock = Mock()
@@ -993,7 +1006,7 @@ class TestPrepareVMDiskWithQoS:
 
     def test_prepare_vm_disk_with_qosclass(self, mock_args):
         """Test preparing VM disk with QoS class"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -1025,7 +1038,7 @@ class TestPrepareVMDiskWithQoS:
 
     def test_prepare_vm_disk_with_perdisk_qosclass(self, mock_args):
         """Test preparing VM disk with per-disk QoS class"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -1052,7 +1065,7 @@ class TestPrepareVMDiskWithQoS:
 
     def test_prepare_vm_disk_with_img_qosclass(self, mock_args):
         """Test preparing VM disk with image QoS class"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"},
@@ -1087,7 +1100,7 @@ class TestProcessVMSystemDisksUpdated:
 
     def test_process_vm_system_disks_context_with_qos(self, mock_args):
         """Test processing VM context disk with QoS class"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"}
@@ -1096,7 +1109,10 @@ class TestProcessVMSystemDisksUpdated:
         vm_mock = Mock()
         vm_mock.ID = 123
         vm_mock.STATE = 3
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(HOSTNAME="test-host")]
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.TEMPLATE.get.side_effect = lambda key: {
             "CONTEXT": {"DISK_ID": 1}
         }.get(key)
@@ -1119,7 +1135,7 @@ class TestProcessVMSystemDisksUpdated:
 
     def test_process_vm_system_disks_nvram_with_snapshots(self, mock_args):
         """Test processing VM NVRAM with snapshots"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"}
@@ -1128,7 +1144,10 @@ class TestProcessVMSystemDisksUpdated:
         vm_mock = Mock()
         vm_mock.ID = 123
         vm_mock.STATE = 3
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(HOSTNAME="test-host")]
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "T_OS_LOADER": "OVMF",
@@ -1150,7 +1169,7 @@ class TestProcessVMSystemDisksUpdated:
 
     def test_process_vm_system_disks_checkpoint_with_qos(self, mock_args):
         """Test processing VM checkpoint disk"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
         manager.one_datastores = {
             1: {"qosclass": "sys-ds-qos"}
@@ -1159,7 +1178,10 @@ class TestProcessVMSystemDisksUpdated:
         vm_mock = Mock()
         vm_mock.ID = 456
         vm_mock.STATE = 5  # SUSPENDED
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(HOSTNAME="test-host")]
+        vm_mock.LCM_STATE = 0
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": "vm-qos",
@@ -1180,15 +1202,15 @@ class TestProcessVMSystemDisksUpdated:
 class TestProcessVMDisksUpdated:
     """Test VM disks processing with updated code"""
 
-    @patch.object(OpenNebulaManager, '_prepare_vm_disk')
-    @patch.object(OpenNebulaManager, '_get_disk_symlink')
-    @patch.object(OpenNebulaManager, '_get_vm_disks_list')
+    @patch.object(oneManager, '_prepare_vm_disk')
+    @patch.object(oneManager, '_get_disk_symlink')
+    @patch.object(oneManager, '_get_vm_disks_list')
     def test_process_vm_disks_with_qos(
         self, mock_get_disks_list, mock_get_symlink, mock_prepare_disk,
         mock_args
     ):
         """Test processing VM disks with QoS class"""
-        manager = OpenNebulaManager.__new__(OpenNebulaManager)
+        manager = oneManager.__new__(oneManager)
         manager.args = mock_args
 
         mock_get_disks_list.return_value = [
@@ -1207,7 +1229,11 @@ class TestProcessVMDisksUpdated:
 
         vm_mock = Mock()
         vm_mock.ID = 123
-        vm_mock.HISTORY_RECORDS.HISTORY = [Mock(DS_ID=1, HOSTNAME="test-host")]
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(DS_ID=1, HOSTNAME="test-host", TM_MAD="storpool")
+        ]
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": "vm-qos",
             "VC_POLICY": "vc-policy-1"
