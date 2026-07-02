@@ -3,7 +3,8 @@ from unittest.mock import Mock, patch
 import subprocess
 import os
 
-from storpool_kvchk.managers.one_manager import oneManager as OpenNebulaManager
+from storpool_kvchk.managers.one_manager import oneManager
+OpenNebulaManager = oneManager
 from storpool_kvchk.models.enums import DiskType, ImageType
 
 
