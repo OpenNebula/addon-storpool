@@ -534,6 +534,114 @@ class DataProcessing(BaseManager):
             if self.args.verbose > 5:
                 notes.append(f"Legacy '{sp_name}' not in vmData/dsData")
 
+    def _expected_globalid(
+        self,
+        spname: str,
+        legacy: Optional[str],
+    ) -> Optional[str]:
+        """Resolve the StorPool globalId expected for a given ONE volume"""
+        uid: Optional[str] = self.etcd.data["byName"].get(spname)
+        if uid:
+            return uid.lstrip("~")
+        for candidate in (spname, legacy):
+            if candidate and candidate in self.sp.data:
+                return self.sp.data[candidate]["globalId"]
+        return None
+
+    def _queue_symlink_fix(
+        self,
+        spname: str,
+        one_data: Dict[str, Any],
+        globalid: str,
+    ) -> None:
+        """Queue a 'symlink' action re-creating the disk.N symlink"""
+        if one_data.get("state") not in [3, 8]:
+            # fix only Running or PowerOff VMs, where the disk.N
+            # symlinks are expected to be present on the host
+            self.dbg(3, f"{spname} VM {one_data['vm_id']} state"
+                        f" {one_data.get('state')},"
+                        " not queueing symlink fix")
+            return
+        if spname not in self.update_data:
+            self.update_data[spname] = {"data": {}, "action": []}
+        entry: Dict[str, Any] = self.update_data[spname]
+        if "symlink" in entry["action"]:
+            self.dbg(3, f"{spname} symlink action already queued")
+            return
+        if "uid" not in entry["data"]:
+            entry["data"]["uid"] = globalid
+        entry["data"]["symlink"] = {
+            "host": one_data["host"],
+            "target": "/dev/storpool-byid/_SP_UID_",
+            "link": one_data["link"],
+            "vm_id": one_data["vm_id"],
+        }
+        entry["action"].append("symlink")
+
+    def analyze_host_symlinks(self) -> None:
+        """Detect stale/missing disk.N symlinks on the hosts still
+        pointing to the legacy /dev/storpool/<name> devices instead
+        of /dev/storpool-byid/<globalId>"""
+        self.dbg(1, "processing host symlinks...")
+        known_links: Dict[str, str] = {}
+        for name, data in self.one.vm_disks.items():
+            if data.get("snapshot"):
+                continue
+            link: Optional[str] = data.get("link")
+            host: Optional[str] = data.get("host")
+            if not link or not host:
+                continue
+            known_links[f"{host}:{link}"] = name
+            globalid: Optional[str] = self._expected_globalid(
+                data["spname"], data.get("legacy")
+            )
+            if globalid is None:
+                # not in KV/StorPool - reported by the other passes
+                self.dbg(4, f"{name} {link} on {host}:"
+                            " no globalId found in KV/StorPool")
+                continue
+            expected: str = f"/dev/storpool-byid/{globalid}"
+            target: Optional[str] = data.get("target")
+            if target == expected:
+                continue
+            msg: str = f"VM {data['vm_id']} {name} on {host}:"
+            if target is None:
+                if data.get("state") not in [3, 8] or "links" not in \
+                        self.one.one_hosts.get(host, {}):
+                    # no symlink data collected for this VM/host
+                    continue
+                msg += f" missing symlink {link}"
+            elif target.startswith("/dev/storpool/"):
+                msg += f" stale legacy symlink {link} -> {target}"
+            else:
+                msg += f" unexpected symlink {link} -> {target}"
+            msg += f", expected -> {expected}"
+            self.err(msg, "Issue")
+            self.dbg(0, f"ssh {host} ln -vsfn {expected} {link}")
+            self._queue_symlink_fix(name, data, globalid)
+        self._report_orphan_symlinks(known_links)
+
+    def _report_orphan_symlinks(self, known_links: Dict[str, str]) -> None:
+        """Report StorPool symlinks on the hosts that do not belong
+        to any known ONE VM disk"""
+        for hostname, host_e in self.one.one_hosts.items():
+            for ds_id, host_vms in host_e.get("links", {}).items():
+                for vm_id, disks in host_vms.items():
+                    for disk_name, target in disks.items():
+                        link: str = (f"/var/lib/one/datastores"
+                                     f"/{ds_id}/{vm_id}/{disk_name}")
+                        if f"{hostname}:{link}" in known_links:
+                            continue
+                        if not target.startswith("/dev/storpool"):
+                            continue
+                        msg: str = (f"orphan symlink on {hostname}:"
+                                    f" {link} -> {target}")
+                        if vm_id not in self.one.vm_ids:
+                            msg += f" (VM {vm_id} not in ONE)"
+                        self.err(msg, "Issue")
+                        self.dbg(0, f"# ssh {hostname} rm -v {link}"
+                                    "  # verify before removing")
+
     def _build_tags(self, onerec: Dict[str, Any]) -> Dict[str, str]:
         """Build expected StorPool tags from ONE data"""
         tags: Dict[str, str] = {}

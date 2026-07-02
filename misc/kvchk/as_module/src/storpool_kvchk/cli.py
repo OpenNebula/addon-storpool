@@ -139,6 +139,8 @@ def main() -> int:
 
         data_processing.analyze_storpool()
 
+        data_processing.analyze_host_symlinks()
+
         data_processing.process_updates()
 
         return 0
