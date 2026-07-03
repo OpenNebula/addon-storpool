@@ -690,6 +690,13 @@ class oneManager(BaseManager):
                 "lcm_state": int(vm_e.LCM_STATE),
                 "host": vm_e.HISTORY_RECORDS.HISTORY[-1].HOSTNAME,
                 "ds_id": sys_ds_id,
+                # the DISK_TM_MAD_ARRAY of tm/storpool/mv - a missing
+                # TM_MAD is an empty entry, like xpath_multi.py
+                "disk_tm_mads": [
+                    str(disk.get("TM_MAD") or "")
+                    for disk in self._get_vm_disks_list(vm_e)
+                    if disk is not None
+                ],
             }
             vm_snaps_list: List[str] = self._get_vm_snapshots(vm_e)
             disk_snaps: Dict[int, List[int]] = self._get_disk_snapshots(vm_e)

@@ -19,6 +19,7 @@ def mock_args():
     args.dummy_etcd = 0
     args.default_qosclass = "default-qos"
     args.skip_undeploy_ssh = False
+    args.sp_checkpoint_bd = False
     return args
 
 
@@ -989,6 +990,78 @@ class TestHostLeftovers:
         out = capsys.readouterr().out
         assert "[Issue]" not in out
         assert processor.update_data == {}
+
+    def test_missing_frontend_data_storpool_only_vm(
+        self, processor, capsys
+    ):
+        """With SP_CHECKPOINT_BD set, tm/mv auto-enables the skip
+        for a VM with all disks on StorPool TMs - the missing VM
+        data on the frontend is not reported."""
+        processor.args.sp_checkpoint_bd = True
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.one_vms = {
+            26: {
+                "vm_id": 26,
+                "state": 9,
+                "lcm_state": 0,
+                "host": "kvm1",
+                "ds_id": 0,
+                "disk_tm_mads": ["storpool", "storpool_xfer"],
+            }
+        }
+        processor.one.frontend = {"name": "fe1", "links": {}}
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    def test_missing_frontend_data_mixed_tm_mads(
+        self, processor, capsys
+    ):
+        """SP_CHECKPOINT_BD does not auto-enable the skip for a VM
+        with a non-StorPool disk - the missing VM data on the
+        frontend is still reported."""
+        processor.args.sp_checkpoint_bd = True
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.one_vms = {
+            26: {
+                "vm_id": 26,
+                "state": 9,
+                "lcm_state": 0,
+                "host": "kvm1",
+                "ds_id": 0,
+                # a missing TM_MAD is an empty entry, non-StorPool
+                "disk_tm_mads": ["storpool", ""],
+            }
+        }
+        processor.one.frontend = {"name": "fe1", "links": {}}
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert (
+            "missing /var/lib/one/datastores/0/26/disk.1"
+            " on the frontend"
+        ) in out
 
     def test_placement_from_one_vms(self, processor, capsys):
         """The expected placement of a VM without StorPool disks in

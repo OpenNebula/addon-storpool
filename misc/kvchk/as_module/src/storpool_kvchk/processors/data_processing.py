@@ -849,11 +849,27 @@ class DataProcessing(BaseManager):
         self._report_missing_frontend_data()
         self._report_orphan_symlinks(known_links)
 
+    def _vm_storpool_only(self, vm_id: int) -> bool:
+        """Check if tm/mv auto-enables SKIP_UNDEPLOY_SSH for the VM:
+        SP_CHECKPOINT_BD is set and all the VM disks are on StorPool
+        TMs (an empty TM_MAD counts as non-StorPool, an empty disk
+        list as StorPool-only, like the DISK_TM_MAD_ARRAY loop)"""
+        if not getattr(self.args, "sp_checkpoint_bd", False):
+            return False
+        vm_rec: Dict[str, Any] = self.one.one_vms.get(vm_id) or {}
+        tm_mads: Optional[List[str]] = vm_rec.get("disk_tm_mads")
+        if tm_mads is None:
+            # not collected - stay conservative
+            return False
+        return all("storpool" in tm_mad for tm_mad in tm_mads)
+
     def _report_missing_frontend_data(self) -> None:
         """Report STOPPED/UNDEPLOYED VMs with disk symlinks missing
         on the frontend, where their files are expected. With
-        SKIP_UNDEPLOY_SSH enabled the VM home is not moved to the
-        frontend on stop/undeploy, so nothing is expected there"""
+        SKIP_UNDEPLOY_SSH enabled (in addon-storpoolrc or derived
+        per VM from SP_CHECKPOINT_BD and the disk TM_MADs) the VM
+        home is not moved to the frontend on stop/undeploy, so
+        nothing is expected there"""
         if getattr(self.args, "skip_undeploy_ssh", False):
             self.dbg(2, "SKIP_UNDEPLOY_SSH enabled - not checking"
                         " the VM data on the frontend")
@@ -875,6 +891,11 @@ class DataProcessing(BaseManager):
             if not link:
                 continue
             vm_id: int = int(data["vm_id"])
+            if self._vm_storpool_only(vm_id):
+                self.dbg(3, f"VM {vm_id} is StorPool-only with"
+                            " SP_CHECKPOINT_BD - the VM home is not"
+                            " moved to the frontend")
+                continue
             ds_id: int = int(data["sys_ds_id"])
             disk_name: str = link.rsplit("/", 1)[-1]
             if links.get(ds_id, {}).get(vm_id, {}).get(disk_name):
