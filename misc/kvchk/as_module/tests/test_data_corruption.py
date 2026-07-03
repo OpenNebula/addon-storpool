@@ -6,7 +6,6 @@ from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[i
 from storpool_kvchk.managers.one_manager import oneManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.managers.ssh_manager import SshManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.models.enums import DiskType, ImageType  # type: ignore[import-untyped] # noqa: E501
-from storpool_kvchk.models.exceptions import UnhandledCase  # type: ignore[import-untyped] # noqa: E501
 
 
 @pytest.fixture
@@ -249,13 +248,13 @@ class TestStorPoolCorruption:
 class TestOpenNebulaCorruption:
     """Test scenarios with corrupted OpenNebula data"""
 
-    def test_invalid_disk_references(self, corrupted_setup):
+    def test_invalid_disk_references(self, corrupted_setup, capsys):
         """Test handling of a byUid entry resolvable in ONE but absent
         in StorPool.
 
         `analyze_kv_by_uid` finds the name in OpenNebula (by legacy lookup)
-        but the corresponding volume is missing from StorPool, which is an
-        unhandled inconsistency and must raise `UnhandledCase`.
+        but the corresponding volume is missing from StorPool. The
+        inconsistency is reported as an Issue without aborting the run.
         """
         processor = corrupted_setup
 
@@ -280,9 +279,13 @@ class TestOpenNebulaCorruption:
         # ... but StorPool does not (sp.data is empty)
         processor.sp.data = {}
 
-        # Run analysis
-        with pytest.raises(UnhandledCase):
-            processor.analyze_kv_by_uid()
+        # Run analysis - reported, not raised
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "not in StorPool!" in out
+        assert "one-img-456" not in processor.update_data
 
     def test_inconsistent_snapshot_data(self, corrupted_setup, capsys):
         """Test handling of an image snapshot that is missing from KV and
