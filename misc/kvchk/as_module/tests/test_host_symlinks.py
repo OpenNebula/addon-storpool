@@ -18,6 +18,7 @@ def mock_args():
     args.one_token = None
     args.dummy_etcd = 0
     args.default_qosclass = "default-qos"
+    args.skip_undeploy_ssh = False
     return args
 
 
@@ -929,6 +930,55 @@ class TestHostLeftovers:
                 }
             }
         }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    def test_missing_frontend_data_is_reported(self, processor, capsys):
+        """An UNDEPLOYED VM without its disk symlinks on the frontend
+        is reported when the VM home move is not disabled."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        # frontend collected, no data for the VM
+        processor.one.frontend = {"name": "fe1", "links": {}}
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert (
+            "missing /var/lib/one/datastores/0/26/disk.1"
+            " on the frontend"
+        ) in out
+        assert processor.update_data == {}
+
+    def test_missing_frontend_data_skip_undeploy_ssh(
+        self, processor, capsys
+    ):
+        """With SKIP_UNDEPLOY_SSH enabled the VM home is not moved to
+        the frontend on stop/undeploy - the missing VM data on the
+        frontend is not reported."""
+        processor.args.skip_undeploy_ssh = True
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.frontend = {"name": "fe1", "links": {}}
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
