@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Optional, Tuple, Callable
 
+import re
+import time
 import argparse
 from ..managers.base_manager import BaseManager
 from ..managers.ssh_manager import SshManager
@@ -40,6 +42,7 @@ class DataProcessing(BaseManager):
         self.update_data: Dict[str, Dict[str, Any]] = {}
         self.update_entry: Dict[str, Any] = {}
         self._uid_index: Optional[Dict[str, Dict[str, Any]]] = None
+        self._addon_name_re: Optional[re.Pattern] = None
 
     def _get_by_legacy(self, entry_name: str) -> Optional[Dict[str, Any]]:
         """Look up entry by legacy name in OpenNebula vm_disks and ds_images"""
@@ -646,15 +649,10 @@ class DataProcessing(BaseManager):
                     f" {one_rec['spname']} by tags - KV repair queued"
                 )
                 self._queue_kv_repair(one_rec["spname"], sp_entry)
-            elif self._sp_tags_this_instance(sp_entry):
-                notes.append(
-                    f"{sp_name} tagged for this OpenNebula instance"
-                    " but no matching record found (orphan?)"
-                    f" {sp_entry.get('tags')}"
-                )
             else:
-                # not tagged for this ONE instance - do not spam notes
-                self.dbg(3, f"{sp_name} not in byUid (foreign/untagged)")
+                # orphans are detected and reported by analyze_hanging()
+                self.dbg(3, f"{sp_name} not in byUid"
+                            " (foreign/untagged/hanging)")
 
     def _analyze_storpool_legacy(
         self,
@@ -701,6 +699,148 @@ class DataProcessing(BaseManager):
         else:
             if self.args.verbose > 5:
                 notes.append(f"Legacy '{sp_name}' not in vmData/dsData")
+
+    def _addon_named(self, sp_name: str) -> bool:
+        """Check if a StorPool name matches the addon legacy naming
+        for this OpenNebula instance"""
+        if self._addon_name_re is None:
+            self._addon_name_re = re.compile(
+                rf"^{re.escape(self.args.one_px)}-(img|sys)-\d+(-.*)?$"
+            )
+        return bool(self._addon_name_re.match(sp_name))
+
+    def _hanging_reason(
+        self,
+        sp_name: str,
+        sp_entry: Dict[str, Any],
+        kv_uids: set,
+    ) -> Optional[str]:
+        """Explain why a StorPool record is hanging - not reachable
+        by OpenNebula/addon-storpool through any relation.
+        Returns None when the record is reachable, foreign or
+        handled by StorPool itself"""
+        kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
+        # records StorPool removes by itself
+        if sp_name.startswith("*") or sp_entry.get("deleted"):
+            self.dbg(4, f"{sp_name} {kind} pending deletion - skipping")
+            return None
+        if sp_entry.get("transient") or sp_entry.get("autoName"):
+            self.dbg(4, f"{sp_name} transient/anonymous {kind}"
+                        " - skipping")
+            return None
+        if sp_entry.get("targetDeleteDate"):
+            tags: Dict[str, str] = sp_entry.get("tags") or {}
+            self.dbg(2, f"{sp_name} delayed-delete {kind}"
+                        f" (reason={tags.get('reason')})"
+                        " - expires by itself, skipping")
+            return None
+        # reachable from an OpenNebula record?
+        if sp_name[0] == "~":
+            kv_name: Optional[str] = self.etcd.data["byUid"].get(sp_name)
+            if kv_name and self._resolve_one_record(kv_name):
+                return None
+        elif self._resolve_one_record(sp_name):
+            return None
+        if self._resolve_one_by_tags(sp_entry):
+            return None
+        in_kv: bool = (
+            sp_entry["globalId"] in kv_uids
+            or sp_name in self.etcd.data["byName"]
+        )
+        # not reachable - is the record ours at all?
+        if self._sp_tags_this_instance(sp_entry):
+            if in_kv:
+                return ("tagged for this OpenNebula instance, in KV,"
+                        " but the OpenNebula record is gone")
+            return ("tagged for this OpenNebula instance but not"
+                    " referenced by any OpenNebula record or KV entry")
+        if sp_name[0] != "~" and self._addon_named(sp_name):
+            return ("matches the addon naming but no OpenNebula"
+                    " record references it")
+        if in_kv:
+            return "referenced only by stale KV entries"
+        self.dbg(4, f"{sp_name} foreign/untagged {kind} - skipping")
+        return None
+
+    def _report_hanging(
+        self,
+        sp_name: str,
+        sp_entry: Dict[str, Any],
+        reason: str,
+        age: Optional[float],
+        children: Dict[str, int],
+    ) -> None:
+        """Report a hanging StorPool record with a cleanup suggestion"""
+        kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
+        msg: str = f"hanging {kind} {sp_name}"
+        if sp_name[0] != "~":
+            msg += f" (globalId {sp_entry['globalId']})"
+        if sp_entry.get("size"):
+            msg += f" size {sp_entry['size']}"
+        if age is not None:
+            msg += f" age {age / 86400:.1f}d"
+        msg += f" - {reason}"
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        if tags:
+            msg += f" {tags=}"
+        self.err(msg, "Issue")
+        attached: Optional[Dict[str, Any]] = sp_entry.get("attached")
+        if attached:
+            self.err(
+                f"{sp_name} is attached to client(s)"
+                f" {attached.get('client')}"
+                " - investigate before removing!",
+                "NOTE",
+            )
+            return
+        n_children: int = children.get(sp_name, 0)
+        if n_children:
+            self.err(
+                f"{sp_name} is the parent of {n_children} StorPool"
+                " object(s) - do not delete",
+                "NOTE",
+            )
+            return
+        self.dbg(0, f"# storpool -M -B {kind} {sp_name}"
+                    f" delete {sp_name}"
+                    f"  # API: {sp_entry.get('sp_api_http_host')},"
+                    " verify before removing")
+
+    def analyze_hanging(self) -> None:
+        """Detect StorPool volumes and snapshots that OpenNebula and
+        addon-storpool can no longer reach through any relation (KV,
+        legacy name or tags) - leftovers of broken/retried operations"""
+        self.dbg(1, "processing hanging StorPool volumes/snapshots...")
+        now: float = time.time()
+        min_age: int = int(getattr(self.args, "hanging_min_age", 3600))
+        # everything referenced from the KV store, by globalId
+        kv_uids: set = set()
+        for kv_uid in self.etcd.data["byName"].values():
+            kv_uids.add(kv_uid.lstrip("~"))
+        for kv_uid in self.etcd.data["byUid"]:
+            kv_uids.add(kv_uid.lstrip("~"))
+        # parents of other StorPool records (base images, clones)
+        children: Dict[str, int] = {}
+        for sp_entry in self.sp.data.values():
+            parent: str = sp_entry.get("parentName") or ""
+            if parent:
+                children[parent] = children.get(parent, 0) + 1
+        for sp_name, sp_entry in self.sp.data.items():
+            reason: Optional[str] = self._hanging_reason(
+                sp_name, sp_entry, kv_uids
+            )
+            if reason is None:
+                continue
+            age: Optional[float] = None
+            created: Optional[float] = sp_entry.get("creationTimestamp")
+            if created:
+                age = now - created
+                if age < min_age:
+                    self.dbg(2, f"{sp_name} {reason}, but younger"
+                                f" than {min_age}s - the operation"
+                                " could still be in progress")
+                    continue
+            self._report_hanging(sp_name, sp_entry, reason, age, children)
 
     def _expected_globalid(
         self,

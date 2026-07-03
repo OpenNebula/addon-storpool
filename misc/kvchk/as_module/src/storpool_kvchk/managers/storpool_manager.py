@@ -108,6 +108,9 @@ class spManager(BaseManager):
                     "tags": entry.tags,
                     "size": entry.size,
                     "snapshot": False,
+                    "parentName": getattr(entry, "parentName", "") or "",
+                    "templateName": getattr(entry, "templateName", "") or "",  # noqa: E501
+                    "creationTimestamp": getattr(entry, "creationTimestamp", None),  # noqa: E501
                     "sp_api_http_host": sp_api_http_host,
                     "ZDBG": "volumesList",
                 }
@@ -133,6 +136,15 @@ class spManager(BaseManager):
                     "tags": entry.tags,
                     "size": entry.size,
                     "snapshot": True,
+                    "parentName": getattr(entry, "parentName", "") or "",
+                    "templateName": getattr(entry, "templateName", "") or "",  # noqa: E501
+                    "creationTimestamp": getattr(entry, "creationTimestamp", None),  # noqa: E501
+                    "onVolume": getattr(entry, "onVolume", "") or "",
+                    "autoName": bool(getattr(entry, "autoName", False)),
+                    "transient": bool(getattr(entry, "transient", False)),
+                    "deleted": bool(getattr(entry, "deleted", False)),
+                    "bound": bool(getattr(entry, "bound", False)),
+                    "targetDeleteDate": getattr(entry, "targetDeleteDate", None),  # noqa: E501
                     "sp_api_http_host": sp_api_http_host,
                     "ZDBG": "snapshotsList",
                 }

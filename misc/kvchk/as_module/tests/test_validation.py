@@ -526,7 +526,9 @@ class TestStorpoolGlobalId:
 
     def test_orphan_tagged_volume_note(self, processor, capsys):
         """A volume tagged for this OpenNebula instance without any
-        matching record is reported as a possible orphan."""
+        matching record is reported by the hanging analysis (not by
+        analyze_storpool anymore)."""
+        processor.args.hanging_min_age = 3600
         processor.etcd.data = {"byName": {}, "byUid": {}}
         processor.sp.data = {
             "~fir.b.jm": _sp_vol(
@@ -545,8 +547,13 @@ class TestStorpoolGlobalId:
         processor.analyze_storpool()
 
         out = capsys.readouterr().out
-        assert "[NOTE]" in out
-        assert "orphan?" in out
+        assert "orphan?" not in out
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "hanging volume ~fir.b.jm" in out
         assert processor.update_data == {}
 
     def test_foreign_volume_silent(self, processor, capsys):

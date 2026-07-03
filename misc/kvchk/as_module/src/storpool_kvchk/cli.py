@@ -116,9 +116,20 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
              " disks on StorPool TMs, bool-like string",
     )
 
+    parser.add_argument(
+        "--hanging-min-age",
+        action="store",
+        default=defaults.get("HANGING_MIN_AGE", os.getenv("HANGING_MIN_AGE", "3600")),  # type: ignore[attr-defined] # noqa: E501
+        nargs="?",
+        type=int,
+        help="Minimum age in seconds before a StorPool volume or"
+             " snapshot is reported as hanging (default 3600)",
+    )
+
     args = parser.parse_args()
     args.skip_undeploy_ssh = bool_true(args.skip_undeploy_ssh)
     args.sp_checkpoint_bd = bool_true(args.sp_checkpoint_bd)
+    args.hanging_min_age = int(args.hanging_min_age)
     if args.verbose > 0:
         print(f"parse_arguments() {args=}")
     if args.execute and args.dummy_etcd > 0:
@@ -166,6 +177,8 @@ def main() -> int:
         data_processing.analyze_one_images()
 
         data_processing.analyze_storpool()
+
+        data_processing.analyze_hanging()
 
         data_processing.analyze_host_symlinks()
 
