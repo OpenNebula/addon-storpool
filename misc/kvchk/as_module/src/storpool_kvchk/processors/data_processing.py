@@ -709,40 +709,39 @@ class DataProcessing(BaseManager):
             )
         return bool(self._addon_name_re.match(sp_name))
 
-    def _hanging_reason(
+    def _classify_sp_record(
         self,
         sp_name: str,
         sp_entry: Dict[str, Any],
         kv_uids: set,
-    ) -> Optional[str]:
-        """Explain why a StorPool record is hanging - not reachable
-        by OpenNebula/addon-storpool through any relation.
-        Returns None when the record is reachable, foreign or
-        handled by StorPool itself"""
+    ) -> Tuple[str, Optional[str]]:
+        """Classify a StorPool record against the OpenNebula data:
+        ('reachable'|'internal'|'foreign', None) or
+        ('hanging', reason) when nothing can reach the record"""
         kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
         # records StorPool removes by itself
         if sp_name.startswith("*") or sp_entry.get("deleted"):
             self.dbg(4, f"{sp_name} {kind} pending deletion - skipping")
-            return None
+            return ("internal", None)
         if sp_entry.get("transient") or sp_entry.get("autoName"):
             self.dbg(4, f"{sp_name} transient/anonymous {kind}"
                         " - skipping")
-            return None
+            return ("internal", None)
         if sp_entry.get("targetDeleteDate"):
             tags: Dict[str, str] = sp_entry.get("tags") or {}
             self.dbg(2, f"{sp_name} delayed-delete {kind}"
                         f" (reason={tags.get('reason')})"
                         " - expires by itself, skipping")
-            return None
+            return ("internal", None)
         # reachable from an OpenNebula record?
         if sp_name[0] == "~":
             kv_name: Optional[str] = self.etcd.data["byUid"].get(sp_name)
             if kv_name and self._resolve_one_record(kv_name):
-                return None
+                return ("reachable", None)
         elif self._resolve_one_record(sp_name):
-            return None
+            return ("reachable", None)
         if self._resolve_one_by_tags(sp_entry):
-            return None
+            return ("reachable", None)
         in_kv: bool = (
             sp_entry["globalId"] in kv_uids
             or sp_name in self.etcd.data["byName"]
@@ -750,17 +749,20 @@ class DataProcessing(BaseManager):
         # not reachable - is the record ours at all?
         if self._sp_tags_this_instance(sp_entry):
             if in_kv:
-                return ("tagged for this OpenNebula instance, in KV,"
+                return ("hanging",
+                        "tagged for this OpenNebula instance, in KV,"
                         " but the OpenNebula record is gone")
-            return ("tagged for this OpenNebula instance but not"
+            return ("hanging",
+                    "tagged for this OpenNebula instance but not"
                     " referenced by any OpenNebula record or KV entry")
         if sp_name[0] != "~" and self._addon_named(sp_name):
-            return ("matches the addon naming but no OpenNebula"
+            return ("hanging",
+                    "matches the addon naming but no OpenNebula"
                     " record references it")
         if in_kv:
-            return "referenced only by stale KV entries"
-        self.dbg(4, f"{sp_name} foreign/untagged {kind} - skipping")
-        return None
+            return ("hanging", "referenced only by stale KV entries")
+        self.dbg(4, f"{sp_name} foreign/untagged {kind}")
+        return ("foreign", None)
 
     def _report_hanging(
         self,
@@ -806,13 +808,41 @@ class DataProcessing(BaseManager):
                     f"  # API: {sp_entry.get('sp_api_http_host')},"
                     " verify before removing")
 
+    def _report_foreign(
+        self, sp_name: str, sp_entry: Dict[str, Any]
+    ) -> None:
+        """Report a StorPool record not related to this OpenNebula
+        instance - an inventory line for the operator"""
+        kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
+        msg: str = f"foreign {kind} {sp_name}"
+        if sp_name[0] != "~":
+            msg += f" (globalId {sp_entry['globalId']})"
+        if sp_entry.get("size"):
+            msg += f" size {sp_entry['size']}"
+        if sp_entry.get("templateName"):
+            msg += f" template {sp_entry['templateName']}"
+        if sp_entry.get("clusterId"):
+            msg += f" cluster {sp_entry['clusterId']}"
+        attached: Optional[Dict[str, Any]] = sp_entry.get("attached")
+        if attached:
+            msg += f" attached to client(s) {attached.get('client')}"
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        if tags:
+            msg += f" {tags=}"
+        self.err(msg, "Foreign")
+
     def analyze_hanging(self) -> None:
         """Detect StorPool volumes and snapshots that OpenNebula and
         addon-storpool can no longer reach through any relation (KV,
-        legacy name or tags) - leftovers of broken/retried operations"""
+        legacy name or tags) - leftovers of broken/retried operations.
+        With --report-foreign the records not related to this
+        OpenNebula instance are inventoried too"""
         self.dbg(1, "processing hanging StorPool volumes/snapshots...")
         now: float = time.time()
         min_age: int = int(getattr(self.args, "hanging_min_age", 3600))
+        report_foreign: bool = bool(
+            getattr(self.args, "report_foreign", False)
+        )
         # everything referenced from the KV store, by globalId
         kv_uids: set = set()
         for kv_uid in self.etcd.data["byName"].values():
@@ -826,10 +856,15 @@ class DataProcessing(BaseManager):
             if parent:
                 children[parent] = children.get(parent, 0) + 1
         for sp_name, sp_entry in self.sp.data.items():
-            reason: Optional[str] = self._hanging_reason(
+            category, reason = self._classify_sp_record(
                 sp_name, sp_entry, kv_uids
             )
+            if category == "foreign":
+                if report_foreign:
+                    self._report_foreign(sp_name, sp_entry)
+                continue
             if reason is None:
+                # reachable or handled by StorPool itself
                 continue
             age: Optional[float] = None
             created: Optional[float] = sp_entry.get("creationTimestamp")

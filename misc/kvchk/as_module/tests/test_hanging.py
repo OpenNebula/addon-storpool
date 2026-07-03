@@ -27,6 +27,7 @@ def mock_args():
     args.skip_undeploy_ssh = False
     args.sp_checkpoint_bd = False
     args.hanging_min_age = 3600
+    args.report_foreign = False
     return args
 
 
@@ -309,6 +310,101 @@ class TestHangingReachable:
 
         out = capsys.readouterr().out
         assert "[Issue]" not in out
+
+
+class TestForeignReport:
+    """Inventory of the records not related to this OpenNebula
+    instance with --report-foreign"""
+
+    def test_foreign_records_reported(self, processor, capsys):
+        """With --report-foreign all foreign records are inventoried
+        with their details, tagged [Foreign] and not as issues."""
+        processor.args.report_foreign = True
+        processor.sp.data = {
+            "database-vol1": _sp_rec(
+                "database-vol1", "aaa.b.aa",
+                clusterId="nvme.b",
+                templateName="hybrid",
+                attached={"client": [7], "volume": "database-vol1"},
+            ),
+            "~ccc.b.cc": _sp_rec(
+                "~ccc.b.cc", "ccc.b.cc", snapshot=True,
+                tags={"virt": "one", "nloc": "two", "img": "two-img-1"},
+            ),
+        }
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "[Foreign]" in out
+        assert (
+            "foreign volume database-vol1 (globalId aaa.b.aa)"
+        ) in out
+        assert "template hybrid" in out
+        assert "cluster nvme.b" in out
+        assert "attached to client(s) [7]" in out
+        assert "foreign snapshot ~ccc.b.cc" in out
+        assert "'nloc': 'two'" in out
+        assert "[Issue]" not in out
+        # inventory only, no removal suggestions
+        assert "delete" not in out
+        assert processor.update_data == {}
+
+    def test_foreign_not_reported_by_default(self, processor, capsys):
+        """Without --report-foreign the foreign records stay silent."""
+        processor.sp.data = {
+            "database-vol1": _sp_rec("database-vol1", "aaa.b.aa"),
+        }
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "[Foreign]" not in out
+
+    def test_foreign_report_keeps_internal_silent(
+        self, processor, capsys
+    ):
+        """StorPool-internal records are not inventoried as foreign."""
+        processor.args.report_foreign = True
+        processor.sp.data = {
+            "*gone-vol": _sp_rec(
+                "*gone-vol", "aaa.b.aa", snapshot=True, deleted=True,
+            ),
+            "~trn.b.aa": _sp_rec(
+                "~trn.b.aa", "trn.b.aa", snapshot=True, transient=True,
+            ),
+        }
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "[Foreign]" not in out
+
+    def test_own_records_not_inventoried(self, processor, capsys):
+        """Reachable and hanging records of this instance are not
+        tagged [Foreign] - a hanging one stays an [Issue]."""
+        processor.args.report_foreign = True
+        processor.one.vm_disks = {"one-sys-26-1": _vm_disk()}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+        processor.sp.data = {
+            # reachable via KV
+            "~fir.b.jm": _sp_rec("~fir.b.jm", "fir.b.jm"),
+            # hanging (tagged for this instance)
+            "~han.b.aa": _sp_rec(
+                "~han.b.aa", "han.b.aa",
+                tags=_one_tags(img="one-img-99"),
+            ),
+        }
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "[Foreign]" not in out
+        assert "[Issue]" in out
+        assert "hanging volume ~han.b.aa" in out
 
 
 class TestHangingSafety:

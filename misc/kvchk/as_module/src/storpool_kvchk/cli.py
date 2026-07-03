@@ -117,6 +117,14 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "-F",
+        "--report-foreign",
+        action="store_true",
+        help="report all StorPool volumes/snapshots not related to"
+             " this OpenNebula instance (inventory of the entities"
+             " outside the VM lifecycle)",
+    )
+    parser.add_argument(
         "--hanging-min-age",
         action="store",
         default=defaults.get("HANGING_MIN_AGE", os.getenv("HANGING_MIN_AGE", "3600")),  # type: ignore[attr-defined] # noqa: E501
