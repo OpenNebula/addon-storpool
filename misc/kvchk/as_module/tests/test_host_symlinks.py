@@ -44,6 +44,7 @@ def processor(mock_args):
     one_manager.one_hosts = {}
     one_manager.one_datastores = {}
     one_manager.one_vms = {}
+    one_manager.frontend = {}
     one_manager.vm_ids = []
 
     with patch('storpool_kvchk.managers.storpool_manager.SPConfig'):
@@ -663,7 +664,7 @@ class TestHostLeftovers:
 
     def test_leftover_of_undeployed_vm(self, processor, capsys):
         """Artefacts of an UNDEPLOYED VM left on its last host are
-        reported - the VM is not expected on any host."""
+        reported - the VM files are expected on the frontend."""
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {
             "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
@@ -684,7 +685,7 @@ class TestHostLeftovers:
 
         out = capsys.readouterr().out
         assert "orphan symlink on kvm1" in out
-        assert "(VM 26 state 9, not expected on any host)" in out
+        assert "(VM 26 state 9, expected on the frontend)" in out
         assert (
             "# ssh kvm1 rm -v /var/lib/one/datastores/0/26/disk.1"
         ) in out
@@ -806,6 +807,125 @@ class TestHostLeftovers:
                                 "/dev/storpool-byid/fir.b.zz",
                         }
                     }
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    @pytest.mark.parametrize("state", [4, 9])
+    def test_undeployed_vm_artefacts_on_frontend_are_expected(
+        self, processor, capsys, state
+    ):
+        """The files of a STOPPED/UNDEPLOYED VM live on the frontend -
+        its symlinks there are not left-overs."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=state, lcm_state=0, target=None)
+        }
+        processor.one.frontend = {
+            "name": "fe1",
+            "links": {
+                0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+            },
+        }
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    def test_running_vm_artefacts_on_frontend(self, processor, capsys):
+        """A VM running on a host with left-over artefacts on the
+        frontend is reported."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.frontend = {
+            "name": "fe1",
+            "links": {
+                0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+            },
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "orphan symlink on the frontend fe1" in out
+        assert (
+            "(VM 26 expected on host kvm1, not on the frontend)"
+        ) in out
+        # the frontend clean-up is local, no ssh
+        assert (
+            "# rm -v /var/lib/one/datastores/0/26/disk.1"
+        ) in out
+        assert "# ssh fe1" not in out
+        assert processor.update_data == {}
+
+    def test_deleted_vm_artefacts_on_frontend(self, processor, capsys):
+        """Left-over artefacts on the frontend of a VM that is no
+        longer in ONE are reported."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {}
+        processor.one.frontend = {
+            "name": "fe1",
+            "links": {
+                0: {99: {"disk.0": "/dev/storpool/one-sys-99-0-raw"}}
+            },
+        }
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "orphan symlink on the frontend fe1" in out
+        assert "(VM 99 not in ONE)" in out
+        assert (
+            "# rm -v /var/lib/one/datastores/0/99/disk.0"
+        ) in out
+        assert processor.update_data == {}
+
+    def test_frontend_hypervisor_undeployed_vm(self, processor, capsys):
+        """When the frontend is also a hypervisor host its links are
+        collected once and the symlinks of a STOPPED/UNDEPLOYED VM
+        there are not reported twice or as left-overs."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.frontend = {"name": "kvm1"}
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
                 }
             }
         }

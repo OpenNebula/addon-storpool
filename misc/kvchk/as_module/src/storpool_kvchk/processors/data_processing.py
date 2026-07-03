@@ -15,6 +15,10 @@ from ..models.enums import DiskType, ImageType
 # 3 - ACTIVE, 5 - SUSPENDED, 8 - POWEROFF
 VM_ON_HOST_STATES = (3, 5, 8)
 
+# VM states where the VM files are expected to be on the frontend:
+# 4 - STOPPED, 9 - UNDEPLOYED
+VM_ON_FRONTEND_STATES = (4, 9)
+
 
 class DataProcessing(BaseManager):
     """Analyzes data and relationships between
@@ -787,6 +791,9 @@ class DataProcessing(BaseManager):
         to be running"""
         self.dbg(1, "processing host symlinks...")
         known_links: Dict[str, str] = {}
+        frontend_name: Optional[str] = (
+            (self.one.frontend or {}).get("name")
+        )
         for name, data in self.one.vm_disks.items():
             if data.get("snapshot"):
                 continue
@@ -798,6 +805,13 @@ class DataProcessing(BaseManager):
                 # only VMs deployed on the host are expected
                 # to have their disk.N symlinks there
                 known_links[f"{host}:{link}"] = name
+            elif (
+                data.get("state") in VM_ON_FRONTEND_STATES
+                and frontend_name
+            ):
+                # the files of STOPPED/UNDEPLOYED VMs are moved
+                # back to the system datastore on the frontend
+                known_links[f"{frontend_name}:{link}"] = name
             target: Optional[str] = data.get("target")
             globalid: Optional[str] = self._expected_globalid(data)
             if globalid is None:
@@ -863,9 +877,11 @@ class DataProcessing(BaseManager):
         vm_id: int,
         disk_name: str,
         vm_rec: Optional[Dict[str, Any]],
+        is_frontend: bool,
     ) -> Optional[str]:
-        """Explain why a StorPool symlink collected from a host is a
-        left-over artefact according to the OpenNebula data.
+        """Explain why a StorPool symlink collected from a host or
+        the frontend is a left-over artefact according to the
+        OpenNebula data.
         Returns None when the symlink could be legitimate."""
         if vm_id not in self.one.vm_ids:
             return f" (VM {vm_id} not in ONE)"
@@ -875,14 +891,21 @@ class DataProcessing(BaseManager):
         state: Optional[int] = vm_rec.get("state")
         exp_host: Optional[str] = vm_rec.get("host")
         exp_ds: Optional[int] = vm_rec.get("ds_id")
-        if state is not None and state not in VM_ON_HOST_STATES:
+        if state in VM_ON_FRONTEND_STATES:
+            if not is_frontend:
+                return (f" (VM {vm_id} state {state},"
+                        " expected on the frontend)")
+        elif state is not None and state not in VM_ON_HOST_STATES:
             return (f" (VM {vm_id} state {state},"
                     " not expected on any host)")
-        if exp_host and exp_host != hostname:
+        elif exp_host and exp_host != hostname:
+            if is_frontend:
+                return (f" (VM {vm_id} expected on host {exp_host},"
+                        " not on the frontend)")
             return f" (VM {vm_id} expected on host {exp_host})"
         if exp_ds is not None and int(exp_ds) != ds_id:
             return f" (VM {vm_id} expected in datastore {exp_ds})"
-        # VM deployed on this host: an unknown disk.N is a left-over
+        # VM expected here: an unknown disk.N is a left-over
         # (e.g. a detached disk), anything else (disk.N.snapM, ...)
         # could be legitimate
         if disk_name.startswith("disk.") and disk_name[5:].isdigit():
@@ -890,15 +913,31 @@ class DataProcessing(BaseManager):
         return None
 
     def _report_orphan_symlinks(self, known_links: Dict[str, str]) -> None:
-        """Check the StorPool symlinks collected from the hosts against
-        the OpenNebula data and report the left-over artefacts: symlinks
-        of VMs that are deleted, not deployed, expected on another host
-        or in another datastore, and unknown disk.N symlinks"""
+        """Check the StorPool symlinks collected from the hosts and
+        the frontend against the OpenNebula data and report the
+        left-over artefacts: symlinks of VMs that are deleted, not
+        deployed, expected on another host, on the frontend or in
+        another datastore, and unknown disk.N symlinks"""
         placement: Dict[int, Dict[str, Any]] = (
             self._expected_vm_placement()
         )
-        for hostname, host_e in self.one.one_hosts.items():
-            for ds_id, host_vms in host_e.get("links", {}).items():
+        frontend: Dict[str, Any] = self.one.frontend or {}
+        frontend_name: Optional[str] = frontend.get("name")
+        # (hostname, links, is_frontend, remote)
+        sources: List[Tuple[str, Dict[int, Any], bool, bool]] = [
+            (hostname, host_e.get("links", {}),
+             hostname == frontend_name, True)
+            for hostname, host_e in self.one.one_hosts.items()
+        ]
+        if frontend_name and frontend_name not in self.one.one_hosts:
+            sources.append(
+                (frontend_name, frontend.get("links", {}), True, False)
+            )
+        for hostname, host_links, is_frontend, remote in sources:
+            where: str = hostname
+            if not remote:
+                where = f"the frontend {hostname}"
+            for ds_id, host_vms in host_links.items():
                 for vm_id, disks in host_vms.items():
                     vm_rec: Optional[Dict[str, Any]] = (
                         placement.get(vm_id)
@@ -911,18 +950,22 @@ class DataProcessing(BaseManager):
                         if not target.startswith("/dev/storpool"):
                             continue
                         note: Optional[str] = self._classify_leftover(
-                            hostname, ds_id, vm_id, disk_name, vm_rec
+                            hostname, ds_id, vm_id, disk_name,
+                            vm_rec, is_frontend,
                         )
                         if note is None:
                             self.dbg(3, f"skipping {hostname}:{link}"
                                         f" -> {target}")
                             continue
                         self.err(
-                            f"orphan symlink on {hostname}:"
+                            f"orphan symlink on {where}:"
                             f" {link} -> {target}{note}",
                             "Issue",
                         )
-                        self.dbg(0, f"# ssh {hostname} rm -v {link}"
+                        rm_cmd: str = f"# ssh {hostname} rm -v {link}"
+                        if not remote:
+                            rm_cmd = f"# rm -v {link}"
+                        self.dbg(0, f"{rm_cmd}"
                                     "  # verify before removing")
 
     def _build_tags(self, onerec: Dict[str, Any]) -> Dict[str, str]:

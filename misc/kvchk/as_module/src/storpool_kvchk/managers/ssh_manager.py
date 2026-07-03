@@ -13,6 +13,25 @@ class SshManager(BaseManager):
     def __init__(self, args: Any):
         super().__init__(args)
 
+    def _parse_symlinks(
+        self, out: str
+    ) -> Dict[int, Dict[int, Dict[str, str]]]:
+        """Parse 'ls -l' output lines into the per-datastore/VM
+        symlink map"""
+        symlinks: Dict[int, Dict[int, Dict[str, str]]] = {}
+        for line in out.splitlines():
+            words: List[str] = line.split()
+            if "->" in words:
+                dpath: List[str] = words[-3].split("/")
+                ds_id: int = int(dpath[5])
+                vm_id: int = int(dpath[6])
+                if ds_id not in symlinks:
+                    symlinks[ds_id] = {}
+                if vm_id not in symlinks[ds_id]:
+                    symlinks[ds_id][vm_id] = {}
+                symlinks[ds_id][vm_id][dpath[-1]] = words[-1]
+        return symlinks
+
     def get_symlinks(self, host: str) -> Dict[int, Dict[int, Dict[str, str]]]:
         """ssh to a host end get the symlinks in the path"""
         symlinks: Dict[int, Dict[int, Dict[str, str]]] = {}
@@ -29,7 +48,7 @@ class SshManager(BaseManager):
             "{}",
             r"\;",
         )
-        if self.args.dummy_etcd > 1:  # pylint: disable=R1702
+        if self.args.dummy_etcd > 1:
             self.dbg(0, f"[dummy] {ssh_cmd}")
         else:
             try:
@@ -37,18 +56,9 @@ class SshManager(BaseManager):
                     ssh_cmd, capture_output=True, check=True
                 )
                 if res.returncode == 0:
-                    out: str = res.stdout.decode("utf-8")
-                    for line in out.splitlines():
-                        words: List[str] = line.split()
-                        if "->" in words:
-                            dpath: List[str] = words[-3].split("/")
-                            ds_id: int = int(dpath[5])
-                            vm_id: int = int(dpath[6])
-                            if ds_id not in symlinks:
-                                symlinks[ds_id] = {}
-                            if vm_id not in symlinks[ds_id]:
-                                symlinks[ds_id][vm_id] = {}
-                            symlinks[ds_id][vm_id][dpath[-1]] = words[-1]
+                    symlinks = self._parse_symlinks(
+                        res.stdout.decode("utf-8")
+                    )
             except subprocess.CalledProcessError as error:
                 raise SshManagerError(
                     f"subprocess.CalledProcessError {error=}",
@@ -62,6 +72,47 @@ class SshManager(BaseManager):
                     str(ssh_cmd),
                 )
         self.dbg(2, f"ssh_getsymlinks {ssh_cmd}: {symlinks}")
+        return symlinks
+
+    def get_local_symlinks(self) -> Dict[int, Dict[int, Dict[str, str]]]:
+        """Get the symlinks in the datastores path on the frontend,
+        where the files of the STOPPED/UNDEPLOYED VMs are expected"""
+        symlinks: Dict[int, Dict[int, Dict[str, str]]] = {}
+        find_cmd = (
+            "find",
+            "/var/lib/one/datastores",
+            "-type",
+            "l",
+            "-exec",
+            "ls",
+            "-l",
+            "{}",
+            ";",
+        )
+        if self.args.dummy_etcd > 1:
+            self.dbg(0, f"[dummy] {find_cmd}")
+        else:
+            try:
+                res: subprocess.CompletedProcess[bytes] = subprocess.run(
+                    find_cmd, capture_output=True, check=True
+                )
+                if res.returncode == 0:
+                    symlinks = self._parse_symlinks(
+                        res.stdout.decode("utf-8")
+                    )
+            except subprocess.CalledProcessError as error:
+                raise SshManagerError(
+                    f"subprocess.CalledProcessError {error=}",
+                    "localhost",
+                    str(find_cmd),
+                )
+            except Exception as error:
+                raise SshManagerError(
+                    f"Unknown error {error=}",
+                    "localhost",
+                    str(find_cmd),
+                )
+        self.dbg(2, f"get_local_symlinks {find_cmd}: {symlinks}")
         return symlinks
 
     def _get_vm_pid(self, host: str, vm_id: int) -> int:

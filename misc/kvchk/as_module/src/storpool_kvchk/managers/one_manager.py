@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Union, Optional, cast
 
 import os
 import copy
+import socket
 import argparse
 import pprint
 import subprocess
@@ -68,6 +69,7 @@ class oneManager(BaseManager):
     one_hosts: Dict[str, Any] = {}
     one_datastores: Dict[int, Any] = {}
     one_vms: Dict[int, Dict[str, Any]] = {}
+    frontend: Dict[str, Any] = {}
     vm_ids: List[int] = []
 
     def get_one_token(self) -> str:
@@ -95,6 +97,7 @@ class oneManager(BaseManager):
             raise err
         self._init_datastores()
         self._init_hosts()
+        self._init_frontend()
         self._init_vmids()
         self._init_ds_images()
         self._get_vm_disks()
@@ -137,6 +140,23 @@ class oneManager(BaseManager):
                     # raise error
             self.one_hosts[hostname] = host_r
         self.dbg(2, f"self.one_hosts = \n{pprint.pformat(self.one_hosts)}")
+
+    def _init_frontend(self) -> None:
+        """Collect the symlinks from the datastores path on the
+        frontend - the expected location of the files of the
+        STOPPED/UNDEPLOYED VMs"""
+        self.dbg(6, "get_frontend")
+        hostname: str = socket.gethostname()
+        self.frontend = {"name": hostname}
+        if hostname in self.one_hosts:
+            # the frontend is a hypervisor host, already collected
+            self.dbg(2, f"frontend {hostname} is a hypervisor host")
+            return
+        try:
+            self.frontend["links"] = self.ssh.get_local_symlinks()
+        except Exception as error:
+            print(f"Error: {error=}; frontend {hostname=}")
+        self.dbg(2, f"self.frontend = \n{pprint.pformat(self.frontend)}")
 
     def _init_datastores(self) -> None:
         """Get OpenNebula datastores"""

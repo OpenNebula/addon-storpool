@@ -175,6 +175,57 @@ class TestSshManagerGetSymlinks:
             mock_dbg.assert_called()
 
 
+class TestSshManagerGetLocalSymlinks:
+    """Test get_local_symlinks method (frontend collection)"""
+
+    @patch('subprocess.run')
+    def test_get_local_symlinks_success(self, mock_run, ssh_manager):
+        """Test successful local symlink retrieval on the frontend"""
+        mock_stdout = (
+            b"lrwxrwxrwx 1 root root 20 Mar 14 10:00 "
+            b"/var/lib/one/datastores/1/123/disk.0 -> "
+            b"/tmp/storpool-byid/a.bc.def\n"
+        )
+        mock_run.return_value = Mock(returncode=0, stdout=mock_stdout)
+
+        symlinks = ssh_manager.get_local_symlinks()
+
+        # runs find locally, without ssh and shell escaping
+        expected_cmd = (
+            "find", "/var/lib/one/datastores",
+            "-type", "l", "-exec", "ls", "-l", "{}", ";"
+        )
+        mock_run.assert_called_once_with(
+            expected_cmd, capture_output=True, check=True
+        )
+        assert symlinks[1][123]['disk.0'] == '/tmp/storpool-byid/a.bc.def'
+
+    def test_get_local_symlinks_dummy_mode(self, ssh_manager):
+        """Test dummy mode (dummy_etcd > 1) skips the local find"""
+        ssh_manager.args.dummy_etcd = 2
+
+        with patch('subprocess.run') as mock_run:
+            symlinks = ssh_manager.get_local_symlinks()
+
+        mock_run.assert_not_called()
+        assert symlinks == {}
+
+    @patch('subprocess.run')
+    def test_get_local_symlinks_subprocess_error(
+        self, mock_run, ssh_manager
+    ):
+        """Test handling of subprocess.CalledProcessError"""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, 'find failed'
+        )
+
+        with pytest.raises(SshManagerError) as exc_info:
+            ssh_manager.get_local_symlinks()
+
+        assert 'subprocess.CalledProcessError' in str(exc_info.value)
+        assert 'localhost' in str(exc_info.value)
+
+
 class TestSshManagerCreateSymlink:
     """Test create_symlink method"""
 
