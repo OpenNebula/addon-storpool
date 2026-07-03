@@ -130,7 +130,7 @@ class oneManager(BaseManager):
             host_r["id"] = int(host_e.ID)
             host_r["state"] = int(host_e.STATE)
             host_r["vm_mad"] = str(host_e.VM_MAD)
-            if host_r["state"] < 3:
+            if host_r["state"] < 3 or host_r["state"] == 4:  # 4 = disabled/maintenance # noqa: E501
                 try:
                     host_r["links"] = self.ssh.get_symlinks(hostname)
                 except self.ssh.SshManagerError as error:  # type: ignore[attr-defined] # noqa: E501
