@@ -43,6 +43,7 @@ def processor(mock_args):
     one_manager.ds_images = {}
     one_manager.one_hosts = {}
     one_manager.one_datastores = {}
+    one_manager.one_vms = {}
     one_manager.vm_ids = []
 
     with patch('storpool_kvchk.managers.storpool_manager.SPConfig'):
@@ -613,3 +614,238 @@ class TestHostSymlinks:
 
         out = capsys.readouterr().out
         assert "[Issue]" not in out
+
+
+class TestHostLeftovers:
+    """Check the symlinks collected from the hosts against the
+    OpenNebula data - left-over artefacts on hosts where the VM
+    is not expected to be running"""
+
+    def test_leftover_on_unexpected_host(self, processor, capsys):
+        """Artefacts of a VM found on a host where the VM is not
+        expected to be running (e.g. after a failed/live migration)
+        are reported with the expected host."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+                }
+            },
+            "kvm2": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+                }
+            },
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "orphan symlink on kvm2" in out
+        assert "(VM 26 expected on host kvm1)" in out
+        assert (
+            "# ssh kvm2 rm -v /var/lib/one/datastores/0/26/disk.1"
+        ) in out
+        # the symlink on the expected host is not reported
+        assert "orphan symlink on kvm1" not in out
+        # leftovers are report-only, nothing is queued
+        assert processor.update_data == {}
+
+    def test_leftover_of_undeployed_vm(self, processor, capsys):
+        """Artefacts of an UNDEPLOYED VM left on its last host are
+        reported - the VM is not expected on any host."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "orphan symlink on kvm1" in out
+        assert "(VM 26 state 9, not expected on any host)" in out
+        assert (
+            "# ssh kvm1 rm -v /var/lib/one/datastores/0/26/disk.1"
+        ) in out
+        assert processor.update_data == {}
+
+    def test_suspended_vm_is_expected_on_host(self, processor, capsys):
+        """A SUSPENDED VM keeps its files on the host - its symlinks
+        there are not left-overs."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                state=5,
+                lcm_state=0,
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    def test_leftover_in_other_datastore(self, processor, capsys):
+        """Symlinks of a VM under a system datastore different from
+        the one the VM is deployed in are reported."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}},
+                    102: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}},
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "(VM 26 expected in datastore 0)" in out
+        assert (
+            "# ssh kvm1 rm -v /var/lib/one/datastores/102/26/disk.1"
+        ) in out
+        assert processor.update_data == {}
+
+    def test_extra_disk_symlink_on_expected_host(self, processor, capsys):
+        """A disk.N symlink on the expected host that is not a disk
+        of the VM (e.g. a detached disk) is reported."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {
+                        26: {
+                            "disk.1": "/dev/storpool-byid/fir.b.jm",
+                            "disk.2": "/dev/storpool-byid/fir.b.zz",
+                        }
+                    }
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "disk.2 -> /dev/storpool-byid/fir.b.zz" in out
+        assert "(not a disk of VM 26)" in out
+        # only the extra disk is reported
+        assert out.count("[Issue]") == 1
+        assert processor.update_data == {}
+
+    def test_disk_snapshot_symlink_is_not_reported(
+        self, processor, capsys
+    ):
+        """A disk.N.snapM symlink of a VM deployed on the host could
+        be legitimate (disk snapshot) and is not reported."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {
+                        26: {
+                            "disk.1": "/dev/storpool-byid/fir.b.jm",
+                            "disk.1.snap0":
+                                "/dev/storpool-byid/fir.b.zz",
+                        }
+                    }
+                }
+            }
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    def test_placement_from_one_vms(self, processor, capsys):
+        """The expected placement of a VM without StorPool disks in
+        vm_disks is taken from the collected VM pool data."""
+        processor.one.vm_ids = [30]
+        processor.one.vm_disks = {}
+        processor.one.one_vms = {
+            30: {
+                "vm_id": 30,
+                "name": "vm30",
+                "state": 3,
+                "lcm_state": 3,
+                "host": "kvm1",
+                "ds_id": 0,
+            }
+        }
+        processor.one.one_hosts = {
+            "kvm2": {
+                "links": {
+                    0: {30: {"disk.0": "/dev/storpool-byid/fir.b.aa"}}
+                }
+            }
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "orphan symlink on kvm2" in out
+        assert "(VM 30 expected on host kvm1)" in out
+        assert processor.update_data == {}
