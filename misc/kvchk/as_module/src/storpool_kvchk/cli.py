@@ -105,9 +105,20 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
              " is not moved to the frontend on stop/undeploy,"
              " bool-like string",
     )
+    parser.add_argument(
+        "--sp-checkpoint-bd",
+        action="store",
+        default=defaults.get("SP_CHECKPOINT_BD", os.getenv("SP_CHECKPOINT_BD")),  # type: ignore[attr-defined] # noqa: E501
+        nargs="?",
+        type=str,
+        help="SP_CHECKPOINT_BD from addon-storpoolrc - tm/mv"
+             " auto-enables SKIP_UNDEPLOY_SSH for VMs with all"
+             " disks on StorPool TMs, bool-like string",
+    )
 
     args = parser.parse_args()
     args.skip_undeploy_ssh = bool_true(args.skip_undeploy_ssh)
+    args.sp_checkpoint_bd = bool_true(args.sp_checkpoint_bd)
     if args.verbose > 0:
         print(f"parse_arguments() {args=}")
     if args.execute and args.dummy_etcd > 0:
