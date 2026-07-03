@@ -7,7 +7,7 @@ from ..managers.ssh_manager import SshManager
 from ..managers.one_manager import oneManager
 from ..managers.storpool_manager import spManager
 from ..managers.etcd_manager import etcdManager
-from ..models.exceptions import UnhandledCase, KvByNameError, KvByUidError
+from ..models.exceptions import KvByNameError, KvByUidError
 from ..models.enums import DiskType, ImageType
 
 
@@ -30,6 +30,7 @@ class DataProcessing(BaseManager):
         self.ssh: SshManager = ssh_manager
         self.update_data: Dict[str, Dict[str, Any]] = {}
         self.update_entry: Dict[str, Any] = {}
+        self._uid_index: Optional[Dict[str, Dict[str, Any]]] = None
 
     def _get_by_legacy(self, entry_name: str) -> Optional[Dict[str, Any]]:
         """Look up entry by legacy name in OpenNebula vm_disks and ds_images"""
@@ -58,6 +59,111 @@ class DataProcessing(BaseManager):
         self.dbg(6, f"{entry_name} not found in one.vm_disks or one.ds_images (or snapshots)")  # noqa: E501
         return None
 
+    def _sp_by_uid(self, kv_uid: str) -> Optional[Dict[str, Any]]:
+        """Look up a StorPool record by KV uid ('~globalId').
+        sp.data is keyed by name, so volumes still under their legacy
+        name are found via the globalId index."""
+        if kv_uid in self.sp.data:
+            return self.sp.data[kv_uid]
+        if self._uid_index is None:
+            self._uid_index = {}
+            for sp_entry in self.sp.data.values():
+                self._uid_index[sp_entry["globalId"]] = sp_entry
+        return self._uid_index.get(kv_uid.lstrip("~"))
+
+    def _resolve_one_record(self, name: str) -> Optional[Dict[str, Any]]:
+        """Find an OpenNebula record by current or legacy name"""
+        if name in self.one.vm_disks:
+            return self.one.vm_disks[name]
+        if name in self.one.ds_images:
+            return self.one.ds_images[name]
+        return self._get_by_legacy(name)
+
+    def _sp_tags_this_instance(self, sp_entry: Dict[str, Any]) -> bool:
+        """Check if the StorPool tags claim the record belongs to
+        this OpenNebula instance"""
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        if tags.get("virt") != "one":
+            return False
+        if tags.get("nloc") and tags["nloc"] != self.args.one_px:
+            return False
+        return True
+
+    def _resolve_one_by_tags(
+        self, sp_entry: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve the OpenNebula record for a StorPool record
+        using its tags"""
+        if not self._sp_tags_this_instance(sp_entry):
+            return None
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        img: Optional[str] = tags.get("img")
+        if img:
+            candidate: str = img
+            if tags.get("snap"):
+                candidate = f"{img}-{tags['snap']}"
+            one_data: Optional[Dict[str, Any]] = (
+                self._resolve_one_record(candidate)
+            )
+            if one_data:
+                return one_data
+        if sp_entry["snapshot"] is False:
+            nvm: Optional[str] = tags.get("nvm")
+            diskid: Optional[str] = tags.get("diskid")
+            if nvm and diskid:
+                for rec in self.one.vm_disks.values():
+                    if rec.get("snapshot"):
+                        continue
+                    if (
+                        str(rec.get("vm_id")) == nvm
+                        and str(rec.get("disk_id")) == diskid
+                    ):
+                        return rec
+        return None
+
+    def _queue_kv_repair(
+        self, spname: str, sp_entry: Dict[str, Any]
+    ) -> None:
+        """Queue restoring the byName/byUid pair for a StorPool record"""
+        if spname not in self.update_data:
+            self.update_data[spname] = {"data": {}, "action": []}
+        entry: Dict[str, Any] = self.update_data[spname]
+        if "spname" not in entry["data"]:
+            entry["data"]["spname"] = spname
+        if "uid" not in entry["data"]:
+            entry["data"]["uid"] = sp_entry["globalId"]
+        if "kv" not in entry["action"]:
+            entry["action"].append("kv")
+        self.dbg(2, f"queued KV repair {spname} ->"
+                    f" ~{sp_entry['globalId']}")
+
+    def _kv_check_one_record(self, name: str, uid: str) -> None:
+        """Check that a KV byName entry is still backed by an
+        OpenNebula record"""
+        if self._resolve_one_record(name):
+            return
+        sp_entry: Optional[Dict[str, Any]] = (
+            self._sp_by_uid(uid) or self.sp.data.get(name)
+        )
+        if sp_entry is None:
+            self.err(
+                f"[kv] byName[{name}] = {uid} not in OpenNebula"
+                " and not in StorPool - stale KV record",
+                "Issue",
+            )
+            self.dbg(0, f"etcdctl del /byName/{name}")
+            if self.etcd.data["byUid"].get(uid) == name:
+                self.dbg(0, f"etcdctl del /byUid/{uid}")
+        else:
+            # e.g. a backup image (not tracked in ds_images) or an
+            # unreferenced leftover - report only, never suggest delete
+            self.dbg(
+                1,
+                f"[kv] byName[{name}] = {uid} not in OpenNebula but"
+                f" StorPool has {sp_entry['name']}"
+                " (backup image or leftover?)",
+            )
+
     def analyze_kv_by_name(self) -> None:
         """Analyze KV byName entries"""
         self.dbg(3, "processing byName entries ...")
@@ -68,6 +174,7 @@ class DataProcessing(BaseManager):
                 self._kv_check_name_uid_match(name, uid)
             else:
                 self._kv_handle_missing_uid(name, uid)
+            self._kv_check_one_record(name, uid)
             # Check for duplicate byName entries
             for name2, uid2 in self.etcd.data["byName"].items():
                 if name2 != name and uid2 == uid and name2 != byUid_name:
@@ -80,6 +187,7 @@ class DataProcessing(BaseManager):
 
     def _kv_check_name_uid_match(self, name: str, uid: str) -> None:
         """Check if name matches uid entry"""
+        sp_uid_entry: Optional[Dict[str, Any]] = self._sp_by_uid(uid)
         if name != self.etcd.data["byUid"][uid]:
             self.dbg(
                 2,
@@ -87,11 +195,11 @@ class DataProcessing(BaseManager):
                 f"={self.etcd.data['byUid'][uid]}",
             )
             # Check if uid is in StorPool
-            if uid in self.sp.data:
-                if self.sp.data[uid]["snapshot"]:
-                    self.dbg(2, f"[kv] UID snapshot:{self.sp.data[uid]}")
+            if sp_uid_entry is not None:
+                if sp_uid_entry["snapshot"]:
+                    self.dbg(2, f"[kv] UID snapshot:{sp_uid_entry}")
                 else:
-                    self.dbg(2, f"[kv] UID volume:{self.sp.data[uid]}")
+                    self.dbg(2, f"[kv] UID volume:{sp_uid_entry}")
             # Check if name is in StorPool
             elif name in self.sp.data:
                 if self.sp.data[name]["snapshot"]:
@@ -105,13 +213,20 @@ class DataProcessing(BaseManager):
                 )
         else:
             # byUid/uid -> name matches byName/name
-            if uid not in self.sp.data:
-                self.dbg(
-                    2,
+            if sp_uid_entry is None:
+                self.err(
                     f"[kv] byName[{name}] = {uid}"
-                    " UID not in StorPool //Delete?",
+                    " UID not in StorPool!",
+                    "Issue",
                 )
-            elif name in self.sp.data:
+                self.dbg(0, f"# etcdctl del /byName/{name}"
+                            "  # verify before removing")
+                self.dbg(0, f"# etcdctl del /byUid/{uid}"
+                            "  # verify before removing")
+            elif (
+                sp_uid_entry["name"][0] == "~"
+                and name in self.sp.data
+            ):
                 self.dbg(
                     2,
                     f"[kv] byName[{name}] = {uid}"
@@ -120,6 +235,7 @@ class DataProcessing(BaseManager):
 
     def _kv_handle_missing_uid(self, name: str, uid: str) -> None:
         """Handle case when uid is missing from byUid"""
+        sp_uid_entry: Optional[Dict[str, Any]] = self._sp_by_uid(uid)
         if name in self.sp.data:
             if self.sp.data[name]["snapshot"]:
                 self.dbg(
@@ -133,8 +249,8 @@ class DataProcessing(BaseManager):
                     f"[kv] byName[{name}] = {uid}"
                     + f" not in byUid but {name} volume exists in StorPool",
                 )
-        elif uid in self.sp.data:
-            if self.sp.data[uid]["snapshot"]:
+        elif sp_uid_entry is not None:
+            if sp_uid_entry["snapshot"]:
                 self.dbg(
                     2,
                     f"[kv] byName[{name}] = {uid}"
@@ -149,10 +265,13 @@ class DataProcessing(BaseManager):
                 )
                 self._update_kv_data(name, uid)
         else:
-            self.dbg(
-                2,
-                f"[kv] byName[{name}] = {uid} not in byUid and StorPool",
+            self.err(
+                f"[kv] byName[{name}] = {uid}"
+                " not in byUid and not in StorPool!",
+                "Issue",
             )
+            self.dbg(0, f"# etcdctl del /byName/{name}"
+                        "  # verify before removing")
 
     def _update_kv_data(self, name: str, uid: str) -> None:
         """Update KV data for name/uid pair"""
@@ -160,6 +279,9 @@ class DataProcessing(BaseManager):
             self.update_data[name] = {"data": {}, "action": []}
         if "name" not in self.update_data[name]["data"]:
             self.update_data[name]["data"]["name"] = name
+        # write_kv_data() keys on 'spname'
+        if "spname" not in self.update_data[name]["data"]:
+            self.update_data[name]["data"]["spname"] = name
         if "uid" not in self.update_data[name]["data"]:
             self.update_data[name]["data"]["uid"] = uid
         self.update_data[name]["data"]["byName"] = name
@@ -185,19 +307,21 @@ class DataProcessing(BaseManager):
             else:
                 one_data: Optional[Dict[str, Any]] = self._get_by_legacy(name)
                 if one_data:
-                    self._fix_one_data(uid, name)
+                    # repair KV under the current name, not the legacy one
+                    self._fix_one_data(uid, one_data["spname"])
                 else:
                     self.dbg(2, f" byUid[{uid}] = {name} not in ONE")
                     self.dbg(0, f"etcdctl del /byUid/{uid}")
 
     def _fix_uid_mismatch(self, uid: str, name: str) -> None:
         """Fix uid mismatch cases"""
-        if uid in self.sp.data:
-            if self.sp.data[uid]["snapshot"]:
+        sp_uid_entry: Optional[Dict[str, Any]] = self._sp_by_uid(uid)
+        if sp_uid_entry is not None:
+            if sp_uid_entry["snapshot"]:
                 self.dbg(
                     2,
                     f" byUid[{uid}]={name}"
-                    f" has SP snapshot {self.sp.data[uid]['tags']},"
+                    f" has SP snapshot {sp_uid_entry['tags']},"
                     f" byName[{name}]={self.etcd.data['byName'][name]}",
                 )
                 self.dbg(0, f"etcdctl del /byUid/{uid}")
@@ -206,11 +330,11 @@ class DataProcessing(BaseManager):
                 self.dbg(
                     2,
                     f" byUid[{uid}]={name}"
-                    f" has SP volume {self.sp.data[uid]['tags']},"
+                    f" has SP volume {sp_uid_entry['tags']},"
                     f" byName[{name}]={self.etcd.data['byName'][name]}",
                 )
                 self.dbg(0, f"etcdctl del /byUid/{uid}")
-                sp_api_http_host = self.sp.data[uid]["sp_api_http_host"]
+                sp_api_http_host = sp_uid_entry["sp_api_http_host"]
                 self.dbg(
                     0,
                     f"storpool -M -B volume {uid} delete {uid}"
@@ -221,19 +345,28 @@ class DataProcessing(BaseManager):
 
     def _fix_one_data(self, uid: str, name: str) -> None:
         """Fix OpenNebula data cases"""
-        if uid in self.sp.data:
+        if self._sp_by_uid(uid) is not None:
             self.dbg(
                 2,
                 f" byUid[{uid}] = {name} in ONE and StorPool, KV update",
             )
             if name not in self.update_data:
                 self.update_data[name] = {"data": {}, "action": []}
-            self.update_data[name]["data"] = {"name": name, "uid": uid}
+            self.update_data[name]["data"] = {
+                "name": name,
+                # write_kv_data() keys on 'spname'
+                "spname": name,
+                "uid": uid,
+            }
             self.dbg(6, f"ZDBG {self.update_data=}")
             self.update_data[name]["action"].append("kvupdate")
         else:
-            self.dbg(2, f" byUid[{uid}] = {name} in ONE but not in StorPool")
-            raise UnhandledCase(f" byUid[{uid}] = {name} not in StorPool")
+            # report and continue - a single inconsistent record
+            # must not abort the whole validation run
+            self.err(
+                f" byUid[{uid}] = {name} in ONE but not in StorPool!",
+                "Issue",
+            )
 
     def analyze_vm_disks(self) -> None:
         """Analyze VM disk elements"""
@@ -256,6 +389,9 @@ class DataProcessing(BaseManager):
                 else:
                     err = True
                     msg += f" {name}/{by_name_uid} not in byUid!"
+                if self._sp_by_uid(by_name_uid) is None:
+                    err = True
+                    msg += f" UID {by_name_uid} not in StorPool!"
             else:
                 err = True
                 if name in self.sp.data:
@@ -300,23 +436,27 @@ class DataProcessing(BaseManager):
             if name in self.etcd.data["byName"]:
                 by_name_uid: str = self.etcd.data["byName"][name]
                 msg += f" UID {by_name_uid} (in KV)"
-                if by_name_uid in self.sp.data:
+                sp_rec: Optional[Dict[str, Any]] = (
+                    self._sp_by_uid(by_name_uid)
+                )
+                if sp_rec is not None:
                     msg += (
                         " SPsnapshot:"
-                        f"{self.sp.data[by_name_uid]['snapshot']}"
+                        f"{sp_rec['snapshot']}"
                     )
                     if data["disktype"] == DiskType.PERSISTENT:
                         if data["vms"] > 0:
                             msg += " _but_ VM list " + repr(data["vmlist"])
-                        elif self.sp.data[by_name_uid]["snapshot"] is not True:
+                        elif sp_rec["snapshot"] is not True:
                             msg += " no VMs but volume! [CONVERT TO SNAPSHOT?]"
                     elif data["imagetype"] == ImageType.CDROM:
                         if data["vms"] > 0:
                             msg += " VM list " + repr(data["vmlist"])
-                        if self.sp.data[by_name_uid]["snapshot"] is not True:
+                        if sp_rec["snapshot"] is not True:
                             msg += " is SPvolume! [CONVERT TO SNAPSHOT?]"
                 else:
-                    msg += " UID not in StorPool"
+                    err = True
+                    msg += " UID not in StorPool!"
             else:
                 err = True
                 is_snapshot: bool = True
@@ -370,17 +510,22 @@ class DataProcessing(BaseManager):
     def _analyze_one_image_snapshots(self, data: Dict[str, Any]) -> None:
         """Analyze snapshots for a given image"""
         for snapname, snapdata in data["snapshots"].items():
+            err: bool = False
             msg: str = f"IMG {data['image_id']} {snapname=}"
             if snapname in self.etcd.data["byName"]:
                 by_name_uid: str = self.etcd.data["byName"][snapname]
                 msg += f" UID {by_name_uid} (in KV)"
-                if by_name_uid in self.sp.data:
+                sp_rec: Optional[Dict[str, Any]] = (
+                    self._sp_by_uid(by_name_uid)
+                )
+                if sp_rec is not None:
                     msg += (
                         " snapshot="
-                        f"{self.sp.data[by_name_uid]['snapshot']}"
+                        f"{sp_rec['snapshot']}"
                         " in StorPool"
                     )
                 else:
+                    err = True
                     msg += " StorPool snapshot not found!"
             else:
                 msg += " not in KV!"
@@ -405,7 +550,10 @@ class DataProcessing(BaseManager):
                     else:
                         msg += " Should migrate but not found in StorPool"
                         msg += "\n\tON:" + repr(snapdata)
-            self.dbg(1, msg)
+            if err:
+                self.err(msg, "Issue")
+            else:
+                self.dbg(1, msg)
 
     def analyze_storpool(self) -> None:
         """Analyze StorPool data"""
@@ -471,20 +619,33 @@ class DataProcessing(BaseManager):
                     )
             else:
                 notes.append(f"byUid/{sp_name}={kv_name} not in byName/")
+                # repair the lost byName entry when ONE confirms it
+                one_rec: Optional[Dict[str, Any]] = (
+                    self._resolve_one_record(kv_name)
+                )
+                if one_rec:
+                    notes.append(
+                        f"KV repair queued for {one_rec['spname']}"
+                    )
+                    self._queue_kv_repair(one_rec["spname"], sp_entry)
         else:
-            notes.append(f"{sp_name} not in byUid")
-
-    def _is_vm_undeployed(self, one_data: Dict[str, Any]) -> bool:
-        """Check if the VM is undeployed"""
-        ret: bool = False
-        if one_data["state"] == 4:
-            ret = True
-        if one_data["state"] == 8:
-            ret = True
-        if one_data["state"] == 9:
-            ret = True
-        self.dbg(9, f"is_vm_undeployed {one_data['state']=} {one_data['lcm_state']=} {ret=}")  # noqa: E501
-        return ret
+            # not in byUid at all - use the tags to find the ONE record
+            one_rec = self._resolve_one_by_tags(sp_entry)
+            if one_rec:
+                notes.append(
+                    f"{sp_name} not in byUid, matched ONE"
+                    f" {one_rec['spname']} by tags - KV repair queued"
+                )
+                self._queue_kv_repair(one_rec["spname"], sp_entry)
+            elif self._sp_tags_this_instance(sp_entry):
+                notes.append(
+                    f"{sp_name} tagged for this OpenNebula instance"
+                    " but no matching record found (orphan?)"
+                    f" {sp_entry.get('tags')}"
+                )
+            else:
+                # not tagged for this ONE instance - do not spam notes
+                self.dbg(3, f"{sp_name} not in byUid (foreign/untagged)")
 
     def _analyze_storpool_legacy(
         self,
@@ -514,18 +675,16 @@ class DataProcessing(BaseManager):
                     "byName": spname,
                 }
                 self.update_data[spname]["action"].append("kv")
-            if sp_entry["snapshot"] is False and "host" in one_data:
-                target: str = "/dev/storpool-byid/_SP_UID_"
-                _target: str = target.replace("_SP_UID_", sp_entry["globalId"])
+            if (
+                sp_entry["snapshot"] is False
+                and "host" in one_data
+                and "link" in one_data
+            ):
+                _target: str = f"/dev/storpool-byid/{sp_entry['globalId']}"
                 if "target" not in one_data or one_data["target"] != _target:
-                    self.update_data[spname]["data"]["symlink"] = {
-                        "host": one_data["host"],
-                        "target": target,
-                        "link": one_data["link"],
-                        "vm_id": one_data["vm_id"],
-                    }
-                    if not self._is_vm_undeployed(one_data):
-                        self.update_data[spname]["action"].append("symlink")
+                    self._queue_symlink_fix(
+                        spname, one_data, sp_entry["globalId"]
+                    )
             if sp_update:
                 self.dbg(4, f"update {spname} {spname=} {sp_update=}")
                 self.update_data[spname]["data"].update(sp_update["data"])
@@ -536,16 +695,52 @@ class DataProcessing(BaseManager):
 
     def _expected_globalid(
         self,
-        spname: str,
-        legacy: Optional[str],
+        one_data: Dict[str, Any],
     ) -> Optional[str]:
-        """Resolve the StorPool globalId expected for a given ONE volume"""
-        uid: Optional[str] = self.etcd.data["byName"].get(spname)
-        if uid:
-            return uid.lstrip("~")
+        """Resolve the StorPool globalId expected for a given ONE volume,
+        walking all known relations: KV byName (current and legacy name),
+        KV byUid reverse mapping, StorPool by name and StorPool by tags"""
+        spname: str = one_data["spname"]
+        legacy: Optional[str] = one_data.get("legacy")
+        # KV byName, by the current and by the legacy name
+        for candidate in (spname, legacy):
+            if candidate and candidate in self.etcd.data["byName"]:
+                uid: str = self.etcd.data["byName"][candidate]
+                if candidate != spname:
+                    self.dbg(2, f"{spname} found in KV byName"
+                                f" as legacy '{candidate}'")
+                return uid.lstrip("~")
+        # KV byUid reverse lookup (byName entry lost/inconsistent)
+        for uid, kv_name in self.etcd.data["byUid"].items():
+            if kv_name in (spname, legacy):
+                self.dbg(2, f"{spname} found only in KV"
+                            f" byUid[{uid}]={kv_name}")
+                return uid.lstrip("~")
+        # StorPool volume/snapshot still under the ONE name
         for candidate in (spname, legacy):
             if candidate and candidate in self.sp.data:
                 return self.sp.data[candidate]["globalId"]
+        # StorPool tags (volume renamed to ~globalId, KV entries lost)
+        vm_id: Optional[int] = one_data.get("vm_id")
+        disk_id: Optional[int] = one_data.get("disk_id")
+        for sp_name, sp_entry in self.sp.data.items():
+            tags: Dict[str, str] = sp_entry.get("tags") or {}
+            if tags.get("virt") != "one":
+                continue
+            if tags.get("nloc") and tags["nloc"] != self.args.one_px:
+                continue
+            if tags.get("snap"):
+                # a snapshot of the volume, not the volume itself
+                continue
+            if tags.get("img") == spname or (
+                vm_id is not None
+                and disk_id is not None
+                and tags.get("nvm") == str(vm_id)
+                and tags.get("diskid") == str(disk_id)
+            ):
+                self.dbg(2, f"{spname} matched StorPool tags"
+                            f" of {sp_name} {tags=}")
+                return sp_entry["globalId"]
         return None
 
     def _queue_symlink_fix(
@@ -592,16 +787,23 @@ class DataProcessing(BaseManager):
             if not link or not host:
                 continue
             known_links[f"{host}:{link}"] = name
-            globalid: Optional[str] = self._expected_globalid(
-                data["spname"], data.get("legacy")
-            )
+            target: Optional[str] = data.get("target")
+            globalid: Optional[str] = self._expected_globalid(data)
             if globalid is None:
-                # not in KV/StorPool - reported by the other passes
-                self.dbg(4, f"{name} {link} on {host}:"
-                            " no globalId found in KV/StorPool")
+                if target and target.startswith("/dev/storpool/"):
+                    # never stay silent about an old-format symlink
+                    self.err(
+                        f"VM {data['vm_id']} {name} on {host}:"
+                        f" stale legacy symlink {link} -> {target}"
+                        " but no globalId found in KV/StorPool!",
+                        "Issue",
+                    )
+                else:
+                    # not in KV/StorPool - reported by the other passes
+                    self.dbg(4, f"{name} {link} on {host}:"
+                                " no globalId found in KV/StorPool")
                 continue
             expected: str = f"/dev/storpool-byid/{globalid}"
-            target: Optional[str] = data.get("target")
             if target == expected:
                 continue
             msg: str = f"VM {data['vm_id']} {name} on {host}:"
