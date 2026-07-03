@@ -846,7 +846,44 @@ class DataProcessing(BaseManager):
             self.err(msg, "Issue")
             self.dbg(0, f"ssh {host} ln -vsfn {expected} {link}")
             self._queue_symlink_fix(name, data, globalid)
+        self._report_missing_frontend_data()
         self._report_orphan_symlinks(known_links)
+
+    def _report_missing_frontend_data(self) -> None:
+        """Report STOPPED/UNDEPLOYED VMs with disk symlinks missing
+        on the frontend, where their files are expected. With
+        SKIP_UNDEPLOY_SSH enabled the VM home is not moved to the
+        frontend on stop/undeploy, so nothing is expected there"""
+        if getattr(self.args, "skip_undeploy_ssh", False):
+            self.dbg(2, "SKIP_UNDEPLOY_SSH enabled - not checking"
+                        " the VM data on the frontend")
+            return
+        frontend: Dict[str, Any] = self.one.frontend or {}
+        links: Optional[Dict[int, Any]] = frontend.get("links")
+        if links is None and frontend.get("name") in self.one.one_hosts:
+            # the frontend is a hypervisor host
+            links = self.one.one_hosts[frontend["name"]].get("links")
+        if links is None:
+            # frontend symlinks not collected
+            return
+        for name, data in self.one.vm_disks.items():
+            if data.get("snapshot"):
+                continue
+            if data.get("state") not in VM_ON_FRONTEND_STATES:
+                continue
+            link: Optional[str] = data.get("link")
+            if not link:
+                continue
+            vm_id: int = int(data["vm_id"])
+            ds_id: int = int(data["sys_ds_id"])
+            disk_name: str = link.rsplit("/", 1)[-1]
+            if links.get(ds_id, {}).get(vm_id, {}).get(disk_name):
+                continue
+            self.err(
+                f"VM {vm_id} {name} state {data.get('state')}:"
+                f" missing {link} on the frontend",
+                "Issue",
+            )
 
     def _expected_vm_placement(self) -> Dict[int, Dict[str, Any]]:
         """Build the expected VM placement (host, ds_id, state) from

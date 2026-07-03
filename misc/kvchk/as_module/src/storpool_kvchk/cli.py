@@ -34,6 +34,12 @@ def parse_addon_storpoolrc() -> Dict[str, str]:
     return defaults
 
 
+def bool_true(value: Any) -> bool:
+    """Interpret a bool-like addon-storpoolrc value the same way
+    as boolTrue() in tm/storpool/storpool_common.sh"""
+    return str(value).upper() in ("1", "Y", "YES", "T", "TRUE", "ON")
+
+
 def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
     """Parse and validate command line arguments"""
     parser = argparse.ArgumentParser()
@@ -89,8 +95,19 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
         type=str,
         help="Default QoS class, string",
     )
+    parser.add_argument(
+        "--skip-undeploy-ssh",
+        action="store",
+        default=defaults.get("SKIP_UNDEPLOY_SSH", os.getenv("SKIP_UNDEPLOY_SSH")),  # type: ignore[attr-defined] # noqa: E501
+        nargs="?",
+        type=str,
+        help="SKIP_UNDEPLOY_SSH from addon-storpoolrc - the VM home"
+             " is not moved to the frontend on stop/undeploy,"
+             " bool-like string",
+    )
 
     args = parser.parse_args()
+    args.skip_undeploy_ssh = bool_true(args.skip_undeploy_ssh)
     if args.verbose > 0:
         print(f"parse_arguments() {args=}")
     if args.execute and args.dummy_etcd > 0:
