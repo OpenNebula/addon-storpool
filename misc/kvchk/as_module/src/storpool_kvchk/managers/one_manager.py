@@ -67,6 +67,7 @@ class oneManager(BaseManager):
     vm_disks: Dict[str, Any] = {}
     one_hosts: Dict[str, Any] = {}
     one_datastores: Dict[int, Any] = {}
+    one_vms: Dict[int, Dict[str, Any]] = {}
     vm_ids: List[int] = []
 
     def get_one_token(self) -> str:
@@ -660,6 +661,16 @@ class oneManager(BaseManager):
                 f">>> VM {vm_e.ID} '{vm_e.NAME}'"
                 f" {vm_e.STATE}:{vm_e.LCM_STATE} {links=}",
             )
+            # expected VM placement, checked against the symlinks
+            # collected from the hosts
+            self.one_vms[vm_id] = {
+                "vm_id": vm_id,
+                "name": str(vm_e.NAME),
+                "state": int(vm_e.STATE),
+                "lcm_state": int(vm_e.LCM_STATE),
+                "host": vm_e.HISTORY_RECORDS.HISTORY[-1].HOSTNAME,
+                "ds_id": sys_ds_id,
+            }
             vm_snaps_list: List[str] = self._get_vm_snapshots(vm_e)
             disk_snaps: Dict[int, List[int]] = self._get_disk_snapshots(vm_e)
             self.vm_disks.update(
@@ -674,6 +685,7 @@ class oneManager(BaseManager):
             )
 
         self.dbg(2, f"END vm_disks = \n{pprint.pformat(self.vm_disks)}")
+        self.dbg(2, f"END one_vms = \n{pprint.pformat(self.one_vms)}")
 
     def get_by_legacy(
         self, one_dict: Dict[str, Dict[str, Any]], entry_name: str

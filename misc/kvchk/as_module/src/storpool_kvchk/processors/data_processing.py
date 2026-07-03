@@ -10,6 +10,11 @@ from ..managers.etcd_manager import etcdManager
 from ..models.exceptions import KvByNameError, KvByUidError
 from ..models.enums import DiskType, ImageType
 
+# VM states where the VM files (and the disk.N symlinks) are
+# expected to be present on the VM host:
+# 3 - ACTIVE, 5 - SUSPENDED, 8 - POWEROFF
+VM_ON_HOST_STATES = (3, 5, 8)
+
 
 class DataProcessing(BaseManager):
     """Analyzes data and relationships between
@@ -776,7 +781,10 @@ class DataProcessing(BaseManager):
     def analyze_host_symlinks(self) -> None:
         """Detect stale/missing disk.N symlinks on the hosts still
         pointing to the legacy /dev/storpool/<name> devices instead
-        of /dev/storpool-byid/<globalId>"""
+        of /dev/storpool-byid/<globalId>, then check the symlinks
+        collected from the hosts against the OpenNebula data for
+        left-over artefacts on hosts where the VM is not expected
+        to be running"""
         self.dbg(1, "processing host symlinks...")
         known_links: Dict[str, str] = {}
         for name, data in self.one.vm_disks.items():
@@ -786,7 +794,10 @@ class DataProcessing(BaseManager):
             host: Optional[str] = data.get("host")
             if not link or not host:
                 continue
-            known_links[f"{host}:{link}"] = name
+            if data.get("state") in VM_ON_HOST_STATES:
+                # only VMs deployed on the host are expected
+                # to have their disk.N symlinks there
+                known_links[f"{host}:{link}"] = name
             target: Optional[str] = data.get("target")
             globalid: Optional[str] = self._expected_globalid(data)
             if globalid is None:
@@ -823,12 +834,75 @@ class DataProcessing(BaseManager):
             self._queue_symlink_fix(name, data, globalid)
         self._report_orphan_symlinks(known_links)
 
+    def _expected_vm_placement(self) -> Dict[int, Dict[str, Any]]:
+        """Build the expected VM placement (host, ds_id, state) from
+        the OpenNebula data, falling back to the VM disk records when
+        the VM pool data is not available"""
+        placement: Dict[int, Dict[str, Any]] = {}
+        for vm_id, vm_rec in self.one.one_vms.items():
+            placement[int(vm_id)] = dict(vm_rec)
+        for data in self.one.vm_disks.values():
+            if "vm_id" not in data:
+                continue
+            entry: Dict[str, Any] = placement.setdefault(
+                int(data["vm_id"]), {}
+            )
+            for one_key, key in (
+                ("host", "host"),
+                ("state", "state"),
+                ("sys_ds_id", "ds_id"),
+            ):
+                if key not in entry and data.get(one_key) is not None:
+                    entry[key] = data[one_key]
+        return placement
+
+    def _classify_leftover(
+        self,
+        hostname: str,
+        ds_id: int,
+        vm_id: int,
+        disk_name: str,
+        vm_rec: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        """Explain why a StorPool symlink collected from a host is a
+        left-over artefact according to the OpenNebula data.
+        Returns None when the symlink could be legitimate."""
+        if vm_id not in self.one.vm_ids:
+            return f" (VM {vm_id} not in ONE)"
+        if not vm_rec:
+            # in ONE but no placement data collected
+            return ""
+        state: Optional[int] = vm_rec.get("state")
+        exp_host: Optional[str] = vm_rec.get("host")
+        exp_ds: Optional[int] = vm_rec.get("ds_id")
+        if state is not None and state not in VM_ON_HOST_STATES:
+            return (f" (VM {vm_id} state {state},"
+                    " not expected on any host)")
+        if exp_host and exp_host != hostname:
+            return f" (VM {vm_id} expected on host {exp_host})"
+        if exp_ds is not None and int(exp_ds) != ds_id:
+            return f" (VM {vm_id} expected in datastore {exp_ds})"
+        # VM deployed on this host: an unknown disk.N is a left-over
+        # (e.g. a detached disk), anything else (disk.N.snapM, ...)
+        # could be legitimate
+        if disk_name.startswith("disk.") and disk_name[5:].isdigit():
+            return f" (not a disk of VM {vm_id})"
+        return None
+
     def _report_orphan_symlinks(self, known_links: Dict[str, str]) -> None:
-        """Report StorPool symlinks on the hosts that do not belong
-        to any known ONE VM disk"""
+        """Check the StorPool symlinks collected from the hosts against
+        the OpenNebula data and report the left-over artefacts: symlinks
+        of VMs that are deleted, not deployed, expected on another host
+        or in another datastore, and unknown disk.N symlinks"""
+        placement: Dict[int, Dict[str, Any]] = (
+            self._expected_vm_placement()
+        )
         for hostname, host_e in self.one.one_hosts.items():
             for ds_id, host_vms in host_e.get("links", {}).items():
                 for vm_id, disks in host_vms.items():
+                    vm_rec: Optional[Dict[str, Any]] = (
+                        placement.get(vm_id)
+                    )
                     for disk_name, target in disks.items():
                         link: str = (f"/var/lib/one/datastores"
                                      f"/{ds_id}/{vm_id}/{disk_name}")
@@ -836,11 +910,18 @@ class DataProcessing(BaseManager):
                             continue
                         if not target.startswith("/dev/storpool"):
                             continue
-                        msg: str = (f"orphan symlink on {hostname}:"
-                                    f" {link} -> {target}")
-                        if vm_id not in self.one.vm_ids:
-                            msg += f" (VM {vm_id} not in ONE)"
-                        self.err(msg, "Issue")
+                        note: Optional[str] = self._classify_leftover(
+                            hostname, ds_id, vm_id, disk_name, vm_rec
+                        )
+                        if note is None:
+                            self.dbg(3, f"skipping {hostname}:{link}"
+                                        f" -> {target}")
+                            continue
+                        self.err(
+                            f"orphan symlink on {hostname}:"
+                            f" {link} -> {target}{note}",
+                            "Issue",
+                        )
                         self.dbg(0, f"# ssh {hostname} rm -v {link}"
                                     "  # verify before removing")
 
