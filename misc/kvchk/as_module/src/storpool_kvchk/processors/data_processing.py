@@ -6,7 +6,7 @@ import time
 import argparse
 from ..managers.base_manager import BaseManager
 from ..managers.ssh_manager import SshManager
-from ..managers.one_manager import oneManager
+from ..managers.one_manager import oneManager, is_storpool_tm_mad
 from ..managers.storpool_manager import spManager
 from ..managers.etcd_manager import etcdManager
 from ..models.exceptions import KvByNameError, KvByUidError
@@ -1036,7 +1036,7 @@ class DataProcessing(BaseManager):
         if tm_mads is None:
             # not collected - stay conservative
             return False
-        return all("storpool" in tm_mad for tm_mad in tm_mads)
+        return all(is_storpool_tm_mad(tm_mad) for tm_mad in tm_mads)
 
     def _report_missing_frontend_data(self) -> None:
         """Report STOPPED/UNDEPLOYED VMs with disk symlinks missing

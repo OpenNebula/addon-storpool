@@ -3,7 +3,10 @@ from unittest.mock import Mock, patch
 import subprocess
 import os
 
-from storpool_kvchk.managers.one_manager import oneManager
+from storpool_kvchk.managers.one_manager import (
+    oneManager,
+    is_storpool_tm_mad,
+)
 OpenNebulaManager = oneManager
 from storpool_kvchk.models.enums import DiskType, ImageType
 
@@ -44,6 +47,7 @@ def mock_pyone_api():
     ds_mock.STATE = 0
     ds_mock.TYPE = 0
     ds_mock.DISK_TYPE = 0
+    ds_mock.TM_MAD = "storpool"
     ds_mock.TEMPLATE.get.return_value = "ds-qos"
 
     datastorepool_mock = Mock()
@@ -480,6 +484,35 @@ class TestoneManager:
         assert expected_name in vm_disks
         assert vm_disks[expected_name]["disktype"] == DiskType.CHECKPOINT
 
+    def test_process_vm_system_disks_skips_non_storpool_sys_ds(
+        self, mock_args
+    ):
+        """CONTEXT/NVRAM/checkpoint are skipped when the VM system
+        datastore is not StorPool-backed"""
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {1: {"tm_mad": "ssh"}}
+
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 4  # STOPPED -> would create a checkpoint
+        vm_mock.LCM_STATE = 0
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="ssh")
+        ]
+        vm_mock.TEMPLATE.get.side_effect = lambda key: {
+            "CONTEXT": {"DISK_ID": 1},
+        }.get(key)
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "T_OS_LOADER": "OVMF", "SP_QOSCLASS": None, "VC_POLICY": None,
+        }.get(key, default)
+
+        vm_disks = manager._process_vm_system_disks(
+            vm_mock, 1, [], {"disk.1": "/path/to/disk"}
+        )
+
+        assert vm_disks == {}
+
     @patch.object(oneManager, '_prepare_vm_disk')
     @patch.object(oneManager, '_get_disk_symlink')
     @patch.object(oneManager, '_get_vm_disks_list')
@@ -492,7 +525,8 @@ class TestoneManager:
         manager.args = mock_args
 
         mock_get_disks_list.return_value = [
-            {"DISK_ID": 0, "IMAGE_ID": 1, "DATASTORE_ID": 2}
+            {"DISK_ID": 0, "IMAGE_ID": 1, "DATASTORE_ID": 2,
+             "TM_MAD": "storpool"}
         ]
         mock_prepare_disk.return_value = {
             "spname": "one-img-1-123-0",
@@ -525,6 +559,66 @@ class TestoneManager:
         assert "one-img-1-123-0-snap1" in vm_disks
         # Check disk snapshot
         assert "one-img-1-123-0-snap1" in vm_disks
+
+    def test_process_vm_disks_skips_non_storpool(self, mock_args):
+        """A disk on a non-StorPool datastore must not enter vm_disks"""
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {}
+
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(DS_ID=1, HOSTNAME="test-host", TM_MAD="storpool")
+        ]
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "SP_QOSCLASS": "vm-qos", "VC_POLICY": None,
+        }.get(key, default)
+        vm_mock.TEMPLATE.get.return_value = [
+            {"DISK_ID": 0, "IMAGE_ID": 1, "DATASTORE_ID": 2,
+             "TM_MAD": "storpool"},
+            {"DISK_ID": 1, "IMAGE_ID": 2, "DATASTORE_ID": 3,
+             "TM_MAD": "qcow2"},
+        ]
+
+        vm_disks = manager._process_vm_disks(vm_mock, [], {}, {})
+
+        # the storpool disk (persistent image 1) is kept
+        assert "one-img-1" in vm_disks
+        assert vm_disks["one-img-1"]["tm_mad"] == "storpool"
+        # the qcow2 disk (disk_id 1) is skipped entirely
+        assert not any(
+            data.get("disk_id") == 1 for data in vm_disks.values()
+        )
+
+    def test_process_vm_disks_volatile_via_system_ds(self, mock_args):
+        """A volatile disk with no TM_MAD/DATASTORE_ID resolves through
+        the VM system datastore (DATASTORE_ID 0 is a valid system DS)"""
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {0: {"tm_mad": "storpool"}}
+
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(DS_ID=0, HOSTNAME="test-host", TM_MAD="storpool")
+        ]
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "SP_QOSCLASS": None, "VC_POLICY": None,
+        }.get(key, default)
+        # volatile disk: no IMAGE_ID/TM_MAD, placed on system DS 0
+        vm_mock.TEMPLATE.get.return_value = [
+            {"DISK_ID": 0, "TYPE": "fs", "DATASTORE_ID": 0},
+        ]
+
+        vm_disks = manager._process_vm_disks(vm_mock, [], {}, {})
+
+        assert "one-sys-123-0" in vm_disks
+        assert vm_disks["one-sys-123-0"]["tm_mad"] == "storpool"
 
     def test_get_disk_symlink_found(self, mock_args):
         """Test getting disk symlink when found"""
@@ -899,6 +993,7 @@ class TestInitDatastores:
         assert 1 in manager.one_datastores
         assert manager.one_datastores[1]["name"] == "test-ds"
         assert manager.one_datastores[1]["qosclass"] == "ds-qos"
+        assert manager.one_datastores[1]["tm_mad"] == "storpool"
         assert manager.one_datastores[1]["ZDBG"] == "_init_datastores"
 
 
@@ -1262,7 +1357,8 @@ class TestProcessVMDisksUpdated:
         manager.args = mock_args
 
         mock_get_disks_list.return_value = [
-            {"DISK_ID": 0, "IMAGE_ID": 1, "DATASTORE_ID": 2}
+            {"DISK_ID": 0, "IMAGE_ID": 1, "DATASTORE_ID": 2,
+             "TM_MAD": "storpool"}
         ]
         mock_prepare_disk.return_value = {
             "spname": "one-img-1-123-0",
@@ -1305,3 +1401,49 @@ class TestProcessVMDisksUpdated:
         assert "one-img-1-123-0-snap1" in vm_disks
         assert "qosclass" not in vm_disks["one-img-1-123-0-snap1"]
         assert "vc-policy" not in vm_disks["one-img-1-123-0-snap1"]
+
+
+class TestTmMadResolution:
+    """Test the StorPool TM_MAD predicate and per-disk resolver"""
+
+    @pytest.mark.parametrize("tm_mad,expected", [
+        ("storpool", True),
+        ("storpool_xfer", True),
+        ("ssh", False),
+        ("qcow2", False),
+        ("", False),
+        (None, False),
+    ])
+    def test_is_storpool_tm_mad(self, tm_mad, expected):
+        assert is_storpool_tm_mad(tm_mad) is expected
+
+    def test_disk_tm_mad_prefers_disk_attribute(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {5: {"tm_mad": "ssh"}}
+        # the disk's own TM_MAD wins over the datastore map
+        assert manager._disk_tm_mad(
+            {"DISK_ID": 0, "DATASTORE_ID": 5, "TM_MAD": "storpool"}, 9
+        ) == "storpool"
+
+    def test_disk_tm_mad_via_datastore_id_zero(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {0: {"tm_mad": "storpool"}}
+        # DATASTORE_ID 0 (system DS) must be honoured, not treated as missing
+        assert manager._disk_tm_mad(
+            {"DISK_ID": 0, "DATASTORE_ID": 0}, 7
+        ) == "storpool"
+
+    def test_disk_tm_mad_falls_back_to_system_ds(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {7: {"tm_mad": "storpool"}}
+        # volatile disk with no TM_MAD and no DATASTORE_ID -> system DS
+        assert manager._disk_tm_mad({"DISK_ID": 0}, 7) == "storpool"
+
+    def test_disk_tm_mad_unknown_returns_empty(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {}
+        assert manager._disk_tm_mad({"DISK_ID": 0}, 7) == ""
