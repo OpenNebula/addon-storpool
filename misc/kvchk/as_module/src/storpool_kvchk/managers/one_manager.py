@@ -17,6 +17,13 @@ ONE_TOKEN = "oneadmin:oneadmin"
 ONE_AUTH_FILE = "/var/lib/one/.one/one_auth"
 ONE_API_URL = "http://localhost:2633/RPC2"
 
+
+def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
+    """A disk/datastore is StorPool-backed when its TM_MAD starts with
+    'storpool' - the same test the addon uses in
+    tm/storpool/storpool_common.sh (${TM_MAD:0:8} == storpool)."""
+    return bool(tm_mad) and str(tm_mad).startswith("storpool")
+
 QOSCLASS_ORDER: Dict[DiskType, List[str]] = {
     # Order is from highest to lowest priority.
     DiskType.PERSISTENT: [
@@ -169,6 +176,9 @@ class oneManager(BaseManager):
             datastore_r["state"] = int(datastore_e.STATE)
             datastore_r["type"] = int(datastore_e.TYPE)
             datastore_r["disk_type"] = datastore_e.DISK_TYPE
+            # /DATASTORE/TM_MAD - the transfer manager driver, used to
+            # tell StorPool-backed datastores from the rest
+            datastore_r["tm_mad"] = str(datastore_e.TM_MAD or "")
             datastore_r["ZDBG"] = "_init_datastores"
             datastore_r["qosclass"] = datastore_e.TEMPLATE.get("SP_QOSCLASS", self.args.default_qosclass)  # noqa: E501
             datastore_r["SP_API_HTTP_HOST"] = datastore_e.TEMPLATE.get("SP_API_HTTP_HOST")  # noqa: E501
@@ -402,6 +412,27 @@ class oneManager(BaseManager):
             return links[f"disk.{disk_id}"]
         return None
 
+    def _disk_tm_mad(self, disk: Dict[str, Any], sys_ds_id: int) -> str:
+        """Resolve the TM_MAD backing a VM disk.
+
+        Image disks carry DISK/TM_MAD (their image datastore's driver,
+        always present once the image is acquired) and a DISK/DATASTORE_ID.
+        Volatile disks reflect the *system* datastore and only get
+        TM_MAD/DATASTORE_ID once the VM is deployed, so fall back to the
+        datastore the disk is placed on and finally to the VM system DS.
+        Only the base TM_MAD is used - the addon's oneVmVolumes ignores
+        TM_MAD_SYSTEM, so we do too. DATASTORE_ID 0 is a valid (system)
+        datastore, so it must not be treated as 'missing'."""
+        tm_mad: Any = disk.get("TM_MAD")
+        if tm_mad:
+            return str(tm_mad)
+        ds_id: Any = disk.get("DATASTORE_ID")
+        if ds_id not in (None, "") and int(ds_id) in self.one_datastores:
+            ds_tm: Any = self.one_datastores[int(ds_id)].get("tm_mad")
+            if ds_tm:
+                return str(ds_tm)
+        return str(self.one_datastores.get(sys_ds_id, {}).get("tm_mad") or "")
+
     def _get_vm_disks_list(self, vm_element: Any) -> List[Dict[str, Any]]:
         """Get list of the VM disks"""
         disk_element: Union[dict[str, Any], list[Any]] = vm_element.TEMPLATE.get("DISK")  # noqa: E501
@@ -427,14 +458,26 @@ class oneManager(BaseManager):
         vm_id: int = int(vm_e.ID)
         host: str = vm_e.HISTORY_RECORDS.HISTORY[-1].HOSTNAME
         tm_mad: str = vm_e.HISTORY_RECORDS.HISTORY[-1].TM_MAD
+        # the CONTEXT ISO, NVRAM and checkpoint files all live in the VM
+        # system datastore, so they are StorPool volumes only when that DS
+        # is StorPool-backed (i.e. the addon driver ever ran for this VM)
+        sys_ds: Dict[str, Any] = self.one_datastores.get(sys_ds_id, {})
+        sys_tm: str = str(sys_ds.get("tm_mad") or tm_mad or "")
+        sys_is_sp: bool = is_storpool_tm_mad(sys_tm)
         state: int = int(vm_e.STATE)
         lcm_state: int = int(vm_e.LCM_STATE)
+        if not sys_is_sp:
+            self.dbg(
+                3,
+                f"VM {vm_id} system DS {sys_ds_id} TM_MAD='{sys_tm}' not"
+                " StorPool - skipping CONTEXT/NVRAM/checkpoint volumes",
+            )
         # CONTEXTUALIZATION disk
         entry: Union[dict[str, Any], None] = vm_e.TEMPLATE.get("CONTEXT")
         v_name: str = ""
         v_info: Dict[str, Any] = {}
         snap_dict: Dict[str, Any] = {}
-        if entry is not None:
+        if entry is not None and sys_is_sp:
             disk_id: int = int(entry.get("DISK_ID"))  # type: ignore[arg-type]
             v_name = f"{self.args.one_px}-sys-{vm_id}-{disk_id}"
             v_info = {
@@ -487,7 +530,7 @@ class oneManager(BaseManager):
                 vm_disks[snapname] = snap_dict
         # UEFI NVRAM volume
         entry = vm_e.USER_TEMPLATE.get("T_OS_LOADER")  # noqa: E501
-        if entry is not None:
+        if entry is not None and sys_is_sp:
             v_name = f"{self.args.one_px}-sys-{vm_id}-NVRAM"
             v_info = {
                 "legacy": v_name,
@@ -525,7 +568,7 @@ class oneManager(BaseManager):
                     del snap_dict["qosclass"]
                 vm_disks[snap] = snap_dict
         # VM checkpoint volume
-        if int(vm_e.STATE) in [4, 5]:  # 4 - STOPPED, 5 - SUSPENDED
+        if sys_is_sp and int(vm_e.STATE) in [4, 5]:  # 4-STOPPED, 5-SUSPENDED
             v_name = f"{self.args.one_px}-sys-{vm_id}-rawcheckpoint"
             v_info = {
                 "spname": v_name,
@@ -585,6 +628,18 @@ class oneManager(BaseManager):
             vm_details["qosclass"] = self.args.default_qosclass
         vm_details["disks"] = self._get_vm_disks_list(vm_element)
         for disk in vm_details["disks"]:
+            if disk is None:
+                continue
+            # process only the disks backed by the StorPool driver - a VM
+            # may legitimately have disks on non-StorPool datastores
+            tm_mad: str = self._disk_tm_mad(disk, vm_details["ds_id"])
+            if not is_storpool_tm_mad(tm_mad):
+                self.dbg(
+                    3,
+                    f"VM {vm_details['id']} disk {disk.get('DISK_ID')}"
+                    f" TM_MAD='{tm_mad}' not StorPool - skipping",
+                )
+                continue
             disk_id: int = int(disk.get("DISK_ID"))
             img_ds_id: int = int(disk.get("DATASTORE_ID", -1))
             v_info: Dict[str, Any] = self._prepare_vm_disk(
@@ -600,9 +655,10 @@ class oneManager(BaseManager):
                     "img_ds_id": img_ds_id,
                     "qosclass": vm_qosclass,
                     "vc-policy": vc_policy,
-                    "tm_mad": disk.get("TM_MAD"),
+                    "tm_mad": tm_mad,
                 }
             )
+            v_info["tm_mad"] = tm_mad
             v_info["state"] = vm_details["state"]
             v_info["lcm_state"] = vm_details["lcm_state"]
             v_info["ZDBG"] = "process_vm_disks"
@@ -690,10 +746,11 @@ class oneManager(BaseManager):
                 "lcm_state": int(vm_e.LCM_STATE),
                 "host": vm_e.HISTORY_RECORDS.HISTORY[-1].HOSTNAME,
                 "ds_id": sys_ds_id,
-                # the DISK_TM_MAD_ARRAY of tm/storpool/mv - a missing
-                # TM_MAD is an empty entry, like xpath_multi.py
+                # the DISK_TM_MAD_ARRAY of tm/storpool/mv - resolved like
+                # a disk's TM_MAD (image DS for image disks, the system DS
+                # for volatile disks that may not carry it until deployed)
                 "disk_tm_mads": [
-                    str(disk.get("TM_MAD") or "")
+                    self._disk_tm_mad(disk, sys_ds_id)
                     for disk in self._get_vm_disks_list(vm_e)
                     if disk is not None
                 ],
