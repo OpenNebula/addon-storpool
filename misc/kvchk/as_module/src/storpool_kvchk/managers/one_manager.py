@@ -17,6 +17,14 @@ ONE_TOKEN = "oneadmin:oneadmin"
 ONE_AUTH_FILE = "/var/lib/one/.one/one_auth"
 ONE_API_URL = "http://localhost:2633/RPC2"
 
+# Host states where the datastores path is reachable over ssh and the
+# symlinks are worth collecting:
+#   0 INIT, 1 MONITORING_MONITORED, 2 MONITORED,
+#   4 DISABLED, 7 MONITORING_DISABLED (a disabled host, monitoring cycle)
+# The rest are skipped: 3 ERROR, 5 MONITORING_ERROR, 6 MONITORING_INIT
+# (host unreachable/not yet up) and 8 OFFLINE (host is down).
+HOST_SYMLINK_STATES = (0, 1, 2, 4, 7)
+
 
 def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     """A disk/datastore is StorPool-backed when its TM_MAD starts with
@@ -137,7 +145,7 @@ class oneManager(BaseManager):
             host_r["id"] = int(host_e.ID)
             host_r["state"] = int(host_e.STATE)
             host_r["vm_mad"] = str(host_e.VM_MAD)
-            if host_r["state"] < 3 or host_r["state"] == 4:  # 4 = disabled/maintenance # noqa: E501
+            if host_r["state"] in HOST_SYMLINK_STATES:
                 try:
                     host_r["links"] = self.ssh.get_symlinks(hostname)
                 except self.ssh.SshManagerError as error:  # type: ignore[attr-defined] # noqa: E501
