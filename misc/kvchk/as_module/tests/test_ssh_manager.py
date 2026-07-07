@@ -430,6 +430,75 @@ class TestSshManagerAction:
             pass
 
 
+class TestSshManagerRemoveSymlink:
+    """Test remove_symlink method (undeployed frontend leftovers)"""
+
+    def test_remove_symlink_missing_data_raises(self, ssh_manager):
+        with pytest.raises(ValueError):
+            ssh_manager.remove_symlink({"foo": "bar"})
+
+    def test_remove_symlink_outside_datastores_raises(self, ssh_manager):
+        with pytest.raises(ValueError):
+            ssh_manager.remove_symlink(
+                {"unlink": {"link": "/etc/passwd", "host": None}}
+            )
+
+    def test_remove_symlink_non_execute_is_noop(self, ssh_manager):
+        with patch('subprocess.run') as mock_run:
+            ssh_manager.args.execute = False
+            ssh_manager.remove_symlink(
+                {"unlink": {
+                    "link": "/var/lib/one/datastores/0/26/disk.1",
+                    "host": None,
+                }}
+            )
+            mock_run.assert_not_called()
+
+    @patch('subprocess.run')
+    def test_remove_symlink_local_execute(self, mock_run, ssh_manager):
+        mock_run.return_value = Mock(returncode=0, stdout=b"", stderr=b"")
+        ssh_manager.args.execute = True
+        ssh_manager.args.dry_run = False
+        link = "/var/lib/one/datastores/0/26/disk.1"
+        ssh_manager.remove_symlink({"unlink": {"link": link, "host": None}})
+        mock_run.assert_called_once()
+        assert mock_run.call_args[0][0] == ("rm", "-v", link)
+
+    @patch('subprocess.run')
+    def test_remove_symlink_remote_execute(self, mock_run, ssh_manager):
+        mock_run.return_value = Mock(returncode=0, stdout=b"", stderr=b"")
+        ssh_manager.args.execute = True
+        ssh_manager.args.dry_run = False
+        link = "/var/lib/one/datastores/0/26/disk.1"
+        ssh_manager.remove_symlink(
+            {"unlink": {"link": link, "host": "kvm1"}}
+        )
+        assert mock_run.call_args[0][0] == ("ssh", "kvm1", "rm", "-v", link)
+
+    @patch('subprocess.run')
+    def test_remove_symlink_dry_run(self, mock_run, ssh_manager):
+        ssh_manager.args.execute = True
+        ssh_manager.args.dry_run = True
+        ssh_manager.remove_symlink(
+            {"unlink": {
+                "link": "/var/lib/one/datastores/0/26/disk.1",
+                "host": None,
+            }}
+        )
+        mock_run.assert_not_called()
+
+    @patch('subprocess.run')
+    def test_action_unlink_dispatches_to_remove(self, mock_run, ssh_manager):
+        mock_run.return_value = Mock(returncode=0, stdout=b"", stderr=b"")
+        ssh_manager.args.execute = True
+        ssh_manager.args.dry_run = False
+        link = "/var/lib/one/datastores/0/26/disk.1"
+        ssh_manager.action(
+            {"unlink": {"link": link, "host": None}}, "unlink"
+        )
+        assert mock_run.call_args[0][0] == ("rm", "-v", link)
+
+
 class TestSshManagerInheritance:
     """Test inheritance from BaseManager"""
 

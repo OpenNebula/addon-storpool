@@ -1039,47 +1039,112 @@ class DataProcessing(BaseManager):
         return all(is_storpool_tm_mad(tm_mad) for tm_mad in tm_mads)
 
     def _report_missing_frontend_data(self) -> None:
-        """Report STOPPED/UNDEPLOYED VMs with disk symlinks missing
-        on the frontend, where their files are expected. With
-        SKIP_UNDEPLOY_SSH enabled (in addon-storpoolrc or derived
-        per VM from SP_CHECKPOINT_BD and the disk TM_MADs) the VM
-        home is not moved to the frontend on stop/undeploy, so
-        nothing is expected there"""
+        """Check the disk symlinks of STOPPED/UNDEPLOYED VMs on the
+        frontend, where their home is moved.
+
+        A STOPPED VM (state 4) is expected to have its disk.N symlinks
+        there - a missing one is reported. An UNDEPLOYED VM (state 9)
+        has its StorPool volumes detached from all clients, so the
+        disk.N symlinks left on the frontend are dangling - they are
+        reported for removal (the addon re-creates the proper symlinks
+        when the VM is resumed).
+
+        With SKIP_UNDEPLOY_SSH enabled (in addon-storpoolrc or derived
+        per VM from SP_CHECKPOINT_BD and the disk TM_MADs) the VM home
+        is not moved to the frontend, so nothing is expected there."""
         if getattr(self.args, "skip_undeploy_ssh", False):
             self.dbg(2, "SKIP_UNDEPLOY_SSH enabled - not checking"
                         " the VM data on the frontend")
             return
         frontend: Dict[str, Any] = self.one.frontend or {}
+        frontend_name: Optional[str] = frontend.get("name")
         links: Optional[Dict[int, Any]] = frontend.get("links")
-        if links is None and frontend.get("name") in self.one.one_hosts:
+        # is the frontend reached over ssh (a hypervisor host) or is it
+        # the local node the tool runs on? decides the removal command
+        remote: bool = False
+        if links is None and frontend_name in self.one.one_hosts:
             # the frontend is a hypervisor host
-            links = self.one.one_hosts[frontend["name"]].get("links")
+            links = self.one.one_hosts[frontend_name].get("links")
+            remote = True
         if links is None:
             # frontend symlinks not collected
             return
         for name, data in self.one.vm_disks.items():
             if data.get("snapshot"):
                 continue
-            if data.get("state") not in VM_ON_FRONTEND_STATES:
+            state: Optional[int] = data.get("state")
+            if state not in VM_ON_FRONTEND_STATES:
                 continue
             link: Optional[str] = data.get("link")
             if not link:
                 continue
             vm_id: int = int(data["vm_id"])
+            ds_id: int = int(data["sys_ds_id"])
+            disk_name: str = link.rsplit("/", 1)[-1]
+            target: Optional[str] = (
+                links.get(ds_id, {}).get(vm_id, {}).get(disk_name)
+            )
+            if state == 9:  # UNDEPLOYED - the symlinks are dangling
+                self._report_undeployed_symlink(
+                    vm_id, name, link, target, frontend_name, remote
+                )
+                continue
+            # STOPPED - the VM home is expected complete on the frontend
             if self._vm_storpool_only(vm_id):
                 self.dbg(3, f"VM {vm_id} is StorPool-only with"
                             " SP_CHECKPOINT_BD - the VM home is not"
                             " moved to the frontend")
                 continue
-            ds_id: int = int(data["sys_ds_id"])
-            disk_name: str = link.rsplit("/", 1)[-1]
-            if links.get(ds_id, {}).get(vm_id, {}).get(disk_name):
+            if target:
                 continue
             self.err(
-                f"VM {vm_id} {name} state {data.get('state')}:"
+                f"VM {vm_id} {name} state {state}:"
                 f" missing {link} on the frontend",
                 "Issue",
             )
+
+    def _report_undeployed_symlink(
+        self,
+        vm_id: int,
+        name: str,
+        link: str,
+        target: Optional[str],
+        frontend_name: Optional[str],
+        remote: bool,
+    ) -> None:
+        """Report a dangling StorPool disk symlink left on the frontend
+        for an UNDEPLOYED VM. The volume is detached from all clients,
+        so the symlink points at a missing device - it is safe to
+        remove, the addon re-creates it when the VM is resumed."""
+        if not target or not target.startswith("/dev/storpool"):
+            # nothing on the frontend, or not a StorPool symlink - the
+            # addon re-creates the proper symlink on resume
+            return
+        self.err(
+            f"VM {vm_id} {name} undeployed: dangling symlink"
+            f" {link} -> {target} on the frontend"
+            " (detached StorPool volume, re-created on resume)",
+            "Issue",
+        )
+        rm_host: Optional[str] = frontend_name if remote else None
+        rm_cmd: str = f"# rm -v {link}"
+        if rm_host:
+            rm_cmd = f"# ssh {rm_host} rm -v {link}"
+        self.dbg(0, f"{rm_cmd}  # removed with --execute")
+        self._queue_symlink_removal(name, link, rm_host)
+
+    def _queue_symlink_removal(
+        self, spname: str, link: str, host: Optional[str]
+    ) -> None:
+        """Queue an 'unlink' action removing a dangling frontend symlink
+        (performed by ssh.action when --execute is given)"""
+        if spname not in self.update_data:
+            self.update_data[spname] = {"data": {}, "action": []}
+        entry: Dict[str, Any] = self.update_data[spname]
+        if "unlink" in entry["action"]:
+            return
+        entry["data"]["unlink"] = {"link": link, "host": host}
+        entry["action"].append("unlink")
 
     def _expected_vm_placement(self) -> Dict[int, Dict[str, Any]]:
         """Build the expected VM placement (host, ds_id, state) from
@@ -1333,6 +1398,7 @@ class DataProcessing(BaseManager):
             "kv": self.etcd.action,
             "kvupdate": self.etcd.action,
             "symlink": self.ssh.action,
+            "unlink": self.ssh.action,
         }
         self.dbg(1, f"PROCESSING {len(self.update_data)} update records")
         record: int = 0
