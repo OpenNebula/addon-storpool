@@ -823,12 +823,13 @@ class TestHostLeftovers:
         assert "[Issue]" not in out
         assert processor.update_data == {}
 
-    @pytest.mark.parametrize("state", [4, 9])
+    @pytest.mark.parametrize("state", [4])
     def test_undeployed_vm_artefacts_on_frontend_are_expected(
         self, processor, capsys, state
     ):
-        """The files of a STOPPED/UNDEPLOYED VM live on the frontend -
-        its symlinks there are not left-overs."""
+        """The files of a STOPPED VM live on the frontend - its
+        symlinks there are not left-overs. (An UNDEPLOYED VM's
+        symlinks are dangling and handled separately.)"""
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {
             "one-sys-26-1": _vm_disk(state=state, lcm_state=0, target=None)
@@ -915,10 +916,12 @@ class TestHostLeftovers:
         ) in out
         assert processor.update_data == {}
 
-    def test_frontend_hypervisor_undeployed_vm(self, processor, capsys):
-        """When the frontend is also a hypervisor host its links are
-        collected once and the symlinks of a STOPPED/UNDEPLOYED VM
-        there are not reported twice or as left-overs."""
+    def test_undeployed_dangling_symlink_on_hypervisor_frontend(
+        self, processor, capsys
+    ):
+        """When the frontend is also a hypervisor host, the dangling
+        disk symlink of an UNDEPLOYED VM there is reported with an ssh
+        removal command (the volume is detached, re-created on resume)."""
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {
             "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
@@ -939,15 +942,29 @@ class TestHostLeftovers:
         processor.analyze_host_symlinks()
 
         out = capsys.readouterr().out
-        assert "[Issue]" not in out
-        assert processor.update_data == {}
+        assert "undeployed: dangling symlink" in out
+        assert (
+            "# ssh kvm1 rm -v /var/lib/one/datastores/0/26/disk.1"
+        ) in out
+        # a removal is queued for --execute, over ssh to the frontend host
+        assert processor.update_data == {
+            "one-sys-26-1": {
+                "data": {
+                    "unlink": {
+                        "link": "/var/lib/one/datastores/0/26/disk.1",
+                        "host": "kvm1",
+                    }
+                },
+                "action": ["unlink"],
+            }
+        }
 
     def test_missing_frontend_data_is_reported(self, processor, capsys):
-        """An UNDEPLOYED VM without its disk symlinks on the frontend
-        is reported when the VM home move is not disabled."""
+        """A STOPPED VM without its disk symlinks on the frontend is
+        reported when the VM home move is not disabled."""
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {
-            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+            "one-sys-26-1": _vm_disk(state=4, lcm_state=0, target=None)
         }
         # frontend collected, no data for the VM
         processor.one.frontend = {"name": "fe1", "links": {}}
@@ -965,6 +982,64 @@ class TestHostLeftovers:
             "missing /var/lib/one/datastores/0/26/disk.1"
             " on the frontend"
         ) in out
+        assert processor.update_data == {}
+
+    def test_undeployed_dangling_symlink_removed(self, processor, capsys):
+        """An UNDEPLOYED VM with a StorPool disk symlink left on the
+        frontend is reported as dangling with a local rm command."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.frontend = {
+            "name": "fe1",
+            "links": {0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}},
+        }
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "undeployed: dangling symlink" in out
+        assert "# rm -v /var/lib/one/datastores/0/26/disk.1" in out
+        # not an ssh removal - the frontend is the local node
+        assert "ssh fe1 rm" not in out
+        # a local removal is queued for --execute (host is None)
+        assert processor.update_data == {
+            "one-sys-26-1": {
+                "data": {
+                    "unlink": {
+                        "link": "/var/lib/one/datastores/0/26/disk.1",
+                        "host": None,
+                    }
+                },
+                "action": ["unlink"],
+            }
+        }
+
+    def test_undeployed_no_symlink_no_issue(self, processor, capsys):
+        """An UNDEPLOYED VM with no disk symlink on the frontend is not
+        reported - there is nothing to remove and the addon re-creates
+        it on resume."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+        }
+        processor.one.frontend = {"name": "fe1", "links": {}}
+        processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
         assert processor.update_data == {}
 
     def test_missing_frontend_data_skip_undeploy_ssh(
@@ -1000,12 +1075,12 @@ class TestHostLeftovers:
         processor.args.sp_checkpoint_bd = True
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {
-            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+            "one-sys-26-1": _vm_disk(state=4, lcm_state=0, target=None)
         }
         processor.one.one_vms = {
             26: {
                 "vm_id": 26,
-                "state": 9,
+                "state": 4,
                 "lcm_state": 0,
                 "host": "kvm1",
                 "ds_id": 0,
@@ -1034,12 +1109,12 @@ class TestHostLeftovers:
         processor.args.sp_checkpoint_bd = True
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {
-            "one-sys-26-1": _vm_disk(state=9, lcm_state=0, target=None)
+            "one-sys-26-1": _vm_disk(state=4, lcm_state=0, target=None)
         }
         processor.one.one_vms = {
             26: {
                 "vm_id": 26,
-                "state": 9,
+                "state": 4,
                 "lcm_state": 0,
                 "host": "kvm1",
                 "ds_id": 0,

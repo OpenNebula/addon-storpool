@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 
 import subprocess
 
@@ -192,6 +192,38 @@ class SshManager(BaseManager):
             self.err(f"create_symlink Error! {mkdir_cmd=} {ssh_cmd=} {error=}")
             raise error
 
+    def remove_symlink(self, action_data: Dict[str, Any]) -> None:
+        """Remove a dangling symlink on the frontend/host (an undeployed
+        VM leftover). Only symlinks under the datastores path are
+        touched and the removal happens with --execute."""
+        if "unlink" not in action_data:
+            raise ValueError(
+                f"unlink data is required to remove a symlink {action_data=}"
+            )
+        link: str = action_data["unlink"]["link"]
+        host: Optional[str] = action_data["unlink"].get("host")
+        if not link.startswith("/var/lib/one/datastores/"):
+            raise ValueError(
+                "refusing to remove a symlink outside the datastores"
+                f" path: {link}"
+            )
+        rm_cmd: Tuple[str, ...] = ("rm", "-v", link)
+        if host:
+            rm_cmd = ("ssh", host, "rm", "-v", link)
+        try:
+            if self.args.execute:
+                if self.args.dry_run:
+                    self.dbg(0, f"[dry-run] {rm_cmd=}")
+                else:
+                    response = subprocess.run(
+                        rm_cmd, capture_output=True, check=True
+                    )
+                    if self.args.verbose > 0:
+                        self.dbg(0, f"remove_symlink {rm_cmd}: {response}")
+        except Exception as error:
+            self.err(f"remove_symlink Error! {rm_cmd=} {error=}")
+            raise error
+
     def _get_spdev(self, action_data: Dict[str, Any]) -> None:
         """Get the spdev for the given symlink"""
         if self.args.verbose:
@@ -308,6 +340,9 @@ class SshManager(BaseManager):
     def action(self, action_data: Dict[str, Any], action: str) -> None:
         """Action on the given data"""
         self.dbg(3, f"{action=} {action_data=}")
-        self.create_symlink(action_data)
+        if action == "unlink":
+            self.remove_symlink(action_data)
+        else:
+            self.create_symlink(action_data)
         # self._get_spdev(action_data)
         # self.symlink_in_namespace(action_data)
