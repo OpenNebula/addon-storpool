@@ -10,6 +10,7 @@ import subprocess
 import pyone  # type: ignore
 from .ssh_manager import SshManager
 from ..models.enums import DiskType, ImageType
+from ..models.exceptions import SshManagerError
 from .base_manager import BaseManager
 
 # OpenNebula authentication
@@ -148,7 +149,7 @@ class oneManager(BaseManager):
             if host_r["state"] in HOST_SYMLINK_STATES:
                 try:
                     host_r["links"] = self.ssh.get_symlinks(hostname)
-                except self.ssh.SshManagerError as error:  # type: ignore[attr-defined] # noqa: E501
+                except SshManagerError as error:
                     print(f"Error: {error=}; {hostname=}")
                 except Exception as error:
                     print(f"Error: {error=}; {hostname=}")
