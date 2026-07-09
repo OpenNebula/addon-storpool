@@ -23,6 +23,16 @@ class SshManager(BaseManager):
             words: List[str] = line.split()
             if "->" in words:
                 dpath: List[str] = words[-3].split("/")
+                # only /var/lib/one/datastores/<ds_id>/<vm_id>/... links
+                # are tracked; a datastore or VM directory could itself
+                # be a symlink (e.g. to a shared/NFS mount) - skip those
+                if (
+                    len(dpath) < 8
+                    or not dpath[5].isdigit()
+                    or not dpath[6].isdigit()
+                ):
+                    self.dbg(1, f"skipping non-VM symlink {words[-3]}")
+                    continue
                 ds_id: int = int(dpath[5])
                 vm_id: int = int(dpath[6])
                 if ds_id not in symlinks:
