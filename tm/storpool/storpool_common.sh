@@ -1585,7 +1585,7 @@ function storpoolDetach()
             _SP_CLIENT="[${_SP_CLIENT}]"
             if boolTrue "MULTICLUSTER"; then
                 oneHostInfo "${_SP_HOST}"
-                DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+                DO_REMOTE="~${HOST_SP_CLUSTER_ID:-${SP_CLUSTER_ID}}"
             fi
         fi
     fi
@@ -1622,7 +1622,10 @@ function storpoolDetach()
         if [[ ${#_DATA_A[*]} -gt 0 ]]; then
             for _SP_CLUSTER_ID in "${!_DATA_A[@]}"; do
                 X_HOST_SP_CLUSTER_ID="${HOST_SP_CLUSTER_ID}"
-                [[ -z "${_SP_CLUSTER_ID#*-}" ]] || HOST_SP_CLUSTER_ID="${_SP_CLUSTER_ID}"
+                if [[ -n "${_SP_CLUSTER_ID#*-}" ]]; then
+                    HOST_SP_CLUSTER_ID="${_SP_CLUSTER_ID}"
+                    DO_REMOTE="~${_SP_CLUSTER_ID}"
+                fi
                 storpoolRetry VolumesReassignWait "\"reassign\":[${_DATA_A[${_SP_CLUSTER_ID}]}]"
                 HOST_SP_CLUSTER_ID="${X_HOST_SP_CLUSTER_ID}"
             done
