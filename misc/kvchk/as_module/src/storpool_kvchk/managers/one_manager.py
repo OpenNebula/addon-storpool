@@ -33,6 +33,7 @@ def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     tm/storpool/storpool_common.sh (${TM_MAD:0:8} == storpool)."""
     return bool(tm_mad) and str(tm_mad).startswith("storpool")
 
+
 QOSCLASS_ORDER: Dict[DiskType, List[str]] = {
     # Order is from highest to lowest priority.
     DiskType.PERSISTENT: [
