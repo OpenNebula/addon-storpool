@@ -19,7 +19,7 @@
 # Global env:
 # T_PERSISTENT_CDROM=4
 # T_PERSISTENT_CDROM_TYPE="block"
-# # The IDE devices are limited to 4
+# # The IDE devices are limited to 4 (shared with IDE hard disks)
 # # MAX_CDROM_DEVICES=4
 # VM Attribute:
 # .//USER_TEMPLATE/T_PERSISTENT_CDROM = 4
@@ -198,16 +198,13 @@ def change_cdrom(
 
 def collect_cdroms(
     root: ET.Element,
-) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
+) -> Tuple[List[Dict[str, Any]], List[str], List[str], int]:
     all_cdroms: List[Dict[str, Any]] = []
     used_hd_devices: List[str] = []
     used_sd_devices: List[str] = []
+    ide_disks_count: int = 0
 
     for disk_e in root.findall('.//devices/disk'):
-        if disk_e.get('device') != 'cdrom':
-            continue
-
-        info: Dict[str, Any] = {"element": disk_e}
         target_e = disk_e.find('./target')
         if target_e is None:
             continue
@@ -216,15 +213,29 @@ def collect_cdroms(
         if target_dev is None:
             continue
 
-        info["target_dev"] = target_dev
         target_prefix = target_dev[0:2]
+        target_bus = target_e.get('bus')
+        is_ide_slot = target_prefix == 'hd' or target_bus == 'ide'
+
+        if disk_e.get('device') != 'cdrom':
+            # IDE hard disks share the same 4 IDE slots as CDROMs.
+            if is_ide_slot:
+                if target_dev not in used_hd_devices:
+                    used_hd_devices.append(target_dev)
+                ide_disks_count += 1
+                log_dbg(f"IDE disk occupies slot {target_dev}"
+                        f" bus={target_bus}")
+            continue
+
+        info: Dict[str, Any] = {"element": disk_e}
+        info["target_dev"] = target_dev
         info["target_prefix"] = target_prefix
         if target_prefix == 'hd':
-            used_hd_devices.append(target_dev)
+            if target_dev not in used_hd_devices:
+                used_hd_devices.append(target_dev)
         elif target_prefix == 'sd':
             used_sd_devices.append(target_dev)
 
-        target_bus = target_e.get('bus')
         if target_bus is not None:
             info["target_bus"] = target_bus
 
@@ -245,7 +256,7 @@ def collect_cdroms(
 
         all_cdroms.append(info)
 
-    return all_cdroms, used_hd_devices, used_sd_devices
+    return all_cdroms, used_hd_devices, used_sd_devices, ide_disks_count
 
 
 test_env = os.getenv('TEST_ENV', None)  # type: ignore[attr-defined]
@@ -271,7 +282,8 @@ context_disk_id_e: Optional[ET.Element] = vm_root.find(
 if context_disk_id_e is not None:
     context_disk_id = int(context_disk_id_e.text)
 
-all_cdroms, used_hd_devices, used_sd_devices = collect_cdroms(root)
+all_cdroms, used_hd_devices, used_sd_devices, ide_disks_count = \
+    collect_cdroms(root)
 total_cdroms_count = len(all_cdroms)
 
 cdrom_bus: str = 'ide'
@@ -320,6 +332,16 @@ if pers_cdroms_count > 0:
             f" {used_hd_devices=} {used_sd_devices=}")
 
     if cdrom_bus == 'ide':
+        # IDE controller has only 4 slots shared with hard disks.
+        available_ide_slots = max_cdrom_devices - ide_disks_count
+        if available_ide_slots < 0:
+            available_ide_slots = 0
+        if target_count > available_ide_slots:
+            log_inf(f"persistent cdroms count {target_count} reduced to"
+                    f" {available_ide_slots} due to {ide_disks_count}"
+                    f" IDE disk(s)")
+            target_count = available_ide_slots
+
         if total_cdroms_count >= target_count:
             msg = (f"already have {total_cdroms_count} cdrom devices"
                    f" (target {target_count}). nothing to do")
