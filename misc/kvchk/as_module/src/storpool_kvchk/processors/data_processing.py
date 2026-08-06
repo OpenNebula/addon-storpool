@@ -50,6 +50,11 @@ class DataProcessing(BaseManager):
         if entry_name in self.one.vm_disks:
             self.dbg(5, f"{entry_name} is in one.vm_disks")
             return self.one.vm_disks[entry_name]
+        # Check name in ds_images (legacy == spname for images, but
+        # keep a direct key match for consistency with vm_disks)
+        if entry_name in self.one.ds_images:
+            self.dbg(5, f"{entry_name} is in one.ds_images")
+            return self.one.ds_images[entry_name]
         # Check legacy names in vm_disks
         for vdata in self.one.vm_disks.values():
             if "legacy" in vdata:
@@ -132,6 +137,71 @@ class DataProcessing(BaseManager):
                     ):
                         return rec
         return None
+
+    def _npers_clone_prefix(self, sp_name: str) -> Optional[str]:
+        """Return 'one-img-N-' when sp_name is exactly the base image
+        name one-img-N, else None."""
+        match = re.match(
+            rf"^{re.escape(self.args.one_px)}-img-(\d+)$", sp_name
+        )
+        if not match:
+            return None
+        return f"{sp_name}-"
+
+    def _has_npers_clones(self, clone_prefix: str) -> bool:
+        """True when non-persistent clone disks for this base image
+        exist in ONE vm_disks or as StorPool volumes tagged with img."""
+        for name, rec in self.one.vm_disks.items():
+            if name.startswith(clone_prefix):
+                return True
+            legacy = rec.get("legacy") or ""
+            if legacy.startswith(clone_prefix):
+                return True
+        for sp_entry in self.sp.data.values():
+            img = (sp_entry.get("tags") or {}).get("img") or ""
+            if img.startswith(clone_prefix):
+                return True
+        return False
+
+    def _resolve_npers_base_image(
+        self, sp_name: str
+    ) -> Optional[Dict[str, Any]]:
+        """Recover the non-persistent base image record when the ONE
+        image is missing from ds_images (deleted/ACL) but clone disks
+        one-img-N-{vm}-{disk} still reference it.
+
+        The base must be a StorPool snapshot for NPERS clones; a
+        leftover volume is queued with VolumeFreeze by _build_sp_update.
+        """
+        if sp_name in self.one.ds_images:
+            return self.one.ds_images[sp_name]
+        clone_prefix: Optional[str] = self._npers_clone_prefix(sp_name)
+        if clone_prefix is None:
+            return None
+        if not self._has_npers_clones(clone_prefix):
+            return None
+        image_id: int = int(sp_name.rsplit("-", 1)[-1])
+        self.dbg(
+            3,
+            f"{sp_name} recovered as NPERS base image {image_id}"
+            " from clone disks (missing from ds_images)",
+        )
+        return {
+            "image_id": image_id,
+            "spname": sp_name,
+            "legacy": sp_name,
+            "img": sp_name,
+            "snapshot": True,
+            "disktype": DiskType.NONPERSISTENT,
+            "imagetype": ImageType.OS,
+            "virt": "one",
+            "nloc": self.args.one_px,
+            "vms": 0,
+            "vmlist": [],
+            "snapshots": {},
+            "name": f"(recovered NPERS base image {image_id})",
+            "ZDBG": "_resolve_npers_base_image",
+        }
 
     def _queue_kv_repair(
         self, spname: str, sp_entry: Dict[str, Any]
@@ -660,8 +730,30 @@ class DataProcessing(BaseManager):
         sp_entry: Dict[str, Any],
         notes: List[str],
     ) -> None:
-        """Analyze StorPool entry with legacy name"""
+        """Analyze StorPool entry with legacy name.
+
+        Resolve the OpenNebula record by the StorPool name (current or
+        legacy), then fall back to tags - the same recovery the
+        ~globalId path uses - so a volume whose name no longer matches
+        spname/legacy (e.g. one-sys-N-checkpoint vs -rawcheckpoint)
+        is still queued for the multicluster rename. Finally recover a
+        non-persistent base image one-img-N missing from ds_images when
+        clone disks one-img-N-* are still present."""
         one_data: Optional[Dict[str, Any]] = self._get_by_legacy(sp_name)
+        if one_data is None:
+            one_data = self._resolve_one_by_tags(sp_entry)
+            if one_data:
+                notes.append(
+                    f"Legacy '{sp_name}' matched ONE"
+                    f" {one_data['spname']} by tags"
+                )
+        if one_data is None:
+            one_data = self._resolve_npers_base_image(sp_name)
+            if one_data:
+                notes.append(
+                    f"Legacy '{sp_name}' recovered as NPERS base"
+                    f" image {one_data['image_id']} from clones"
+                )
         if one_data:
             spname: str = one_data["spname"]
             self.dbg(4, f"in ONE_data {sp_name=} {spname=}\n\t{one_data=}")
@@ -677,10 +769,15 @@ class DataProcessing(BaseManager):
                 )
             except (KvByNameError, KvByUidError) as err:
                 self.dbg(6, f"etcd_manager.validate_kv:{err}")
-                sp_update["kv"] = {
-                    "byUid": f"~{sp_entry['globalId']}",
-                    "byName": spname,
-                }
+                # ensure a record exists when _build_sp_update was a no-op
+                if spname not in self.update_data:
+                    self.update_data[spname] = {
+                        "data": {
+                            "uid": sp_entry["globalId"],
+                            "spname": spname,
+                        },
+                        "action": [],
+                    }
                 self.update_data[spname]["action"].append("kv")
             if (
                 sp_entry["snapshot"] is False
@@ -741,6 +838,8 @@ class DataProcessing(BaseManager):
         elif self._resolve_one_record(sp_name):
             return ("reachable", None)
         if self._resolve_one_by_tags(sp_entry):
+            return ("reachable", None)
+        if sp_name[0] != "~" and self._resolve_npers_base_image(sp_name):
             return ("reachable", None)
         in_kv: bool = (
             sp_entry["globalId"] in kv_uids
