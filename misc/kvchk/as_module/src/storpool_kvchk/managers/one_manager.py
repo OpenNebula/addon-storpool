@@ -26,6 +26,13 @@ ONE_API_URL = "http://localhost:2633/RPC2"
 # (host unreachable/not yet up) and 8 OFFLINE (host is down).
 HOST_SYMLINK_STATES = (0, 1, 2, 4, 7)
 
+# OpenNebula pool.info filter: -2 = all resources (same as
+# `oneimage list` / `onehost list` as oneadmin). Using -1 (user +
+# groups only) drops images owned by other users/groups while VMs
+# are still visible via `onevm list`, so base images like one-img-N
+# go missing from ds_images.
+ONE_POOL_INFO_ALL = -2
+
 
 def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     """A disk/datastore is StorPool-backed when its TM_MAD starts with
@@ -121,7 +128,7 @@ class oneManager(BaseManager):
 
     def _init_vmids(self) -> None:
         """List of VM IDs"""
-        # onevm = one_api.vmpool.info(-1, -1, -1, -1)
+        # onevm = one_api.vmpool.info(ONE_POOL_INFO_ALL, -1, -1)
         self.vm_ids: List[int] = []
         cmd = ["onevm", "list", "--list", "ID", "--csv", "--no-pager"]
         try:
@@ -139,7 +146,7 @@ class oneManager(BaseManager):
     def _init_hosts(self) -> None:
         """Get OpenNebula hosts"""
         self.dbg(6, "get_hosts")
-        one_hosts_info = self.api.hostpool.info(-1, -1, -1, -1)
+        one_hosts_info = self.api.hostpool.info(ONE_POOL_INFO_ALL, -1, -1)
         for host_e in one_hosts_info.get_HOST():
             host_r: Dict[str, Any] = {}
             hostname: str = host_e.NAME
@@ -178,7 +185,9 @@ class oneManager(BaseManager):
     def _init_datastores(self) -> None:
         """Get OpenNebula datastores"""
         self.dbg(6, "get_datastores")
-        one_datastores_info = self.api.datastorepool.info(-1, -1, -1, -1)
+        one_datastores_info = self.api.datastorepool.info(
+            ONE_POOL_INFO_ALL, -1, -1
+        )
         for datastore_e in one_datastores_info.get_DATASTORE():
             datastore_r: Dict[str, Any] = {}
             datastore_r["name"] = datastore_e.NAME
@@ -355,7 +364,11 @@ class oneManager(BaseManager):
 
     def _init_ds_images(self) -> None:
         """Get registeredOpenNebula Images"""
-        oneimg: Any = self.api.imagepool.info(-1, -1, -1, -1)
+        # filter -2 (ALL): must see every image, including those owned
+        # by other users/groups. Clones still show up via onevm list
+        # even when the base image would be invisible under filter -1.
+        self.ds_images = {}
+        oneimg: Any = self.api.imagepool.info(ONE_POOL_INFO_ALL, -1, -1)
         for img_e in oneimg.get_IMAGE():
             spname: str = f"{self.args.one_px}-img-{img_e.ID}"
             if int(img_e.TYPE) >= 6:
@@ -383,7 +396,17 @@ class oneManager(BaseManager):
                     img_dict["snapshot"] = False
                     img_dict["vm_id"] = img_dict["vmlist"][0]
             img_dict["snapshots"] = {}
-            for snapshot in img_e.SNAPSHOTS.SNAPSHOT:
+            snapshots_e: Any = getattr(img_e, "SNAPSHOTS", None)
+            snap_list: Any = (
+                getattr(snapshots_e, "SNAPSHOT", None)
+                if snapshots_e is not None
+                else None
+            )
+            if snap_list is None:
+                snap_list = []
+            elif not isinstance(snap_list, list):
+                snap_list = [snap_list]
+            for snapshot in snap_list:
                 snap_id: int = int(snapshot.ID)  # type: ignore[annotation-unchecked] # noqa: E501
                 snap: str = f"snap{snap_id}"
                 snap_entry = {

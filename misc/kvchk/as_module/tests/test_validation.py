@@ -574,3 +574,301 @@ class TestStorpoolGlobalId:
         out = capsys.readouterr().out
         assert "[NOTE]" not in out
         assert processor.update_data == {}
+
+
+def _checkpoint_disk(**overrides):
+    """ONE record for a STOPPED/SUSPENDED VM checkpoint volume"""
+    data = {
+        "vm_id": 26,
+        "spname": "one-sys-26-rawcheckpoint",
+        "img": "one-sys-26-rawcheckpoint",
+        "legacy": "one-sys-26-rawcheckpoint",
+        "snapshot": False,
+        "disktype": DiskType.CHECKPOINT,
+        "nloc": "one",
+        "virt": "one",
+        "state": 4,
+        "lcm_state": 0,
+    }
+    data.update(overrides)
+    return data
+
+
+def _context_disk(**overrides):
+    """ONE record for a CONTEXT iso volume (legacy suffix -iso)"""
+    data = {
+        "vm_id": 26,
+        "disk_id": 2,
+        "spname": "one-sys-26-2",
+        "img": "one-sys-26-2",
+        "legacy": "one-sys-26-2-iso",
+        "snapshot": False,
+        "disktype": DiskType.CONTEXT,
+        "host": "kvm1",
+        "nloc": "one",
+        "virt": "one",
+        "state": 3,
+        "lcm_state": 3,
+        "sys_ds_id": 0,
+        "link": "/var/lib/one/datastores/0/26/disk.2",
+    }
+    data.update(overrides)
+    return data
+
+
+class TestStorpoolLegacy:
+    """_analyze_storpool_legacy(): volumes still under a human-readable
+    name must be queued for rename to the multicluster ~globalId form."""
+
+    def test_legacy_volume_queued_when_kv_already_ok(self, processor, capsys):
+        """KV already maps the current spname; StorPool still carries
+        the legacy name. analyze_vm_disks stays quiet (no TO_MIGRATE),
+        but analyze_storpool must still queue the Update rename."""
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+        processor.one.vm_disks = {"one-sys-26-1": _vm_disk()}
+        processor.sp.data = {
+            "one-sys-26-1-raw": _sp_vol("one-sys-26-1-raw", "fir.b.jm")
+        }
+
+        processor.analyze_vm_disks()
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert "TO_MIGRATE" not in out
+        assert processor.update_data == {}
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-sys-26-1"]
+        assert "Update" in entry["action"]
+        assert entry["data"]["uid"] == "fir.b.jm"
+        assert entry["data"]["legacy"] == "one-sys-26-1-raw"
+        assert entry["data"]["spname"] == "one-sys-26-1"
+
+    def test_legacy_volume_queued_when_not_in_kv(self, processor, capsys):
+        """No KV entry: analyze_vm_disks reports TO_MIGRATE and
+        analyze_storpool queues the Update."""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.vm_disks = {"one-sys-26-1": _vm_disk()}
+        processor.sp.data = {
+            "one-sys-26-1-raw": _sp_vol("one-sys-26-1-raw", "fir.b.jm")
+        }
+
+        processor.analyze_vm_disks()
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "<<TO_MIGRATE>>" in out
+        assert "legacy:one-sys-26-1-raw" in out
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-sys-26-1"]
+        assert "Update" in entry["action"]
+        assert "kv" in entry["action"]
+        assert entry["data"]["uid"] == "fir.b.jm"
+
+    @pytest.mark.parametrize(
+        "legacy_name,spname,disk_factory",
+        [
+            ("one-sys-26-1-raw", "one-sys-26-1", _vm_disk),
+            ("one-sys-26-2-iso", "one-sys-26-2", _context_disk),
+        ],
+    )
+    def test_legacy_suffix_variants_queued(
+        self, processor, legacy_name, spname, disk_factory
+    ):
+        """Volatile -raw and CONTEXT -iso legacy names resolve via
+        the ONE legacy field and queue an Update."""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.vm_disks = {spname: disk_factory()}
+        processor.sp.data = {
+            legacy_name: _sp_vol(legacy_name, "fir.b.jm")
+        }
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data[spname]
+        assert "Update" in entry["action"]
+        assert entry["data"]["legacy"] == legacy_name
+
+    def test_image_legacy_queued_for_multicluster(self, processor, capsys):
+        """An image still under its legacy StorPool name (not in KV)
+        is reported TO_MIGRATE and queued for Update."""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.ds_images = {"one-img-48": _ds_image()}
+        processor.sp.data = {
+            "one-img-48": _sp_vol(
+                "one-img-48", "img.b.aa", snapshot=True
+            )
+        }
+
+        processor.analyze_one_images()
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "<TO_MIGRATE>" in out
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-img-48"]
+        assert "Update" in entry["action"]
+        assert entry["data"]["uid"] == "img.b.aa"
+
+    def test_no_one_record_not_queued(self, processor, capsys):
+        """A legacy-named volume with no matching ONE record is not
+        queued for migration (hanging analysis covers leftovers)."""
+        processor.args.hanging_min_age = 0
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.sp.data = {
+            "one-sys-99-0-raw": _sp_vol("one-sys-99-0-raw", "old.b.xx")
+        }
+
+        processor.analyze_storpool()
+        assert processor.update_data == {}
+
+        processor.analyze_hanging()
+        out = capsys.readouterr().out
+        assert "hanging volume one-sys-99-0-raw" in out
+
+    def test_name_mismatch_reachable_by_tags_queued(
+        self, processor, capsys
+    ):
+        """StorPool name is neither spname nor legacy (e.g. checkpoint
+        vs rawcheckpoint), but tags resolve to the ONE record: the
+        volume is still queued for the multicluster rename (tags
+        fallback, same recovery as the ~globalId path)."""
+        processor.args.hanging_min_age = 0
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.vm_disks = {
+            "one-sys-26-rawcheckpoint": _checkpoint_disk()
+        }
+        processor.sp.data = {
+            "one-sys-26-checkpoint": _sp_vol(
+                "one-sys-26-checkpoint",
+                "chk.b.aa",
+                tags={
+                    "virt": "one",
+                    "nloc": "one",
+                    "img": "one-sys-26-rawcheckpoint",
+                },
+            )
+        }
+
+        processor.analyze_storpool()
+
+        out = capsys.readouterr().out
+        assert "matched ONE one-sys-26-rawcheckpoint by tags" in out
+        entry = processor.update_data["one-sys-26-rawcheckpoint"]
+        assert "Update" in entry["action"]
+        assert entry["data"]["uid"] == "chk.b.aa"
+        assert "kv" in entry["action"]
+
+        processor.analyze_hanging()
+        out = capsys.readouterr().out
+        assert "hanging" not in out
+
+    def test_npers_base_in_ds_images_queued_normally(self, processor, capsys):
+        """When imagepool.info(ALL) includes the base image, the
+        legacy volume is migrated via normal ds_images lookup (no
+        clone-based recovery needed)."""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.ds_images = {
+            "one-img-1448": _ds_image(
+                image_id=1448,
+                spname="one-img-1448",
+                legacy="one-img-1448",
+                disktype=DiskType.NONPERSISTENT,
+                snapshot=True,
+                vms=3,
+                vmlist=[4951, 4961, 5011],
+            )
+        }
+        processor.one.vm_disks = {}
+        processor.sp.data = {
+            "one-img-1448": _sp_vol("one-img-1448", "n9jc.b.jpk", tags={})
+        }
+
+        processor.analyze_storpool()
+
+        out = capsys.readouterr().out
+        assert "recovered as NPERS base" not in out
+        entry = processor.update_data["one-img-1448"]
+        assert "VolumeFreeze" in entry["action"]
+        assert "Update" in entry["action"]
+
+    def test_npers_base_image_missing_from_ds_images_queued(
+        self, processor, capsys
+    ):
+        """Base image one-img-N is a leftover StorPool volume (empty
+        tags) and absent from ds_images (filter/ACL miss), while NPERS
+        clone disks one-img-N-{vm}-{disk} still exist in ONE.
+
+        Safety net when imagepool.info did not return the image: recover
+        from clones and queue VolumeFreeze + multicluster rename."""
+        processor.args.hanging_min_age = 0
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.ds_images = {}
+        processor.one.vm_disks = {
+            "one-img-1448-4951-0": {
+                "vm_id": 4951,
+                "disk_id": 0,
+                "spname": "one-img-1448-4951-0",
+                "img": "one-img-1448-4951-0",
+                "legacy": "one-img-1448-4951-0",
+                "snapshot": False,
+                "disktype": DiskType.NONPERSISTENT,
+                "nloc": "one",
+                "virt": "one",
+                "state": 3,
+                "lcm_state": 3,
+            }
+        }
+        processor.sp.data = {
+            "one-img-1448": _sp_vol(
+                "one-img-1448",
+                "n9jc.b.jpk",
+                tags={},
+                parentName="one-img-1448@9642",
+            ),
+            "~n9jc.b.mm7": _sp_vol(
+                "~n9jc.b.mm7",
+                "n9jc.b.mm7",
+                tags={
+                    "virt": "one",
+                    "nloc": "one",
+                    "type": "NPERS",
+                    "img": "one-img-1448-4951-0",
+                    "nvm": "4951",
+                    "diskid": "0",
+                },
+            ),
+        }
+
+        processor.analyze_storpool()
+
+        out = capsys.readouterr().out
+        assert "recovered as NPERS base image 1448 from clones" in out
+        entry = processor.update_data["one-img-1448"]
+        assert "VolumeFreeze" in entry["action"]
+        assert "Update" in entry["action"]
+        assert entry["data"]["uid"] == "n9jc.b.jpk"
+        assert entry["data"]["snapshot"] is False
+
+        processor.analyze_hanging()
+        out = capsys.readouterr().out
+        assert "hanging volume one-img-1448" not in out
+
+    def test_npers_base_without_clones_not_recovered(self, processor):
+        """An orphan one-img-N volume with no clone disks is not
+        synthesised into a base-image record."""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.ds_images = {}
+        processor.one.vm_disks = {}
+        processor.sp.data = {
+            "one-img-1448": _sp_vol("one-img-1448", "n9jc.b.jpk")
+        }
+
+        processor.analyze_storpool()
+
+        assert "one-img-1448" not in processor.update_data

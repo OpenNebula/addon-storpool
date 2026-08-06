@@ -6,6 +6,7 @@ import os
 from storpool_kvchk.managers.one_manager import (
     oneManager,
     is_storpool_tm_mad,
+    ONE_POOL_INFO_ALL,
 )
 OpenNebulaManager = oneManager
 from storpool_kvchk.models.enums import DiskType, ImageType
@@ -712,6 +713,46 @@ class TestoneManager:
         assert manager.ds_images[expected_name]["image_id"] == 1
         assert manager.ds_images[expected_name]["imagetype"] == ImageType(0)
         assert manager.ds_images[expected_name]["disktype"] == DiskType(1)
+        # Must request ALL images (-2), not user+groups (-1): otherwise
+        # base images owned by other users/groups are invisible while
+        # their NPERS clones still appear via onevm list.
+        mock_pyone_api.imagepool.info.assert_called_with(
+            ONE_POOL_INFO_ALL, -1, -1
+        )
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    def test_init_ds_images_handles_missing_snapshots(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
+    ):
+        """Images without a SNAPSHOTS element must still be indexed."""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+
+        image = Mock()
+        image.ID = 1448
+        image.TYPE = ImageType.OS
+        image.PERSISTENT = DiskType.NONPERSISTENT
+        image.STATE = 2  # used
+        image.NAME = "Ubuntu 22.04"
+        image.DATASTORE_ID = 111
+        image.VMS.get_ID.return_value = [4951, 4961, 5011]
+        image.TEMPLATE.get.return_value = None
+        image.SNAPSHOTS = None
+
+        imagepool_mock = Mock()
+        imagepool_mock.get_IMAGE.return_value = [image]
+        mock_pyone_api.imagepool.info.return_value = imagepool_mock
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        assert "one-img-1448" in manager.ds_images
+        entry = manager.ds_images["one-img-1448"]
+        assert entry["snapshot"] is True
+        assert entry["disktype"] == DiskType.NONPERSISTENT
+        assert entry["vms"] == 3
+        assert entry["snapshots"] == {}
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')
