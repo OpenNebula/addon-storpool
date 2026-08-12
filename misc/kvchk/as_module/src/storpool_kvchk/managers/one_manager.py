@@ -296,11 +296,8 @@ class oneManager(BaseManager):
         }
         v_name: str = vdata["one_px"]
         img_qosclass: Optional[str] = None
-        if (
-            "image_id" in vdata
-            and vdata["image_id"] is not None
-            and img_ds_id > 0
-        ):
+        # image disks have DISK/IMAGE_ID; volatile disks carry the system DS id
+        if vdata.get("image_id") is not None:
             v_name = f"{v_name}-img-{vdata['image_id']}"
             if "type" in vdata and vdata["type"] == "CDROM":
                 v_name = f"{v_name}-{vdata['vm_id']}-{vdata['disk_id']}"
@@ -675,12 +672,17 @@ class oneManager(BaseManager):
                 continue
             disk_id: int = int(disk.get("DISK_ID"))
             img_ds_id: int = int(disk.get("DATASTORE_ID", -1))
+            # volatile disks have no IMAGE_ID; image 0 is a valid image
+            raw_image_id: Any = disk.get("IMAGE_ID")
+            image_id: Optional[int] = (
+                int(raw_image_id) if raw_image_id not in (None, "") else None
+            )
             v_info: Dict[str, Any] = self._prepare_vm_disk(
                 {
                     "one_px": self.args.one_px,
                     "vm_id": vm_details["id"],
                     "disk_id": disk_id,
-                    "image_id": int(disk.get("IMAGE_ID", 0)),
+                    "image_id": image_id,
                     "clone": disk.get("CLONE"),
                     "type": disk.get("TYPE"),
                     "fs": disk.get("FS", ""),
