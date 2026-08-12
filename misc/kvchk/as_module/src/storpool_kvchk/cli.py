@@ -186,6 +186,8 @@ def main() -> int:
 
         data_processing.analyze_storpool()
 
+        data_processing.analyze_duplicates()
+
         data_processing.analyze_hanging()
 
         data_processing.analyze_host_symlinks()
