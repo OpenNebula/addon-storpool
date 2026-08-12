@@ -1424,6 +1424,27 @@ class DataProcessing(BaseManager):
         self.dbg(6, f"ONE {onerec['spname']} {tags=}")
         return tags
 
+    def _detach_commands(self, sp_record: Dict[str, Any]) -> List[str]:
+        """storpool CLI commands detaching the record from all clients"""
+        attached: Dict[str, Any] = sp_record.get("attached") or {}
+        kind: str = "snapshot" if sp_record["snapshot"] else "volume"
+        return [
+            f"storpool detach {kind} {sp_record['name']} client {client}"
+            for client in (attached.get("client") or [])
+        ]
+
+    def _block_reason(self, sp_record: Dict[str, Any]) -> Optional[str]:
+        """Reason to skip a record's actions: an attached volume can
+        not be converted to a snapshot"""
+        attached: Optional[Dict[str, Any]] = sp_record.get("attached")
+        if attached:
+            return (
+                f"{sp_record['name']} must be converted to a snapshot"
+                f" but is attached to client(s) {attached.get('client')}"
+                f" {attached.get('rights')}"
+            )
+        return None
+
     def _build_sp_update(
         self, sp_record: Dict[str, Any], one_record: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -1479,6 +1500,12 @@ class DataProcessing(BaseManager):
             del response["data"]["tags"]
         if one_record["snapshot"] is True:
             if sp_record["snapshot"] is False:
+                blocked: Optional[str] = self._block_reason(sp_record)
+                if blocked:
+                    response["data"]["blocked"] = blocked
+                    response["data"]["blocked_cmds"] = self._detach_commands(
+                        sp_record
+                    )
                 response["action"].insert(0, "VolumeFreeze")
             else:
                 if "snap" in one_record:
@@ -1502,6 +1529,16 @@ class DataProcessing(BaseManager):
         self.dbg(1, f"PROCESSING {len(self.update_data)} update records")
         record: int = 0
         for name, data in self.update_data.items():
+            blocked: Optional[str] = data["data"].get("blocked")
+            if blocked:
+                self.err(
+                    f"{name} {data['action']} NOT executed: {blocked}",
+                    "BLOCKED",
+                )
+                for cmd in data["data"].get("blocked_cmds", []):
+                    self.dbg(0, cmd)
+                record += 1
+                continue
             self.dbg(1, f">>> WALKING [{record}] {name} {data['action']} {data['data']=}")  # noqa: E501
             for action in data["action"]:
                 if action in actions:

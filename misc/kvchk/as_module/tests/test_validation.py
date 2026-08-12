@@ -872,3 +872,94 @@ class TestStorpoolLegacy:
         processor.analyze_storpool()
 
         assert "one-img-1448" not in processor.update_data
+
+
+def _attached(volume, client=27, rights="rw"):
+    """A StorPool attachment record"""
+    return {
+        "volume": volume,
+        "client": [client],
+        "rights": [rights],
+        "count": 1,
+    }
+
+
+class TestBlockedActions:
+    """Attached volumes due for conversion are skipped and reported"""
+
+    def test_attached_image_blocks_the_record(self, processor):
+        """An attached image gets the block reason and detach command"""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.sp.data = {
+            "one-img-200": _sp_vol(
+                "one-img-200",
+                "n9wb.b.qr1d",
+                attached=_attached("one-img-200"),
+            )
+        }
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-img-200"]
+        assert "VolumeFreeze" in entry["action"]
+        assert "attached to client(s) [27]" in entry["data"]["blocked"]
+        assert entry["data"]["blocked_cmds"] == [
+            "storpool detach volume one-img-200 client 27"
+        ]
+
+    def test_detached_image_not_blocked(self, processor):
+        """The same image without an attachment is queued normally."""
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.sp.data = {
+            "one-img-200": _sp_vol("one-img-200", "n9wb.b.qr1d")
+        }
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-img-200"]
+        assert "VolumeFreeze" in entry["action"]
+        assert "blocked" not in entry["data"]
+
+    def test_blocked_record_actions_not_executed(self, processor, capsys):
+        """process_updates() skips blocked records and prints why"""
+        processor.args.execute = True
+        processor.update_data = {
+            "one-img-200": {
+                "action": ["VolumeFreeze", "Update", "kv"],
+                "data": {
+                    "uid": "n9wb.b.qr1d",
+                    "spname": "one-img-200",
+                    "snapshot": False,
+                    "sp_api_http_host": "localhost",
+                    "blocked": "one-img-200 must be converted to a"
+                               " snapshot but is attached to client(s)"
+                               " [27] ['rw']",
+                    "blocked_cmds": [
+                        "storpool detach volume one-img-200 client 27"
+                    ],
+                },
+            }
+        }
+        processor.sp.volumefreeze = Mock()
+        processor.sp.action = Mock()
+        processor.etcd.action = Mock()
+
+        processor.process_updates()
+
+        processor.sp.volumefreeze.assert_not_called()
+        processor.sp.action.assert_not_called()
+        processor.etcd.action.assert_not_called()
+        out = capsys.readouterr().out
+        assert "[BLOCKED]" in out
+        assert "NOT executed" in out
+        assert "storpool detach volume one-img-200 client 27" in out
