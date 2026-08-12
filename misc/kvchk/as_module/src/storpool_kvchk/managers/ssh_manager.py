@@ -175,7 +175,7 @@ class SshManager(BaseManager):
             action_data["symlink"]["host"],
             "ln",
             "-v",
-            "-sf",
+            "-sfn",
             target,
             link,
         )
