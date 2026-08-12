@@ -621,6 +621,42 @@ class TestoneManager:
         assert "one-sys-123-0" in vm_disks
         assert vm_disks["one-sys-123-0"]["tm_mad"] == "storpool"
 
+    def test_process_vm_disks_volatile_swap_on_nonzero_ds(self, mock_args):
+        """A deployed volatile disk must not be named one-img-0"""
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {
+            103: {"tm_mad": "storpool"},
+            104: {"tm_mad": "storpool"},
+        }
+        manager.ds_images = {}
+
+        vm_mock = Mock()
+        vm_mock.ID = 840
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(DS_ID=104, HOSTNAME="test-host", TM_MAD="storpool")
+        ]
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "SP_QOSCLASS": None, "VC_POLICY": None,
+        }.get(key, default)
+        vm_mock.TEMPLATE.get.return_value = [
+            {"DISK_ID": "0", "IMAGE_ID": "197", "DATASTORE_ID": "103",
+             "CLONE": "YES", "TYPE": "BLOCK", "TM_MAD": "storpool"},
+            {"DISK_ID": "1", "DATASTORE_ID": "104", "TYPE": "swap",
+             "TM_MAD": "storpool"},
+        ]
+
+        vm_disks = manager._process_vm_disks(vm_mock, [], {}, {})
+
+        assert "one-img-0" not in vm_disks
+        assert "one-img-197-840-0" in vm_disks
+        swap = vm_disks["one-sys-840-1"]
+        assert swap["disktype"] == DiskType.VOLATILE
+        assert swap["volatile"] == "swap"
+        assert swap["legacy"] == "one-sys-840-1-swap"
+
     def test_get_disk_symlink_found(self, mock_args):
         """Test getting disk symlink when found"""
         manager = oneManager.__new__(oneManager)
