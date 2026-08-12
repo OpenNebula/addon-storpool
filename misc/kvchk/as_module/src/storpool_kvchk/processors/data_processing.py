@@ -1507,6 +1507,8 @@ class DataProcessing(BaseManager):
                         sp_record
                     )
                 response["action"].insert(0, "VolumeFreeze")
+                # needed even when already renamed with proper tags
+                to_globalid = True
             else:
                 if "snap" in one_record:
                     response["data"]["snap"] = one_record["snap"]
