@@ -976,6 +976,201 @@ class DataProcessing(BaseManager):
                     continue
             self._report_hanging(sp_name, sp_entry, reason, age, children)
 
+    def _sp_internal(self, sp_name: str, sp_entry: Dict[str, Any]) -> bool:
+        """Records StorPool creates and removes by itself"""
+        return bool(
+            sp_name.startswith("*")
+            or sp_entry.get("deleted")
+            or sp_entry.get("transient")
+            or sp_entry.get("autoName")
+            or sp_entry.get("targetDeleteDate")
+        )
+
+    def _claimed_one_record(
+        self, sp_name: str, sp_entry: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """The OpenNebula record (or recovered NPERS base image) a
+        StorPool record claims - via KV, the addon name or the tags"""
+        if sp_name[0] == "~":
+            kv_name: Optional[str] = self.etcd.data["byUid"].get(sp_name)
+            if kv_name:
+                one_rec: Optional[Dict[str, Any]] = (
+                    self._resolve_one_record(kv_name)
+                )
+                if one_rec:
+                    return one_rec
+        else:
+            one_rec = self._resolve_one_record(sp_name)
+            if one_rec:
+                return one_rec
+        one_rec = self._resolve_one_by_tags(sp_entry)
+        if one_rec:
+            return one_rec
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        img: Optional[str] = tags.get("img")
+        if (
+            img
+            and not tags.get("snap")
+            and self._sp_tags_this_instance(sp_entry)
+        ):
+            one_rec = self._resolve_npers_base_image(img)
+            if one_rec:
+                return one_rec
+        if sp_name[0] != "~":
+            return self._resolve_npers_base_image(sp_name)
+        return None
+
+    def _kv_registered(self, spname: str, global_id: str) -> bool:
+        """Check that KV binds the globalId to the OpenNebula name"""
+        kv_uid: str = f"~{global_id}"
+        return (
+            self.etcd.data["byName"].get(spname) == kv_uid
+            or self.etcd.data["byUid"].get(kv_uid) == spname
+        )
+
+    def analyze_duplicates(self) -> None:
+        """Detect several StorPool records claiming the same OpenNebula
+        record. The KV-registered one is the live one - the rest are
+        leftovers of broken/retried operations, reported with a delete
+        hint for the operator. With no (or several) KV-registered
+        records of a record OpenNebula expects the live one can not be
+        told apart - reported for human investigation and the queued
+        actions are blocked. When OpenNebula does not expect the record
+        either, they are all leftover artifacts - a normal cleanup."""
+        self.dbg(1, "processing duplicate StorPool records...")
+        claims: Dict[str, List[Dict[str, Any]]] = {}
+        for sp_name, sp_entry in self.sp.data.items():
+            if self._sp_internal(sp_name, sp_entry):
+                continue
+            one_rec: Optional[Dict[str, Any]] = self._claimed_one_record(
+                sp_name, sp_entry
+            )
+            if not one_rec or not one_rec.get("spname"):
+                continue
+            claims.setdefault(one_rec["spname"], []).append(sp_entry)
+        for spname, entries in sorted(claims.items()):
+            if len(entries) > 1:
+                self._report_duplicates(spname, entries)
+
+    def _duplicate_details(self, sp_entry: Dict[str, Any]) -> str:
+        """One-line facts about a duplicate StorPool record"""
+        kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
+        msg: str = f"{kind} {sp_entry['name']}"
+        if sp_entry["name"][0] != "~":
+            msg += f" (globalId {sp_entry['globalId']})"
+        if sp_entry.get("size"):
+            msg += f" size {sp_entry['size']}"
+        created: Optional[float] = sp_entry.get("creationTimestamp")
+        if created:
+            msg += " created " + time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(created)
+            )
+        if sp_entry.get("parentName"):
+            msg += f" parent {sp_entry['parentName']}"
+        return msg
+
+    def _block_queued_update(self, spname: str, reason: str) -> None:
+        """Keep process_updates() away from an ambiguous record"""
+        if spname in self.update_data:
+            self.update_data[spname]["data"]["blocked"] = reason
+
+    def _report_leftovers(self, leftovers: List[Dict[str, Any]]) -> None:
+        """Report leftover StorPool records with a delete hint each,
+        the newest first so a chain unwinds child before parent"""
+        leftovers.sort(
+            key=lambda e: e.get("creationTimestamp") or 0, reverse=True
+        )
+        for entry in leftovers:
+            self.err(f"leftover {self._duplicate_details(entry)}", "Issue")
+            attached: Optional[Dict[str, Any]] = entry.get("attached")
+            if attached:
+                self.err(
+                    f"{entry['name']} is attached to client(s)"
+                    f" {attached.get('client')}"
+                    " - investigate before removing!",
+                    "NOTE",
+                )
+                continue
+            if entry["name"][0] != "~":
+                self.err(
+                    f"{entry['name']} matches the addon naming"
+                    " - investigate before removing!",
+                    "NOTE",
+                )
+                continue
+            kind: str = "snapshot" if entry["snapshot"] else "volume"
+            self.dbg(
+                0,
+                f"# storpool -M -B {kind} {entry['name']}"
+                f" delete {entry['name']}"
+                f"  # API: {entry.get('sp_api_http_host')},"
+                " verify before removing",
+            )
+
+    def _report_duplicates(
+        self, spname: str, entries: List[Dict[str, Any]]
+    ) -> None:
+        """Report the duplicate StorPool records of an OpenNebula
+        record and hint the cleanup of the leftovers"""
+        live: List[Dict[str, Any]] = [
+            e for e in entries if self._kv_registered(spname, e["globalId"])
+        ]
+        if len(live) != 1:
+            expected: bool = self._resolve_one_record(spname) is not None
+            if not live and not expected:
+                # nothing in OpenNebula, nothing in KV - all of them
+                # are leftover artifacts, a normal cleanup
+                reason: str = (
+                    f"{len(entries)} StorPool records claim {spname}"
+                    " which OpenNebula does not expect and none is"
+                    " registered in KV - leftover artifacts"
+                )
+                self.err(reason, "Issue")
+                self._report_leftovers(list(entries))
+                self._block_queued_update(spname, reason)
+                return
+            state: str = (
+                "none of them is registered in KV"
+                if not live
+                else f"{len(live)} of them are registered in KV"
+            )
+            reason = (
+                f"{len(entries)} StorPool records claim OpenNebula"
+                f" {spname} and {state} - can not tell the live one,"
+                " investigate manually"
+            )
+            self.err(reason, "CRITICAL")
+            for entry in entries:
+                self.err(
+                    f"{spname} <= {self._duplicate_details(entry)}",
+                    "CRITICAL",
+                )
+            self._block_queued_update(spname, reason)
+            return
+        live_uid: str = live[0]["globalId"]
+        self.err(
+            f"{len(entries)} StorPool records claim OpenNebula {spname},"
+            f" KV keeps ~{live_uid} - the rest are leftovers",
+            "Issue",
+        )
+        leftovers: List[Dict[str, Any]] = [
+            e for e in entries if e["globalId"] != live_uid
+        ]
+        queued: Optional[Dict[str, Any]] = self.update_data.get(spname)
+        if (
+            queued
+            and queued["data"].get("uid")
+            in {e["globalId"] for e in leftovers}
+            and "VolumeFreeze" not in queued["action"]
+        ):
+            self.err(
+                f"{spname} update queued with leftover uid"
+                f" {queued['data']['uid']} - replaced with {live_uid}",
+                "NOTE",
+            )
+            queued["data"]["uid"] = live_uid
+        self._report_leftovers(leftovers)
+
     def _expected_globalid(
         self,
         one_data: Dict[str, Any],

@@ -996,3 +996,207 @@ class TestBlockedActions:
 
         entry = processor.update_data["one-img-200"]
         assert "VolumeFreeze" in entry["action"]
+
+
+_IMG_TAGS = {"virt": "one", "nloc": "one", "img": "one-img-200"}
+
+
+def _dup_snap(gid, created, parent="", **overrides):
+    """A ~globalId snapshot claiming one-img-200 by tags"""
+    return _sp_vol(
+        f"~{gid}",
+        gid,
+        snapshot=True,
+        tags=dict(_IMG_TAGS),
+        creationTimestamp=created,
+        parentName=parent,
+        **overrides,
+    )
+
+
+class TestDuplicateClaims:
+    """analyze_duplicates(): several StorPool records claiming the
+    same OpenNebula record."""
+
+    def _image(self, processor):
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+
+    def test_leftovers_of_kv_registered_record(self, processor, capsys):
+        """One record in KV: the others are leftovers, reported with
+        a delete hint each, the newest (deepest child) first."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 1000),
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 2000, "~n9wb.b.qr1d"),
+            "~n9wb.b.qf8h": _dup_snap("n9wb.b.qf8h", 3000, "~n9wb.b.qfgh"),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "3 StorPool records claim OpenNebula one-img-200" in out
+        assert "KV keeps ~n9wb.b.qr1d" in out
+        assert "leftover snapshot ~n9wb.b.qfgh" in out
+        assert "leftover snapshot ~n9wb.b.qf8h" in out
+        assert "leftover snapshot ~n9wb.b.qr1d" not in out
+        hint_child = out.index(
+            "# storpool -M -B snapshot ~n9wb.b.qf8h delete ~n9wb.b.qf8h"
+        )
+        hint_parent = out.index(
+            "# storpool -M -B snapshot ~n9wb.b.qfgh delete ~n9wb.b.qfgh"
+        )
+        assert hint_child < hint_parent
+
+    def test_no_kv_record_is_critical(self, processor, capsys):
+        """No record in KV: reported CRITICAL, no delete hints, and
+        the KV repair queued by analyze_storpool() is blocked."""
+        self._image(processor)
+        processor.sp.data = {
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 2000),
+            "~n9wb.b.qf8h": _dup_snap("n9wb.b.qf8h", 3000, "~n9wb.b.qfgh"),
+        }
+
+        processor.analyze_storpool()
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[CRITICAL]" in out
+        assert "none of them is registered in KV" in out
+        assert "investigate manually" in out
+        assert "# storpool" not in out
+        assert processor.update_data["one-img-200"]["data"]["blocked"]
+
+    def test_unexpected_record_is_normal_cleanup(self, processor, capsys):
+        """No KV record but OpenNebula does not expect the record
+        either (deleted NPERS image, clones remain): all of them are
+        leftover artifacts - an Issue with hints, not CRITICAL."""
+        processor.one.vm_disks = {
+            "one-img-200-53-0": _vm_disk(
+                vm_id=53,
+                disk_id=0,
+                spname="one-img-200-53-0",
+                legacy="one-img-200-53-0",
+            )
+        }
+        processor.sp.data = {
+            "one-img-200": _sp_vol(
+                "one-img-200", "n9wb.b.qzzz", tags=dict(_IMG_TAGS)
+            ),
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 2000),
+            "~n9wb.b.qf8h": _dup_snap("n9wb.b.qf8h", 3000, "~n9wb.b.qfgh"),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[CRITICAL]" not in out
+        assert "OpenNebula does not expect" in out
+        assert "leftover artifacts" in out
+        assert (
+            "# storpool -M -B snapshot ~n9wb.b.qf8h delete ~n9wb.b.qf8h"
+            in out
+        )
+        assert (
+            "# storpool -M -B snapshot ~n9wb.b.qfgh delete ~n9wb.b.qfgh"
+            in out
+        )
+        # the addon-named volume gets no delete hint
+        assert "delete one-img-200" not in out
+        assert "one-img-200 matches the addon naming" in out
+
+    def test_attached_leftover_gets_no_delete_hint(self, processor, capsys):
+        """An attached leftover is reported for investigation instead
+        of a delete hint."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 1000),
+            "~n9wb.b.qfgh": _dup_snap(
+                "n9wb.b.qfgh", 2000, attached=_attached("~n9wb.b.qfgh")
+            ),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "leftover snapshot ~n9wb.b.qfgh" in out
+        assert "investigate before removing" in out
+        assert "# storpool" not in out
+
+    def test_queued_leftover_uid_replaced(self, processor, capsys):
+        """A KV repair queued with a leftover uid (first-wins in
+        analyze_storpool) is corrected to the KV-registered one."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 1000),
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 2000),
+        }
+        processor.update_data = {
+            "one-img-200": {
+                "action": ["kv"],
+                "data": {"spname": "one-img-200", "uid": "n9wb.b.qfgh"},
+            }
+        }
+
+        processor.analyze_duplicates()
+
+        assert (
+            processor.update_data["one-img-200"]["data"]["uid"]
+            == "n9wb.b.qr1d"
+        )
+        out = capsys.readouterr().out
+        assert "replaced with n9wb.b.qr1d" in out
+
+    def test_single_record_not_reported(self, processor, capsys):
+        """One record claiming the OpenNebula record is the normal
+        state - nothing to report."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 1000),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert "[CRITICAL]" not in out
+
+    def test_internal_records_ignored(self, processor, capsys):
+        """Snapshots StorPool removes by itself (deleted, transient,
+        autoName) do not count as duplicates."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 1000),
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 2000, deleted=True),
+            "~n9wb.b.qf8h": _dup_snap("n9wb.b.qf8h", 3000, autoName=True),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert "[CRITICAL]" not in out
