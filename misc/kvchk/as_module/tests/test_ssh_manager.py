@@ -283,7 +283,7 @@ class TestSshManagerCreateSymlink:
             "ssh", "test-host", "mkdir", "-p", "/path/to"
         )
         expected_cmd = (
-            "ssh", "test-host", "ln", "-v", "-sf",
+            "ssh", "test-host", "ln", "-v", "-sfn",
             "/path/to/123/target",  # _SP_UID_ should be replaced with uid
             "/path/to/link"
         )
