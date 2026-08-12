@@ -963,3 +963,36 @@ class TestBlockedActions:
         assert "[BLOCKED]" in out
         assert "NOT executed" in out
         assert "storpool detach volume one-img-200 client 27" in out
+
+    def test_freeze_of_migrated_volume_not_dropped(self, processor):
+        """An already renamed volume still gets VolumeFreeze queued"""
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200,
+                spname="one-img-200",
+                legacy="one-img-200",
+                img="one-img-200",
+                nloc="one",
+                virt="one",
+            )
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _sp_vol(
+                "~n9wb.b.qr1d",
+                "n9wb.b.qr1d",
+                tags={
+                    "virt": "one",
+                    "nloc": "one",
+                    "img": "one-img-200",
+                },
+            )
+        }
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-img-200"]
+        assert "VolumeFreeze" in entry["action"]
