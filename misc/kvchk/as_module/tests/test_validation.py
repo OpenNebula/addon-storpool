@@ -1200,3 +1200,144 @@ class TestDuplicateClaims:
         out = capsys.readouterr().out
         assert "[Issue]" not in out
         assert "[CRITICAL]" not in out
+
+
+class TestPreservedGlobalId:
+    """VolumeRevert changes the canonical globalId on every revert and
+    keeps the original one resolvable as preservedGlobalId - the KV
+    store references the preserved one."""
+
+    def _reverted_vol(self, name="~fir.b.jm", gid="fir.b.xx",
+                      preserved="fir.b.jm", **overrides):
+        """A volume that went through VolumeRevert: the canonical
+        globalId drifted away from the (preserved) creation one"""
+        return _sp_vol(
+            name, gid, preservedGlobalId=preserved, **overrides
+        )
+
+    def test_sp_by_uid_finds_preserved_id(self, processor):
+        vol = self._reverted_vol(name="one-sys-26-1-raw")
+        processor.sp.data = {"one-sys-26-1-raw": vol}
+        assert processor._sp_by_uid("~fir.b.jm") is vol
+        assert processor._sp_by_uid("~fir.b.xx") is vol
+
+    def test_kv_globalid_prefers_preserved(self, processor):
+        vol = self._reverted_vol()
+        assert processor._kv_globalid(vol) == "fir.b.jm"
+        plain = _sp_vol("~fir.b.aa", "fir.b.aa")
+        assert processor._kv_globalid(plain) == "fir.b.aa"
+
+    def test_kv_on_preserved_id_is_consistent(self, processor, capsys):
+        """A KV pair referencing a reverted legacy-named volume by its
+        preserved id is consistent - no 'UID not in StorPool!'."""
+        vol = self._reverted_vol(name="one-sys-26-1-raw")
+        processor.sp.data = {"one-sys-26-1-raw": vol}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_kv_by_name()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+
+    def test_canonical_kv_rebound_to_preserved(self, processor, capsys):
+        """A byName entry keeping the revert-unstable canonical id of
+        the volume (an old migration/repair wrote it) is reported and
+        rebound to the preserved one."""
+        vol = self._reverted_vol()
+        processor.sp.data = {"~fir.b.jm": vol}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.xx"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_storpool()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "revert-unstable id" in out
+        entry = processor.update_data["one-sys-26-1"]
+        assert entry["data"]["uid"] == "fir.b.jm"
+        assert "kv" in entry["action"]
+
+    def test_missing_byuid_rebinds_to_preserved(self, processor):
+        """Restoring a lost byUid entry rewrites the pair through the
+        preserved id, not the canonical one the byName entry kept."""
+        vol = self._reverted_vol()
+        processor.sp.data = {"~fir.b.jm": vol}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.xx"},
+            "byUid": {},
+        }
+
+        processor.analyze_kv_by_name()
+
+        entry = processor.update_data["one-sys-26-1"]
+        assert entry["data"]["uid"] == "~fir.b.jm"
+        assert "kv" in entry["action"]
+
+    def test_uid_mismatch_alias_never_deletes_the_record(
+        self, processor, capsys
+    ):
+        """A stale byUid entry keeping another id of the record the
+        byName entry references goes alone - never with a delete hint
+        for the record itself."""
+        vol = self._reverted_vol()
+        processor.sp.data = {"~fir.b.jm": vol}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {
+                "~fir.b.jm": "one-sys-26-1",
+                "~fir.b.xx": "one-sys-26-1",
+            },
+        }
+
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "etcdctl del /byUid/~fir.b.xx" in out
+        assert "volume ~fir.b.xx delete" not in out
+
+    def test_kv_registered_via_preserved_id(self, processor):
+        vol = self._reverted_vol()
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-img-200"},
+        }
+        assert processor._kv_registered("one-img-200", vol) is True
+
+    def test_duplicates_live_record_by_preserved_id(
+        self, processor, capsys
+    ):
+        """The KV-registered record of a duplicate claim is recognized
+        by its preserved id - the reverted live volume is not reported
+        as a leftover."""
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-img-200"},
+        }
+        live = self._reverted_vol(
+            snapshot=True,
+            tags=dict(_IMG_TAGS),
+            creationTimestamp=1000,
+        )
+        leftover = _dup_snap("n9wb.b.qfgh", 2000)
+        processor.sp.data = {
+            "~fir.b.jm": live,
+            "~n9wb.b.qfgh": leftover,
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[CRITICAL]" not in out
+        assert "KV keeps ~fir.b.jm" in out
+        assert "leftover snapshot ~n9wb.b.qfgh" in out
+        assert "~fir.b.jm delete" not in out

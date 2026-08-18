@@ -76,16 +76,29 @@ class DataProcessing(BaseManager):
         self.dbg(6, f"{entry_name} not found in one.vm_disks or one.ds_images (or snapshots)")  # noqa: E501
         return None
 
+    def _kv_globalid(self, sp_entry: Dict[str, Any]) -> str:
+        """The globalId the KV store (and the disk.N symlinks) should
+        reference. VolumeRevert changes the canonical globalId on every
+        revert while keeping the original one resolvable forever as
+        preservedGlobalId - so the preserved one is the stable handle."""
+        return sp_entry.get("preservedGlobalId") or sp_entry["globalId"]
+
     def _sp_by_uid(self, kv_uid: str) -> Optional[Dict[str, Any]]:
         """Look up a StorPool record by KV uid ('~globalId').
         sp.data is keyed by name, so volumes still under their legacy
-        name are found via the globalId index."""
+        name are found via the globalId index. Reverted volumes are
+        also found by their preserved (original) globalId - the one
+        the KV store keeps."""
         if kv_uid in self.sp.data:
             return self.sp.data[kv_uid]
         if self._uid_index is None:
             self._uid_index = {}
             for sp_entry in self.sp.data.values():
                 self._uid_index[sp_entry["globalId"]] = sp_entry
+            for sp_entry in self.sp.data.values():
+                preserved: str = sp_entry.get("preservedGlobalId") or ""
+                if preserved:
+                    self._uid_index.setdefault(preserved, sp_entry)
         return self._uid_index.get(kv_uid.lstrip("~"))
 
     def _resolve_one_record(self, name: str) -> Optional[Dict[str, Any]]:
@@ -213,11 +226,11 @@ class DataProcessing(BaseManager):
         if "spname" not in entry["data"]:
             entry["data"]["spname"] = spname
         if "uid" not in entry["data"]:
-            entry["data"]["uid"] = sp_entry["globalId"]
+            entry["data"]["uid"] = self._kv_globalid(sp_entry)
         if "kv" not in entry["action"]:
             entry["action"].append("kv")
         self.dbg(2, f"queued KV repair {spname} ->"
-                    f" ~{sp_entry['globalId']}")
+                    f" ~{self._kv_globalid(sp_entry)}")
 
     def _kv_check_one_record(self, name: str, uid: str) -> None:
         """Check that a KV byName entry is still backed by an
@@ -332,20 +345,23 @@ class DataProcessing(BaseManager):
                     + f" not in byUid but {name} volume exists in StorPool",
                 )
         elif sp_uid_entry is not None:
+            # rebind through the stable id - uid may be the
+            # revert-unstable canonical globalId
+            stable_uid: str = f"~{self._kv_globalid(sp_uid_entry)}"
             if sp_uid_entry["snapshot"]:
                 self.dbg(
                     2,
                     f"[kv] byName[{name}] = {uid}"
                     f" not in byUid but UID {uid} snapshot exists in StorPool",
                 )
-                self._update_kv_data(name, uid)
+                self._update_kv_data(name, stable_uid)
             else:
                 self.dbg(
                     2,
                     f"[kv] byName[{name}] = {uid}"
                     f" not in byUid but UID {uid} volume exists in StorPool",
                 )
-                self._update_kv_data(name, uid)
+                self._update_kv_data(name, stable_uid)
         else:
             self.err(
                 f"[kv] byName[{name}] = {uid}"
@@ -398,6 +414,22 @@ class DataProcessing(BaseManager):
     def _fix_uid_mismatch(self, uid: str, name: str) -> None:
         """Fix uid mismatch cases"""
         sp_uid_entry: Optional[Dict[str, Any]] = self._sp_by_uid(uid)
+        if (
+            sp_uid_entry is not None
+            and sp_uid_entry
+            is self._sp_by_uid(self.etcd.data["byName"][name])
+        ):
+            # both uids are ids of the same record (canonical vs
+            # preserved after a VolumeRevert) - only the stale byUid
+            # entry goes, never the record itself
+            self.dbg(
+                2,
+                f" byUid[{uid}]={name} is another id of the record"
+                f" byName[{name}]={self.etcd.data['byName'][name]}"
+                " references",
+            )
+            self.dbg(0, f"etcdctl del /byUid/{uid}")
+            return
         if sp_uid_entry is not None:
             if sp_uid_entry["snapshot"]:
                 self.dbg(
@@ -427,7 +459,8 @@ class DataProcessing(BaseManager):
 
     def _fix_one_data(self, uid: str, name: str) -> None:
         """Fix OpenNebula data cases"""
-        if self._sp_by_uid(uid) is not None:
+        sp_entry: Optional[Dict[str, Any]] = self._sp_by_uid(uid)
+        if sp_entry is not None:
             self.dbg(
                 2,
                 f" byUid[{uid}] = {name} in ONE and StorPool, KV update",
@@ -438,7 +471,7 @@ class DataProcessing(BaseManager):
                 "name": name,
                 # write_kv_data() keys on 'spname'
                 "spname": name,
-                "uid": uid,
+                "uid": self._kv_globalid(sp_entry),
             }
             self.dbg(6, f"ZDBG {self.update_data=}")
             self.update_data[name]["action"].append("kvupdate")
@@ -690,15 +723,27 @@ class DataProcessing(BaseManager):
                             sp_update["data"]["spname"]
                         ] = sp_update
                 else:
-                    self.dbg(
-                        3,
-                        f"ZDBG {sp_name=} =="
-                        f" {self.etcd.data['byName'][kv_name]}"
-                    )
-                    notes.append(
-                        f"{sp_name} <> byName/{kv_name}="
-                        f"{self.etcd.data['byName'][kv_name]}"
-                    )
+                    kv_val: str = self.etcd.data["byName"][kv_name]
+                    if self._sp_by_uid(kv_val) is sp_entry:
+                        # the KV references this same volume through
+                        # another of its ids - the canonical one drifts
+                        # on every VolumeRevert (a later revert leaves
+                        # it unresolvable), so rebind to the stable one
+                        self.err(
+                            f"byName[{kv_name}] = {kv_val} is a"
+                            f" revert-unstable id of {sp_name}"
+                            f" - rebind to ~{self._kv_globalid(sp_entry)}",
+                            "Issue",
+                        )
+                        self._queue_kv_repair(kv_name, sp_entry)
+                    else:
+                        self.dbg(
+                            3,
+                            f"ZDBG {sp_name=} == {kv_val}"
+                        )
+                        notes.append(
+                            f"{sp_name} <> byName/{kv_name}={kv_val}"
+                        )
             else:
                 notes.append(f"byUid/{sp_name}={kv_name} not in byName/")
                 # repair the lost byName entry when ONE confirms it
@@ -764,7 +809,7 @@ class DataProcessing(BaseManager):
                 self.update_data[spname] = sp_update
             try:
                 self.etcd.validate_kv(
-                    sp_entry["globalId"],
+                    self._kv_globalid(sp_entry),
                     spname,
                 )
             except (KvByNameError, KvByUidError) as err:
@@ -773,7 +818,7 @@ class DataProcessing(BaseManager):
                 if spname not in self.update_data:
                     self.update_data[spname] = {
                         "data": {
-                            "uid": sp_entry["globalId"],
+                            "uid": self._kv_globalid(sp_entry),
                             "spname": spname,
                         },
                         "action": [],
@@ -784,10 +829,12 @@ class DataProcessing(BaseManager):
                 and "host" in one_data
                 and "link" in one_data
             ):
-                _target: str = f"/dev/storpool-byid/{sp_entry['globalId']}"
+                _target: str = (
+                    f"/dev/storpool-byid/{self._kv_globalid(sp_entry)}"
+                )
                 if "target" not in one_data or one_data["target"] != _target:
                     self._queue_symlink_fix(
-                        spname, one_data, sp_entry["globalId"]
+                        spname, one_data, self._kv_globalid(sp_entry)
                     )
             if sp_update:
                 self.dbg(4, f"update {spname} {spname=} {sp_update=}")
@@ -841,8 +888,10 @@ class DataProcessing(BaseManager):
             return ("reachable", None)
         if sp_name[0] != "~" and self._resolve_npers_base_image(sp_name):
             return ("reachable", None)
+        preserved: str = sp_entry.get("preservedGlobalId") or ""
         in_kv: bool = (
             sp_entry["globalId"] in kv_uids
+            or bool(preserved and preserved in kv_uids)
             or sp_name in self.etcd.data["byName"]
         )
         # not reachable - is the record ours at all?
@@ -1020,12 +1069,18 @@ class DataProcessing(BaseManager):
             return self._resolve_npers_base_image(sp_name)
         return None
 
-    def _kv_registered(self, spname: str, global_id: str) -> bool:
-        """Check that KV binds the globalId to the OpenNebula name"""
-        kv_uid: str = f"~{global_id}"
-        return (
-            self.etcd.data["byName"].get(spname) == kv_uid
-            or self.etcd.data["byUid"].get(kv_uid) == spname
+    def _kv_registered(self, spname: str, sp_entry: Dict[str, Any]) -> bool:
+        """Check that KV binds one of the record's globalIds (the
+        preserved one survives VolumeRevert) to the OpenNebula name"""
+        kv_uids: set = {f"~{sp_entry['globalId']}"}
+        preserved: str = sp_entry.get("preservedGlobalId") or ""
+        if preserved:
+            kv_uids.add(f"~{preserved}")
+        if self.etcd.data["byName"].get(spname) in kv_uids:
+            return True
+        return any(
+            self.etcd.data["byUid"].get(kv_uid) == spname
+            for kv_uid in kv_uids
         )
 
     def analyze_duplicates(self) -> None:
@@ -1056,8 +1111,12 @@ class DataProcessing(BaseManager):
         """One-line facts about a duplicate StorPool record"""
         kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
         msg: str = f"{kind} {sp_entry['name']}"
-        if sp_entry["name"][0] != "~":
-            msg += f" (globalId {sp_entry['globalId']})"
+        if sp_entry["name"] != f"~{sp_entry['globalId']}":
+            msg += f" (globalId {sp_entry['globalId']}"
+            preserved: str = sp_entry.get("preservedGlobalId") or ""
+            if preserved:
+                msg += f", preserved {preserved}"
+            msg += ")"
         if sp_entry.get("size"):
             msg += f" size {sp_entry['size']}"
         created: Optional[float] = sp_entry.get("creationTimestamp")
@@ -1113,7 +1172,7 @@ class DataProcessing(BaseManager):
         """Report the duplicate StorPool records of an OpenNebula
         record and hint the cleanup of the leftovers"""
         live: List[Dict[str, Any]] = [
-            e for e in entries if self._kv_registered(spname, e["globalId"])
+            e for e in entries if self._kv_registered(spname, e)
         ]
         if len(live) != 1:
             expected: bool = self._resolve_one_record(spname) is not None
@@ -1147,20 +1206,25 @@ class DataProcessing(BaseManager):
                 )
             self._block_queued_update(spname, reason)
             return
-        live_uid: str = live[0]["globalId"]
+        live_uid: str = self._kv_globalid(live[0])
         self.err(
             f"{len(entries)} StorPool records claim OpenNebula {spname},"
             f" KV keeps ~{live_uid} - the rest are leftovers",
             "Issue",
         )
         leftovers: List[Dict[str, Any]] = [
-            e for e in entries if e["globalId"] != live_uid
+            e for e in entries if e is not live[0]
         ]
+        leftover_uids: set = set()
+        for entry in leftovers:
+            leftover_uids.add(entry["globalId"])
+            preserved: str = entry.get("preservedGlobalId") or ""
+            if preserved:
+                leftover_uids.add(preserved)
         queued: Optional[Dict[str, Any]] = self.update_data.get(spname)
         if (
             queued
-            and queued["data"].get("uid")
-            in {e["globalId"] for e in leftovers}
+            and queued["data"].get("uid") in leftover_uids
             and "VolumeFreeze" not in queued["action"]
         ):
             self.err(
@@ -1197,7 +1261,7 @@ class DataProcessing(BaseManager):
         # StorPool volume/snapshot still under the ONE name
         for candidate in (spname, legacy):
             if candidate and candidate in self.sp.data:
-                return self.sp.data[candidate]["globalId"]
+                return self._kv_globalid(self.sp.data[candidate])
         # StorPool tags (volume renamed to ~globalId, KV entries lost)
         vm_id: Optional[int] = one_data.get("vm_id")
         disk_id: Optional[int] = one_data.get("disk_id")
@@ -1218,7 +1282,7 @@ class DataProcessing(BaseManager):
             ):
                 self.dbg(2, f"{spname} matched StorPool tags"
                             f" of {sp_name} {tags=}")
-                return sp_entry["globalId"]
+                return self._kv_globalid(sp_entry)
         return None
 
     def _queue_symlink_fix(
@@ -1297,6 +1361,19 @@ class DataProcessing(BaseManager):
                     self.dbg(4, f"{name} {link} on {host}:"
                                 " no globalId found in KV/StorPool")
                 continue
+            sp_rec: Optional[Dict[str, Any]] = (
+                self._sp_by_uid(f"~{globalid}")
+            )
+            if sp_rec is None:
+                # a dead id from a stale KV entry - never queue a
+                # symlink to it; the KV passes report/repair it
+                self.dbg(2, f"{name} {link} on {host}: expected"
+                            f" globalId {globalid} not in StorPool"
+                            " - skipping the symlink check")
+                continue
+            # normalize to the stable id - the KV may still hold the
+            # revert-unstable canonical one
+            globalid = self._kv_globalid(sp_rec)
             expected: str = f"/dev/storpool-byid/{globalid}"
             if target == expected:
                 continue
@@ -1650,7 +1727,7 @@ class DataProcessing(BaseManager):
         response: Dict[str, Any] = {
             "action": [cmd],
             "data": {
-                "uid": sp_record["globalId"],
+                "uid": self._kv_globalid(sp_record),
                 "spname": one_record["spname"],
                 "snapshot": sp_record["snapshot"],
                 "sptags": sp_record["tags"],
