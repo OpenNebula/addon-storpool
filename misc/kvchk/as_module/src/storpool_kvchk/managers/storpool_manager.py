@@ -109,6 +109,9 @@ class spManager(BaseManager):
                 name = entry["name"]
                 self.data[name] = {
                     "globalId": entry["globalId"],
+                    # the original globalId survives VolumeRevert,
+                    # the canonical one changes on every revert
+                    "preservedGlobalId": entry.get("preservedGlobalId", "") or "",  # noqa: E501
                     "name": name,
                     "clusterId": entry.get("clusterId"),
                     "tags": entry.get("tags", {}),

@@ -55,6 +55,7 @@ def mock_storpool_modules():
     # list mocks return plain dicts as the raw API JSON would contain.
     mock_volume = {
         "globalId": "vol-123-global-id",
+        "preservedGlobalId": "vol-000-preserved-id",
         "name": "test-volume",
         "clusterId": "1",
         "tags": {"type": "PERS", "kvcheck": "test"},
@@ -170,6 +171,7 @@ class TestStorPoolManager:
         # Verify volume data structure
         volume_data = sp_manager.data["test-volume"]
         assert volume_data["globalId"] == "vol-123-global-id"
+        assert volume_data["preservedGlobalId"] == "vol-000-preserved-id"
         assert volume_data["name"] == "test-volume"
         assert volume_data["tags"] == {"type": "PERS", "kvcheck": "test"}
         assert volume_data["size"] == 10737418240

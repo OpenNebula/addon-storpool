@@ -66,6 +66,19 @@ def processor(mock_args):
     )
 
 
+def _sp_vol(name="~fir.b.jm", gid="fir.b.jm", **overrides):
+    """The StorPool volume backing the migrated VM disk"""
+    data = {
+        "globalId": gid,
+        "name": name,
+        "tags": {},
+        "snapshot": False,
+        "sp_api_http_host": "localhost",
+    }
+    data.update(overrides)
+    return data
+
+
 def _vm_disk(**overrides):
     """A migrated running VM disk with a stale legacy symlink"""
     data = {
@@ -103,6 +116,7 @@ class TestHostSymlinks:
                 }
             }
         }
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -145,6 +159,7 @@ class TestHostSymlinks:
                 }
             }
         }
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -161,6 +176,7 @@ class TestHostSymlinks:
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {"one-sys-26-1": _vm_disk(target=None)}
         processor.one.one_hosts = {"kvm1": {"links": {}}}
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -179,6 +195,7 @@ class TestHostSymlinks:
         processor.one.vm_ids = [26]
         processor.one.vm_disks = {"one-sys-26-1": _vm_disk(target=None)}
         processor.one.one_hosts = {"kvm1": {}}  # no "links" key
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -204,6 +221,7 @@ class TestHostSymlinks:
                 }
             }
         }
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -231,6 +249,7 @@ class TestHostSymlinks:
                 }
             }
         }
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -254,6 +273,7 @@ class TestHostSymlinks:
                 }
             }
         }
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {"one-sys-26-1-raw": "~fir.b.jm"},
             "byUid": {"~fir.b.jm": "one-sys-26-1-raw"},
@@ -278,6 +298,7 @@ class TestHostSymlinks:
                 }
             }
         }
+        processor.sp.data = {"~fir.b.jm": _sp_vol()}
         processor.etcd.data = {
             "byName": {},
             "byUid": {"~fir.b.jm": "one-sys-26-1"},
@@ -617,6 +638,73 @@ class TestHostSymlinks:
 
         out = capsys.readouterr().out
         assert "[Issue]" not in out
+
+    def test_reverted_volume_symlink_on_preserved_id_silent(
+        self, processor, capsys
+    ):
+        """After VolumeRevert the canonical globalId drifts but the KV
+        and the disk.N symlink keep the preserved (original) id - that
+        is the stable state, not an issue."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool-byid/fir.b.jm"}}
+                }
+            }
+        }
+        processor.sp.data = {
+            "~fir.b.jm": _sp_vol(
+                gid="fir.b.xx", preservedGlobalId="fir.b.jm"
+            )
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" not in out
+        assert processor.update_data == {}
+
+    def test_dead_kv_id_never_gets_a_symlink_fix(self, processor, capsys):
+        """A KV entry keeping an id StorPool no longer resolves (an
+        intermediate id of a reverted volume) must not produce an
+        ln to the dead /dev/storpool-byid path."""
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {"one-sys-26-1": _vm_disk()}
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {
+                    0: {26: {"disk.1": "/dev/storpool/one-sys-26-1-raw"}}
+                }
+            }
+        }
+        processor.sp.data = {
+            "~fir.b.jm": _sp_vol(
+                gid="fir.b.xx", preservedGlobalId="fir.b.jm"
+            )
+        }
+        # the dead intermediate id fir.b.yt from an old migration
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.yt"},
+            "byUid": {"~fir.b.yt": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "ln -vsfn /dev/storpool-byid/fir.b.yt" not in out
+        assert "symlink" not in processor.update_data.get(
+            "one-sys-26-1", {"action": []}
+        )["action"]
 
 
 class TestHostLeftovers:
