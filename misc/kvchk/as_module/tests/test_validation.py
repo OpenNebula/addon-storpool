@@ -299,7 +299,8 @@ class TestKvByUid:
             },
         }
         processor.sp.data = {
-            "one-sys-26-1-raw": _sp_vol("one-sys-26-1-raw", "fir.b.jm")
+            "one-sys-26-1-raw": _sp_vol("one-sys-26-1-raw", "fir.b.jm"),
+            "~new.b.aa": _sp_vol("~new.b.aa", "new.b.aa"),
         }
 
         processor.analyze_kv_by_uid()
@@ -307,6 +308,31 @@ class TestKvByUid:
         out = capsys.readouterr().out
         assert "etcdctl del /byUid/~fir.b.jm" in out
         assert "storpool -M -B volume ~fir.b.jm delete ~fir.b.jm" in out
+
+    def test_fix_uid_mismatch_dead_byname_rebinds(
+        self, processor, capsys
+    ):
+        """byName keeps an id that is not in StorPool while byUid
+        still resolves the surviving record - byName is rebound to
+        the survivor instead of hinting its deletion."""
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~new.b.aa"},  # not in StorPool
+            "byUid": {
+                "~fir.b.jm": "one-sys-26-1",
+                "~new.b.aa": "one-sys-26-1",
+            },
+        }
+        processor.sp.data = {
+            "one-sys-26-1-raw": _sp_vol("one-sys-26-1-raw", "fir.b.jm")
+        }
+
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "volume ~fir.b.jm delete" not in out
+        assert "rebind byName to ~fir.b.jm" in out
+        entry = processor.update_data["one-sys-26-1"]
+        assert entry["data"]["uid"] == "~fir.b.jm"
 
 
 class TestVmDisks:
@@ -1341,3 +1367,28 @@ class TestPreservedGlobalId:
         assert "KV keeps ~fir.b.jm" in out
         assert "leftover snapshot ~n9wb.b.qfgh" in out
         assert "~fir.b.jm delete" not in out
+
+    def test_dead_byname_id_rebinds_via_resolving_byuid(
+        self, processor, capsys
+    ):
+        """byName keeps a dead intermediate id while byUid still
+        references the record by its stable id - byName is rebound,
+        the record never gets a delete hint."""
+        vol = self._reverted_vol()
+        processor.sp.data = {"~fir.b.jm": vol}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.yt"},  # dead id
+            "byUid": {
+                "~fir.b.jm": "one-sys-26-1",
+                "~fir.b.yt": "one-sys-26-1",
+            },
+        }
+
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "volume ~fir.b.jm delete" not in out
+        assert "rebind byName to ~fir.b.jm" in out
+        entry = processor.update_data["one-sys-26-1"]
+        assert entry["data"]["uid"] == "~fir.b.jm"
+        assert "kv" in entry["action"]
