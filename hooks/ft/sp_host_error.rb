@@ -248,7 +248,7 @@ if vm_ids_array
                     vm.undeploy
                     splog("#{host_name}(#{host_id}) CALL: vm.undeploy VM #{vm_id} wait for #{n_state}")
                 elsif state == "UNDEPLOYED/LCM_INIT" and prev_action != "resume"
-                    n_state = "ACTIVE/RUNNINNG"
+                    n_state = "ACTIVE/RUNNING"
                     vmhash[vm_id]["state"] = n_state
                     vmhash[vm_id]["prev_action"] = "resume"
                     vm.resume

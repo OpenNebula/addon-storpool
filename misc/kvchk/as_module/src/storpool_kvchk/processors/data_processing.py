@@ -1669,7 +1669,7 @@ class DataProcessing(BaseManager):
             to_globalid = True
         new_tags = self._build_tags(one_record)
         if len(sp_record["tags"]) > 0:
-            # there are storpoool tags, let's check them
+            # there are storpool tags, let's check them
             for tagname, tagval in new_tags.items():
                 if (
                     tagname not in sp_record["tags"]

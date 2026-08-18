@@ -195,7 +195,7 @@ EOF
             mode="${READONLY_MODE}"
         fi
         storpoolVolumeRevert "${sp_uid}" "${volume}" "${snapUid}" "${REMOTE_BACKUP_DELETE}" "${REVERT_SIZE}" || finish=0
-        if booltTrue "REVERT_SEZE"; then
+        if boolTrue "REVERT_SIZE"; then
             OLD_SIZE_M=$((V_SIZE/1024/1024))
             storpoolVolumeInfo "~${SP_GLOBALID}"
             NEW_SIZE_M=$((V_SIZE/1024/1024))

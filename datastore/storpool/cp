@@ -253,7 +253,7 @@ else
     tStart=$(date +%s)
     if [[ -n "${DST_HOST}" ]]; then
         if [[ -n "${localFile}" ]] && [[ -f "${localFile}" ]]; then
-            COPY_CMD="${DD:-dd} if=\"${localFile}\" bs=\"${COPY_CMD_DS_BS:-1M}\" iflag=direct"
+            COPY_CMD="${DD:-dd} if=\"${localFile}\" bs=\"${COPY_CMD_DD_BS:-1M}\" iflag=direct"
         fi
         splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_TEMP_LINK} bs=${COPY_CMD_DD_BS:-1M} status=none iflag=fullblock oflag=direct"
         multiline_exec_and_log "set -e -o pipefail; eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} \"${DST_HOST}\" ${DD:-dd} of=\"${SP_TEMP_LINK}\" bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct" \
