@@ -430,6 +430,24 @@ class DataProcessing(BaseManager):
             )
             self.dbg(0, f"etcdctl del /byUid/{uid}")
             return
+        byname_val: str = self.etcd.data["byName"][name]
+        if (
+            sp_uid_entry is not None
+            and self._sp_by_uid(byname_val) is None
+            and uid == f"~{self._kv_globalid(sp_uid_entry)}"
+        ):
+            # byName keeps a dead id (an intermediate globalId of a
+            # reverted volume) while this byUid entry references the
+            # record by its stable id - rebind byName instead of
+            # hinting a delete of the resolvable record
+            self.err(
+                f"byName[{name}] = {byname_val} not in StorPool but"
+                f" byUid[{uid}] = {name} resolves - rebind byName"
+                f" to {uid}",
+                "Issue",
+            )
+            self._update_kv_data(name, uid)
+            return
         if sp_uid_entry is not None:
             if sp_uid_entry["snapshot"]:
                 self.dbg(
