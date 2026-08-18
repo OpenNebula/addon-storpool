@@ -238,7 +238,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 		unset SP_API_HTTP_PORT
 	fi
 	export SP_PROPAGATE="${SP_TEMPLATE_PROPAGATE_ARRAY[i]:-${SP_TEMPLATE_PROPAGATE}}"
-	if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
+	if boolTrue "DEBUG_MONITOR_HELPER_SYNC"; then
 		if [[ -n "${SP_AUTH_TOKEN}${SP_API_HTTP_HOST}${SP_API_HTTP_PORT}" ]]; then
 			splog "[D] API_TOKEN:${SP_AUTH_TOKEN:+DEFINED} API_HOST:${SP_API_HTTP_HOST} API_PORT:${SP_API_HTTP_PORT}"
 		fi
@@ -249,7 +249,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 		continue
 	fi
     if [[ "${DS_STATE_ARRAY[i]}" != "0" ]]; then
-	    if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
+	    if boolTrue "DEBUG_MONITOR_HELPER_SYNC"; then
             splog "[D] Skipped Datastore ${DS_ID} STATE=${DS_STATE_ARRAY[i]}"
         fi
         continue
@@ -282,7 +282,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
         CLUSTER_ID_ARRAY+=(${_element})
     done {xpathfh}< <("${_XPATH_A[@]}" <"${SP_FE_JSON_PATH}/${ONEDATASTORE_XML}" "${_XPATH_QUERY[@]}" || true)
 
-	if [[ -n "${DDEBUG_MOINTOR_HELPER_SYNC}" ]]; then
+	if [[ -n "${DDEBUG_MONITOR_HELPER_SYNC}" ]]; then
 		splog "[DD] DS_ID=${DS_ID} ${SP_FE_JSON_PATH}/${ONEDATASTORE_XML} CLUSTER_ID_ARRAY:${CLUSTER_ID_ARRAY[*]}"
 	fi
 
@@ -552,6 +552,6 @@ done
 
 rm -f "${lockFile}"
 
-if boolTrue "DEBUG_MOINTOR_HELPER_SYNC"; then
+if boolTrue "DEBUG_MONITOR_HELPER_SYNC"; then
 	splog "[D] END"
 fi
