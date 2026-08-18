@@ -51,32 +51,33 @@ def mock_storpool_modules():
     # Create comprehensive API mock with all required responses
     mock_api = Mock()
 
-    # Mock volume data
-    mock_volume = Mock()
-    mock_volume.globalId = "vol-123-global-id"
-    mock_volume.name = "test-volume"
-    mock_volume.clusterId = "1"
-    mock_volume.tags = {"type": "PERS", "kvcheck": "test"}
-    mock_volume.size = 10737418240  # 10GB in bytes
+    # The manager fetches the lists with returnRawAPIData=True, so the
+    # list mocks return plain dicts as the raw API JSON would contain.
+    mock_volume = {
+        "globalId": "vol-123-global-id",
+        "name": "test-volume",
+        "clusterId": "1",
+        "tags": {"type": "PERS", "kvcheck": "test"},
+        "size": 10737418240,  # 10GB in bytes
+    }
 
-    # Mock snapshot data
-    mock_snapshot = Mock()
-    mock_snapshot.globalId = "snap-456-global-id"
-    mock_snapshot.name = "test-snapshot"
-    mock_snapshot.clusterId = "1"
-    snap_tags = {"type": "PERS", "snap": "0", "kvcheck": "test"}
-    mock_snapshot.tags = snap_tags
-    mock_snapshot.size = 10737418240  # 10GB in bytes
+    mock_snapshot = {
+        "globalId": "snap-456-global-id",
+        "name": "test-snapshot",
+        "clusterId": "1",
+        "tags": {"type": "PERS", "snap": "0", "kvcheck": "test"},
+        "size": 10737418240,  # 10GB in bytes
+    }
 
-    # Mock attachment data (include missing snapshot attribute)
-    mock_attachment = Mock()
-    mock_attachment.volume = "test-volume"
-    mock_attachment.globalId = "vol-123-global-id"
-    mock_attachment.clusterId = "1"
-    mock_attachment.cluster = "test-cluster"
-    mock_attachment.client = "1"
-    mock_attachment.rights = "rw"
-    mock_attachment.snapshot = False  # This was missing in original
+    mock_attachment = {
+        "volume": "test-volume",
+        "globalId": "vol-123-global-id",
+        "clusterId": "1",
+        "cluster": "test-cluster",
+        "client": "1",
+        "rights": "rw",
+        "snapshot": False,
+    }
 
     # Set up API list methods
     mock_api.volumesList.return_value = [mock_volume]
@@ -203,10 +204,16 @@ class TestStorPoolManager:
 
     def test_api_list_methods_called(self, sp_manager):
         """Test that all required API list methods are called during init"""
-        # Verify API methods were called
-        sp_manager._mock_api.volumesList.assert_called()
-        sp_manager._mock_api.snapshotsList.assert_called()
-        sp_manager._mock_api.attachmentsList.assert_called()
+        # Verify API methods were called requesting raw API data
+        sp_manager._mock_api.volumesList.assert_called_with(
+            returnRawAPIData=True
+        )
+        sp_manager._mock_api.snapshotsList.assert_called_with(
+            returnRawAPIData=True
+        )
+        sp_manager._mock_api.attachmentsList.assert_called_with(
+            returnRawAPIData=True
+        )
 
     @pytest.mark.parametrize("action,snapshot,expected_cmd", [
         ("Update", False, "volumeUpdate"),
@@ -395,23 +402,25 @@ class TestStorPoolManager:
     ):
         """Test handling of multiple attachments for the same volume"""
         # Create multiple attachments for the same volume
-        mock_attachment1 = Mock()
-        mock_attachment1.volume = "multi-attach-volume"
-        mock_attachment1.globalId = "vol-multi-123"
-        mock_attachment1.clusterId = "1"
-        mock_attachment1.cluster = "cluster-1"
-        mock_attachment1.client = "1"
-        mock_attachment1.rights = "rw"
-        mock_attachment1.snapshot = False
+        mock_attachment1 = {
+            "volume": "multi-attach-volume",
+            "globalId": "vol-multi-123",
+            "clusterId": "1",
+            "cluster": "cluster-1",
+            "client": "1",
+            "rights": "rw",
+            "snapshot": False,
+        }
 
-        mock_attachment2 = Mock()
-        mock_attachment2.volume = "multi-attach-volume"
-        mock_attachment2.globalId = "vol-multi-123"
-        mock_attachment2.clusterId = "1"
-        mock_attachment2.cluster = "cluster-1"
-        mock_attachment2.client = "2"
-        mock_attachment2.rights = "ro"
-        mock_attachment2.snapshot = False
+        mock_attachment2 = {
+            "volume": "multi-attach-volume",
+            "globalId": "vol-multi-123",
+            "clusterId": "1",
+            "cluster": "cluster-1",
+            "client": "2",
+            "rights": "ro",
+            "snapshot": False,
+        }
 
         # Update the existing mock to return multiple attachments
         mock_storpool_modules['api'].attachmentsList.return_value = [

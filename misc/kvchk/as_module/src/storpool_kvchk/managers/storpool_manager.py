@@ -54,7 +54,11 @@ class spManager(BaseManager):
         self._load_data()
 
     def _load_data(self) -> None:
-        """Get StorPool data as an dict with reduced set of elements"""
+        """Get StorPool data as an dict with reduced set of elements
+
+        The lists are fetched with returnRawAPIData=True because the
+        typed bindings drop any JSON field their spec does not declare
+        (e.g. preservedGlobalId)."""
         self._attachments()
         self._volumes()
         self._snapshots()
@@ -65,94 +69,97 @@ class spManager(BaseManager):
         self.attachments: Dict[str, Dict[str, Any]] = {}
         for sp_api_http_host, api in self.api_host.items():
             try:
-                attach_list = api.attachmentsList()  # noqa
+                attach_list = api.attachmentsList(returnRawAPIData=True)  # noqa
             except Exception as error:
                 self.err(f"Error! {error}")
                 raise error
             for entry in attach_list:
-                if entry.volume in self.attachments:
-                    entry_volume = self.attachments[entry.volume]
-                    entry_volume["client"].append(int(entry.client))
-                    entry_volume["rights"].append(entry.rights)
-                    entry_volume["clusterId"].append(entry.clusterId)
+                volume = entry["volume"]
+                if volume in self.attachments:
+                    entry_volume = self.attachments[volume]
+                    entry_volume["client"].append(int(entry["client"]))
+                    entry_volume["rights"].append(entry["rights"])
+                    entry_volume["clusterId"].append(entry.get("clusterId"))
                     entry_volume["sp_api_http_host"].append(sp_api_http_host)
                     entry_volume["count"] += 1
                 else:
-                    self.attachments[entry.volume] = {
-                        "globalId": entry.globalId,
-                        "clusterId": [entry.clusterId],
-                        "cluster": entry.cluster,
-                        "client": [int(entry.client)],
-                        "rights": [entry.rights],
-                        "volume": entry.volume,
-                        "snapshot": entry.snapshot,
+                    self.attachments[volume] = {
+                        "globalId": entry.get("globalId"),
+                        "clusterId": [entry.get("clusterId")],
+                        "cluster": entry.get("cluster"),
+                        "client": [int(entry["client"])],
+                        "rights": [entry["rights"]],
+                        "volume": volume,
+                        "snapshot": bool(entry.get("snapshot", False)),
                         "sp_api_http_host": [sp_api_http_host],
                         "count": 1,
                         "ZDBG": "attachmentsList",
                     }
-                self.dbg(4, f"{self.attachments[entry.volume]}")
+                self.dbg(4, f"{self.attachments[volume]}")
 
     def _volumes(self) -> None:
         """Get StorPool volumes"""
         for sp_api_http_host, api in self.api_host.items():
             try:
-                volumes_list = api.volumesList()  # noqa
+                volumes_list = api.volumesList(returnRawAPIData=True)  # noqa
             except Exception as error:
                 self.err(f"Error! {error}")
                 raise error
             for entry in volumes_list:
-                self.data[entry.name] = {
-                    "globalId": entry.globalId,
-                    "name": entry.name,
-                    "clusterId": entry.clusterId,
-                    "tags": entry.tags,
-                    "size": entry.size,
+                name = entry["name"]
+                self.data[name] = {
+                    "globalId": entry["globalId"],
+                    "name": name,
+                    "clusterId": entry.get("clusterId"),
+                    "tags": entry.get("tags", {}),
+                    "size": entry["size"],
                     "snapshot": False,
-                    "parentName": getattr(entry, "parentName", "") or "",
-                    "templateName": getattr(entry, "templateName", "") or "",  # noqa: E501
-                    "creationTimestamp": getattr(entry, "creationTimestamp", None),  # noqa: E501
+                    "parentName": entry.get("parentName", "") or "",
+                    "templateName": entry.get("templateName", "") or "",
+                    "creationTimestamp": entry.get("creationTimestamp"),
                     "sp_api_http_host": sp_api_http_host,
                     "ZDBG": "volumesList",
                 }
-                if entry.name in self.attachments:
-                    self.data[entry.name]["attached"] = copy.deepcopy(
-                        self.attachments[entry.name]
+                if name in self.attachments:
+                    self.data[name]["attached"] = copy.deepcopy(
+                        self.attachments[name]
                     )
-                self.dbg(4, f"{self.data[entry.name]}")
+                self.dbg(4, f"{self.data[name]}")
 
     def _snapshots(self) -> None:
         """Get StorPool snapshots"""
         for sp_api_http_host, api in self.api_host.items():
             try:
-                snaps_list = api.snapshotsList()  # noqa
+                snaps_list = api.snapshotsList(returnRawAPIData=True)  # noqa
             except Exception as error:
                 self.err(f"Error! {error}")
                 raise error
             for entry in snaps_list:
-                self.data[entry.name] = {
-                    "globalId": entry.globalId,
-                    "name": entry.name,
-                    "clusterId": entry.clusterId,
-                    "tags": entry.tags,
-                    "size": entry.size,
+                name = entry["name"]
+                self.data[name] = {
+                    "globalId": entry["globalId"],
+                    "name": name,
+                    "clusterId": entry.get("clusterId"),
+                    "tags": entry.get("tags", {}),
+                    "size": entry["size"],
                     "snapshot": True,
-                    "parentName": getattr(entry, "parentName", "") or "",
-                    "templateName": getattr(entry, "templateName", "") or "",  # noqa: E501
-                    "creationTimestamp": getattr(entry, "creationTimestamp", None),  # noqa: E501
-                    "onVolume": getattr(entry, "onVolume", "") or "",
-                    "autoName": bool(getattr(entry, "autoName", False)),
-                    "transient": bool(getattr(entry, "transient", False)),
-                    "deleted": bool(getattr(entry, "deleted", False)),
-                    "bound": bool(getattr(entry, "bound", False)),
-                    "targetDeleteDate": getattr(entry, "targetDeleteDate", None),  # noqa: E501
+                    "parentName": entry.get("parentName", "") or "",
+                    "templateName": entry.get("templateName", "") or "",
+                    "creationTimestamp": entry.get("creationTimestamp"),
+                    "onVolume": entry.get("onVolume", "") or "",
+                    "autoName": bool(entry.get("autoName", False)),
+                    "transient": bool(entry.get("transient", False)),
+                    "deleted": bool(entry.get("deleted", False)),
+                    "bound": bool(entry.get("bound", False)),
+                    "targetDeleteDate": entry.get("targetDeleteDate"),
                     "sp_api_http_host": sp_api_http_host,
                     "ZDBG": "snapshotsList",
                 }
-                if entry.name in self.attachments:
-                    self.data[entry.name]["attached"] = copy.deepcopy(
-                        self.attachments[entry.name]
+                if name in self.attachments:
+                    self.data[name]["attached"] = copy.deepcopy(
+                        self.attachments[name]
                     )
-                self.dbg(4, f"{self.data[entry.name]}")
+                self.dbg(4, f"{self.data[name]}")
 
     def volumefreeze(
         self,
