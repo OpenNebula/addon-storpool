@@ -535,6 +535,11 @@ class DataProcessing(BaseManager):
                 else:
                     if "legacy" in data:
                         legacy_name: str = data["legacy"]
+                        # VM/disk snapshot entries map to StorPool
+                        # snapshots, not volumes
+                        obj_kind: str = (
+                            "snapshot" if data.get("snapshot") else "volume"
+                        )
                         if legacy_name in self.sp.data:
                             msg += f" <<TO_MIGRATE>> legacy:{legacy_name}"
                             if self.args.verbose > 1:
@@ -544,11 +549,24 @@ class DataProcessing(BaseManager):
                                     f"\n\tON:{repr(data)}"
                                 )
                         else:
-                            msg += (
-                                " Should upgrade legacy volume"
-                                f" '{legacy_name}'"
-                                " but not found in StorPool!"
-                            )
+                            if legacy_name == name:
+                                # the legacy and current names coincide,
+                                # so there is nothing to upgrade - the
+                                # expected object is missing entirely
+                                if obj_kind == "snapshot":
+                                    msg += (
+                                        " StorPool snapshot missing"
+                                        f" (snapshot '{data.get('snap')}'"
+                                        f" of volume '{data.get('img')}')!"
+                                    )
+                                else:
+                                    msg += " StorPool volume missing!"
+                            else:
+                                msg += (
+                                    f" Should upgrade legacy {obj_kind}"
+                                    f" '{legacy_name}'"
+                                    " but not found in StorPool!"
+                                )
                             msg += "\n\tON:" + repr(data)
                     else:
                         msg = f" !{name} not found in KV/StorPool data!"
