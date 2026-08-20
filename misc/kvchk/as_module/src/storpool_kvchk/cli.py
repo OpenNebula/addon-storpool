@@ -7,11 +7,13 @@ import pprint
 import argparse
 import traceback
 
+from .managers.base_manager import BaseManager
 from .managers.ssh_manager import SshManager
 from .managers.one_manager import oneManager
 from .managers.storpool_manager import spManager
 from .managers.etcd_manager import etcdManager
 from .processors.data_processing import DataProcessing
+from .utils.report_writer import ReportWriter
 
 
 def parse_addon_storpoolrc() -> Dict[str, str]:
@@ -117,6 +119,15 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "-R",
+        "--report",
+        action="store_true",
+        help="log the reported issues to YYYYmmdd-HHMM-<category>.txt"
+             " files in the current folder (kv, vm-disks, images,"
+             " volumes, hanging, foreign, duplicates, symlinks,"
+             " updates, errors)",
+    )
+    parser.add_argument(
         "-F",
         "--report-foreign",
         action="store_true",
@@ -169,6 +180,9 @@ def main() -> int:
         defaults = parse_addon_storpoolrc()
         arguments = parse_arguments(defaults)
 
+        if arguments.report:
+            BaseManager.reporter = ReportWriter()
+
         ssh_manager = SshManager(arguments)
         one_manager = oneManager(arguments, ssh_manager)
         sp_manager = spManager(arguments, one_manager.one_datastores)
@@ -198,6 +212,16 @@ def main() -> int:
     except Exception:
         print(f"Error: {traceback.format_exc()}", file=sys.stderr)
         return 1
+    finally:
+        if BaseManager.reporter is not None:
+            report_files = BaseManager.reporter.close()
+            BaseManager.reporter = None
+            base = BaseManager(arguments)
+            if report_files:
+                for report_file in report_files:
+                    base.dbg(0, f"report file: {report_file}")
+            else:
+                base.dbg(0, "no issues reported, no report files written")
 
 
 if __name__ == "__main__":
