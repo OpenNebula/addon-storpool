@@ -535,27 +535,25 @@ class TestSshManagerEdgeCases:
 
     @patch('subprocess.run')
     def test_get_symlinks_malformed_path(self, mock_run, ssh_manager):
-        """Test handling of malformed symlink paths"""
+        """Symlinks above the <ds_id>/<vm_id>/<file> level (e.g. a
+        datastore directory symlinked to a shared mount) are skipped"""
         mock_run.return_value = Mock(
             returncode=0,
             stdout=b"lrwxrwxrwx 1 root root 20 Mar 14 10:00 /var/lib/one/invalid/path -> /target\n"  # noqa: E501
         )
 
-        # Should handle malformed paths gracefully
-        with pytest.raises(Exception):
-            ssh_manager.get_symlinks('test-host')
+        assert ssh_manager.get_symlinks('test-host') == {}
 
     @patch('subprocess.run')
     def test_get_symlinks_non_numeric_ids(self, mock_run, ssh_manager):
-        """Test handling of non-numeric datastore/VM IDs"""
+        """Symlinks with non-numeric datastore/VM path components
+        do not match the ds/vm layout and are skipped"""
         mock_run.return_value = Mock(
             returncode=0,
             stdout=b"lrwxrwxrwx 1 root root 20 Mar 14 10:00 /var/lib/one/datastores/abc/def/disk.0 -> /target\n"  # noqa: E501
         )
 
-        # Should handle non-numeric IDs gracefully
-        with pytest.raises(Exception):
-            ssh_manager.get_symlinks('test-host')
+        assert ssh_manager.get_symlinks('test-host') == {}
 
     def test_create_symlink_empty_uid(self, ssh_manager):
         """Test create_symlink with empty uid"""
