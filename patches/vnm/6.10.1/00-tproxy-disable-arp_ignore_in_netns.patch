@@ -10,7 +10,7 @@
 +            # [LOCAL PATCH]: Loosen inherited ARP strictness. This ensures the namespace
 +            # replies to the VM's cross-subnet ARP requests for the 169.254.16.9 IP.
 +            ip_netns_exec(brdev, "sysctl -w net.ipv4.conf.all.arp_ignore=0")
-+            ip_netns_exec(brdev, "sysctl -w net.ipv4.conf.#{brdev}a.arp_ignore=0")
++            ip_netns_exec(brdev, "sysctl -w net.ipv4.conf.#{brdev.tr('.', '/')}a.arp_ignore=0")
 +
              # Prevent ARP requests from being propagated to other HV machines.
              # It reduces network traffic and ensures that the closest HV handles
