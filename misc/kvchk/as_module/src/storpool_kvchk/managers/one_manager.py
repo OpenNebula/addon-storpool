@@ -370,6 +370,19 @@ class oneManager(BaseManager):
             spname: str = f"{self.args.one_px}-img-{img_e.ID}"
             if int(img_e.TYPE) >= 6:
                 continue
+            ds_id: int = int(img_e.DATASTORE_ID)
+            ds_entry: Dict[str, Any] = self.one_datastores.get(ds_id, {})
+            if ds_entry and not is_storpool_tm_mad(ds_entry.get("tm_mad")):
+                # a non-StorPool datastore (e.g. a files datastore
+                # holding CONTEXT scripts, kernels, ramdisks) has no
+                # StorPool-backed images at all
+                self.dbg(
+                    2,
+                    f"IMG {img_e.ID} ({img_e.NAME}) datastore {ds_id}"
+                    f" TM_MAD='{ds_entry.get('tm_mad')}' not StorPool"
+                    " - skipping",
+                )
+                continue
             img_dict: Dict[str, Any] = {
                 "image_id": int(img_e.ID),
                 "legacy": spname,
@@ -384,7 +397,7 @@ class oneManager(BaseManager):
                 "virt": "one",
                 "nloc": self.args.one_px,
                 "qosclass": img_e.TEMPLATE.get("SP_QOSCLASS"),
-                "datastore_id": int(img_e.DATASTORE_ID),
+                "datastore_id": ds_id,
                 "ZDBG": "_get_ds_images",
             }
             img_dict["vms"] = len(img_dict["vmlist"])
