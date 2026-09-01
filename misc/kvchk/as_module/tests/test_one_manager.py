@@ -792,6 +792,62 @@ class TestoneManager:
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')
+    def test_init_ds_images_skips_non_storpool_datastore(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
+    ):
+        """Images in a non-StorPool datastore (e.g. the files
+        datastore holding CONTEXT scripts) are not StorPool-backed
+        at all - not indexed, so never reported."""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+
+        files_ds = Mock()
+        files_ds.NAME = "files"
+        files_ds.ID = 2
+        files_ds.STATE = 0
+        files_ds.TYPE = 2  # FILE_DS
+        files_ds.DISK_TYPE = 0
+        files_ds.TM_MAD = "ssh"
+        files_ds.TEMPLATE.get.return_value = None
+        ds_pool = mock_pyone_api.datastorepool.info.return_value
+        ds_pool.get_DATASTORE.return_value = (
+            ds_pool.get_DATASTORE.return_value + [files_ds]
+        )
+
+        context_image = Mock()
+        context_image.ID = 599
+        context_image.TYPE = ImageType.CONTEXT
+        context_image.PERSISTENT = DiskType.NONPERSISTENT
+        context_image.STATE = 1
+        context_image.NAME = "mysql_moodle.sh"
+        context_image.DATASTORE_ID = 2
+        context_image.VMS.get_ID.return_value = []
+        context_image.TEMPLATE.get.return_value = None
+        context_image.SNAPSHOTS = None
+
+        sp_image = Mock()
+        sp_image.ID = 1
+        sp_image.TYPE = ImageType.OS
+        sp_image.PERSISTENT = DiskType.PERSISTENT
+        sp_image.STATE = 1
+        sp_image.NAME = "regular-image"
+        sp_image.DATASTORE_ID = 1
+        sp_image.VMS.get_ID.return_value = [123]
+        sp_image.TEMPLATE.get.return_value = None
+        sp_image.SNAPSHOTS = None
+
+        imagepool_mock = Mock()
+        imagepool_mock.get_IMAGE.return_value = [context_image, sp_image]
+        mock_pyone_api.imagepool.info.return_value = imagepool_mock
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        assert "one-img-599" not in manager.ds_images
+        assert "one-img-1" in manager.ds_images
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
     def test_init_ds_images_skips_backup_type(
         self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
     ):
