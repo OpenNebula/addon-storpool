@@ -1082,6 +1082,67 @@ class TestDuplicateClaims:
         )
         assert hint_child < hint_parent
 
+    def test_stale_byuid_registration_disambiguated(
+        self, processor, capsys
+    ):
+        """Two records registered in KV but only one holds the full
+        byName<->byUid pair: it is the current one, the other claims
+        the record via a stale byUid entry - marked bogus and hinted
+        for cleanup, not CRITICAL."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {
+                "~n9wb.b.qr1d": "one-img-200",
+                "~n9wb.b.qfgh": "one-img-200",  # stale
+            },
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 2000),
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 1000),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[CRITICAL]" not in out
+        assert "byName<->byUid pair confirms ~n9wb.b.qr1d" in out
+        assert (
+            "~n9wb.b.qfgh claims one-img-200 only via a stale KV"
+            " byUid entry - bogus" in out
+        )
+        assert "leftover snapshot ~n9wb.b.qfgh" in out
+        assert (
+            "# storpool -M -B snapshot ~n9wb.b.qfgh delete ~n9wb.b.qfgh"
+            in out
+        )
+        assert "~n9wb.b.qr1d delete" not in out
+
+    def test_no_pair_stays_critical(self, processor, capsys):
+        """Two records registered in KV via byUid entries only (no
+        byName entry): still no way to tell the current one - reported
+        CRITICAL with no delete hints."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {},
+            "byUid": {
+                "~n9wb.b.qr1d": "one-img-200",
+                "~n9wb.b.qfgh": "one-img-200",
+            },
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 2000),
+            "~n9wb.b.qfgh": _dup_snap("n9wb.b.qfgh", 1000),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "[CRITICAL]" in out
+        assert "2 of them are registered in KV" in out
+        assert "investigate manually" in out
+        assert "# storpool" not in out
+
     def test_no_kv_record_is_critical(self, processor, capsys):
         """No record in KV: reported CRITICAL, no delete hints, and
         the KV repair queued by analyze_storpool() is blocked."""

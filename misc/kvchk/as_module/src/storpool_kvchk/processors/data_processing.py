@@ -1119,15 +1119,35 @@ class DataProcessing(BaseManager):
             for kv_uid in kv_uids
         )
 
+    def _kv_pair_match(self, spname: str, sp_entry: Dict[str, Any]) -> bool:
+        """Check that KV binds the record in both directions: the
+        (unique) byName entry references one of the record's globalIds
+        and that byUid entry points back to the OpenNebula name"""
+        kv_uid: Optional[str] = self.etcd.data["byName"].get(spname)
+        if not kv_uid:
+            return False
+        kv_uids: set = {f"~{sp_entry['globalId']}"}
+        preserved: str = sp_entry.get("preservedGlobalId") or ""
+        if preserved:
+            kv_uids.add(f"~{preserved}")
+        return (
+            kv_uid in kv_uids
+            and self.etcd.data["byUid"].get(kv_uid) == spname
+        )
+
     def analyze_duplicates(self) -> None:
         """Detect several StorPool records claiming the same OpenNebula
         record. The KV-registered one is the live one - the rest are
         leftovers of broken/retried operations, reported with a delete
-        hint for the operator. With no (or several) KV-registered
-        records of a record OpenNebula expects the live one can not be
-        told apart - reported for human investigation and the queued
-        actions are blocked. When OpenNebula does not expect the record
-        either, they are all leftover artifacts - a normal cleanup."""
+        hint for the operator. Several KV-registered records are told
+        apart by the (unique) byName entry: the one holding the full
+        byName<->byUid pair is the current one, the rest claim the
+        record only via stale byUid entries - bogus. With no KV record
+        (or no unique pair) of a record OpenNebula expects the live
+        one can not be told apart - reported for human investigation
+        and the queued actions are blocked. When OpenNebula does not
+        expect the record either, they are all leftover artifacts - a
+        normal cleanup."""
         self.dbg(1, "processing duplicate StorPool records...")
         claims: Dict[str, List[Dict[str, Any]]] = {}
         for sp_name, sp_entry in self.sp.data.items():
@@ -1210,6 +1230,18 @@ class DataProcessing(BaseManager):
         live: List[Dict[str, Any]] = [
             e for e in entries if self._kv_registered(spname, e)
         ]
+        stale_kv: List[Dict[str, Any]] = []
+        if len(live) > 1:
+            # several KV-registered records: the byName entry is
+            # unique, so at most one of them holds the full
+            # byName<->byUid pair - that one is the current record,
+            # the rest are registered only via stale byUid entries
+            paired: List[Dict[str, Any]] = [
+                e for e in live if self._kv_pair_match(spname, e)
+            ]
+            if len(paired) == 1:
+                stale_kv = [e for e in live if e is not paired[0]]
+                live = paired
         if len(live) != 1:
             expected: bool = self._resolve_one_record(spname) is not None
             if not live and not expected:
@@ -1243,11 +1275,26 @@ class DataProcessing(BaseManager):
             self._block_queued_update(spname, reason)
             return
         live_uid: str = self._kv_globalid(live[0])
-        self.err(
-            f"{len(entries)} StorPool records claim OpenNebula {spname},"
-            f" KV keeps ~{live_uid} - the rest are leftovers",
-            "Issue",
-        )
+        if stale_kv:
+            self.err(
+                f"{len(entries)} StorPool records claim OpenNebula"
+                f" {spname}, the KV byName<->byUid pair confirms"
+                f" ~{live_uid} as current - the rest are bogus",
+                "Issue",
+            )
+            for entry in stale_kv:
+                self.err(
+                    f"{entry['name']} claims {spname} only via a stale"
+                    " KV byUid entry - bogus, not the current record",
+                    "NOTE",
+                )
+        else:
+            self.err(
+                f"{len(entries)} StorPool records claim OpenNebula"
+                f" {spname}, KV keeps ~{live_uid} - the rest are"
+                " leftovers",
+                "Issue",
+            )
         leftovers: List[Dict[str, Any]] = [
             e for e in entries if e is not live[0]
         ]
