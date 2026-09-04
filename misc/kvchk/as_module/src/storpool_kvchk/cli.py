@@ -122,10 +122,17 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
         "-R",
         "--report",
         action="store_true",
+        default=True,
         help="log the reported issues to YYYYmmdd-HHMM-<category>.txt"
              " files in the current folder (kv, vm-disks, images,"
              " volumes, hanging, foreign, duplicates, symlinks,"
-             " updates, errors)",
+             " updates, errors), the default",
+    )
+    parser.add_argument(
+        "--no-report",
+        dest="report",
+        action="store_false",
+        help="do not write the report files",
     )
     parser.add_argument(
         "-F",
@@ -181,7 +188,7 @@ def main() -> int:
         arguments = parse_arguments(defaults)
 
         if arguments.report:
-            BaseManager.reporter = ReportWriter()
+            BaseManager.reporter = ReportWriter(argv=sys.argv)
 
         ssh_manager = SshManager(arguments)
         one_manager = oneManager(arguments, ssh_manager)
