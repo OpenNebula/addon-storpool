@@ -335,6 +335,123 @@ class TestKvByUid:
         assert entry["data"]["uid"] == "~fir.b.jm"
 
 
+    def test_fix_uid_mismatch_byname_snapshot_of_byuid_volume(
+        self, processor, capsys
+    ):
+        """byName points at the revert snapshot of the very volume
+        byUid references (dispa one-img-62: volume ~nyff.b.d8 attached
+        to the running VM, snapshot ~nyff.b.pu onVolume ~nyff.b.d8) -
+        the volume is the disk; report the conflict, never hint its
+        deletion, queue nothing."""
+        tags = {"nvm": "34", "img": "one-img-62", "diskid": "3"}
+        processor.etcd.data = {
+            "byName": {"one-img-62": "~nyff.b.pu"},
+            "byUid": {
+                "~nyff.b.d8": "one-img-62",
+                "~nyff.b.pu": "one-img-62",
+            },
+        }
+        processor.sp.data = {
+            "~nyff.b.d8": _sp_vol(
+                "~nyff.b.d8",
+                "nyff.b.d8",
+                tags=tags,
+                parentName="~nyff.b.pu",
+                attached={"client": [3], "rights": ["rw"]},
+            ),
+            "~nyff.b.pu": _sp_vol(
+                "~nyff.b.pu",
+                "nyff.b.pu",
+                tags=tags,
+                snapshot=True,
+                onVolume="~nyff.b.d8",
+                parentName="",
+            ),
+        }
+
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "volume ~nyff.b.d8 delete" not in out
+        assert "etcdctl del /byUid/~nyff.b.d8" not in out
+        assert "[CONFLICT]" in out
+        assert "attached to clients [3]" in out
+        assert "# etcdctl put /byName/one-img-62 ~nyff.b.d8" in out
+        assert "# etcdctl del /byUid/~nyff.b.pu" in out
+        assert processor.update_data == {}
+
+    def test_fix_uid_mismatch_transient_snapshot_not_deleted(
+        self, processor, capsys
+    ):
+        """byUid references a transient snapshot that is not the byName
+        id (dispa one-img-113: ~nyff.b.p9, an intermediate baseOn
+        snapshot with children) - StorPool removes such snapshots by
+        itself, so only the stale KV entry is hinted."""
+        tags = {"nvm": "176", "img": "one-img-113", "diskid": "1"}
+        processor.etcd.data = {
+            "byName": {"one-img-113": "~nyff.b.48"},
+            "byUid": {
+                "~nyff.b.48": "one-img-113",
+                "~nyff.b.p9": "one-img-113",
+            },
+        }
+        processor.sp.data = {
+            "~nyff.b.48": _sp_vol(
+                "~nyff.b.48",
+                "nyff.b.48",
+                tags=tags,
+                snapshot=True,
+                onVolume="~nyff.b.p4",
+                parentName="~nyff.b.p9",
+                autoName=True,
+                transient=True,
+            ),
+            "~nyff.b.p9": _sp_vol(
+                "~nyff.b.p9",
+                "nyff.b.p9",
+                tags=tags,
+                snapshot=True,
+                onVolume="~nyff.b.p4",
+                parentName="~nyff.b.pz",
+                autoName=True,
+                transient=True,
+            ),
+        }
+
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "etcdctl del /byUid/~nyff.b.p9" in out
+        assert "snapshot ~nyff.b.p9 delete" not in out
+        assert "transient/anonymous snapshot" in out
+        assert processor.update_data == {}
+
+    def test_fix_uid_mismatch_named_snapshot_still_deleted(
+        self, processor, capsys
+    ):
+        """A user-named (non-transient) snapshot behind a stale byUid
+        entry keeps the StorPool delete hint."""
+        processor.etcd.data = {
+            "byName": {"one-img-9": "~fir.b.aa"},
+            "byUid": {
+                "~fir.b.aa": "one-img-9",
+                "~fir.b.bb": "one-img-9",
+            },
+        }
+        processor.sp.data = {
+            "~fir.b.aa": _sp_vol("~fir.b.aa", "fir.b.aa"),
+            "~fir.b.bb": _sp_vol(
+                "~fir.b.bb", "fir.b.bb", snapshot=True, autoName=False
+            ),
+        }
+
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "etcdctl del /byUid/~fir.b.bb" in out
+        assert "storpool -M -B snapshot ~fir.b.bb delete ~fir.b.bb" in out
+
+
 class TestVmDisks:
     """analyze_vm_disks(): VM disks validated against KV and StorPool."""
 

@@ -448,6 +448,44 @@ class DataProcessing(BaseManager):
             )
             self._update_kv_data(name, uid)
             return
+        byname_entry: Optional[Dict[str, Any]] = self._sp_by_uid(byname_val)
+        if (
+            sp_uid_entry is not None
+            and not sp_uid_entry["snapshot"]
+            and byname_entry is not None
+            and byname_entry["snapshot"]
+            and (
+                byname_entry.get("onVolume") == sp_uid_entry["name"]
+                or sp_uid_entry.get("parentName") == byname_entry["name"]
+            )
+        ):
+            # byName points at a snapshot of the very volume this
+            # byUid entry references (its revert/parent snapshot, same
+            # tags) - the volume is the disk, never hint its deletion.
+            # A volume/snapshot mix for one identity is left to the
+            # administrator: facts only, no queued update.
+            attached: List[Any] = (
+                sp_uid_entry.get("attached") or {}
+            ).get("client", [])
+            self.err(
+                f"byName[{name}] = {byname_val} is a snapshot of the"
+                f" volume {uid} that byUid[{uid}] = {name} references"
+                f" (onVolume={byname_entry.get('onVolume')},"
+                f" volume parentName={sp_uid_entry.get('parentName')},"
+                f" volume attached to clients {attached})",
+                "CONFLICT",
+            )
+            self.dbg(
+                0,
+                f"# etcdctl put /byName/{name} {uid}"
+                "  # verify before rebinding",
+            )
+            self.dbg(
+                0,
+                f"# etcdctl del /byUid/{byname_val}"
+                "  # verify before removing",
+            )
+            return
         if sp_uid_entry is not None:
             if sp_uid_entry["snapshot"]:
                 self.dbg(
@@ -457,7 +495,20 @@ class DataProcessing(BaseManager):
                     f" byName[{name}]={self.etcd.data['byName'][name]}",
                 )
                 self.dbg(0, f"etcdctl del /byUid/{uid}")
-                self.dbg(0, f"storpool -M -B snapshot {uid} delete {uid}")
+                if self._sp_internal(uid, sp_uid_entry):
+                    # a transient/anonymous snapshot (the implicit
+                    # baseOn snapshot of a clone) lives as long as its
+                    # children need it and StorPool removes it by
+                    # itself - only the stale KV entry goes
+                    self.dbg(
+                        0,
+                        f"# {uid} is a transient/anonymous snapshot"
+                        " StorPool removes by itself - not deleting",
+                    )
+                else:
+                    self.dbg(
+                        0, f"storpool -M -B snapshot {uid} delete {uid}"
+                    )
             else:
                 self.dbg(
                     2,
