@@ -1,9 +1,13 @@
-"""Log the reported issues to per-category files (--report)."""
+"""Log the reported issues to per-category files (--report, the
+default; --no-report to skip)."""
 from __future__ import annotations
 from typing import Dict, List, Optional, TextIO
 
 import os
+import shlex
 import time
+
+from ..version import __version__
 
 # Map the reporting method to the issue category (the file name
 # suffix). Reports from methods not listed here land in 'errors'.
@@ -49,13 +53,27 @@ class ReportWriter:
 
     The files are created lazily - a category with no issues leaves
     no file behind. The same lines that go to stdout are written, so
-    the files can be grepped/diffed between runs."""
+    the files can be grepped/diffed between runs.
+
+    The file name carries the run start time to the minute and the
+    files are appended to, so a second run within the same minute
+    lands in the same files. Each run opens its files with a '#'
+    header line (version, start time to the second, command line)
+    to tell the runs apart."""
 
     def __init__(
-        self, directory: str = ".", timestamp: Optional[str] = None
+        self,
+        directory: str = ".",
+        timestamp: Optional[str] = None,
+        argv: Optional[List[str]] = None,
     ) -> None:
         self.directory: str = directory
         self.timestamp: str = timestamp or time.strftime("%Y%m%d-%H%M")
+        self.header: str = (
+            f"# storpool-kvchk {__version__}"
+            f" {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            + (f" {shlex.join(argv)}" if argv else "")
+        )
         self._files: Dict[str, TextIO] = {}
 
     def category(self, caller: str) -> Optional[str]:
@@ -74,6 +92,7 @@ class ReportWriter:
         if out is None:
             out = open(self.path(category), "a")
             self._files[category] = out
+            out.write(self.header + "\n")
         out.write(line + "\n")
         out.flush()
 
