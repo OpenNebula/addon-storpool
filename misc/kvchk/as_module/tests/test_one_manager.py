@@ -152,7 +152,12 @@ class TestoneManager:
                                 mock_ssh_manager):
         """Test successful VM IDs initialization"""
         mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = b"123\n456\n789\n"
+        mock_run.return_value.stdout = (
+            b"ID,NAME,STAT,HOST\n"
+            b"123,vm-a,runn,kvm1\n"
+            b"456,\"vm,b\",snap,kvm2\n"
+            b"789,vm-c,pend,\n"
+        )
 
         with patch.object(oneManager, '_init_hosts'):
             with patch.object(oneManager, '_init_ds_images'):
@@ -160,6 +165,91 @@ class TestoneManager:
                     manager = oneManager(mock_args, mock_ssh_manager)
 
         assert manager.vm_ids == [123, 456, 789]
+        assert manager.vm_list == {
+            123: {"name": "vm-a", "stat": "runn", "host": "kvm1"},
+            456: {"name": "vm,b", "stat": "snap", "host": "kvm2"},
+            789: {"name": "vm-c", "stat": "pend", "host": ""},
+        }
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:2] == ["onevm", "list"]
+        assert "--csv" in cmd
+        assert cmd[cmd.index("--list") + 1] == "ID,NAME,STAT,HOST"
+
+    def test_vm_info_listed_but_not_retrievable(self, mock_args, capsys):
+        """A VM that 'onevm list' shows but one.vm.info cannot get
+        (a broken VM record, e.g. deleted while in a snapshot state)
+        is reported with what the list knows about it, then the
+        error is re-raised"""
+        import pyone
+
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.api = Mock()
+        manager.api.vm.info.side_effect = pyone.OneNoExistsException(
+            "[one.vm.info] Error getting virtual machine [2934]."
+        )
+        manager.vm_list = {
+            2934: {
+                "name": "astana-vpn.hoster.kz",
+                "stat": "snap",
+                "host": "clo-1.hoster.kz",
+            }
+        }
+
+        with pytest.raises(pyone.OneNoExistsException):
+            manager._vm_info(2934)
+
+        out = capsys.readouterr().out
+        assert "[Error]" in out
+        assert "VM 2934 'astana-vpn.hoster.kz'" in out
+        assert "state 'snap'" in out
+        assert "host 'clo-1.hoster.kz'" in out
+        assert "'onevm list' shows the VM" in out
+        assert "'onevm show 2934' fails" in out
+        assert "Error getting virtual machine [2934]" in out
+        assert "removed while in state 'snap'?" in out
+        assert "onedb" in out
+
+    def test_vm_info_not_retrievable_and_not_listed(self, mock_args,
+                                                    capsys):
+        """No 'onevm list' details for the VM - the message still
+        names the VM and the API error"""
+        import pyone
+
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.api = Mock()
+        manager.api.vm.info.side_effect = pyone.OneNoExistsException(
+            "[one.vm.info] Error getting virtual machine [7]."
+        )
+        manager.vm_list = {}
+
+        with pytest.raises(pyone.OneNoExistsException):
+            manager._vm_info(7)
+
+        out = capsys.readouterr().out
+        assert "VM 7 ''" in out
+        assert "state 'unknown'" in out
+        assert "removed while in state 'unknown'?" in out
+        assert "Error getting virtual machine [7]" in out
+
+    def test_vm_info_other_errors_pass_through(self, mock_args, capsys):
+        """Only the not-found case gets the 'listed but not
+        retrievable' message; other API failures propagate as-is"""
+        import pyone
+
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.api = Mock()
+        manager.api.vm.info.side_effect = pyone.OneAuthenticationException(
+            "[one.vm.info] User couldn't be authenticated"
+        )
+        manager.vm_list = {7: {"name": "x", "stat": "runn", "host": "h"}}
+
+        with pytest.raises(pyone.OneAuthenticationException):
+            manager._vm_info(7)
+
+        assert "onevm list" not in capsys.readouterr().out
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')

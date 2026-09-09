@@ -2,7 +2,9 @@ from __future__ import annotations
 from typing import List, Dict, Any, Union, Optional, cast
 
 import os
+import csv
 import copy
+import io
 import socket
 import argparse
 import pprint
@@ -95,6 +97,8 @@ class oneManager(BaseManager):
     one_vms: Dict[int, Dict[str, Any]] = {}
     frontend: Dict[str, Any] = {}
     vm_ids: List[int] = []
+    # 'onevm list' columns per VM ID: name, stat (short state), host
+    vm_list: Dict[int, Dict[str, str]] = {}
 
     def get_one_token(self) -> str:
         """Get OpenNebula token"""
@@ -127,21 +131,56 @@ class oneManager(BaseManager):
         self._get_vm_disks()
 
     def _init_vmids(self) -> None:
-        """List of VM IDs"""
+        """List of VM IDs (and the 'onevm list' columns per VM)"""
         # onevm = one_api.vmpool.info(ONE_POOL_INFO_ALL, -1, -1)
         self.vm_ids: List[int] = []
-        cmd = ["onevm", "list", "--list", "ID", "--csv", "--no-pager"]
+        self.vm_list: Dict[int, Dict[str, str]] = {}
+        columns: List[str] = ["ID", "NAME", "STAT", "HOST"]
+        cmd = [
+            "onevm", "list", "--list", ",".join(columns),
+            "--csv", "--no-pager",
+        ]
         try:
             res = subprocess.run(cmd, capture_output=True, check=True)
             if res.returncode == 0:
                 out = res.stdout.decode("utf-8")
-                for line in out.splitlines():
-                    if line.isnumeric():
-                        self.vm_ids.append(int(line))
+                for row in csv.reader(io.StringIO(out)):
+                    # the first row is the header
+                    if not row or not row[0].isnumeric():
+                        continue
+                    vm_id: int = int(row[0])
+                    self.vm_ids.append(vm_id)
+                    self.vm_list[vm_id] = {
+                        key.lower(): (row[idx] if idx < len(row) else "")
+                        for idx, key in enumerate(columns[1:], start=1)
+                    }
         except subprocess.CalledProcessError as error:
             self.err(f"{error=}")
             raise error
         self.dbg(5, f"self.vm_ids = {self.vm_ids}")
+        self.dbg(6, f"self.vm_list = {pprint.pformat(self.vm_list)}")
+
+    def _vm_info(self, vm_id: int) -> Any:
+        """one.vm.info(vm_id) - a VM that 'onevm list' shows but
+        one.vm.info cannot retrieve is a broken VM record in the
+        OpenNebula database (like a VM removed while stuck in the
+        listed state), not something kvchk can work around: report
+        what the list knows about it and stop"""
+        try:
+            return self.api.vm.info(vm_id)
+        except pyone.OneNoExistsException as error:
+            listed: Dict[str, str] = self.vm_list.get(vm_id, {})
+            state: str = listed.get("stat", "") or "unknown"
+            self.err(
+                f"VM {vm_id} '{listed.get('name', '')}'"
+                f" state '{state}'"
+                f" host '{listed.get('host', '')}':"
+                f" 'onevm list' shows the VM but 'onevm show {vm_id}'"
+                f" fails ({error}). The VM record in the OpenNebula"
+                f" database is broken (removed while in state"
+                f" '{state}'?) - fix or remove it (onedb) and re-run."
+            )
+            raise error
 
     def _init_hosts(self) -> None:
         """Get OpenNebula hosts"""
@@ -770,7 +809,7 @@ class oneManager(BaseManager):
         if self.one_hosts is None:
             self.one_hosts = self.get_hosts()
         for vm_id in self.vm_ids:
-            vm_e: Any = self.api.vm.info(vm_id)
+            vm_e: Any = self._vm_info(vm_id)
             try:
                 sys_ds_id = int(vm_e.HISTORY_RECORDS.HISTORY[-1].DS_ID)
             except Exception as error:
