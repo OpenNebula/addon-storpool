@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import List, Dict, Any, Union, Optional, cast
+from typing import List, Dict, Any, Union, Optional, Tuple, cast
 
 import os
+import re
 import csv
 import copy
 import io
@@ -43,8 +44,50 @@ def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     return bool(tm_mad) and str(tm_mad).startswith("storpool")
 
 
+def parse_vm_qosclass(
+    line: Optional[str],
+) -> Tuple[Optional[str], Dict[int, str]]:
+    """Split the VM SP_QOSCLASS attribute the way oneVmInfo() in
+    tm/storpool/storpool_common.sh does.
+
+    Entries are ';'-separated. An entry without ':' is the VM-wide
+    default (the last one wins). An entry 'N:class' is the class for
+    disk N, where N is the first field with every non-digit removed;
+    the entry is ignored when nothing is left. Entries with more than
+    one ':' are ignored, empty entries too.
+
+    Returns (vm_default, {disk_id: class}). docs/qosclass.md:
+    'SP_QOSCLASS=0:tier1' means disk 0 -> tier1 and no VM default.
+    """
+    vm_default: Optional[str] = None
+    per_disk: Dict[int, str] = {}
+    if not line:
+        return vm_default, per_disk
+    for entry in str(line).split(";"):
+        fields: List[str] = entry.split(":")
+        if len(fields) == 1:
+            if fields[0]:
+                vm_default = fields[0]
+        elif len(fields) == 2:
+            digits: str = re.sub(r"\D", "", fields[0])
+            if digits:
+                per_disk[int(digits)] = fields[1]
+    return vm_default, per_disk
+
+
+# The QoS class levels each disk type walks, highest priority first,
+# DEFAULT_QOSCLASS being the implicit last one. Each chain mirrors the
+# SP_QOSCLASS="${A:-${B:-...}}" line of the addon driver that tags the
+# volume (docs/qosclass.md, "-" = level not applicable):
+#   PERSISTENT    tm/storpool/ln       DISK IMAGE VM SYS_DS IMG_DS
+#   CDROM         tm/storpool/ln       DISK VM SYS_DS (IMAGE, IMG_DS zeroed)
+#   NONPERSISTENT tm/storpool/clone    DISK VM SYS_DS (IMG_DS zeroed)
+#   VOLATILE      tm/storpool/mkimage  DISK VM SYS_DS
+#   CONTEXT       tm/storpool/context  VM SYS_DS (no per-disk level)
+#   NVRAM         tm/storpool/context  VM SYS_DS
+# CHECKPOINT (one-sys-N-rawcheckpoint, tm/storpool/presave) is never
+# tagged with qc, so it has no chain and the selector is not called.
 QOSCLASS_ORDER: Dict[DiskType, List[str]] = {
-    # Order is from highest to lowest priority.
     DiskType.PERSISTENT: [
         "disk_qosclass",
         "img_qosclass",
@@ -56,35 +99,33 @@ QOSCLASS_ORDER: Dict[DiskType, List[str]] = {
         "disk_qosclass",
         "vm_qosclass",
         "sys_ds_qosclass",
-        "img_ds_qosclass",
     ],
     DiskType.CDROM: [
         "disk_qosclass",
         "vm_qosclass",
         "sys_ds_qosclass",
-        "img_ds_qosclass",
     ],
     DiskType.NONPERSISTENT: [
         "disk_qosclass",
         "vm_qosclass",
         "sys_ds_qosclass",
-        "img_ds_qosclass",
     ],
     DiskType.CONTEXT: [
-        "disk_qosclass",
         "vm_qosclass",
         "sys_ds_qosclass",
-        "img_ds_qosclass",
     ],
     DiskType.NVRAM: [
         "vm_qosclass",
         "sys_ds_qosclass",
     ],
-    DiskType.CHECKPOINT: [
-        "vm_qosclass",
-        "sys_ds_qosclass",
-    ],
 }
+
+# Image roots - the one-img-N snapshot every non-persistent image and every
+# detached persistent image is. datastore/storpool/cp, mkfs and clone tag
+# the fresh volume with IMAGE > IMAGE_DS > DEFAULT and freeze it (tags
+# survive); tm/storpool/mvds re-tags the same way before freezing, tm/cpds
+# tags the save-as snapshot with IMAGE_DS > DEFAULT (no image class yet).
+IMAGE_QOSCLASS_ORDER: List[str] = ["img_qosclass", "img_ds_qosclass"]
 
 
 class oneManager(BaseManager):
@@ -238,7 +279,9 @@ class oneManager(BaseManager):
             # tell StorPool-backed datastores from the rest
             datastore_r["tm_mad"] = str(datastore_e.TM_MAD or "")
             datastore_r["ZDBG"] = "_init_datastores"
-            datastore_r["qosclass"] = datastore_e.TEMPLATE.get("SP_QOSCLASS", self.args.default_qosclass)  # noqa: E501
+            # raw value only; the fallback chain lives in _qosclass_selector
+            # and an empty attribute counts as unset there, like ${X:-...}
+            datastore_r["qosclass"] = datastore_e.TEMPLATE.get("SP_QOSCLASS") or None  # noqa: E501
             datastore_r["SP_API_HTTP_HOST"] = datastore_e.TEMPLATE.get("SP_API_HTTP_HOST")  # noqa: E501
             datastore_r["SP_API_HTTP_PORT"] = datastore_e.TEMPLATE.get("SP_API_HTTP_PORT", "81")  # noqa: E501
             datastore_r["SP_AUTH_TOKEN"] = datastore_e.TEMPLATE.get("SP_AUTH_TOKEN")  # noqa: E501
@@ -269,13 +312,24 @@ class oneManager(BaseManager):
         disktype: DiskType,
         disk_id: Optional[int],
         img_qosclass: Optional[str],
-        vm_qosclass: str,
+        vm_qosclass: Optional[str],
         img_ds_id: Optional[int],
         sys_ds_id: Optional[int],
-    ) -> str:
-        """Calculate disk QoS class"""
+        disk_qosclasses: Optional[Dict[int, str]] = None,
+        order: Optional[List[str]] = None,
+    ) -> Optional[str]:
+        """Calculate disk QoS class.
+
+        vm_qosclass is the VM-wide default and disk_qosclasses the
+        per-disk map, both as returned by parse_vm_qosclass(). An empty
+        value at any level is skipped, like the ${A:-${B:-...}} chains
+        in the addon drivers. Returns None when no level resolves, so
+        no 'qc' tag is expected. The levels walked are
+        QOSCLASS_ORDER[disktype] unless an explicit order is given
+        (IMAGE_QOSCLASS_ORDER for image roots)."""
         qosclass_data: Dict[str, Any] = {}
-        return_qosclass: str = self.args.default_qosclass
+        default_qosclass: Optional[str] = self.args.default_qosclass or None
+        return_qosclass: Optional[str] = default_qosclass
         # build options
         if sys_ds_id is not None and sys_ds_id in self.one_datastores:
             qosclass_data["sys_ds_qosclass"] = self.one_datastores[
@@ -288,33 +342,30 @@ class oneManager(BaseManager):
         if img_qosclass:
             qosclass_data["img_qosclass"] = img_qosclass
         if vm_qosclass:
-            qosclass_data["vm_qosclass"] = vm_qosclass.split(';')[0]
-            perdisk: List[str] = vm_qosclass.split(';')
-            if len(perdisk) > 1:
-                for _entry in perdisk:
-                    perdisk_entry: List[str] = _entry.split(':')
-                    if len(perdisk_entry) == 2:
-                        if (
-                            disk_id is not None
-                            and int(perdisk_entry[0]) == disk_id
-                        ):
-                            qosclass_data["disk_qosclass"] = perdisk_entry[1]
+            qosclass_data["vm_qosclass"] = vm_qosclass
+        if (
+            disk_id is not None
+            and disk_qosclasses
+            and disk_id in disk_qosclasses
+        ):
+            qosclass_data["disk_qosclass"] = disk_qosclasses[disk_id]
 
         # select qosclass
         matched_qosclass: str = "n/a"
-        for qosclass_name in QOSCLASS_ORDER[disktype]:
-            if qosclass_name in qosclass_data:
-                if qosclass_data[qosclass_name] is not None:
-                    return_qosclass = qosclass_data[qosclass_name]
-                    matched_qosclass = qosclass_name
-                    break
+        if order is None:
+            order = QOSCLASS_ORDER[disktype]
+        for qosclass_name in order:
+            if qosclass_data.get(qosclass_name):
+                return_qosclass = qosclass_data[qosclass_name]
+                matched_qosclass = qosclass_name
+                break
         else:
-            return_qosclass = self.args.default_qosclass
-            matched_qosclass = "default"
+            return_qosclass = default_qosclass
+            matched_qosclass = "default" if default_qosclass else "none"
         self.dbg(
             5,
             f"{disktype.name} {disk_id=} {return_qosclass=} "
-            f"{matched_qosclass=} {qosclass_data=}",
+            f"{matched_qosclass=} {order=} {qosclass_data=}",
         )
         return return_qosclass
 
@@ -322,7 +373,7 @@ class oneManager(BaseManager):
         """Volume dict building helper"""
         self.dbg(6, f"{vdata=}")
         img_ds_id: int = vdata["img_ds_id"]
-        v_info: Dict[str, Union[str, int, bool, DiskType]] = {
+        v_info: Dict[str, Union[str, int, bool, None, DiskType]] = {
             "vm_id": int(vdata["vm_id"]),
             "disk_id": int(vdata["disk_id"]),
             "snapshot": False,
@@ -348,7 +399,7 @@ class oneManager(BaseManager):
                 v_info["disktype"] = DiskType.PERSISTENT
             v_info["legacy"] = v_name
             if v_name in self.ds_images:
-                img_qosclass = self.ds_images[v_name].get("qosclass")
+                img_qosclass = self.ds_images[v_name].get("img_qosclass")
         else:
             v_name = f"{v_name}-sys-{vdata['vm_id']}-{vdata['disk_id']}"
             v_info["disktype"] = DiskType.VOLATILE
@@ -368,6 +419,7 @@ class oneManager(BaseManager):
             vdata["qosclass"],
             vdata["img_ds_id"],
             vdata["sys_ds_id"],
+            vdata.get("disk_qosclasses"),
         )
         v_info["vc-policy"] = vdata["vc-policy"]
         return v_info
@@ -435,10 +487,22 @@ class oneManager(BaseManager):
                 "snapshot": True,
                 "virt": "one",
                 "nloc": self.args.one_px,
-                "qosclass": img_e.TEMPLATE.get("SP_QOSCLASS"),
+                # the image's own SP_QOSCLASS, the IMAGE level of the VM
+                # disk chains (tm/ln) - raw, blank is unset
+                "img_qosclass": img_e.TEMPLATE.get("SP_QOSCLASS") or None,
                 "datastore_id": ds_id,
                 "ZDBG": "_get_ds_images",
             }
+            # the qc the image root snapshot carries
+            img_dict["qosclass"] = self._qosclass_selector(
+                img_dict["disktype"],
+                None,
+                img_dict["img_qosclass"],
+                None,
+                ds_id,
+                None,
+                order=IMAGE_QOSCLASS_ORDER,
+            )
             img_dict["vms"] = len(img_dict["vmlist"])
             if img_dict["disktype"] == DiskType.PERSISTENT:
                 if img_dict["vms"] > 0:
@@ -531,10 +595,12 @@ class oneManager(BaseManager):
     ) -> Dict[str, Any]:
         """Get VM system disks/volumes"""
         vc_policy: str = vm_e.USER_TEMPLATE.get("VC_POLICY")
-        vm_qosclass: str = vm_e.USER_TEMPLATE.get("SP_QOSCLASS")
+        vm_qosclass_line: Optional[str] = vm_e.USER_TEMPLATE.get("SP_QOSCLASS")  # noqa: E501
+        vm_qosclass, disk_qosclasses = parse_vm_qosclass(vm_qosclass_line)
         self.dbg(
             6,
-            f"** VM {vm_e.ID} {sys_ds_id=} {vm_qosclass=} {vc_policy=}",
+            f"** VM {vm_e.ID} {sys_ds_id=} {vm_qosclass_line=}"
+            f" {vm_qosclass=} {disk_qosclasses=} {vc_policy=}",
         )
         vm_disks: Dict[str, Any] = {}
         vm_id: int = int(vm_e.ID)
@@ -582,6 +648,8 @@ class oneManager(BaseManager):
                          f"/disk.{disk_id}"),
                 # fmt: on
             }
+            # tm/storpool/context resolves VM_SP_QOSCLASS > DS > DEFAULT
+            # and never looks at the per-disk entries
             v_info["qosclass"] = self._qosclass_selector(
                 cast(DiskType, v_info["disktype"]),
                 cast(Optional[int], v_info["disk_id"]),
@@ -590,6 +658,12 @@ class oneManager(BaseManager):
                 None,
                 sys_ds_id,
             )
+            if not getattr(self.args, "tag_context_iso", True):
+                # TAG_CONTEXT_ISO=0: tm/storpool/context leaves the volume
+                # with the creation tags (virt, nloc, type, diskid, nvm)
+                # and never writes qc or vc-policy
+                del v_info["qosclass"]
+                del v_info["vc-policy"]
             v_info["ZDBG"] = "_process_vm_system_disks"
             if host:
                 v_info["host"] = host
@@ -664,15 +738,9 @@ class oneManager(BaseManager):
                 "vc-policy": vc_policy,
                 "state": state,
                 "lcm_state": lcm_state,
+                # no "qosclass": tm/storpool/presave tags the checkpoint
+                # volume with virt, nloc, nvm, vc-policy and type only
             }
-            v_info["qosclass"] = self._qosclass_selector(
-                cast(DiskType, v_info["disktype"]),
-                None,
-                None,
-                vm_qosclass,
-                None,
-                sys_ds_id,
-            )
             v_info["ZDBG"] = "get_vm_system_disks"
             v_info["vm_id"] = f"{vm_id}"
             vm_disks[v_name] = v_info
@@ -687,13 +755,14 @@ class oneManager(BaseManager):
         links: Dict[str, str],
     ) -> Dict[str, Any]:
         """Get VM disks"""
-        vm_qosclass: str = vm_element.USER_TEMPLATE.get("SP_QOSCLASS", self.args.default_qosclass)  # noqa: E501
+        vm_qosclass_line: Optional[str] = vm_element.USER_TEMPLATE.get("SP_QOSCLASS")  # noqa: E501
+        vm_qosclass, disk_qosclasses = parse_vm_qosclass(vm_qosclass_line)
         vc_policy: str = vm_element.USER_TEMPLATE.get("VC_POLICY")
         self.dbg(
             6,
             f"** VM {vm_element.ID} {vm_snaps_list=}"
-            + f" {disk_snaps=} {links=}"
-            + f" {vm_qosclass=} {vc_policy=}",
+            + f" {disk_snaps=} {links=} {vm_qosclass_line=}"
+            + f" {vm_qosclass=} {disk_qosclasses=} {vc_policy=}",
         )
         vm_disks: Dict[str, Any] = {}
         vm_details: Dict[str, Any] = {
@@ -704,10 +773,8 @@ class oneManager(BaseManager):
             "lcm_state": int(vm_element.LCM_STATE),
             "disks": [],
         }
-        if vm_qosclass:
-            vm_details["qosclass"] = vm_qosclass.split(';')[0]
-        else:
-            vm_details["qosclass"] = self.args.default_qosclass
+        vm_details["qosclass"] = vm_qosclass
+        vm_details["disk_qosclasses"] = disk_qosclasses
         vm_details["disks"] = self._get_vm_disks_list(vm_element)
         for disk in vm_details["disks"]:
             if disk is None:
@@ -741,6 +808,7 @@ class oneManager(BaseManager):
                     "sys_ds_id": vm_details["ds_id"],
                     "img_ds_id": img_ds_id,
                     "qosclass": vm_qosclass,
+                    "disk_qosclasses": disk_qosclasses,
                     "vc-policy": vc_policy,
                     "tm_mad": tm_mad,
                 }

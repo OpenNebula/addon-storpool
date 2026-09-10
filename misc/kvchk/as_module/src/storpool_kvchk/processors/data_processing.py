@@ -1787,20 +1787,22 @@ class DataProcessing(BaseManager):
             tagsmap.append(("disk_id", "diskid"))
             tagsmap.append(("vc-policy", "vc-policy"))
             tagsmap.append(("qosclass", "qc"))
+        elif "image_id" in onerec and "snap" not in onerec:
+            # an image root (one-img-N as a snapshot): the datastore
+            # drivers and tm/mvds tag it with qc before freezing, see
+            # IMAGE_QOSCLASS_ORDER. Disk/VM/image -snapN snapshots
+            # never carry qc.
+            tagsmap.append(("qosclass", "qc"))
         for onekey, spkey in tagsmap:
             self.dbg(15, f"{onerec['spname']} {onekey=} from tagsmap: {onekey=} -> {spkey=}")  # noqa: E501
             if onekey in onerec and onerec[onekey] is not None:
+                if onekey == "qosclass" and onerec[onekey] == "":
+                    # no class resolved: the addon writes a bare 'qc'
+                    # key with an empty value (tm/ln), i.e. no tag
+                    continue
                 tags[spkey] = str(onerec[onekey])
                 self.dbg(15, f"{onerec['spname']} added {onekey=} -> {tags[spkey]=}")  # noqa: E501
-        if onerec["snapshot"]:
-            for tagkey, tagval in tags.items():
-                if (
-                    tagkey not in [tagtuple[1] for tagtuple in tagsmap]
-                    and tagval != ""
-                ):
-                    self.dbg(15, f"{onerec['spname']} {tagkey=} removed from tags because not in tagsmap: {tagkey=} -> {tagval=}")  # noqa: E501
-                    tags[tagkey] = ""
-        else:
+        if not onerec["snapshot"]:
             if "disktype" in onerec:
                 if onerec["disktype"].name == "CONTEXT":
                     tags["type"] = "CNTXT"

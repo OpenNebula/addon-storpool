@@ -117,6 +117,16 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
              " auto-enables SKIP_UNDEPLOY_SSH for VMs with all"
              " disks on StorPool TMs, bool-like string",
     )
+    parser.add_argument(
+        "--tag-context-iso",
+        action="store",
+        default=defaults.get("TAG_CONTEXT_ISO", os.getenv("TAG_CONTEXT_ISO", "1")),  # type: ignore[attr-defined] # noqa: E501
+        nargs="?",
+        type=str,
+        help="TAG_CONTEXT_ISO from addon-storpoolrc - tm/context tags"
+             " the context ISO volume with qc and vc-policy only when"
+             " enabled (the addon default), bool-like string",
+    )
 
     parser.add_argument(
         "-R",
@@ -155,6 +165,7 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
     args = parser.parse_args()
     args.skip_undeploy_ssh = bool_true(args.skip_undeploy_ssh)
     args.sp_checkpoint_bd = bool_true(args.sp_checkpoint_bd)
+    args.tag_context_iso = bool_true(args.tag_context_iso)
     args.hanging_min_age = int(args.hanging_min_age)
     if args.verbose > 0:
         print(f"parse_arguments() {args=}")
