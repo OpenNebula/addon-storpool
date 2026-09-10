@@ -1570,3 +1570,105 @@ class TestPreservedGlobalId:
         entry = processor.update_data["one-sys-26-1"]
         assert entry["data"]["uid"] == "~fir.b.jm"
         assert "kv" in entry["action"]
+
+
+class TestBuildTagsQosclass:
+    """_build_tags(): the qc tag follows the resolved class"""
+
+    def _volume(self, qosclass):
+        return {
+            "spname": "one-img-5-123-0",
+            "img": "one-img-5-123-0",
+            "legacy": "one-img-5-123-0",
+            "snapshot": False,
+            "vm_id": 123,
+            "disk_id": 0,
+            "nloc": "one",
+            "virt": "one",
+            "disktype": DiskType.NONPERSISTENT,
+            "qosclass": qosclass,
+        }
+
+    def test_class_becomes_qc(self, processor):
+        tags = processor._build_tags(self._volume("tier1"))
+        assert tags["qc"] == "tier1"
+
+    @pytest.mark.parametrize("qosclass", [None, ""])
+    def test_no_class_means_no_qc(self, processor, qosclass):
+        tags = processor._build_tags(self._volume(qosclass))
+        assert "qc" not in tags
+
+
+class TestImageRootSnapshotQc:
+    """The one-img-N root snapshot keeps the qc the addon wrote
+    (kvchk-vs-addon-tags.md, image 645 on hoster.kz)"""
+
+    def _root(self, qosclass):
+        return {
+            "image_id": 645,
+            "spname": "one-img-645",
+            "legacy": "one-img-645",
+            "img": "one-img-645",
+            "imagetype": ImageType.CDROM,
+            "disktype": DiskType.NONPERSISTENT,
+            "snapshot": True,
+            "virt": "one",
+            "nloc": "one",
+            "img_qosclass": None,
+            "qosclass": qosclass,
+            "vms": 0,
+        }
+
+    def _sp_root(self, tags):
+        return {
+            "globalId": "b6uw.b.wiyms",
+            "name": "~b6uw.b.wiyms",
+            "snapshot": True,
+            "tags": tags,
+            "sp_api_http_host": None,
+        }
+
+    def test_root_expects_qc(self, processor):
+        tags = processor._build_tags(self._root("tier0"))
+        assert tags["qc"] == "tier0"
+        assert "diskid" not in tags and "vc-policy" not in tags
+
+    def test_root_without_class_expects_no_qc(self, processor):
+        assert "qc" not in processor._build_tags(self._root(None))
+
+    def test_image_snapN_never_expects_qc(self, processor):
+        snap = {
+            "id": 1, "spname": "one-img-645-snap1",
+            "legacy": "one-img-645-snap1", "img": "one-img-645",
+            "snap": "snap1", "snapshot": True, "virt": "one",
+            "nloc": "one", "vms": 0, "qosclass": "tier0",
+        }
+        assert "qc" not in processor._build_tags(snap)
+
+    def test_matching_qc_queues_nothing(self, processor):
+        """the log case: SnapshotUpdate {'tags': {'qc': ''}} on every run"""
+        sp = self._sp_root(
+            {"virt": "one", "nloc": "one", "qc": "tier0",
+             "img": "one-img-645"}
+        )
+        assert processor._build_sp_update(sp, self._root("tier0")) == {}
+
+    def test_changed_class_is_corrected(self, processor):
+        sp = self._sp_root(
+            {"virt": "one", "nloc": "one", "qc": "tier0",
+             "img": "one-img-645"}
+        )
+        update = processor._build_sp_update(sp, self._root("tier1"))
+        assert update["data"]["tags"] == {"qc": "tier1"}
+
+    def test_volume_to_root_freeze_keeps_qc(self, processor):
+        """image 631 in the log: VolumeFreeze must not carry qc: ''"""
+        sp = {
+            "globalId": "c.b.631", "name": "~c.b.631", "snapshot": False,
+            "tags": {"virt": "one", "nloc": "one", "qc": "tier0",
+                     "img": "one-img-645"},
+            "sp_api_http_host": None, "attached": None,
+        }
+        update = processor._build_sp_update(sp, self._root("tier0"))
+        assert update["action"][0] == "VolumeFreeze"
+        assert "tags" not in update["data"]

@@ -6,6 +6,8 @@ import os
 from storpool_kvchk.managers.one_manager import (
     oneManager,
     is_storpool_tm_mad,
+    parse_vm_qosclass,
+    IMAGE_QOSCLASS_ORDER,
     ONE_POOL_INFO_ALL,
 )
 OpenNebulaManager = oneManager
@@ -22,6 +24,7 @@ def mock_args():
     args.one_token = None
     args.one_px = "one"
     args.default_qosclass = "default-qos"
+    args.tag_context_iso = True
     return args
 
 
@@ -839,6 +842,8 @@ class TestoneManager:
         assert manager.ds_images[expected_name]["image_id"] == 1
         assert manager.ds_images[expected_name]["imagetype"] == ImageType(0)
         assert manager.ds_images[expected_name]["disktype"] == DiskType(1)
+        assert manager.ds_images[expected_name]["img_qosclass"] == "img-qos"
+        assert manager.ds_images[expected_name]["qosclass"] == "img-qos"
         # Must request ALL images (-2), not user+groups (-1): otherwise
         # base images owned by other users/groups are invisible while
         # their NPERS clones still appear via onevm list.
@@ -1033,9 +1038,10 @@ class TestQosClassSelector:
             disktype=DiskType.PERSISTENT,
             disk_id=0,
             img_qosclass="img-qos",
-            vm_qosclass="vm-qos;0:disk0-qos;1:disk1-qos",
+            vm_qosclass="vm-qos",
             img_ds_id=2,
-            sys_ds_id=1
+            sys_ds_id=1,
+            disk_qosclasses={0: "disk0-qos", 1: "disk1-qos"},
         )
 
         assert result == "disk0-qos"
@@ -1093,13 +1099,14 @@ class TestQosClassSelector:
             disktype=DiskType.VOLATILE,
             disk_id=0,
             img_qosclass=None,
-            vm_qosclass="vm-qos;0:disk0-qos",
+            vm_qosclass="vm-qos",
             img_ds_id=2,
-            sys_ds_id=1
+            sys_ds_id=1,
+            disk_qosclasses={0: "disk0-qos"},
         )
 
         # For volatile, order is: disk_qosclass, vm_qosclass,
-        # sys_ds_qosclass, img_ds_qosclass
+        # sys_ds_qosclass (tm/storpool/mkimage)
         assert result == "disk0-qos"
 
     def test_qosclass_cdrom_vm_qosclass(self, mock_args):
@@ -1169,9 +1176,12 @@ class TestQosClassSelector:
             disktype=DiskType.PERSISTENT,
             disk_id=1,
             img_qosclass=None,
-            vm_qosclass="default-vm-qos;0:disk0-qos;1:disk1-qos;2:disk2-qos",
+            vm_qosclass="default-vm-qos",
             img_ds_id=None,
-            sys_ds_id=None
+            sys_ds_id=None,
+            disk_qosclasses={
+                0: "disk0-qos", 1: "disk1-qos", 2: "disk2-qos"
+            },
         )
 
         assert result == "disk1-qos"
@@ -1194,6 +1204,426 @@ class TestQosClassSelector:
         )
 
         assert result == "sys-ds-qos"
+
+
+class TestParseVmQosclass:
+    """parse_vm_qosclass() mirrors oneVmInfo() in storpool_common.sh"""
+
+    def test_empty(self):
+        assert parse_vm_qosclass(None) == (None, {})
+        assert parse_vm_qosclass("") == (None, {})
+
+    def test_vm_default_only(self):
+        assert parse_vm_qosclass("tier0") == ("tier0", {})
+
+    def test_perdisk_only_no_vm_default(self):
+        # docs/qosclass.md: SP_QOSCLASS=0:tier1 tags disk 0 only
+        assert parse_vm_qosclass("0:tier1") == (None, {0: "tier1"})
+
+    def test_vm_default_and_perdisk(self):
+        assert parse_vm_qosclass("tier0;2:tier1;4:tier2") == (
+            "tier0", {2: "tier1", 4: "tier2"}
+        )
+
+    def test_last_vm_default_wins(self):
+        assert parse_vm_qosclass("a;b") == ("b", {})
+
+    def test_three_fields_ignored(self):
+        assert parse_vm_qosclass("x:y:z;tier0") == ("tier0", {})
+
+    def test_disk_id_non_digits_stripped(self):
+        assert parse_vm_qosclass("d1:tier") == (None, {1: "tier"})
+
+    def test_disk_id_without_digits_ignored(self):
+        assert parse_vm_qosclass("abc:tier") == (None, {})
+
+    def test_empty_entries_dropped(self):
+        assert parse_vm_qosclass(";tier0;;1:x;") == ("tier0", {1: "x"})
+
+
+class TestProcessVmDisksQosclassParsing:
+    """SP_QOSCLASS on the VM reaches the disks the way the addon
+    reads it (item 3.6 in kvchk-vs-addon-tags.md)"""
+
+    def _vm(self, sp_qosclass):
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", DS_ID=1, TM_MAD="storpool")
+        ]
+        vm_mock.TEMPLATE.get.side_effect = lambda key, default=None: {
+            "DISK": [
+                {"DISK_ID": 0, "IMAGE_ID": 5, "CLONE": "YES",
+                 "TYPE": "BLOCK", "DATASTORE_ID": 2, "TM_MAD": "storpool"},
+                {"DISK_ID": 1, "IMAGE_ID": 6, "CLONE": "YES",
+                 "TYPE": "BLOCK", "DATASTORE_ID": 2, "TM_MAD": "storpool"},
+            ],
+        }.get(key, default)
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "SP_QOSCLASS": sp_qosclass,
+            "VC_POLICY": None,
+        }.get(key, default)
+        return vm_mock
+
+    def _manager(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.args.default_qosclass = None
+        manager.one_datastores = {
+            1: {"qosclass": None, "tm_mad": "storpool"},
+            2: {"qosclass": None, "tm_mad": "storpool"},
+        }
+        manager.ds_images = {}
+        return manager
+
+    def test_perdisk_entry_only(self, mock_args):
+        manager = self._manager(mock_args)
+        vm_disks = manager._process_vm_disks(self._vm("0:tier1"), [], {}, {})
+        assert vm_disks["one-img-5-123-0"]["qosclass"] == "tier1"
+        # disk 1 has no class at any level: no VM default was given
+        assert vm_disks["one-img-6-123-1"]["qosclass"] is None
+
+    def test_vm_default_and_perdisk_entry(self, mock_args):
+        manager = self._manager(mock_args)
+        vm_disks = manager._process_vm_disks(
+            self._vm("tier0;1:tier1"), [], {}, {}
+        )
+        assert vm_disks["one-img-5-123-0"]["qosclass"] == "tier0"
+        assert vm_disks["one-img-6-123-1"]["qosclass"] == "tier1"
+
+
+class TestQosClassEmptyIsUnset:
+    """An empty SP_QOSCLASS at any level is skipped like the ${A:-${B}}
+    chains in the addon; nothing resolved means no class at all"""
+
+    def test_empty_ds_class_falls_through_to_default(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {1: {"qosclass": ""}}
+        result = manager._qosclass_selector(
+            disktype=DiskType.VOLATILE,
+            disk_id=0,
+            img_qosclass=None,
+            vm_qosclass="",
+            img_ds_id=None,
+            sys_ds_id=1,
+        )
+        assert result == "default-qos"
+
+    def test_empty_perdisk_entry_falls_through(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {1: {"qosclass": "sys-ds-qos"}}
+        result = manager._qosclass_selector(
+            disktype=DiskType.VOLATILE,
+            disk_id=0,
+            img_qosclass=None,
+            vm_qosclass=None,
+            img_ds_id=None,
+            sys_ds_id=1,
+            disk_qosclasses={0: ""},
+        )
+        assert result == "sys-ds-qos"
+
+    @pytest.mark.parametrize("default", [None, ""])
+    def test_nothing_resolved_is_none(self, mock_args, default):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.args.default_qosclass = default
+        manager.one_datastores = {1: {"qosclass": None}}
+        result = manager._qosclass_selector(
+            disktype=DiskType.PERSISTENT,
+            disk_id=0,
+            img_qosclass="",
+            vm_qosclass=None,
+            img_ds_id=None,
+            sys_ds_id=1,
+        )
+        assert result is None
+
+    def test_vm_without_class_takes_system_ds_not_default(self, mock_args):
+        """DEFAULT_QOSCLASS used to be seeded as the VM class and shadow
+        the system datastore class (tm/clone: VM > SYS_DS > DEFAULT)"""
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {
+            1: {"qosclass": "sys-ds-qos", "tm_mad": "storpool"},
+            2: {"qosclass": None, "tm_mad": "storpool"},
+        }
+        manager.ds_images = {}
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", DS_ID=1, TM_MAD="storpool")
+        ]
+        vm_mock.TEMPLATE.get.side_effect = lambda key, default=None: {
+            "DISK": {"DISK_ID": 0, "IMAGE_ID": 5, "CLONE": "YES",
+                     "TYPE": "BLOCK", "DATASTORE_ID": 2,
+                     "TM_MAD": "storpool"},
+        }.get(key, default)
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "VC_POLICY": None,
+        }.get(key, default)
+
+        vm_disks = manager._process_vm_disks(vm_mock, [], {}, {})
+
+        assert vm_disks["one-img-5-123-0"]["qosclass"] == "sys-ds-qos"
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    def test_init_datastores_blank_class_is_none(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
+    ):
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+        ds_mock = mock_pyone_api.datastorepool.info.return_value.get_DATASTORE.return_value[0]  # noqa: E501
+        ds_mock.TEMPLATE.get.return_value = ""
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        assert manager.one_datastores[1]["qosclass"] is None
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    def test_init_ds_images_blank_class_is_none(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
+    ):
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+        img_mock = mock_pyone_api.imagepool.info.return_value.get_IMAGE.return_value[0]  # noqa: E501
+        img_mock.TEMPLATE.get.return_value = ""
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        assert manager.ds_images["one-img-1"]["img_qosclass"] is None
+        # the root snapshot's qc falls through to the image datastore
+        assert manager.ds_images["one-img-1"]["qosclass"] == "ds-qos"
+
+
+class TestQosClassChainsPerDiskType:
+    """Each disk type walks the levels of the addon driver that tags it
+    (item 3.4/3.5 in kvchk-vs-addon-tags.md)"""
+
+    def _manager(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {
+            1: {"qosclass": None, "tm_mad": "storpool"},   # system DS
+            2: {"qosclass": "img-ds-qos", "tm_mad": "storpool"},  # image DS
+        }
+        manager.ds_images = {}
+        return manager
+
+    @pytest.mark.parametrize(
+        "disktype",
+        [DiskType.NONPERSISTENT, DiskType.CDROM, DiskType.VOLATILE],
+    )
+    def test_image_ds_class_not_used(self, mock_args, disktype):
+        """tm/clone and tm/ln (CDROM) zero IMAGE_DS_SP_QOSCLASS, mkimage
+        never reads it: the image datastore class is not a level"""
+        manager = self._manager(mock_args)
+        result = manager._qosclass_selector(
+            disktype=disktype,
+            disk_id=0,
+            img_qosclass=None,
+            vm_qosclass=None,
+            img_ds_id=2,
+            sys_ds_id=1,
+        )
+        assert result == "default-qos"
+
+    def test_persistent_keeps_image_ds_level(self, mock_args):
+        """tm/ln: ... SYSTEM_DS > IMAGE_DS > DEFAULT for persistent"""
+        manager = self._manager(mock_args)
+        result = manager._qosclass_selector(
+            disktype=DiskType.PERSISTENT,
+            disk_id=0,
+            img_qosclass=None,
+            vm_qosclass=None,
+            img_ds_id=2,
+            sys_ds_id=1,
+        )
+        assert result == "img-ds-qos"
+
+    def test_context_has_no_perdisk_level(self, mock_args):
+        """tm/context uses VM_SP_QOSCLASS only; an N:class entry naming
+        the CONTEXT disk id is ignored"""
+        manager = self._manager(mock_args)
+        manager.one_datastores[1]["qosclass"] = "sys-ds-qos"
+        result = manager._qosclass_selector(
+            disktype=DiskType.CONTEXT,
+            disk_id=1,
+            img_qosclass=None,
+            vm_qosclass=None,
+            img_ds_id=None,
+            sys_ds_id=1,
+            disk_qosclasses={1: "disk1-qos"},
+        )
+        assert result == "sys-ds-qos"
+
+    def _vm(self, sp_qosclass, state=3):
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = state
+        vm_mock.LCM_STATE = 0 if state != 3 else 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", DS_ID=1, TM_MAD="storpool")
+        ]
+        vm_mock.TEMPLATE.get.side_effect = lambda key, default=None: {
+            "CONTEXT": {"DISK_ID": 1},
+        }.get(key, default)
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "SP_QOSCLASS": sp_qosclass,
+            "VC_POLICY": "vc1",
+        }.get(key, default)
+        return vm_mock
+
+    def test_context_volume_ignores_perdisk_entry(self, mock_args):
+        manager = self._manager(mock_args)
+        vm_disks = manager._process_vm_system_disks(
+            self._vm("vm-qos;1:disk1-qos"), 1, [], {}
+        )
+        assert vm_disks["one-sys-123-1"]["qosclass"] == "vm-qos"
+
+    def test_checkpoint_volume_has_no_qosclass(self, mock_args):
+        """tm/storpool/presave never writes qc on one-sys-N-rawcheckpoint"""
+        manager = self._manager(mock_args)
+        manager.one_datastores[1]["qosclass"] = "sys-ds-qos"
+        vm_disks = manager._process_vm_system_disks(
+            self._vm("vm-qos", state=4), 1, [], {}
+        )
+        chk = vm_disks["one-sys-123-rawcheckpoint"]
+        assert chk["disktype"] == DiskType.CHECKPOINT
+        assert "qosclass" not in chk
+        assert chk["vc-policy"] == "vc1"
+
+
+class TestTagContextIso:
+    """TAG_CONTEXT_ISO gates qc and vc-policy on the context ISO volume
+    (tm/storpool/context, item 3.3 in kvchk-vs-addon-tags.md)"""
+
+    def _vm(self):
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", DS_ID=1, TM_MAD="storpool")
+        ]
+        vm_mock.TEMPLATE.get.side_effect = lambda key, default=None: {
+            "CONTEXT": {"DISK_ID": 1},
+        }.get(key, default)
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "SP_QOSCLASS": "vm-qos",
+            "VC_POLICY": "vc1",
+            "T_OS_LOADER": "OVMF",
+        }.get(key, default)
+        return vm_mock
+
+    def _manager(self, mock_args, enabled):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.args.tag_context_iso = enabled
+        manager.one_datastores = {1: {"qosclass": None, "tm_mad": "storpool"}}
+        manager.ds_images = {}
+        return manager
+
+    def test_enabled_expects_qc_and_vc_policy(self, mock_args):
+        manager = self._manager(mock_args, True)
+        vm_disks = manager._process_vm_system_disks(
+            self._vm(), 1, ["snap1"], {}
+        )
+        ctx = vm_disks["one-sys-123-1"]
+        assert ctx["qosclass"] == "vm-qos"
+        assert ctx["vc-policy"] == "vc1"
+
+    def test_disabled_expects_neither(self, mock_args):
+        manager = self._manager(mock_args, False)
+        vm_disks = manager._process_vm_system_disks(
+            self._vm(), 1, ["snap1"], {}
+        )
+        ctx = vm_disks["one-sys-123-1"]
+        assert ctx["disktype"] == DiskType.CONTEXT
+        assert "qosclass" not in ctx
+        assert "vc-policy" not in ctx
+        # the other tags are untouched
+        assert ctx["disk_id"] == 1
+        assert ctx["vm_id"] == 123
+        # the VM snapshot copy never had them either
+        snap = vm_disks["one-sys-123-1-snap1"]
+        assert "qosclass" not in snap and "vc-policy" not in snap
+        # NVRAM is not gated by TAG_CONTEXT_ISO
+        nvram = vm_disks["one-sys-123-NVRAM"]
+        assert nvram["qosclass"] == "vm-qos"
+        assert nvram["vc-policy"] == "vc1"
+
+    def test_missing_attribute_means_enabled(self, mock_args):
+        """the addon default is TAG_CONTEXT_ISO=1"""
+        manager = self._manager(mock_args, True)
+        del manager.args.tag_context_iso
+        vm_disks = manager._process_vm_system_disks(self._vm(), 1, [], {})
+        assert vm_disks["one-sys-123-1"]["qosclass"] == "vm-qos"
+
+
+class TestImageRootQosclass:
+    """one-img-N root snapshots carry IMAGE > IMAGE_DS > DEFAULT
+    (datastore/storpool/cp, mkfs, clone; tm/storpool/mvds, cpds)"""
+
+    def _manager(self, mock_args, ds_qos):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {2: {"qosclass": ds_qos}}
+        return manager
+
+    def test_image_class_wins(self, mock_args):
+        manager = self._manager(mock_args, "img-ds-qos")
+        assert manager._qosclass_selector(
+            DiskType.NONPERSISTENT, None, "img-qos", None, 2, None,
+            order=IMAGE_QOSCLASS_ORDER,
+        ) == "img-qos"
+
+    def test_image_ds_then_default(self, mock_args):
+        manager = self._manager(mock_args, "img-ds-qos")
+        assert manager._qosclass_selector(
+            DiskType.NONPERSISTENT, None, None, None, 2, None,
+            order=IMAGE_QOSCLASS_ORDER,
+        ) == "img-ds-qos"
+        manager = self._manager(mock_args, None)
+        assert manager._qosclass_selector(
+            DiskType.NONPERSISTENT, None, None, None, 2, None,
+            order=IMAGE_QOSCLASS_ORDER,
+        ) == "default-qos"
+
+    def test_vm_and_system_ds_levels_do_not_apply(self, mock_args):
+        manager = self._manager(mock_args, None)
+        manager.args.default_qosclass = None
+        manager.one_datastores[1] = {"qosclass": "sys-ds-qos"}
+        assert manager._qosclass_selector(
+            DiskType.PERSISTENT, 0, None, "vm-qos", 2, 1,
+            disk_qosclasses={0: "disk-qos"}, order=IMAGE_QOSCLASS_ORDER,
+        ) is None
+
+    def test_raw_image_class_feeds_the_persistent_disk_chain(self, mock_args):
+        """the resolved root class must not leak into the IMAGE level
+        of tm/ln's chain: a DS-only class must lose to the VM class"""
+        manager = self._manager(mock_args, "img-ds-qos")
+        manager.one_datastores[1] = {"qosclass": None}
+        manager.ds_images = {
+            "one-img-1": {"img_qosclass": None, "qosclass": "img-ds-qos"}
+        }
+        v_info = manager._prepare_vm_disk({
+            "one_px": "one", "vm_id": 123, "disk_id": 0, "image_id": 1,
+            "clone": "NO", "type": "BLOCK", "fs": "", "sys_ds_id": 1,
+            "img_ds_id": 2, "qosclass": "vm-qos", "vc-policy": None,
+        })
+        assert v_info["disktype"] == DiskType.PERSISTENT
+        assert v_info["qosclass"] == "vm-qos"
 
 
 class TestInitDatastores:
@@ -1421,7 +1851,8 @@ class TestPrepareVMDiskWithQoS:
             "fs": "",
             "sys_ds_id": 1,
             "img_ds_id": -1,
-            "qosclass": "vm-qos;0:disk0-specific-qos;1:disk1-qos",
+            "qosclass": "vm-qos",
+            "disk_qosclasses": {0: "disk0-specific-qos", 1: "disk1-qos"},
             "vc-policy": None
         }
 
@@ -1438,7 +1869,7 @@ class TestPrepareVMDiskWithQoS:
             2: {"qosclass": "img-ds-qos"}
         }
         manager.ds_images = {
-            "one-img-1": {"qosclass": "image-specific-qos"}
+            "one-img-1": {"img_qosclass": "image-specific-qos"}
         }
 
         vdata = {

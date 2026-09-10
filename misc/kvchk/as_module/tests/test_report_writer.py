@@ -133,3 +133,19 @@ def test_report_is_the_default(monkeypatch):
     assert parse_arguments({}).report is False
     monkeypatch.setattr("sys.argv", ["storpool-kvchk", "-R"])
     assert parse_arguments({}).report is True
+
+
+def test_tag_context_iso_default_and_rc(monkeypatch):
+    """TAG_CONTEXT_ISO defaults to the addon's 1; the rc value and the
+    command line are read as bool-like strings"""
+    from storpool_kvchk.cli import parse_arguments  # type: ignore[import-untyped] # noqa: E501
+
+    monkeypatch.delenv("TAG_CONTEXT_ISO", raising=False)
+    monkeypatch.setattr("sys.argv", ["storpool-kvchk"])
+    assert parse_arguments({}).tag_context_iso is True
+    assert parse_arguments({"TAG_CONTEXT_ISO": "0"}).tag_context_iso is False
+    assert parse_arguments({"TAG_CONTEXT_ISO": "yes"}).tag_context_iso is True
+    monkeypatch.setattr(
+        "sys.argv", ["storpool-kvchk", "--tag-context-iso", "0"]
+    )
+    assert parse_arguments({}).tag_context_iso is False
