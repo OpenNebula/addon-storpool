@@ -212,15 +212,17 @@ EOF
         SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${IMAGE_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}}"
         debug_sp_qosclass
 
-        if boolTrue "DDEBUG_VMSNAPSHOT"; then
-            splog "[DD] volume ${sp_uid}::${volume} snapshot ${snapUid}::${snap} ${mode}"
-        fi
-        storpoolDetach "${sp_uid}" "force" "${VMHOST}" "all"
         storpoolVolumeInfo "${sp_uid}"
         if [[ "${V_TYPE}" == "CDROM" ]]; then
             mode="${READONLY_MODE}"
         fi
-        storpoolVolumeRevert "${sp_uid}" "${volume}" "${snapUid}" "${REMOTE_BACKUP_DELETE}" "${REVERT_SIZE}" || finish=0
+
+        if boolTrue "DDEBUG_VMSNAPSHOT"; then
+            splog "[DD] volume ${sp_uid}::${volume} snapshot ${snapUid}::${snap} ${mode}"
+        fi
+        storpoolDetach "${sp_uid}" "force" "${VMHOST}" "all"
+        trapAdd "storpoolAttach \"${sp_uid}\" \"${VMHOST}\" \"${mode}\""
+        storpoolVolumeRevert "${sp_uid}" "${volume}" "${snapUid}" "${REMOTE_BACKUP_DELETE}" "${REVERT_SIZE}" "vm_snap_revert" || exit $?
         if boolTrue "REVERT_SIZE"; then
             OLD_SIZE_M=$((V_SIZE/1024/1024))
             storpoolVolumeInfo "~${SP_GLOBALID}"
@@ -238,6 +240,7 @@ EOF
             fi
         fi
         storpoolAttach "${sp_uid}" "${VMHOST}" "${mode}"
+        trapReset
 #        SYMLINK="/var/lib/one/datastores/${VM_DS_ID}/${VM_ID}/disk.${vmVolumesMap["${volume}"]}"
 #        oneSymlink "${VMHOST}" "${sp_uid}" "${SYMLINK}" || finish=0
 
