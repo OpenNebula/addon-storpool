@@ -140,7 +140,7 @@ fi
 
 if [[ -n "${FS}" ]]; then
     if type -t contains &>/dev/null; then
-        if contains "${SUPPORTED_FS:+ext2,ext3,ext4,xfs}" "${FS}" ","; then
+        if contains "${SUPPORTED_FS:-ext2,ext3,ext4,xfs}" "${FS}" ","; then
             splog "FS:'${FS}' is SUPPORTED_FS:${SUPPORTED_FS}"
         else
             splog "FS:'${FS}' not in SUPPORTED_FS:${SUPPORTED_FS}"
@@ -162,7 +162,15 @@ if [[ -n "${FSTYPE}" && "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
 
     if [[ -n "${FS}" ]]; then
         FS_OPTS="FS_OPTS_${FS}"
-        MKFS_CMD="${MKFS:-mkfs} -F -t \"${FS}\" ${!FS_OPTS} \"${SP_LINK}\""
+        case "${FS,,}" in
+            xfs|btrfs) MKFS_FORCE="-f" ;;
+            ext*)      MKFS_FORCE="-F" ;;
+            *)         MKFS_FORCE="" ;;
+        esac
+        # mkfs on a block device needs CAP_SYS_ADMIN (BLKBSZSET); run it through
+        # sudo like the stock tm/fs_lvm/mkimage does. sudoers ONE_FS allows
+        # /usr/sbin/mkfs only, so always go through the mkfs wrapper.
+        MKFS_CMD="${SUDO:-sudo -n} ${MKFS:-mkfs} -t \"${FS}\" ${MKFS_FORCE} ${!FS_OPTS} \"${SP_LINK}\""
     else
         MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}")"
     fi

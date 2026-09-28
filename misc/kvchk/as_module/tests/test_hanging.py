@@ -21,6 +21,9 @@ def mock_args():
     args.dry_run = False
     args.execute = False
     args.one_px = "one"
+    args.vm_tag = "nvm"
+    args.loc_tag = "nloc"
+    args.loc_tag_val = "one"
     args.one_token = None
     args.dummy_etcd = 0
     args.default_qosclass = "default-qos"

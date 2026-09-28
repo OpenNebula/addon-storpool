@@ -64,6 +64,16 @@ def get_attributes(attr: str) -> Dict[str, str]:
     return ret
 
 
+def fatal(msg: str) -> None:
+    """
+    Report an error that must abort the deploy (deploy-tweaks treats exit
+    code 2 as fatal) instead of silently deploying a domain without the
+    requested UEFI setup.
+    """
+    print(f"Error in <T_OS_NVRAM>: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
 def get_spUid(img: str) -> str:
     """
     Get the SP_UID for a given image name.
@@ -151,7 +161,11 @@ if os_nvram_e is not None and os_nvram_e.text is not None:
     nvram_type: Optional[str] = nvram_attr.get("type")
 
     if nvram_file == "storpool":
+        # the volume is a raw block device: <nvram type='block'> is the
+        # native form (libvirt 8.5+); "type=file" is kept as an override
         nvram_attr = {}
+        if nvram_type is None:
+            nvram_type = "block"
 
     if "template" in nvram_attr:
         # expand relative path
@@ -172,34 +186,25 @@ if os_nvram_e is not None and os_nvram_e.text is not None:
         if nvram_file == "storpool":
             vm_id_e: Optional[ET.Element] = vm.find("./ID")
             if vm_id_e is None or vm_id_e.text is None:
-                print(
-                    'Error in <T_OS_NVRAM>: missing "ID" element',
-                    file=sys.stderr,
-                )
-                changed = False
+                fatal('missing "ID" element')
             else:
                 vm_id: int = int(vm_id_e.text)
                 img: str = f"{one_px}-sys-{vm_id}-NVRAM"
                 sp_uid: str = get_spUid(img)
-                if sp_uid != "":
-                    nvram_filepath = f"/dev/storpool-byid/{sp_uid}"
-                    if nvram_type is not None:
-                        source = "file"
-                        if nvram_type == "block":
-                            source = "dev"
-                        nvram_source_e = ET.SubElement(
-                            nvram_e, "source", {source: nvram_filepath}
-                        )
-                        nvram_e.attrib["type"] = nvram_type
-                    else:
-                        nvram_e.text = nvram_filepath
-                    changed = True
-                else:
-                    print(
-                        f"Error getting SP_UID for volume {img}",
-                        file=sys.stderr,
+                if sp_uid == "":
+                    fatal(f"volume {img} not found in the KV store")
+                nvram_filepath = f"/dev/storpool-byid/{sp_uid}"
+                if nvram_type is not None:
+                    source = "file"
+                    if nvram_type == "block":
+                        source = "dev"
+                    nvram_source_e = ET.SubElement(
+                        nvram_e, "source", {source: nvram_filepath}
                     )
-                    changed = False
+                    nvram_e.attrib["type"] = nvram_type
+                else:
+                    nvram_e.text = nvram_filepath
+                changed = True
         else:
             system_ds_e: Optional[ET.Element] = None
             system_ds_e = root.find(".//one:vm/one:system_datastore", ns)

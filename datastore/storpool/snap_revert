@@ -60,15 +60,20 @@ oneDsDriverAction
 
 SP_VOL="${SOURCE##*/}"
 SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
-if kvGetUid "${SP_SNAP}"; then
-    storpoolSnapshotRevert "${SP_UID}" "${SP_VOL}" "IS_SNAPSHOT"
-else
-    splog "Can't find ${SP_SNAP} for ${SP_VOL}"
+
+if boolTrue "DISKSNAPSHOT_REVERT_STRICT"; then
+    kvGetUid "${SP_SNAP}" fatal
+elif ! kvGetUid "${SP_SNAP}"; then
+    splog "[W] Can't find ${SP_SNAP} for ${SP_VOL}, skipping the revert (DISKSNAPSHOT_REVERT_STRICT=0)"
+    splog "END"
+    exit 0
 fi
+
+storpoolSnapshotRevert "${SP_UID}" "${SP_VOL}" "IS_SNAPSHOT"
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${SP_UID}" "one;${LOC_TAG_VAL};${SP_QOSCLASS}" "virt;${LOC_TAG};qc"
+storpoolSnapshotTag "${SP_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
 
 splog "END"

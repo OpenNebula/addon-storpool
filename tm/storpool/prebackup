@@ -102,6 +102,11 @@ json_volumes=""
 for map in ${vmDisksMap}; do
     img="${map%:*}"
     did="${map#*:}"
+    if [[ -z "${did}" ]]; then
+        # system volume without a DISK_ID (UEFI NVRAM): not part of the backup,
+        # like the nvram file of upstream OpenNebula
+        continue
+    fi
     kvGetUid "${img}" fatal
     if boolTrue "BACKUP_VOLATILE"; then
         diskType="${diskTypeMap_a["${img}"]}"
@@ -112,7 +117,7 @@ for map in ${vmDisksMap}; do
     fi
     if [[ -n "${D_ARR["${did}"]}" ]]; then
         tags=$(tagsHelper "${VM_TAG};${LOC_TAG};virt;img;bak" "${VM_ID};${LOC_TAG_VAL};one;${img};${B_SUFFIX}")
-        json_volumes+="${json_volumes:+,}{\"volume\":\"${SP_UID}\",\"tags\":{${tags}}}"
+        json_volumes+="${json_volumes:+,}{\"volume\":\"${SP_UID}\",\"tags\":{${tags}},\"name\":\"\"}"
         snapshot="${img}-${B_SUFFIX}"
         list_a+=("${SP_UID}" "${snapshot}")
         backups+="${SP_UID}:${snapshot}:${did} "

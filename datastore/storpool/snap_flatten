@@ -67,6 +67,11 @@ SNAP_UID="${SP_UID}"
 
 storpoolSnapshotRevert "${SNAP_UID}" "${SP_VOL}" "IS_SNAPSHOT"
 
+SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+debug_sp_qosclass
+
+storpoolSnapshotTag "${SP_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+
 storpoolSnapshotsDelete "${SP_VOL}" "snap"
 
 splog "END"

@@ -486,7 +486,7 @@ class oneManager(BaseManager):
                 "name": img_e.NAME,
                 "snapshot": True,
                 "virt": "one",
-                "nloc": self.args.one_px,
+                "nloc": self.args.loc_tag_val,
                 # the image's own SP_QOSCLASS, the IMAGE level of the VM
                 # disk chains (tm/ln) - raw, blank is unset
                 "img_qosclass": img_e.TEMPLATE.get("SP_QOSCLASS") or None,
@@ -531,7 +531,7 @@ class oneManager(BaseManager):
                     "size": int(snapshot.SIZE),
                     "snapshot": True,
                     "virt": "one",
-                    "nloc": self.args.one_px,
+                    "nloc": self.args.loc_tag_val,
                     "ZDBG": "_get_ds_images",
                 }
                 # fmt: off
@@ -635,7 +635,7 @@ class oneManager(BaseManager):
                 "disktype": DiskType.CONTEXT,
                 "disk_id": disk_id,
                 "vm_id": vm_id,
-                "nloc": self.args.one_px,
+                "nloc": self.args.loc_tag_val,
                 "virt": "one",
                 "snapshot": False,
                 "sys_ds_id": sys_ds_id,
@@ -684,9 +684,14 @@ class oneManager(BaseManager):
                 if "qosclass" in snap_dict:
                     del snap_dict["qosclass"]
                 vm_disks[snapname] = snap_dict
-        # UEFI NVRAM volume
-        entry = vm_e.USER_TEMPLATE.get("T_OS_LOADER")  # noqa: E501
-        if entry is not None and sys_is_sp:
+        # UEFI NVRAM volume: tm/storpool/context creates it only when
+        # T_OS_NVRAM is in storpool mode ("storpool:template=OVMF_VARS.fd")
+        entry = vm_e.USER_TEMPLATE.get("T_OS_NVRAM")
+        nvram_sp: bool = (
+            entry is not None
+            and str(entry).split(":", 1)[0].strip() == "storpool"
+        )
+        if nvram_sp and sys_is_sp:
             v_name = f"{self.args.one_px}-sys-{vm_id}-NVRAM"
             v_info = {
                 "legacy": v_name,
@@ -694,7 +699,7 @@ class oneManager(BaseManager):
                 "img": v_name,
                 "disktype": DiskType.NVRAM,
                 "vm_id": vm_id,
-                "nloc": self.args.one_px,
+                "nloc": self.args.loc_tag_val,
                 "virt": "one",
                 "snapshot": False,
                 "sys_ds_id": sys_ds_id,
@@ -722,7 +727,7 @@ class oneManager(BaseManager):
                     del snap_dict["vc-policy"]
                 if "qosclass" in snap_dict:
                     del snap_dict["qosclass"]
-                vm_disks[snap] = snap_dict
+                vm_disks[f"{v_name}-{snap}"] = snap_dict
         # VM checkpoint volume
         if sys_is_sp and int(vm_e.STATE) in [4, 5]:  # 4-STOPPED, 5-SUSPENDED
             v_name = f"{self.args.one_px}-sys-{vm_id}-rawcheckpoint"
@@ -733,7 +738,7 @@ class oneManager(BaseManager):
                 "disktype": DiskType.CHECKPOINT,
                 "vm_id": vm_id,
                 "snapshot": False,
-                "nloc": self.args.one_px,
+                "nloc": self.args.loc_tag_val,
                 "virt": "one",
                 "vc-policy": vc_policy,
                 "state": state,
@@ -817,7 +822,7 @@ class oneManager(BaseManager):
             v_info["state"] = vm_details["state"]
             v_info["lcm_state"] = vm_details["lcm_state"]
             v_info["ZDBG"] = "process_vm_disks"
-            v_info["nloc"] = self.args.one_px
+            v_info["nloc"] = self.args.loc_tag_val
             v_info["virt"] = "one"
             if vm_details["host"]:
                 v_info["host"] = vm_details["host"]

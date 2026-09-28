@@ -29,6 +29,8 @@ def parse_addon_storpoolrc() -> Dict[str, str]:
                 line = line.strip()
                 if line.startswith("#") or not line:
                     continue
+                if line.startswith("export "):
+                    line = line[len("export "):].lstrip()
                 if '=' in line:
                     key, value = line.split("=", 1)
                     value = value.strip('"\'')
@@ -66,6 +68,31 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
         nargs="?",
         type=str,
         help="Object preffix in StorPool, string",
+    )
+    parser.add_argument(
+        "--vm-tag",
+        action="store",
+        default=defaults.get("VM_TAG", os.getenv("VM_TAG", "nvm")),  # type: ignore[attr-defined] # noqa: E501
+        type=str,
+        help="VM_TAG from addon-storpoolrc - the StorPool tag holding"
+             " the VM ID on VM disks, empty string disables it"
+             " (default nvm)",
+    )
+    parser.add_argument(
+        "--loc-tag",
+        action="store",
+        default=defaults.get("LOC_TAG", os.getenv("LOC_TAG", "nloc")),  # type: ignore[attr-defined] # noqa: E501
+        type=str,
+        help="LOC_TAG from addon-storpoolrc - the StorPool tag marking"
+             " the OpenNebula instance (default nloc)",
+    )
+    parser.add_argument(
+        "--loc-tag-val",
+        action="store",
+        default=defaults.get("LOC_TAG_VAL", os.getenv("LOC_TAG_VAL")),  # type: ignore[attr-defined] # noqa: E501
+        type=str,
+        help="LOC_TAG_VAL from addon-storpoolrc - the value of the"
+             " LOC_TAG tag (default ONE_PX)",
     )
     parser.add_argument(
         "-t",
@@ -167,6 +194,9 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
     args.sp_checkpoint_bd = bool_true(args.sp_checkpoint_bd)
     args.tag_context_iso = bool_true(args.tag_context_iso)
     args.hanging_min_age = int(args.hanging_min_age)
+    # storpool_common.sh: LOC_TAG_VAL="${LOC_TAG_VAL:-${ONE_PX}}"
+    if not args.loc_tag_val or args.loc_tag_val == "${ONE_PX}":
+        args.loc_tag_val = args.one_px
     if args.verbose > 0:
         print(f"parse_arguments() {args=}")
     if args.execute and args.dummy_etcd > 0:

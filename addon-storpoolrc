@@ -25,6 +25,12 @@ MKSWAP="/usr/sbin/mkswap"
 # To enable set to '1'
 # Default: 0 (disabled)
 #SP_CHECKPOINT_BD=0
+# Note: SP_CHECKPOINT_BD=1 and SKIP_UNDEPLOY_SSH=1 skip the VM directory
+# transfer on undeploy/stop. VMs that keep firmware state in the VM directory
+# (upstream UEFI with OS/FIRMWARE=<path> and no StorPool NVRAM, or vTPM) are
+# always transferred regardless of these settings.
+# Front-end directory with the OVMF_VARS templates for T_OS_NVRAM="storpool:template=<file>"
+#OVMF_PATH="/var/lib/one/remotes/OVMF"
 
 # (Experimental)
 # Code that overrides the VM snapshot interface creating atomic or in
@@ -42,11 +48,30 @@ VMSNAPSHOT_FSFREEZE=0
 #
 VMSNAPSHOT_DELETE_ON_TERMINATE=1
 
+# Restart the libvirt domain after a VM snapshot revert.
+# The revert destroys the domain to revert the volumes. By default the domain
+# stays destroyed and OpenNebula reports the VM in POWEROFF at the next monitor
+# cycle (resume it to boot from the reverted disks). With this option enabled the
+# live domain XML is saved before the destroy and the domain is re-created from
+# it once the volumes are reverted, so the VM boots immediately and stays
+# RUNNING for OpenNebula. When the restart fails the VM is left in POWEROFF as
+# before and the VM log gets an error.
+#
+#VMSNAPSHOT_RESTARTDOMAIN=0
+
 # Add quota to the count of VM snapshots
 # the limit is set as a number with the VMSNAPSHOT_LIMIT
 # custom attribute attributevariable in the SYSTEM datastore
 #
 VMSNAPSHOT_ENABLE_LIMIT=1
+
+# Fail the disk snapshot revert when the StorPool snapshot is missing.
+# The snapshot is missing when the disk was attached to the VM after
+# the snapshot was taken. When disabled the revert of such disk is
+# skipped with a warning in the log.
+# Default: 0 (disabled)
+#
+#DISKSNAPSHOT_REVERT_STRICT=0
 
 # Change DEV_PREFIX on imported images
 # Uncomment to enable
@@ -91,6 +116,20 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #DELAY_DELETE="48h"
 
+# StorPool API retries
+# A call that fails with a definitive API error (objectDoesNotExist,
+# invalidParam, ...) is not retried. A call that fails because the API is
+# unreachable (connection refused, timeout; e.g. during a StorPool mgmt
+# failover) is retried STORPOOL_RETRIES times, waiting
+# COMM_ERROR_SLEEP_SECONDS between attempts. A call answered with a
+# transient API error is retried until it succeeds, waiting
+# TRANSIENT_ERROR_SLEEP_SECONDS between attempts.
+# Defaults: 10 retries, 3 seconds, 3 seconds
+#
+#STORPOOL_RETRIES=10
+#COMM_ERROR_SLEEP_SECONDS=3
+#TRANSIENT_ERROR_SLEEP_SECONDS=3
+
 # Image export to custom Marketplace
 # using a qcow2 file on the bridge node
 # Disabled by default.
@@ -110,6 +149,9 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #DDEBUG_SP_RUN_CMD=1
 
 # datastore/monitor_helper-sync
+# drop the cached VolumeTemplatesStatus JSON when a datastore's StorPool
+# template is missing so the next run refetches it (default: NO)
+#MONITOR_DROP_STALE_TEMPLATE_CACHE=YES
 #DEBUG_MONITOR_HELPER_SYNC=1
 #DDEBUG_MONITOR_HELPER_SYNC=1
 

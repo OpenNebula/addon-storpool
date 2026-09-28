@@ -72,6 +72,16 @@ There are three levels of configuration possible:
   DISKSNAPSHOT_LIMIT=15
   ```
 
+## Disk snapshot revert of a missing snapshot
+
+When a disk is attached to a VM after a snapshot was taken, there is no StorPool snapshot of the disk to revert to. By default the addon skips the revert of such disk with a warning in the log and the revert of the other disks proceeds.
+
+To fail the revert instead, set in `$ONE_LOCATION/remotes/addon-storpoolrc`:
+
+```
+DISKSNAPSHOT_REVERT_STRICT=1
+```
+
 ## Re-configure the 'VM snapshot' to do atomic disk snapshots
 
 1. Append the following string to the VM_MAD's _ARGUMENTS_:
@@ -96,6 +106,26 @@ It is possible to do `fsfreeze/fsthaw` while the VM disks are snapshotted:
 ONE_LOCATION=/var/lib/one
 echo "VMSNAPSHOT_FSFREEZE=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
 ```
+
+### Restart the VM after a VM snapshot revert
+
+`onevm snapshot-revert` destroys the libvirt domain in order to revert the
+StorPool volumes. By default the domain is left destroyed: OpenNebula reports
+the VM in `POWEROFF` at the next monitor cycle and it must be resumed to boot
+from the reverted disks. To boot the VM right after the revert and keep it
+`RUNNING` for OpenNebula:
+
+```
+echo "VMSNAPSHOT_RESTARTDOMAIN=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
+```
+
+The live domain XML (hot-plugged disks, deploy-tweaks, UEFI nvram included) is
+saved on the host before the destroy and the domain is re-created from it
+after the volumes are reverted. When the XML can not be saved the domain is
+not touched until the revert, and when the re-creation fails the VM stays in
+`POWEROFF` as without the option; both cases are reported in the VM log and in
+the syslog of the front-end (`vmm_sp_snapshot_revert-storpool`) and of the
+host (`vmm_sp_snapshot_revert_r`).
 
 ### VM snapshot limits
 
@@ -132,7 +162,7 @@ REMOTE_BACKUP_DELETE=<remote_location>:<optional_tags>
 
 There is an option to send last snapshot to a remote StorPool cluster when deleting a disk image. The configuration is as follow:
 
-* `remote_location` - the name of the remote StorPool cluster to send volume snapshot to
+* `remote_location` - the name of the remote StorPool location or cluster to send volume snapshot to (the API rejects location ids and locations with more than one cluster: `Please use cluster name`)
 * `optional_argumets` - extra arguments
 
 For example, to send volume snapshot to a remote cluster with name _clusterB_ and tag the volumes with tag _del=y_ set:
@@ -143,39 +173,49 @@ REMOTE_BACKUP_DELETE="clusterB:del=y"
 
 ## Monitoring space usage
 
-In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, and the SYSTEM datastore and the VM disks (and their snapshots) are monitored from the hosts. As this addon does not support direct access to the StorPool API from the hosts, we should provide the needed data to the related probes. This is done by the `monitor_helper-sync` script, which is run via a cron job on the front-end. The script is collecting the needed data and propagating (if needed) to the hosts for use. Here is the default configuration:
+In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, and the SYSTEM datastore and the VM disks (and their snapshots) are monitored from the hosts. As this addon does not support direct access to the StorPool API from the hosts, we should provide the needed data to the related probes. This is done by the `monitor_helper-sync` script, which is run on the front-end by the `monitor_helper-sync.timer` systemd unit every 4 minutes (the unit files are in `misc/etc/systemd/system/`). The script is collecting the needed data from the StorPool API and propagating (if needed) to the hosts for use.
+
+The script calls the `ClustersList`, `VolumesSpace`, `SnapshotsSpace` and `VolumeTemplatesStatus` StorPool API methods. Each response is cached in `SP_FE_JSON_PATH` as `json-<ApiCall>-<API host>`, and for each OpenNebula cluster a symlink `<ONE cluster ID>/json-<ApiCall>-<datastore ID>` is created for the monitor probes. A cached response is reused until it is older than `SP_<APICALL>_SECONDS` (the API call name in upper case), or `SP_DEFAULT_SECONDS` when the per-call variable is not set. Here is the default configuration:
 
 ```
 # path to the json files on the hosts
 # (must be writable by the oneadmin user)
-SP_JSON_PATH="/tmp/"
+SP_JSON_PATH="/tmp"
 
 # Path to the json files on the front-end
 # (must be writable by the oneadmin user)
 SP_FE_JSON_PATH="/var/cache/addon-storpool-monitor"
 
-# datastores stats JSON and the command that generate them
-SP_TEMPLATE_STATUS_JSON="storpool_template_status.json"
-SP_TEMPLATE_STATUS_RUN="storpool -j template status"
+# Seconds to reuse a cached API response before calling the API again
+SP_DEFAULT_SECONDS=1800
 
-# VM disks stats JSON and the command that generate them
-SP_VOLUME_SPACE_JSON="storpool_volume_usedSpace.json"
-SP_VOLUME_SPACE_RUN="storpool -j volume usedSpace"
-
-# VM disks snapshots stats JSON and the command that generate them
-SP_SNAPSHOT_SPACE_JSON="storpool_snapshot_space.json"
-SP_SNAPSHOT_SPACE_RUN="storpool -j snapshot space"
+# Per API call override of SP_DEFAULT_SECONDS
+#SP_CLUSTERSLIST_SECONDS=1800
+#SP_VOLUMESSPACE_SECONDS=1800
+#SP_SNAPSHOTSSPACE_SECONDS=1800
+#SP_VOLUMETEMPLATESSTATUS_SECONDS=1800
 
 # Copy(scp) the JSON files to the remote hosts
 MONITOR_SYNC_REMOTE="YES"
 
+# Drop the cached VolumeTemplatesStatus JSON when a datastore's StorPool
+# template is missing, so the next run refetches it instead of waiting
+# for the cache to expire (SP_VOLUMETEMPLATESSTATUS_SECONDS/SP_DEFAULT_SECONDS)
+MONITOR_DROP_STALE_TEMPLATE_CACHE="NO"
+
 # Do template propagate. When there is change in the template attributes
-# propagate the change to all current volumes based on the template
-SP_TEMPLATE_PROPAGATE="YES"
+# propagate the change to all current volumes based on the template.
+# Could be set globally here or per datastore as SP_TEMPLATE_PROPAGATE attribute.
+#SP_TEMPLATE_PROPAGATE="YES"
 
 # Uncomment to enable debugging
-#DEBUG_MONITOR_SYNC=1
+#DEBUG_MONITOR_HELPER_SYNC=1
+#DDEBUG_MONITOR_HELPER_SYNC=1
 ```
+
+**Note:** The datastore usage reported by OpenNebula lags the StorPool API by up to the cache TTL plus the OpenNebula datastore monitoring interval. With the defaults (`SP_DEFAULT_SECONDS=1800` and `MONITORING_INTERVAL_DATASTORE=300` in `oned.conf`) the `FREE_MB` value could be up to ~35 minutes old. Lower the `SP_*_SECONDS` values when fresher data is needed.
+
+**Note:** The `SP_TEMPLATE_STATUS_MINUTES`, `SP_VOLUME_SPACE_MINUTES`, `SP_SNAPSHOT_SPACE_MINUTES` and the other `SP_*_MINUTES` variables from older releases are not used anymore. Replace them with the corresponding `SP_*_SECONDS` variables.
 
 For the case when there is shared filesystem between the `one-fe` and the HV nodes there is no need to copy the JSON files. In this case, the `SP_JSON_PATH` variable must be altered to point to a shared folder, and you should set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in the `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files.
 

@@ -115,7 +115,8 @@ class DataProcessing(BaseManager):
         tags: Dict[str, str] = sp_entry.get("tags") or {}
         if tags.get("virt") != "one":
             return False
-        if tags.get("nloc") and tags["nloc"] != self.args.one_px:
+        loc_tag: str = self.args.loc_tag
+        if tags.get(loc_tag) and tags[loc_tag] != self.args.loc_tag_val:
             return False
         return True
 
@@ -137,8 +138,8 @@ class DataProcessing(BaseManager):
             )
             if one_data:
                 return one_data
-        if sp_entry["snapshot"] is False:
-            nvm: Optional[str] = tags.get("nvm")
+        if sp_entry["snapshot"] is False and self.args.vm_tag:
+            nvm: Optional[str] = tags.get(self.args.vm_tag)
             diskid: Optional[str] = tags.get("diskid")
             if nvm and diskid:
                 for rec in self.one.vm_disks.values():
@@ -208,7 +209,7 @@ class DataProcessing(BaseManager):
             "disktype": DiskType.NONPERSISTENT,
             "imagetype": ImageType.OS,
             "virt": "one",
-            "nloc": self.args.one_px,
+            "nloc": self.args.loc_tag_val,
             "vms": 0,
             "vmlist": [],
             "snapshots": {},
@@ -1403,7 +1404,8 @@ class DataProcessing(BaseManager):
             tags: Dict[str, str] = sp_entry.get("tags") or {}
             if tags.get("virt") != "one":
                 continue
-            if tags.get("nloc") and tags["nloc"] != self.args.one_px:
+            loc_tag: str = self.args.loc_tag
+            if tags.get(loc_tag) and tags[loc_tag] != self.args.loc_tag_val:
                 continue
             if tags.get("snap"):
                 # a snapshot of the volume, not the volume itself
@@ -1411,7 +1413,8 @@ class DataProcessing(BaseManager):
             if tags.get("img") == spname or (
                 vm_id is not None
                 and disk_id is not None
-                and tags.get("nvm") == str(vm_id)
+                and self.args.vm_tag
+                and tags.get(self.args.vm_tag) == str(vm_id)
                 and tags.get("diskid") == str(disk_id)
             ):
                 self.dbg(2, f"{spname} matched StorPool tags"
@@ -1775,12 +1778,15 @@ class DataProcessing(BaseManager):
         """Build expected StorPool tags from ONE data"""
         tags: Dict[str, str] = {}
         tagsmap: List[Tuple[str, str]] = [
-            ("vm_id", "nvm"),
-            ("nloc", "nloc"),
+            ("nloc", self.args.loc_tag),
             ("virt", "virt"),
             ("snap", "snap"),
             ("img", "img"),
         ]
+        if self.args.vm_tag:
+            # VM_TAG="" disables the VM ID tag in the addon (tagsHelper
+            # skips empty keys)
+            tagsmap.insert(0, ("vm_id", self.args.vm_tag))
         self.dbg(7, f"build_tags {onerec=}")
         if not onerec["snapshot"]:
             # the volumes had diskid

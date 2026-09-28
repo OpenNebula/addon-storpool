@@ -85,6 +85,9 @@ export VMSNAPSHOT_FSFREEZE=0
 export VMSNAPSHOT_DELETE_ON_TERMINATE=1
 # block creating new VM Snapshots when the limit is reached
 export VMSNAPSHOT_LIMIT=""
+# re-create the libvirt domain after a VM snapshot revert (the VM stays RUNNING)
+# instead of leaving it destroyed (the VM drops to POWEROFF at the next monitor cycle)
+export VMSNAPSHOT_RESTARTDOMAIN=0
 # alter the SYSTEM snapshot behavior depending on the underlying file system
 export SP_SYSTEM="ssh"
 # update Disk size in OpenNebula when reverting a snapshot
@@ -274,6 +277,13 @@ function getFromConf()
     echo "${response//\"/}"
 }
 
+# delayDeleteValid VALUE
+# true for the formats delayDeleteSeconds understands: <n>[s|m|h|d]
+function delayDeleteValid()
+{
+    [[ "$1" =~ ^[0-9]+[smhd]?$ ]]
+}
+
 function delayDeleteSeconds()
 {
     local n="${1//[^0-9]/}"
@@ -418,6 +428,23 @@ function kvGet()
         fi
     fi
     return "${KVRET}"
+}
+
+function kvGetFamily()
+{
+    local _kvName="$1" _keysAndVals="$2"
+    local _key="" _val="" kvfh=""
+    local _re="^/byName/${_kvName//./\\.}(-(snap[0-9]+|${VMSNAPSHOT_TAG:-ONESNAP}-.+|TEMP-[A-Za-z0-9]+|[0-9]{9,}))?$"
+    while read -r -u "${kvfh}" _key; do
+        read -r -u "${kvfh}" _val || break
+        [[ "${_key}" =~ ${_re} ]] || continue
+        if [[ -n "${_keysAndVals}" ]]; then
+            printf '%s\n%s\n' "${_key}" "${_val}"
+        else
+            echo "${_val}"
+        fi
+    done {kvfh}< <(kvGet byName "${_kvName}" startswith KeysAndVals || true)
+    exec {kvfh}<&-
 }
 
 function kvGetUid()
@@ -744,14 +771,17 @@ function storpoolApi()
         '${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81}/ctrl/1.0/${_method}'"
         echo "${_apiCmd}"
     else
+        local _curlErr=""
+        _curlErr="$(mktemp --tmpdir storpoolApi-XXXXXXXX.err 2>/dev/null || mktemp --tmpdir=/tmp storpoolApi-XXXXXX.err)"
         curl -s -S -q -N -H "Authorization: Storpool v1:${SP_AUTH_TOKEN}" \
         --connect-timeout "${SP_API_CONNECT_TIMEOUT:-1}" \
         --max-time "${_max_time}" ${_data:+-d "${_data}"} \
-        "${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81}/ctrl/1.0/${_method}" 2>/dev/null
+        "${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81}/ctrl/1.0/${_method}" 2>"${_curlErr}"
         _ret=$?
         if [[ ${_ret} -ne 0 ]]; then
-            splog "${_method} ${_data:+${_data}} max-time:${_max_time} ret:${_ret}"
+            splog "${_method} ${_data:+${_data}} max-time:${_max_time} ret:${_ret} $(tr '\n' ' ' <"${_curlErr}" 2>/dev/null || true)"
         fi
+        rm -f "${_curlErr}"
         return "${_ret}"
     fi
     return "${_ret}"
@@ -760,7 +790,7 @@ function storpoolApi()
 function storpoolWrapper()
 {
     local method="$1"
-    local json="" res="" ret="" ok="" error_name="" cmd="${method}"
+    local res="" ret="" ok="" error_name="" error_descr="" cmd="${method}"
     TRANSIENT="false"
     if boolTrue "MULTICLUSTER"; then
         if [[ -n "${DO_MULTICLUSTER}" ]]; then
@@ -794,6 +824,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd} {$1} communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 ok="$(echo "${res}"|jq -r ".data|.ok" 2>&1)"
                 if [[ "${ok}" == "true" ]]; then
@@ -819,13 +852,20 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd} {$1} communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
                 if [[ "${ok}" == "true" ]]; then
                     if boolTrue "DEBUG_SP_RUN_CMD"; then
                         splog "API ${cmd} {$1} response:${res}"
                     fi
-                    echo "${res}" | jq -r '.data.name'
+                    if [[ "${method}" == "VolumeBackup" ]]; then
+                        echo "${res}" | jq -r '.data.remoteId // .data.snapshotGlobalId'
+                    else
+                        echo "${res}" | jq -r '.data.name'
+                    fi
                 else
                     error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
                     TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
@@ -846,6 +886,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd} {$1} communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
                 if [[ "${ok}" == "true" ]]; then
@@ -872,6 +915,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd}/$1 {$2} communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
                 if [[ "${ok}" == "true" ]]; then
@@ -899,6 +945,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd}/$1 {$2} communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
                 if [[ "${ok}" == "true" ]]; then
@@ -926,6 +975,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd}/$1 {$2} communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 ok="$(echo "${res}" | jq -r ".data|.ok" 2>&1)"
                 if [[ "${ok}" == "true" ]]; then
@@ -934,13 +986,31 @@ function storpoolWrapper()
                     fi
                 else
                     error_name="$(echo "${res}" | jq -r ".error|.name" 2>&1)"
+                    error_descr="$(echo "${res}" | jq -r ".error|.descr" 2>&1)"
                     TRANSIENT="$(echo "${res}" | jq -r ".error|.transient" 2>&1)"
-                    splog "API ${cmd}/$1 {$2} ERROR:${error_name} ${res//$'\n'/ }"
-                    ret=1
-                    [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
-                    [[ "${error_name}" != "invalidParam" ]] || ret=3
-                    [[ "${error_name}" != "jsonError" ]] || ret=4
-                    [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                    if [[ "${method}" == "SnapshotDelete" ]] && [[ "${error_name}" == "invalidParam" ]] \
+                        && [[ "${error_descr}" == *"scheduled to be deleted"* ]]; then
+                        # The snapshot has a targetDeleteDate (DELAY_DELETE): StorPool
+                        # refuses to touch it and will remove it itself when the
+                        # date comes. Nothing to do for the driver, treat as deleted.
+                        splog "[I] API ${cmd}/$1 snapshot is scheduled for deletion by StorPool, treating as deleted (${error_descr})"
+                        ret=0
+                    elif [[ "${method}" == "SnapshotDelete" ]] && [[ "${error_name}" == "objectDoesNotExist" ]] \
+                        && { ! boolTrue "MULTICLUSTER" || [[ -n "${DO_MULTICLUSTER}" ]]; }; then
+                        # Already gone (deleted earlier, or a lazily deleted
+                        # snapshot with children that the API no longer exposes).
+                        # Only when the lookup covered all clusters, so a snapshot
+                        # living in another sub-cluster is not skipped.
+                        splog "[I] API ${cmd}/$1 snapshot does not exist, treating as deleted (${error_descr})"
+                        ret=0
+                    else
+                        splog "API ${cmd}/$1 {$2} ERROR:${error_name} ${res//$'\n'/ }"
+                        ret=1
+                        [[ "${error_name}" != "objectDoesNotExist" ]] || ret=2
+                        [[ "${error_name}" != "invalidParam" ]] || ret=3
+                        [[ "${error_name}" != "jsonError" ]] || ret=4
+                        [[ "${error_name}" != "preconditionViolation" ]] || ret=5
+                    fi
                 fi
             fi
             ;;
@@ -952,6 +1022,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd}/$1 communication error:${res} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 error_descr="$(echo "${res}" | jq -r ".error|.descr" 2>&1)"
                 if [[ "${error_descr}" == "null" ]]; then
@@ -976,6 +1049,9 @@ function storpoolWrapper()
             ret=$?
             if [[ ${ret} -ne 0 ]]; then
                 splog "API ${cmd} communication error:${res} ${DATA_JSON} (${ret})"
+                # curl failed (refused, timeout, ...): retryable, see storpoolRetry
+                COMM_ERROR="${ret}"
+                ret=1
             else
                 error_descr="$(jq -r ".error|.descr" "${DATA_JSON}" 2>&1)"
                 if [[ "${error_descr}" == "null" ]]; then
@@ -1014,6 +1090,12 @@ function splogFile() {
     [[ -z "${2}" ]] || rm -f "${_logfile}"
 }
 
+function isStorpoolValue()
+{
+    local _VALUE="${1%%:*}"
+    [[ "${_VALUE//[[:space:]]/}" == "storpool" ]]
+}
+
 function tagsHelper()
 {
     local _TAG_KEY="$1" _TAG_VAL="$2"
@@ -1046,6 +1128,7 @@ function storpoolRetry() {
     fi
     while true; do
         TRANSIENT="false"
+        COMM_ERROR=""
         if storpoolWrapper "$@" 2>"${_errfile}"; then
             _err=$?
             if boolTrue "DEBUG_storpoolRetry"; then
@@ -1066,7 +1149,9 @@ function storpoolRetry() {
                     splog "Warn: $* SOFT_FAIL"
                     splogFile "${_errfile}" clean
                 fi
-                if [[ "${TRANSIENT,,}" != "true" ]]; then
+                # a definitive API answer is final; transient and
+                # communication errors are still retried below
+                if [[ "${TRANSIENT,,}" != "true" ]] && [[ -z "${COMM_ERROR}" ]]; then
                     break
                 fi
             fi
@@ -1076,6 +1161,11 @@ function storpoolRetry() {
                 splog "VM ${VM_ID} TRANSIENT error! Waiting ${TRANSIENT_ERROR_SLEEP_SECONDS:-3} seconds before retry"
                 # reduce logs flooding with a bit longer delay
                 sleep "${TRANSIENT_ERROR_SLEEP_SECONDS:-3}"
+            elif [[ -n "${COMM_ERROR}" ]]; then
+                # API unreachable (curl:${COMM_ERROR}), e.g. mgmt failover in
+                # progress: bounded retry with a longer pause
+                splog "API ${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81} unreachable (curl:${COMM_ERROR})! Waiting ${COMM_ERROR_SLEEP_SECONDS:-3} seconds before retry (${_retries} left)"
+                sleep "${COMM_ERROR_SLEEP_SECONDS:-3}"
             else
                 splog "TRANSIENT=${TRANSIENT}"
             fi
@@ -1083,6 +1173,9 @@ function storpoolRetry() {
             if [[ ${_retries} -lt 1 ]]; then
                 splog "storpoolRetry($*) FAILED (try:[${_retries}], err:${_err})"
                 splogFile "${_errfile}" clean
+                if boolTrue "_SOFT_FAIL"; then
+                    break
+                fi
                 exit 1
             fi
             if [[ ${_err} -gt 1 ]]; then
@@ -1145,19 +1238,32 @@ function storpoolVolumeInfo()
 function storpoolExist()
 {
     local _NAME="$1" _ENTRY="${2:-${STORPOOL_EXIST_HINT}}" _RETRIES="${3:-1}"
-    local _RET="1" _method="" _LOOP=""
+    local _RET="1" _ERR="0" _method="" _LOOP=""
     unset X_FOUND_AS X_CLUSTER_ID
     for _LOOP in ${_ENTRY}; do
         _method="${_LOOP}Update"
         DO_MULTICLUSTER="1" DO_REMOTE="" _SOFT_FAIL="1" _QUIET_FAIL="1" storpoolRetry "${_method}" "${_NAME}" ""
         _RET=$?
-        if [[ ${_RET} -eq 0 ]]; then
-            X_FOUND_AS="${_LOOP}"
-            read -r X_CLUSTER_ID <<< "$(jq -r '.clusterId' "${TMPDIR}/${_method}.json" || true)"
-            export X_CLUSTER_ID X_FOUND_AS
-            break
-        fi
+        case "${_RET}" in
+            0)
+                X_FOUND_AS="${_LOOP}"
+                read -r X_CLUSTER_ID <<< "$(jq -r '.clusterId' "${TMPDIR}/${_method}.json" || true)"
+                export X_CLUSTER_ID X_FOUND_AS
+                break
+                ;;
+            2|3)
+                # objectDoesNotExist / "is not a <type>": not found as this type
+                _RET=2
+                ;;
+            *)
+                # communication error, 401/404, busy...: verification failed
+                _ERR="${_RET}"
+                ;;
+        esac
     done
+    if [[ ${_RET} -ne 0 ]] && [[ ${_ERR} -ne 0 ]]; then
+        _RET="${_ERR}"
+    fi
     if boolTrue "DEBUG_storpoolExist" || [[ ${_RET} -ne 0 ]]; then
         boolTrue "DEBUG_storpoolExist" && _DBGPX="D" || _DBGPX="E"
         splog "[${_DBGPX}]storpoolExist(${_NAME}, '${_ENTRY}', ${_RETRIES}) ${X_FOUND_AS:-not found}, clusterId ${X_CLUSTER_ID:-not found} (${_RET})"
@@ -1260,8 +1366,10 @@ function storpoolVolumeCreate()
 
 function storpoolVolumeStartswith()
 {
-    local _MATCH="$1" globalid="" sp_uid="" tags="" _RET=1 spfh=""
-    declare -A spnames_a  # spnames_a[SP_UID]=SP_NAME
+    local _MATCH="$1" globalid="" sp_uid="" tags="" _RET=1 spfh="" kvfh="" _key="" _val=""
+    local _self_uid=""
+    local -a spnames_a=()  # derived uids in KV key order
+    declare -A seen_a  # seen_a[SP_UID]=1
     declare -A spuids_a  # spuids_a[SP_UID]=CLUSTER_ID
     DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry VolumesList
     _RET=$?
@@ -1273,16 +1381,26 @@ function storpoolVolumeStartswith()
         splog "(${_MATCH}) clusterId=${clusterid}(${cluster}) sp_uid=${sp_uid} globalId=${globalid} tags ${tags} //from VolumesList"
         spuids_a["${sp_uid}"]="${clusterid}"
     done {spfh}< <(jq -r --arg match "${_MATCH}" \
-                '.data.clusters[]|"\(.clusterId) \(.response.data[]|select(.tags.img|tostring|startswith($match))|"\(.name) \(.globalId) \(.tags|tostring)")"' \
+                '.data.clusters[]|"\(.clusterId) \(.response.data[]|select((.tags.img|tostring) as $img|$img==$match or ($img|startswith($match+"-")))|"\(.name) \(.globalId) \(.tags|tostring)")"' \
                  "${TMPDIR}/VolumesList.json" || true)
     exec {spfh}<&-
     if [[ "${_MATCH:0:1}" != "~" ]]; then
-        for sp_uid in $(kvGet byName "${_MATCH}" startswith); do
-            splog "(${_MATCH}) ${sp_uid} //from kvGet startswith"
-            spnames_a["${sp_uid}"]="${sp_uid}"
-        done
+        while read -r -u "${kvfh}" _key; do
+            read -r -u "${kvfh}" _val || break
+            [[ -n "${_val}" ]] || continue
+            splog "(${_MATCH}) ${_key##*/} ${_val} //from kvGetFamily"
+            [[ -z "${seen_a["${_val}"]}" ]] || continue
+            seen_a["${_val}"]=1
+            if [[ "${_key}" == "/byName/${_MATCH}" ]]; then
+                _self_uid="${_val}"
+            else
+                spnames_a+=("${_val}")
+            fi
+        done {kvfh}< <(kvGetFamily "${_MATCH}" KeysAndVals || true)
+        exec {kvfh}<&-
     fi
-    [[ -z "${spnames_a[*]}" ]] || echo "${spnames_a[*]}"
+    [[ -z "${_self_uid}" ]] || spnames_a=("${_self_uid}" "${spnames_a[@]}")
+    [[ ${#spnames_a[@]} -eq 0 ]] || echo "${spnames_a[*]}"
     if boolTrue "DEBUG_storpoolVolumeStartswith"; then
         splog "[D] spuids_a:[${spuids_a[*]}] spnames_a:[${spnames_a[*]}]"
     fi
@@ -1291,44 +1409,141 @@ function storpoolVolumeStartswith()
 function storpoolVolumeBackup()
 {
     local _VOL_UID="$1" _SP_VOL="$2" _REMOTE_DATA="$3"
-    local _TAGS="" _REMOTE="" _k="" _json="" _RET=1 _element=""
+    local _TAGS="" _REMOTE="" _k="" _v="" _json="" _RET=1 _element="" _REMOTE_ID=""
     IFS=':' read -r -a _rdata <<<"${_REMOTE_DATA}"
 
     for _element in "${_rdata[@]}"; do
         if [[ -z ${_REMOTE} ]]; then
-            _REMOTE="${_element}"
+            _REMOTE="${_element//[[:space:]]/}"
             continue
         fi
-        [[ -z ${_TAGS} ]] || _TAGS+=","
         _k="${_element%%=*}"
-        _TAGS+="\"${_k//[[:space:]]/}\":\"${_element#*=}\""
+        _k="${_k//[[:space:]]/}"
+        _v="${_element#*=}"
+        if [[ -z "${_k}" ]] || [[ "${_element}" != *=* ]]; then
+            splog "[W] storpoolVolumeBackup(${_VOL_UID}) ignoring malformed tag '${_element}' in '${_REMOTE_DATA}'"
+            continue
+        fi
+        # leading comma: the fragment is appended to an existing tags object
+        _TAGS+=",\"${_k}\":\"${_v//[[:space:]]/}\""
     done
+    if [[ -z "${_REMOTE}" ]]; then
+        splog "[E] storpoolVolumeBackup(${_VOL_UID},${_SP_VOL}) no remote location in '${_REMOTE_DATA}'"
+        return 1
+    fi
+    # mark the backup for deletion by default (documented behaviour)
+    [[ -n "${_TAGS}" ]] || _TAGS=',"del":"y"'
 
-    [[ -z "${_TAGS}" ]] || _TAGS="\"del\":\"y\"}"
+    # 'location' is the documented key; 'remote' is an accepted alias
+    _json="\"volume\":\"${_VOL_UID}\",\"location\":\"${_REMOTE}\",\"tags\":{${_TAGS#,}}"
 
-    _json="\"volume\":\"${_VOL_UID}\",\"remote\":\"${_REMOTE}\",\"tags\":{${_TAGS}}"
-
-    DO_MULTICLUSTER=1 storpoolRetry VolumeBackup "${_json}" >/dev/null
+    # _SOFT_FAIL: storpoolRetry must return instead of exit so the fallback runs
+    _REMOTE_ID="$(DO_MULTICLUSTER=1 _SOFT_FAIL=1 storpoolRetry VolumeBackup "${_json}")"
     _RET=$?
-    if [[ ${_RET} -ne 0 ]]; then
-        DO_MULTICLUSTER=1 storpoolVolumeRename "${_VOL_UID}" "${_SP_VOL}" "${_SP_VOL}-$(date +%s||true)" "" "${_TAGS}" >/dev/null
-        _RET=$?
+    if [[ ${_RET} -eq 0 ]]; then
+        splog "[I] ${_VOL_UID} (${_SP_VOL}) backup sent to '${_REMOTE}' remoteId:${_REMOTE_ID:-?} tags:{${_TAGS#,}}"
+        return 0
+    fi
+    splog "[E] VolumeBackup ${_VOL_UID} (${_SP_VOL}) to '${_REMOTE}' failed (${_RET}). Keeping the volume."
+    if DO_MULTICLUSTER=1 storpoolVolumeRename "${_VOL_UID}" "${_SP_VOL}" "${_SP_VOL}-$(date +%s||true)" "" "${_TAGS}" >/dev/null; then
+        splog "[I] ${_VOL_UID} preserved as ${_SP_VOL}-<timestamp>"
+    else
+        splog "[E] Can't rename ${_VOL_UID} (${_SP_VOL}) ($?)"
     fi
     return "${_RET}"
+}
+
+function storpoolDelayContext()
+{
+    local _ctx="${0##*/}"
+    _ctx="${_ctx%.sh}"
+    _ctx="${_ctx%-storpool}"
+    _ctx="${_ctx//[^A-Za-z0-9_.:-]/_}"
+    printf '%s\n' "${_ctx:-unknown}"
+}
+
+function storpoolDelayDeleteReason()
+{
+    local _tags="$1" _part="" _reason=""
+    local -a _parts=()
+    IFS=',' read -ra _parts <<< "${_tags}"
+    for _part in "${_parts[@]}"; do
+        if [[ "${_part}" =~ ^\"reason\":\"([^\"]*)\"$ ]]; then
+            _reason="${BASH_REMATCH[1]}"
+            break
+        fi
+    done
+    if [[ -z "${_reason}" ]]; then
+        _reason="$(storpoolDelayContext)"
+    fi
+    printf '%s\n' "${_reason}"
+}
+
+function storpoolDelayDeleteExtra()
+{
+    local _tags="$1" _part="" _extra=""
+    local -a _parts=()
+    IFS=',' read -ra _parts <<< "${_tags}"
+    for _part in "${_parts[@]}"; do
+        [[ "${_part}" =~ ^\"reason\":\"[^\"]*\"$ ]] && continue
+        [[ -n "${_part}" ]] || continue
+        _extra+="${_extra:+,}${_part}"
+    done
+    printf '%s\n' "${_extra}"
+}
+
+function storpoolDelayDeleteSnapshot()
+{
+    local _SP_UID="$1" _SP_VOL="$2" _REASON="$3" _EXTRA="${4:-}"
+    local _json="" _tags="" _ret=1 _seconds=""
+    SP_DELAY_SNAP=""
+    _REASON="${_REASON//[^A-Za-z0-9_.:-]/}"
+    if [[ -z "${_REASON}" ]]; then
+        splog "[E] storpoolDelayDeleteSnapshot(${_SP_UID}) empty reason"
+        return 1
+    fi
+    if [[ -z "${DELAY_DELETE}" ]] || ! delayDeleteValid "${DELAY_DELETE}"; then
+        splog "[E] Unsupported format in DELAY_DELETE='${DELAY_DELETE}' (expected <n>[s|m|h|d]). ${_SP_UID} (${_SP_VOL}) left unchanged"
+        export SP_DELAY_SNAP
+        return 1
+    fi
+    _seconds="$(delayDeleteSeconds "${DELAY_DELETE}")"
+    _tags="\"virt\":\"one\",\"${LOC_TAG}\":\"${LOC_TAG_VAL}\",\"reason\":\"${_REASON}\""
+    if [[ -n "${_EXTRA}" ]]; then
+        _tags+=",${_EXTRA}"
+    fi
+    _json="\"deleteAfter\":${_seconds},\"tags\":{${_tags}}"
+    # _SOFT_FAIL: storpoolRetry must return so the caller can refuse the
+    # revert (or the delete) instead of the exit being the only signal.
+    SP_DELAY_SNAP="$(DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry VolumeSnapshot "${_SP_UID}" "${_json}")"
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]] || [[ -z "${SP_DELAY_SNAP}" ]]; then
+        splog "[E] Can't create delayed-delete snapshot for ${_SP_UID} (${_SP_VOL}) reason=${_REASON} (${_ret})"
+        SP_DELAY_SNAP=""
+        export SP_DELAY_SNAP
+        [[ ${_ret} -ne 0 ]] || _ret=1
+        return "${_ret}"
+    fi
+    export SP_DELAY_SNAP
+    splog "[I] delayed-delete snapshot ${_SP_UID} (${_SP_VOL}) -> ${SP_DELAY_SNAP} reason=${_REASON} deleteAfter=${_seconds}s"
+    return 0
 }
 
 function storpoolDelete()
 {
     local _SP_UID="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE="$4" _DD_TAGS="$5" _UID_ONLY="$6"
-    local _ret=0 DO_MULTICLUSTER=1 _SP_VOL="" json=""
-    local _snapshot="" _DELAY_DELETE=""
+    local _ret=0 DO_MULTICLUSTER=1 _SP_VOL=""
+    local _snapshot="" _DELAY_DELETE="" _dd_reason="" _dd_extra=""
 
     _SP_VOL="$(kvGet byUid "${_SP_UID}")"
     if boolTrue "DEBUG_storpoolDelete"; then
         splog "[D]($*) (KV byUid -> ${_SP_VOL})"
     fi
-    # TODO: handdle temporary unavailable volumes/snapshots
-    if [[ -n "${ONLY_DELETE}" ]] || storpoolExist "${_SP_UID}"; then
+    local _EXISTS=0
+    if [[ -z "${ONLY_DELETE}" ]]; then
+        storpoolExist "${_SP_UID}" || _EXISTS=$?
+    fi
+    if [[ ${_EXISTS} -eq 0 ]]; then
         DO_REMOTE="${X_CLUSTER_ID:+~${X_CLUSTER_ID}}"
         case "${ONLY_DELETE,,}" in
             volume)
@@ -1358,39 +1573,32 @@ function storpoolDelete()
             fi
         fi
         if [[ -n "${_DELAY_DELETE}" ]] && [[ -z "${_snapshot}" ]]; then
-            local DELAY_DELETE_tmp="${_DELAY_DELETE//[[:digit:]]/}"
-            if [[ -n "${DELAY_DELETE_tmp}" ]] && [[ -z "${DELAY_DELETE_tmp/[smhd]/}" ]]; then
-                json="\"deleteAfter\":$(delayDeleteSeconds "${_DELAY_DELETE}")"
-                if [[ -n "${_DD_TAGS}" ]]; then
-                    json+=",\"tags\":{${_DD_TAGS}}"
-                fi
-                DO_REMOTE="" storpoolRetry VolumeSnapshot "${_SP_UID}" "${json}" >/dev/null
+            if delayDeleteValid "${_DELAY_DELETE}"; then
+                _dd_reason="$(storpoolDelayDeleteReason "${_DD_TAGS}")"
+                _dd_extra="$(storpoolDelayDeleteExtra "${_DD_TAGS}")"
+                storpoolDelayDeleteSnapshot "${_SP_UID}" "${_SP_VOL}" "${_dd_reason}" "${_dd_extra}"
                 _ret=$?
                 if [[ ${_ret} -eq 0 ]]; then
                     DO_REMOTE="" storpoolRetry VolumeDelete "${_SP_UID}" >/dev/null
                     _ret=$?
                 else
-                   splog "[E]Can't create anonymous snapshot for ${_SP_UID} (${_SP_VOL})!"
+                    exit "${_ret}"
                 fi
             else
-                local msg="Unsupported format in DELAY_DELETE='${_DELAY_DELETE}'!" newName=""
-                local _msgpx="E"
-                newName="${_SP_VOL#*~}_DELETE$(date +%s||true)"
-                DO_REMOTE="" storpoolVolumeRename "${_SP_UID}" "${_SP_VOL}" "${newName}" >/dev/null
-                _ret=$?
-                if [[ ${_ret} -ne 0 ]]; then
-                    storpoolVolumeFreeze "${_SP_UID}" "volume"
-                    _ret=$?
-                    if [[ ${_ret} -eq 0 ]]; then
-                        msg+=" ${_SP_UID} converted to snapshot ${newName}"
-                        _msgpx="I"
+                local newName="${_SP_VOL:-${_SP_UID#\~}}_DELETE$(date +%s||true)"
+                splog "[E] Unsupported format in DELAY_DELETE='${_DELAY_DELETE}' (expected <n>[s|m|h|d]). Preserving ${_SP_UID} (${_SP_VOL}) as ${newName}"
+                if DO_REMOTE="" storpoolVolumeRename "${_SP_UID}" "${_SP_VOL}" "${newName}" >/dev/null; then
+                    if storpoolVolumeFreeze "${_SP_UID}" "volume"; then
+                        _ret=0
+                        splog "[I] ${_SP_UID} preserved as snapshot ${newName} (${SP_UID})"
                     else
-                        msg+=" Unable to convert ${_SP_UID} as snapshot ${newName}"
+                        _ret=$?
+                        splog "[E] ${_SP_UID} renamed to ${newName} but not converted to snapshot (${_ret})"
                     fi
                 else
-                    msg+=" Unable to rename ${_SP_UID} to ${newName}."
+                    _ret=$?
+                    splog "[E] Unable to rename ${_SP_UID} to ${newName} (${_ret}); volume left untouched"
                 fi
-                splog "[${_msgpx}]${msg}"
             fi
         else
             if [[ -n "${_snapshot}" ]]; then
@@ -1405,8 +1613,12 @@ function storpoolDelete()
         else
             kvDel "${_SP_VOL}" "${_SP_UID}"
         fi
-    else
+    elif [[ ${_EXISTS} -eq 2 ]]; then
         splog "[W] volume ${_SP_UID} (${_SP_VOL}) not found"
+    else
+        # API not reachable, wrong token/URL, ...: the object may well exist
+        _ret="${_EXISTS}"
+        splog "[E] Can't verify that ${_SP_UID} (${_SP_VOL}) exists (${_ret}), nothing deleted"
     fi
     if [[ ${_ret} -eq 0 ]]; then
         if [[ "${_SNAPSHOTS:0:5}" == "snaps" ]]; then
@@ -1809,16 +2021,35 @@ function storpoolSnapshotsDelete()
 function oneMvds()
 {
     local _SP_VOL="$1" _SP_UID=""
-    for _SP_UID in $(kvGet "byName" "${_SP_VOL}" "startswith"); do
+    for _SP_UID in $(kvGetFamily "${_SP_VOL}"); do
         storpoolSnapshotTag "${_SP_UID}" \
                 "diskid;${VM_TAG};img;${LOC_TAG};virt" \
                 ";;${_SP_VOL};${LOC_TAG_VAL};one"
     done
 }
 
+function storpoolVolumeRevertReason()
+{
+    local _reason="$1"
+    if [[ -z "${_reason}" ]]; then
+        case "${0##*/}" in
+            snap_revert)
+                _reason="disk_snap_revert"
+                ;;
+            snapshot_revert-storpool)
+                _reason="vm_snap_revert"
+                ;;
+            *)
+                _reason="$(storpoolDelayContext)"
+                ;;
+        esac
+    fi
+    printf '%s\n' "${_reason}"
+}
+
 function storpoolVolumeRevert()
 {
-    local _SP_UID="$1" _SP_VOL="$2" _SNAP_UID="$3" _REMOTE="$4" _REVERT_SIZE="${5:-0}"
+    local _SP_UID="$1" _SP_VOL="$2" _SNAP_UID="$3" _REMOTE="$4" _REVERT_SIZE="${5:-0}" _REASON="$6"
     local _RET=1 DO_REMOTE=""
     local _JSON_DATA="\"toSnapshot\":\"${_SNAP_UID}\""
     if boolTrue "_REVERT_SIZE"; then
@@ -1834,13 +2065,12 @@ function storpoolVolumeRevert()
             return "${_RET}"
         fi
     fi
-    if [[ -n "${DELAY_DELETE}" ]] && [[ -z "${_snapshot}" ]]; then
-        local DELAY_DELETE_tmp="${DELAY_DELETE//[[:digit:]]/}"
-        if [[ -n "${DELAY_DELETE_tmp}" ]] && [[ -z "${DELAY_DELETE_tmp/[smhd]/}" ]]; then
-            json="\"deleteAfter\":$(delayDeleteSeconds "${DELAY_DELETE}")"
-            json+=",\"tags\":{\"reason\":\"revert\"${_DD_TAGS:+,${_DD_TAGS}}}"
-            DO_REMOTE="" storpoolRetry VolumeSnapshot "${_SP_UID}" "${json}" >/dev/null
-            _ret=$?
+    if [[ -n "${DELAY_DELETE}" ]]; then
+        _REASON="$(storpoolVolumeRevertReason "${_REASON}")"
+        storpoolDelayDeleteSnapshot "${_SP_UID}" "${_SP_VOL}" "${_REASON}"
+        _RET=$?
+        if [[ ${_RET} -ne 0 ]]; then
+            return "${_RET}"
         fi
     fi
     SP_GLOBALID=$(DO_MULTICLUSTER=1 storpoolRetry VolumeRevert "${_SP_UID}" "${_JSON_DATA}")
@@ -2360,7 +2590,8 @@ function oneVmInfo()
         INCLUDE_CONTEXT_PACKAGES="${_TMP}"
     fi
     _TMP="${XPATH_ELEMENTS[i++]}"
-    if [[ -n "${_TMP}" ]]; then
+    T_OS_NVRAM=""
+    if isStorpoolValue "${_TMP}"; then
         T_OS_NVRAM="${_TMP}"
     fi
     SP_QOSCLASS_LINE="${XPATH_ELEMENTS[i++]}"
@@ -2654,6 +2885,7 @@ function oneTemplateInfo()
         "/VM/USER_TEMPLATE/SP_QOSCLASS"
         "/VM/USER_TEMPLATE/VC_POLICY"
         "/VM/TEMPLATE/TPM/MODEL"
+        "/VM/TEMPLATE/OS/FIRMWARE"
     )
 
     if boolTrue "DEBUG_oneTemplateInfo"; then
@@ -2673,9 +2905,11 @@ function oneTemplateInfo()
     VM_PREV_STATE="${XPATH_ELEMENTS[i++]}"
     CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     T_OS_NVRAM="${XPATH_ELEMENTS[i++]}"
+    isStorpoolValue "${T_OS_NVRAM}" || T_OS_NVRAM=""
     VM_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     VC_POLICY="${XPATH_ELEMENTS[i++]}"
     TPM_MODEL="${XPATH_ELEMENTS[i++]}"
+    VM_OS_FIRMWARE="${XPATH_ELEMENTS[i++]}"
     if boolTrue "DEBUG_oneTemplateInfo"; then
         _DBGMSG="VM_ID=${VM_ID} VM_STATE=${VM_STATE}(${VmState[${VM_STATE}]})"
         _DBGMSG+=" VM_LCM_STATE=${VM_LCM_STATE}(${LcmState[${VM_LCM_STATE}]})"
@@ -2684,6 +2918,7 @@ function oneTemplateInfo()
         _DBGMSG+=" VC_POLICY=${VC_POLICY}"
         _DBGMSG+=" VM_SP_QOSCLASS=${VM_SP_QOSCLASS}"
         _DBGMSG+=" TPM_MODEL=${TPM_MODEL}"
+        _DBGMSG+="${VM_OS_FIRMWARE:+ VM_OS_FIRMWARE=${VM_OS_FIRMWARE}}${T_OS_NVRAM:+ T_OS_NVRAM=${T_OS_NVRAM}}"
         splog "[D][oneTemplateInfo]${_DBGMSG}"
     fi
 
@@ -3192,7 +3427,8 @@ function oneVmVolumes()
         export DISKSNAPSHOT_LIMIT="${_TMP}"
     fi
     _TMP="${XPATH_ELEMENTS[i++]}"
-    if [[ -n "${_TMP}" ]] && [[ -z "${_TMP//[[:digit:]]/}" ]]; then
+    export T_OS_NVRAM=""
+    if isStorpoolValue "${_TMP}"; then
         export T_OS_NVRAM="${_TMP}"
     fi
     export VMSNAPSHOT_WITH_CHECKPOINT="${XPATH_ELEMENTS[i++]}" # TBD: check if this is needed
@@ -3322,6 +3558,7 @@ function oneVmVolumes()
         vmDisksMap+="${oneName}: "
         vmDisksTypeMap+="${oneName}:NVRAM "
         vmDisksReadOnlyMap+="${oneName}: "
+        vmDisksDsMap+="${oneName}:${VM_DS_ID} "
     fi
     DISK_ID="${CONTEXT_DISK_ID}"
     if [[ -n "${DISK_ID}" ]]; then
@@ -3413,7 +3650,7 @@ function oneVmDiskSnapshots()
 
     unset i
     local _DISK_SNAPSHOTS="${XPATH_ELEMENTS[i++]}"
-    read -g -r -a DISK_SNAPSHOTS_A <<< "${_DISK_SNAPSHOTS}"
+    read -r -a DISK_SNAPSHOTS_A <<< "${_DISK_SNAPSHOTS}"
     if boolTrue "DEBUG_oneVmDiskSnapshots"; then
         splog "[D][oneVmDiskSnapshots] VM ${VM_ID} DISK ${DISK_ID}, ${#DISK_SNAPSHOTS_A[*]} snapshots, SNAPSHOT_IDs:[${DISK_SNAPSHOTS_A[*]}]"
     fi
@@ -3485,8 +3722,8 @@ function oneVmSnapshots()
     CONTEXT_DISK_ID="${XPATH_ELEMENTS[i++]}"
     local _SNAPSHOT_ID="${XPATH_ELEMENTS[i++]}"
     local _HYPERVISOR_ID="${XPATH_ELEMENTS[i++]}"
-    read -g -r -a SNAPSHOT_IDS_A <<< "${_SNAPSHOT_ID}"
-    read -g -r -a HYPERVISOR_IDS_A <<< "${_HYPERVISOR_ID}"
+    read -r -a SNAPSHOT_IDS_A <<< "${_SNAPSHOT_ID}"
+    read -r -a HYPERVISOR_IDS_A <<< "${_HYPERVISOR_ID}"
     if [[ -n "${disk_id}" ]]; then
         export DISK_A="${XPATH_ELEMENTS[i++]}"
         export DISK_B="${XPATH_ELEMENTS[i++]}"

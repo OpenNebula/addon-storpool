@@ -77,7 +77,8 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 
     if boolTrue "MULTICLUSTER"; then
        oneHostInfo "${VMHOST}"
-       DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+       # RemoteCommand/~/... is "unknown cluster" when the host has no SP_CLUSTER_ID
+       [[ -z "${HOST_SP_CLUSTER_ID}" ]] || DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
     fi
 
     unset vmVolumesMap diskVolumes vmVolumesQcMap
@@ -121,14 +122,22 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$?"
 EOF
 )
+    RESTART_DOMAIN=0
     if boolTrue "VMSNAPSHOT_RESTARTDOMAIN"; then
+        RESTART_DOMAIN=1
         restartDomainDirname="/var/lib/one/datastores/${VM_DS_ID}/${VM_ID}"
         restartDomain="${restartDomainDirname}/$(mktemp -u restart-XXXXXX).domain"
         rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
     mkdir -p "${restartDomainDirname}"
     virsh --connect "\$LIBVIRT_URI" dumpxml "${DOMAIN}" --inactive 2>"/tmp/sprevert-${VM_ID}-dumpxml.err" >"${restartDomain}"
-    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh dumpxml ${DOMAIN} > "${restartDomain}" ret:\$?"
+    dret=\$?
+    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh dumpxml ${DOMAIN} > ${restartDomain} ret:\$dret"
+    if [[ \$dret -ne 0 ]] || ! grep -q "</domain>" "${restartDomain}"; then
+        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} domain XML dump failed: \$(cat /tmp/sprevert-${VM_ID}-dumpxml.err)"
+        rm -f "${restartDomain}"
+        exit 3
+    fi
 	while read -r -u 4 out; do
         logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
     done 4< <(virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" 2>&1)
@@ -137,12 +146,28 @@ EOF
 )
     fi
     ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
-    splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed ($?)"
+    ret=$?
+    if [[ ${ret} -eq 3 ]] && boolTrue "RESTART_DOMAIN"; then
+        # the domain is still running: destroy it without the restart (the old behaviour)
+        splog "[W] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} domain XML dump failed, the domain will not be restarted"
+        RESTART_DOMAIN=0
+        rCMD=$(cat <<EOF
+    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+	while read -r -u 4 out; do
+        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
+    done 4< <(virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" 2>&1)
+    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$?"
+EOF
+)
+        ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+        ret=$?
+    fi
+    splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed (${ret})${RESTART_DOMAIN:+ restart XML:${restartDomain}}"
     sleep .5
     declare -a tmpVolumes_a=()
     declare -a snapList_a=()
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
-    storpoolRetry SnapshotsList
+    DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList
     while read -r -u "${jqfh}" sp_uid img loctagval; do
         if boolTrue "DDEBUG_VMSNAPSHOT"; then
             splog "snapshot sp_uid:${sp_uid} tag img:${img} ${LOC_TAG}:${loctagval}"
@@ -150,15 +175,16 @@ EOF
         if [[ "${img}" == "${MEM_VOL}" ]]; then
             continue
         fi
-        if [[ -z "${diskVolumes_a["${img}"]}" ]]; then
+        if [[ -z "${vmVolumes_a["${img}"]}" ]]; then
             if boolTrue "DEBUG_VMSNAPSHOT"; then
-                splog "[D] VM ${VM_ID} Skip snapshot ${sp_uid} for ${img} (not in diskVolumes:${!diskVolumes_a[*]})"
+                splog "[D] VM ${VM_ID} Skip snapshot ${sp_uid} for ${img} (not in vmVolumes:${!vmVolumes_a[*]})"
             fi
             continue
         fi
         snapList_a+=("${sp_uid}-${img}-${SNAP_ID}")
     done {jqfh}< <(jq -r --arg snap_id "${SNAP_ID}" --arg vm_tag "${VM_TAG}" --arg vm_id "${VM_ID}" --arg loctag "${LOC_TAG}" \
-                  '.data[]|select(.tags[$vm_tag]==$vm_id)|select(.tags["snap"]==$snap_id)|select(.deleted==false)|"\(.name) \(.tags["img"]|tostring) \(.tags[$loctag]|tostring)"' \
+                  '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+                   |select(.tags[$vm_tag]==$vm_id)|select(.tags["snap"]==$snap_id)|select(.deleted==false)|"\(.name) \(.tags["img"]|tostring) \(.tags[$loctag]|tostring)"' \
                   "${TMPDIR}/SnapshotsList.json" || true)
     exec {jqfh}<&-
 
@@ -215,9 +241,10 @@ EOF
 #        SYMLINK="/var/lib/one/datastores/${VM_DS_ID}/${VM_ID}/disk.${vmVolumesMap["${volume}"]}"
 #        oneSymlink "${VMHOST}" "${sp_uid}" "${SYMLINK}" || finish=0
 
+        diskid="${diskVolumes_a["${volume}"]}"  # empty for the NVRAM volume
         storpoolVolumeTag "${sp_uid}" \
-            "virt;${LOC_TAG};diskid;${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
-             "one;${LOC_TAG_VAL};${diskVolumes_a["${volume}"]};${VM_ID};${VC_POLICY};${SP_QOSCLASS}"
+            "virt;${LOC_TAG};${diskid:+diskid};${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
+             "one;${LOC_TAG_VAL};${diskid};${VM_ID};${VC_POLICY};${SP_QOSCLASS}"
         te="$(date +%s%N)"
         splog "-=[E]=- snapshot ${snapentry} (${te} dt:$((te-tb)))"
     done
@@ -232,11 +259,22 @@ EOF
             kvDelByKey "/byName/${vname}"
         done
     fi
-    if boolTrue "VMSNAPSHOT_RESTARTDOMAIN"; then
+    if boolTrue "RESTART_DOMAIN"; then
+        # the ssh exit status must be the one of virsh create, not of the logger call after it
         rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-    virsh --connect "\$LIBVIRT_URI" create "${restartDomain}" && rm -f "${restartDomain}" "/tmp/sprevert-${VM_ID}"*
-    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh create ${restartDomain} //${DOMAIN}  ret:\$?"
+    virsh --connect "\$LIBVIRT_URI" create "${restartDomain}" >"/tmp/sprevert-${VM_ID}-create.log" 2>&1
+    cret=\$?
+    while read -r out; do
+        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
+    done <"/tmp/sprevert-${VM_ID}-create.log"
+    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh create ${restartDomain} //${DOMAIN} ret:\$cret"
+    if [[ \$cret -eq 0 ]]; then
+        rm -f "${restartDomain}" "/tmp/sprevert-${VM_ID}"*
+    else
+        cat "/tmp/sprevert-${VM_ID}-create.log" >&2
+    fi
+    exit \$cret
 EOF
 )
         ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-create.err" >"/tmp/sprevert-${VM_ID}-create.out"
@@ -245,7 +283,8 @@ EOF
             splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} restarted XML:${restartDomain}"
             rm -f "/tmp/sprevert-${VM_ID}"*
         else
-            splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} XML:${restartDomain} failed to restart ${ret}"
+            splog "[W] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} failed to restart from ${restartDomain} (${ret}): $(cat "/tmp/sprevert-${VM_ID}-create.err" 2>/dev/null | tr '\n' ' ')"
+            log_error "VM ${VM_ID} volumes reverted but the domain could not be restarted (${ret}), resume the VM"
         fi
     fi
     splog "END VM ${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID}"

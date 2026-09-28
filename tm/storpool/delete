@@ -96,17 +96,20 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     done
 
     if boolTrue "IS_DISK"; then
+        # the volume first, then its derived names (disk/VM snapshots, ...)
         for VOL_UID in $(storpoolVolumeStartswith "${SP_VOL}"); do
             storpoolDelete "${VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
-            if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                if [[ ${LCM_STATE} -ne 15 ]]; then
-                    # Combined deletion: both regular "snap" and VM "ONESNAP" snapshots
-                    storpoolSnapshotsDelete "${SP_VOL}" "snap,${VMSNAPSHOT_TAG}"
-                else
-                    splog "VMSNAPSHOT(s) not edeleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
-                fi
-            fi
         done
+        # sweep by tags once, after the loop: inside the loop it would remove
+        # the snapshots the loop still has to visit by their KV entries
+        if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
+            if [[ ${LCM_STATE} -ne 15 ]]; then
+                # Combined deletion: both regular "snap" and VM "ONESNAP" snapshots
+                storpoolSnapshotsDelete "${SP_VOL}" "snap,${VMSNAPSHOT_TAG}"
+            else
+                splog "VMSNAPSHOT(s) not deleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
+            fi
+        fi
     else
         # TPM volume
         if boolTrue "ONE_TPM_SAVE"; then
@@ -138,14 +141,14 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         if boolTrue "SP_CHECKPOINT_BD"; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
             if kvGetUid "${SP_VOL}"; then
-                storpoolDelete "${SP_UID}" "force" "" "" "\"sys\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+                storpoolDelete "${SP_UID}" "force" "" "" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
             fi
         fi
         if [[ -n "${T_OS_NVRAM}" ]]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
             if kvGetUid "${SP_VOL}"; then
                 VOL_UID="${SP_UID}"
-                storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"sys\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
+                storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
                     if [[ ${LCM_STATE} -ne 15 ]]; then
                         storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"

@@ -171,6 +171,13 @@ if [[ -d "${0}.d" ]]; then
             else
                 splog "[W] Error: ${hook} succeeded but xmllint failed with exit code ${ret}"
             fi
+        elif [[ ${ret} -eq 2 ]]; then
+            while read -r -u "${errfd}" errline; do
+                splog "[E] stderr:${errline}"
+            done {errfd}< <(cat "${ERR_FILE}" || true)
+            exec {errfd}<&-
+            error_message "[E][deploy-tweaks] ${hook##*/} aborted the deploy of VM ${VM_ID}: $(tr '\n' ' ' <"${ERR_FILE}")"
+            exit 255
         else
             splog "[W] ${hook} failed with exit code ${ret}"
         fi

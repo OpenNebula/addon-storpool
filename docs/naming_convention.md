@@ -118,33 +118,53 @@ virt=one
 
 ## Snapshots
 
+The snapshots are unnamed StorPool snapshots. The name used by the driver is stored as key/value in the etcd service and is repeated in the tags.
+
 ### Disk snapshot
 
+Registered in etcd as `${VM_VOLUME_NAME}-snap${SNAP_ID}` with tags:
 ```bash
-vol=${VM_VOLUME_NAME}
+img=${VM_VOLUME_NAME}
 snap=snap${SNAP_ID}
 nvm=${VM_ID}
 nloc=${ONE_PX}
 virt=one
 ```
 
+The image snapshots created with `oneimage snapshot-*` use the same `${IMAGE_VOLUME_NAME}-snap${SNAP_ID}` naming.
+
 ### VM snapshot
 
+Registered in etcd as `${VM_VOLUME_NAME}-ONESNAP-${VM_SNAPSHOT_ID}-${TIMESTAMP}` with tags:
 ```bash
-vol=${VM_VOLUME_NAME}
+img=${VM_VOLUME_NAME}
 snap=ONESNAP-${VM_SNAPSHOT_ID}-${TIMESTAMP}
 nvm=${VM_ID}
 nloc=${ONE_PX}
 virt=one
 ```
 
+### Reverting to a snapshot
+
+A disk or VM snapshot revert uses the StorPool `VolumeRevert` API call. The volume gets a new `globalId` on each revert, while the id it was created with is kept in `preservedGlobalId`. The addon keeps addressing the volume by the original id in etcd and in the datastore symlinks. Both ids are resolved by the StorPool API, `storpool volume list` and `/dev/storpool-byid/`, so when correlating the output of `storpool volume list` with the etcd entries or the symlinks either id can be matched.
+
 ## NVRAM
 
-A StorPool volume with tags:
+The UEFI variables of a VM with `T_OS_NVRAM = "storpool:template=..."`
+(see `uefi_boot.md`). A StorPool volume in the template of the system
+datastore (`${ONE_PX}-ds-${SYSTEM_DS_ID}`), with the exact size of the
+`OVMF_VARS` template file, registered in the KV store as
+`byName/${ONE_PX}-sys-${VM_ID}-NVRAM` -> `~globalId` and addressed by globalId
+afterwards, with tags:
 ```bash
 img=${ONE_PX}-sys-${VM_ID}-NVRAM
 nvm=${VM_ID}
 type=NVRAM
 nloc=${ONE_PX}
 virt=one
+vc-policy=${VC_POLICY}   # when the VM has a VC_POLICY
+qc=${SP_QOSCLASS}        # when a QoS class is resolved for the VM
 ```
+It has no `diskid` tag. It is listed in the `oneVmVolumes` maps with an empty
+`DISK_ID`, so VM snapshots (`${ONE_PX}-sys-${VM_ID}-NVRAM-ONESNAP-<id>-<ts>`),
+migration and terminate handle it like a VM disk; backups skip it.
