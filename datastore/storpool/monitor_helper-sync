@@ -32,6 +32,11 @@ ONE_VM_POOL_XML="one.pool"
 # Do sync to remote hosts
 MONITOR_SYNC_REMOTE="YES"
 
+# Drop the cached VolumeTemplatesStatus JSON when a datastore's StorPool
+# template is missing, so the next run refetches it instead of waiting
+# for the cache to expire
+MONITOR_DROP_STALE_TEMPLATE_CACHE="NO"
+
 ONEDATASTORE_XML="ds.xml"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${ONE_HOME}/remotes/tm/storpool/storpool_common.sh"
@@ -123,6 +128,7 @@ trapAdd "rm -f \"${lockFile}\""
 # Global arrays ...
 declare -a template_data_a
 declare -A jFiles_a
+declare -i ds_count=0 host_count=0
 declare -a to_delete_a
 
 if [[ ! -d "${SP_FE_JSON_PATH}" ]]; then
@@ -255,6 +261,7 @@ for i in "${!DS_ID_ARRAY[@]}"; do
         continue
     fi
 
+    ds_count+=1
     spApiHttpHost="${SP_API_HTTP_HOST:-0.0.0.0}"
 
     # get the list of StorPool clusters (connected API)
@@ -516,6 +523,7 @@ for i in "${!HOST_ID_ARRAY[@]}"; do
         continue
     fi
 
+    host_count+=1
     while read -r -u "${ffh}" _jFile; do
         sFile="$(realpath "${_jFile}" || true)"
         dFile="${sFile##*/}"
@@ -550,8 +558,20 @@ for i in "${!HOST_ID_ARRAY[@]}"; do
     done {ffh}< <(find "${SP_FE_JSON_PATH}" -type f -name "*-${_sp_cluster_id}" || true)
 done
 
+# drop the cached JSONs with missing templates so the next run refetches them
+if boolTrue "MONITOR_DROP_STALE_TEMPLATE_CACHE" "${MONITOR_DROP_STALE_TEMPLATE_CACHE}"; then # make shellcheck happy
+    declare -A dropped_a
+    for _jFile in "${to_delete_a[@]}"; do
+        [[ -n "${dropped_a[${_jFile}]}" ]] && continue
+        dropped_a[${_jFile}]=1
+        [[ -f "${_jFile}" ]] || continue
+        rm -f "${_jFile}"
+        splog "[I] ($?) rm -f ${_jFile} (MONITOR_DROP_STALE_TEMPLATE_CACHE=${MONITOR_DROP_STALE_TEMPLATE_CACHE})"
+    done
+elif [[ ${#to_delete_a[@]} -gt 0 ]] && boolTrue "DEBUG_MONITOR_HELPER_SYNC"; then
+    splog "[D] Kept ${#to_delete_a[@]} cached JSON(s) with missing templates (set MONITOR_DROP_STALE_TEMPLATE_CACHE=YES to drop)"
+fi
+
 rm -f "${lockFile}"
 
-if boolTrue "DEBUG_MONITOR_HELPER_SYNC"; then
-	splog "[D] END"
-fi
+splog "[I] END datastores:${ds_count} json:${#jFiles_a[@]} hosts:${host_count} missing_templates:${#to_delete_a[@]}"

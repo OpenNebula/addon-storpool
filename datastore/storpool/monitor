@@ -87,8 +87,11 @@ fi
 
 JSON_FILE="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON}-${SP_API_HTTP_HOST:-0.0.0.0}-${SP_CLUSTER_ID}"
 
+DS_TYPE=""
+found=""
 while read -r -u "${jqfh}" name storedCapacity storedFree u2 u3; do
 	if [[ "${name}" == "${DS_NAME}" ]]; then
+		found=1
 		if boolTrue "ALT_STATS" "${ALT_STATS}"; then # make shellcheck happy
 			storedFree=$(( storedFree + u2 + u3 ))
 		fi
@@ -99,6 +102,7 @@ while read -r -u "${jqfh}" name storedCapacity storedFree u2 u3; do
 				DS_TYPE="SYSTEM_DS"
 				;;
 			*)
+				DS_TYPE="IMAGE_DS"
 				echo "USED_MB=$((used/1024/1024))"
 				echo "TOTAL_MB=$((storedCapacity/1024/1024))"
 				echo "FREE_MB=$((storedFree/1024/1024))"
@@ -110,3 +114,5 @@ while read -r -u "${jqfh}" name storedCapacity storedFree u2 u3; do
 		break
 	fi
 done {jqfh}< <( jq -r '.data[]|.name+" "+(.stored.capacity|tostring)+" "+(.stored.free|tostring)+" "+(.stored.internal.u2|tostring)+" "+(.stored.internal.u3|tostring)' "${JSON_FILE}" || true)
+
+splog "[I] DS ${DS_ID} ${DS_TYPE:-${DRV_ACTION:0:6}} END (${DS_NAME}${found:+ found}${found:- missing in ${JSON_FILE}})"

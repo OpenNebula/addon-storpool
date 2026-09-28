@@ -17,6 +17,9 @@ def mock_args():
     args.dry_run = False
     args.execute = False
     args.one_px = "one"
+    args.vm_tag = "nvm"
+    args.loc_tag = "nloc"
+    args.loc_tag_val = "one"
     args.one_token = None
     args.dummy_etcd = 0
     args.default_qosclass = "default-qos"
@@ -1672,3 +1675,71 @@ class TestImageRootSnapshotQc:
         update = processor._build_sp_update(sp, self._root("tier0"))
         assert update["action"][0] == "VolumeFreeze"
         assert "tags" not in update["data"]
+
+
+class TestConfiguredTagNames:
+    """VM_TAG / LOC_TAG / LOC_TAG_VAL from addon-storpoolrc: kvchk must
+    use the site's tag names instead of the hardcoded nvm/nloc"""
+
+    def _cdrom(self):
+        return {
+            "spname": "int-img-35-171-3",
+            "img": "int-img-35-171-3",
+            "legacy": "int-img-35-171-3",
+            "snapshot": False,
+            "vm_id": 171,
+            "disk_id": 3,
+            "nloc": "int",
+            "virt": "one",
+            "disktype": DiskType.CDROM,
+        }
+
+    def test_vm_tag_ivm_is_used_not_stripped(self, processor):
+        """the site log: VM_TAG=ivm, kvchk queued ivm: '' and nvm: 171"""
+        processor.args.vm_tag = "ivm"
+        processor.args.one_px = "int"
+        processor.args.loc_tag_val = "int"
+        tags = processor._build_tags(self._cdrom())
+        assert tags["ivm"] == "171"
+        assert "nvm" not in tags
+        sp = _sp_vol("~bzz1.b.ttk1", "bzz1.b.ttk1",
+                     tags={"type": "CDROM", "ivm": "171"})
+        update = processor._build_sp_update(sp, self._cdrom())
+        assert "ivm" not in update["data"]["tags"]
+        assert update["data"]["tags"] == {
+            "nloc": "int", "virt": "one", "img": "int-img-35-171-3",
+            "diskid": "3",
+        }
+
+    def test_empty_vm_tag_disables_the_tag(self, processor):
+        processor.args.vm_tag = ""
+        tags = processor._build_tags(self._cdrom())
+        assert "nvm" not in tags
+        assert all(v != "171" for v in tags.values())
+
+    def test_loc_tag_and_value(self, processor):
+        processor.args.loc_tag = "site"
+        processor.args.loc_tag_val = "dc1"
+        disk = self._cdrom()
+        disk["nloc"] = "dc1"  # oneManager fills it from loc_tag_val
+        tags = processor._build_tags(disk)
+        assert tags["site"] == "dc1"
+        assert "nloc" not in tags
+        assert processor._sp_tags_this_instance(
+            {"tags": {"virt": "one", "site": "dc1"}}
+        )
+        assert not processor._sp_tags_this_instance(
+            {"tags": {"virt": "one", "site": "dc2"}}
+        )
+
+    def test_resolve_by_vm_tag(self, processor):
+        processor.args.vm_tag = "ivm"
+        processor.args.loc_tag_val = "int"
+        disk = self._cdrom()
+        processor.one.vm_disks = {disk["spname"]: disk}
+        sp = _sp_vol("~bzz1.b.ttk1", "bzz1.b.ttk1",
+                     tags={"virt": "one", "nloc": "int",
+                           "ivm": "171", "diskid": "3"})
+        assert processor._resolve_one_by_tags(sp) is disk
+        processor.args.vm_tag = ""
+        assert processor._resolve_one_by_tags(sp) is None

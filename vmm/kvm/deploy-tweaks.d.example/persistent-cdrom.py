@@ -90,6 +90,52 @@ def is_persistent_sata_slot(dev: str) -> bool:
     )
 
 
+def sata_persistent_unit(dev: str) -> str:
+    """AHCI controller 0, units 5..2 for sdzz..sdzw.
+
+    Unit 0 is the q35 context CDROM. OpenNebula places other SATA CDROMs
+    on controllers 1+ at unit 0. Without an explicit address, libvirt maps
+    sdzz (index 701) to controller 116 and adds SATA controllers 0..116.
+    """
+    return str(ord(dev[3]) - ord('u'))
+
+
+def set_sata_address(disk_e: ET.Element, dev: str) -> bool:
+    attrs = {
+        "type": "drive",
+        "controller": "0",
+        "bus": "0",
+        "target": "0",
+        "unit": sata_persistent_unit(dev),
+    }
+    address_e = disk_e.find('./address')
+    if address_e is None:
+        _ = ET.SubElement(disk_e, "address", attrs)  # type: ignore[attr-defined] # noqa: E501
+        return True
+    changed = False
+    for key, val in attrs.items():
+        if address_e.get(key) != val:
+            address_e.set(key, val)
+            changed = True
+    return changed
+
+
+def pin_persistent_sata_addresses(devices_e: ET.Element) -> bool:
+    changed = False
+    for disk_e in devices_e.findall('./disk'):
+        target_e = disk_e.find('./target')
+        if target_e is None or target_e.get('bus') != 'sata':
+            continue
+        dev = target_e.get('dev')
+        if dev is None or not is_persistent_sata_slot(dev):
+            continue
+        if set_sata_address(disk_e, dev):
+            log_inf(f"pinned SATA address for {dev}"
+                    f" controller=0 unit={sata_persistent_unit(dev)}")
+            changed = True
+    return changed
+
+
 def cdrom_has_source(disk_e: ET.Element) -> bool:
     source_e = disk_e.find('./source')
     if source_e is None:
@@ -157,6 +203,8 @@ def add_cdrom(
         },
     )
     _ = ET.SubElement(disk_e, "readonly", {})  # type: ignore[attr-defined] # noqa: E501
+    if cdrom_bus == 'sata' and is_persistent_sata_slot(dev):
+        set_sata_address(disk_e, dev)
     log_inf(f"added CDROM device: {dev}"
             f" type:{disk_cdrom_type} bus:{cdrom_bus}")
     return True
@@ -187,10 +235,11 @@ def change_cdrom(
             target_e.set('dev', dev)
             msg += f" dev:{target_dev} -> {dev}"
             changed = True
-            address_e = disk_e.find('./address')
-            if address_e is not None:
-                disk_e.remove(address_e)
-                msg += " removed address"
+        if cdrom_bus == 'sata' and is_persistent_sata_slot(dev):
+            if set_sata_address(disk_e, dev):
+                msg += (f" address controller=0"
+                        f" unit={sata_persistent_unit(dev)}")
+                changed = True
     if msg:
         log_inf(f"change_cdrom(){msg}")
     return changed
@@ -400,6 +449,8 @@ if pers_cdroms_count > 0:
             if add_cdrom(devices_e, cdrom_bus, disk_cdrom_type, dev):
                 changed = True
                 total_cdroms_count += 1
+        if pin_persistent_sata_addresses(devices_e):
+            changed = True
 
 
 if changed:

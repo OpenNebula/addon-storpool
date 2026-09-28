@@ -498,9 +498,17 @@ else
 
     if ! onetemplate show "${VM_TEMPLATE_NAME}" &>/dev/null; then
         imageDelete "${VM_TEMPLATE_NAME}"
-        TEMPLATE_ID="$(onemarketapp list -f NAME~'Alpine Linux' -l ID,NAME,TYPE,STAT --csv |\
-            grep 'img,rdy' | tail -n 1 | cut -d, -f 1)"
-        hdr "Downloading template ${TEMPLATE_ID} from OpenNebula Marketplace as '${VM_TEMPLATE_NAME}'"
+        TEMPLATE_ID=""
+        while IFS= read -r _app_id; do
+            [[ -n "${_app_id}" ]] || continue
+            _app_arch="$(onemarketapp show "${_app_id}" --xml | xmlget '//TEMPLATE' ARCHITECTURE || true)"
+            if [[ "${_app_arch}" == "x86_64" ]]; then
+                TEMPLATE_ID="${_app_id}"
+            fi
+        done < <(onemarketapp list -f NAME~'Alpine Linux' -l ID,NAME,TYPE,STAT --csv |\
+            grep 'img,rdy' | cut -d, -f 1)
+        [[ -n "${TEMPLATE_ID}" ]] || die "No ready x86_64 Alpine Linux marketplace image"
+        hdr "Downloading x86_64 template ${TEMPLATE_ID} from OpenNebula Marketplace as '${VM_TEMPLATE_NAME}'"
         if onemarketapp export "${TEMPLATE_ID}" "${VM_TEMPLATE_NAME}" --datastore "${IMAGE_DS_ID}" \
             &>"${DATA_DIR}/export-${VM_TEMPLATE_NAME}"; then
             hdr "Waiting for template image '${VM_TEMPLATE_NAME}' to become ready"
@@ -520,6 +528,9 @@ fi
 # VM create
 hdr "Creating VM ${VM_NAME} from Template ${VM_TEMPLATE_NAME}${VN_ID:+ using VNet ID ${VN_ID}}"
 echo
+cat >"${DATA_DIR}/user-${VM_NAME}.template" <<EOF
+VMSNAPSHOT_LIMIT = "5"
+EOF
 if onetemplate instantiate "${VM_TEMPLATE_NAME}" --name "${VM_NAME}" \
     ${VN_ID:+--nic "${VN_ID}"} --hold &>"${DATA_DIR}/instantiate-${VM_NAME}"; then
     # shellcheck disable=SC2310
@@ -528,6 +539,11 @@ else
     cat "${DATA_DIR}/instantiate-${VM_NAME}"
     die "Create VM failed //HOLD"
 fi
+onevm update "${VM_NAME}" --append "${DATA_DIR}/user-${VM_NAME}.template" \
+    &>"${DATA_DIR}/update-${VM_NAME}" \
+    || { cat "${DATA_DIR}/update-${VM_NAME}"; die "Failed to set VMSNAPSHOT_LIMIT"; }
+_snap_limit="$(onevm show "${VM_NAME}" --xml | xmlget '//USER_TEMPLATE' VMSNAPSHOT_LIMIT || true)"
+[[ "${_snap_limit}" == "5" ]] || die "VMSNAPSHOT_LIMIT is '${_snap_limit}', expected 5"
 
 vmDeploy "${VM_NAME}" "${HOST1}"
 VM_ID=$(onevm show "${VM_NAME}" --xml |\

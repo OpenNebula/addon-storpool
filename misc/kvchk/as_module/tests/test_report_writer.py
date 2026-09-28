@@ -149,3 +149,41 @@ def test_tag_context_iso_default_and_rc(monkeypatch):
         "sys.argv", ["storpool-kvchk", "--tag-context-iso", "0"]
     )
     assert parse_arguments({}).tag_context_iso is False
+
+
+def test_tag_names_from_rc(monkeypatch, tmp_path):
+    """VM_TAG, LOC_TAG and LOC_TAG_VAL come from addon-storpoolrc, also
+    when written with the export prefix; LOC_TAG_VAL falls back to
+    ONE_PX like storpool_common.sh"""
+    from storpool_kvchk.cli import (  # type: ignore[import-untyped]
+        parse_addon_storpoolrc,
+        parse_arguments,
+    )
+
+    for var in ("VM_TAG", "LOC_TAG", "LOC_TAG_VAL", "ONE_PX"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr("sys.argv", ["storpool-kvchk"])
+    args = parse_arguments({})
+    assert (args.vm_tag, args.loc_tag, args.loc_tag_val) == (
+        "nvm", "nloc", "one"
+    )
+    rc = tmp_path / "addon-storpoolrc"
+    rc.write_text(
+        "# comment\nexport ONE_PX=int\nVM_TAG=\"ivm\"\n"
+        "export LOC_TAG_VAL='${ONE_PX}'\n"
+    )
+    monkeypatch.setenv("ADDON_STORPOOLRC", str(rc))
+    defaults = parse_addon_storpoolrc()
+    assert defaults["ONE_PX"] == "int"
+    assert defaults["VM_TAG"] == "ivm"
+    args = parse_arguments(defaults)
+    assert (args.one_px, args.vm_tag, args.loc_tag, args.loc_tag_val) == (
+        "int", "ivm", "nloc", "int"
+    )
+    args = parse_arguments({"VM_TAG": ""})
+    assert args.vm_tag == ""
+    monkeypatch.setattr(
+        "sys.argv", ["storpool-kvchk", "--vm-tag", "vm", "--loc-tag-val", "x"]
+    )
+    args = parse_arguments(defaults)
+    assert (args.vm_tag, args.loc_tag_val) == ("vm", "x")

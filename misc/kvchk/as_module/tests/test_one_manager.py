@@ -23,6 +23,9 @@ def mock_args():
     args.dummy_etcd = 0
     args.one_token = None
     args.one_px = "one"
+    args.vm_tag = "nvm"
+    args.loc_tag = "nloc"
+    args.loc_tag_val = "one"
     args.default_qosclass = "default-qos"
     args.tag_context_iso = True
     return args
@@ -539,7 +542,7 @@ class TestoneManager:
         ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
-            "T_OS_LOADER": "OVMF",
+            "T_OS_NVRAM": "storpool:template=OVMF_VARS.fd",
             "SP_QOSCLASS": None,
             "VC_POLICY": None
         }.get(key, default)
@@ -549,6 +552,32 @@ class TestoneManager:
         expected_name = "one-sys-123-NVRAM"
         assert expected_name in vm_disks
         assert vm_disks[expected_name]["disktype"] == DiskType.NVRAM
+
+    def test_process_vm_system_disks_nvram_file_mode(self, mock_args):
+        """A T_OS_NVRAM that is not in storpool mode creates no NVRAM record"""
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {}
+
+        vm_mock = Mock()
+        vm_mock.ID = 123
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = [
+            Mock(HOSTNAME="test-host", TM_MAD="storpool")
+        ]
+        vm_mock.TEMPLATE.get.return_value = None
+        vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
+            "T_OS_NVRAM": "/var/lib/libvirt/qemu/nvram/x.fd:template=OVMF_VARS.fd",
+            "T_OS_LOADER": "/var/tmp/one/OVMF/OVMF_CODE.fd:readonly=yes type=pflash",
+            "SP_QOSCLASS": None,
+            "VC_POLICY": None
+        }.get(key, default)
+
+        vm_disks = manager._process_vm_system_disks(vm_mock, 1, ["snap1"], {})
+
+        assert "one-sys-123-NVRAM" not in vm_disks
+        assert vm_disks == {}
 
     def test_process_vm_system_disks_checkpoint(self, mock_args):
         """Test processing VM system disks - checkpoint"""
@@ -569,7 +598,7 @@ class TestoneManager:
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": None,
             "VC_POLICY": None,
-            "T_OS_LOADER": None
+            "T_OS_NVRAM": None
         }.get(key, default)
 
         vm_disks = manager._process_vm_system_disks(vm_mock, 1, [], {})
@@ -598,7 +627,7 @@ class TestoneManager:
             "CONTEXT": {"DISK_ID": 1},
         }.get(key)
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
-            "T_OS_LOADER": "OVMF", "SP_QOSCLASS": None, "VC_POLICY": None,
+            "T_OS_NVRAM": "storpool:template=OVMF_VARS.fd", "SP_QOSCLASS": None, "VC_POLICY": None,
         }.get(key, default)
 
         vm_disks = manager._process_vm_system_disks(
@@ -1522,7 +1551,7 @@ class TestTagContextIso:
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": "vm-qos",
             "VC_POLICY": "vc1",
-            "T_OS_LOADER": "OVMF",
+            "T_OS_NVRAM": "storpool:template=OVMF_VARS.fd",
         }.get(key, default)
         return vm_mock
 
@@ -1916,7 +1945,7 @@ class TestProcessVMSystemDisksUpdated:
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": "vm-specific-qos",
             "VC_POLICY": "vc-policy-1",
-            "T_OS_LOADER": None
+            "T_OS_NVRAM": None
         }.get(key, default)
 
         vm_disks = manager._process_vm_system_disks(
@@ -1947,7 +1976,7 @@ class TestProcessVMSystemDisksUpdated:
         ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
-            "T_OS_LOADER": "OVMF",
+            "T_OS_NVRAM": "storpool:template=OVMF_VARS.fd",
             "SP_QOSCLASS": "vm-qos",
             "VC_POLICY": "vc-policy-1"
         }.get(key, default)
@@ -1959,10 +1988,15 @@ class TestProcessVMSystemDisksUpdated:
         expected_name = "one-sys-123-NVRAM"
         assert expected_name in vm_disks
         assert vm_disks[expected_name]["disktype"] == DiskType.NVRAM
+        # snapshot records are keyed by volume name like the disk records
+        assert "snap1" not in vm_disks
+        snap_name = f"{expected_name}-snap1"
+        assert snap_name in vm_disks
+        assert vm_disks[snap_name]["spname"] == snap_name
+        assert vm_disks[snap_name]["img"] == expected_name
         # Check that snapshots don't have qosclass and vc-policy
-        assert "snap1" in vm_disks
-        assert "qosclass" not in vm_disks["snap1"]
-        assert "vc-policy" not in vm_disks["snap1"]
+        assert "qosclass" not in vm_disks[snap_name]
+        assert "vc-policy" not in vm_disks[snap_name]
 
     def test_process_vm_system_disks_checkpoint_with_qos(self, mock_args):
         """Test processing VM checkpoint disk"""
@@ -1983,7 +2017,7 @@ class TestProcessVMSystemDisksUpdated:
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
             "SP_QOSCLASS": "vm-qos",
             "VC_POLICY": "vc-policy-1",
-            "T_OS_LOADER": None
+            "T_OS_NVRAM": None
         }.get(key, default)
 
         vm_disks = manager._process_vm_system_disks(

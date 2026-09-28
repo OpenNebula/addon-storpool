@@ -78,18 +78,49 @@ Common element attributes:
 
 ### T_OS_NVRAM
 
-Format: `PATH_TO_VM_NVRAM_FILE:space separated list of element attributes in format key=value`
+Format: `MODE:space separated list of element attributes in format key=value`
 
-Where `PATH_TO_VM_NVRAM_FIL` is the path the the nvram file. With the *storpool* keyword the path will be a StorPool Volume. When there are no '/' in the string it is considered a relative path against the environment variable *NVRAM_TEMPLATE_PATH* (defined in *kvmrc* or *addon-storpoolrc* file).
+`MODE` is one of:
 
-Common element attributes:
+| mode | description |
+| ---- | ----------- |
+| `storpool` | the UEFI variables live in a StorPool volume `${ONE_PX}-sys-${VM_ID}-NVRAM` created by the addon (see below) |
+| `PATH_TO_VM_NVRAM_FILE` | a file on the KVM node managed by libvirt; a bare file name is placed in the VM directory of the system datastore |
+| empty | same as above with the file named after the `template` file |
+
+Element attributes:
 | attribute | description |
 | --------- | ----------- |
-| `template=/path/to/template/OVMF_VARS.fd` | optional, path to the template `OVMF_VARS` file |
-| `type=[file|block]` | optional, type of the nvram element |
+| `template=OVMF_VARS.fd` | in `storpool` mode mandatory: the `OVMF_VARS` file used to seed the volume, a bare file name is resolved against `OVMF_PATH` on the front-end (default `/var/lib/one/remotes/OVMF`); in file mode optional, resolved against `NVRAM_TEMPLATE_PATH` on the KVM node (default `/var/tmp/one/OVMF`) |
+| `type=[block\|file]` | optional, type of the nvram element. In `storpool` mode the default is `block` |
 
-Use this variable to define which file to use as a template for the UEFI nvram. The file must be available in the `/var/lib/one/remotes/OVMF/` folder.
-The `type` attribute will trigger the generation of the "new style" XML, which follow the XML definition syntax of any ordinary disk (libvirt 8.5+)
+In `storpool` mode the domain XML gets the "new style" nvram element that
+follows the syntax of a disk source (libvirt 8.5+):
+
+```
+<nvram type="block">
+  <source dev="/dev/storpool-byid/${globalId}"/>
+</nvram>
+```
+
+Requirements and limits of the `storpool` mode (verified with libvirt 10.0/QEMU 8.2
+on Ubuntu 24.04 and libvirt 11.10/QEMU 10.1 on AlmaLinux 9):
+
+* libvirt 8.5 or newer on the KVM nodes for `type=block`. libvirt 10.10+
+  fills in `format="raw"` itself and does not touch the device.
+* The volume has exactly the size of the template file. QEMU maps the pflash
+  at the size of the block device: a size that is not a multiple of 4KiB is
+  refused at VM start, a larger size shifts the firmware layout and OVMF does
+  not find its variable store. StorPool keeps the requested byte size, so the
+  `OVMF_VARS*.fd` files (540672 bytes for the current 4M builds) work as they are.
+* The VM must have a `CONTEXT` section: the volume is created by the
+  `context` transfer driver, which OpenNebula only invokes for VMs with context.
+* The volume is not part of VM backups, matching upstream OpenNebula which
+  does not back up the nvram file either. A restored VM starts with the
+  variables of the template again.
+* Live and cold migration, VM snapshots (create/revert/delete) and terminate
+  handle the volume like the VM disks.
+
 For OpenNebula VM Templates, the variables should be set as "*Tags*" named *T_OS_LOADER*
 
 ## Usage
@@ -101,29 +132,14 @@ T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
 T_OS_NVRAM = "storpool:template=OVMF_VARS.fd"
 ```
 
-will generate the following domain XML:
-
-```
-  <os>
-    <loader readonly="yes" type="pflash">/var/tmp/one/OVMF/OVMF_CODE.secboot.fd</loader>
-    <nvram>/dev/storpool/one-sys-42-NVRAM</nvram>
-  </os>
-```
-
-Setting variables this way:
-
-```
-T_OS_LOADER = "/var/tmp/one/OVMF/OVMF_CODE.secboot.fd:readonly=yes type=pflash"
-T_OS_NVRAM = "storpool:template=OVMF_VARS.fd type=block"
-```
-
-will generate the following domain XML:
+will generate the following domain XML (the volume is addressed by its
+StorPool globalId):
 
 ```
   <os>
     <loader readonly="yes" type="pflash">/var/tmp/one/OVMF/OVMF_CODE.secboot.fd</loader>
     <nvram type="block">
-      <source dev="/dev/storpool/one-sys-42-NVRAM" />
+      <source dev="/dev/storpool-byid/fir.b.tqq" />
     </nvram>
   </os>
 ```
@@ -140,23 +156,19 @@ As a result of defining these variable any existing definitions in the domain XM
 
 ### New VMs
 
-During VM instantiation, when the contextualization is built the file configured in *T_OS_NVRAM* will be dumped to a StorPool volume.
-Next, the `os.py` deploy-tweak will replace the `os/loader` and `os/nvram` elements in the domain XML the StorPool volume as a persistent UEFI nvram storage.
+During VM instantiation, when the contextualization is built, the `context`
+transfer driver creates the StorPool volume with the exact size of the
+`template` file, seeds it with the file content and registers it in the KV
+store. Next, the `os.py` deploy-tweak replaces the `os/loader` and `os/nvram`
+elements in the domain XML with the StorPool volume as persistent UEFI nvram
+storage. A missing template file, a template size that is not a multiple of
+4KiB or a volume missing from the KV store fail the deployment (the VM goes to
+`FAILURE`) instead of booting the VM with the wrong firmware setup.
 
 ### Existing VMs
 
-Note: for UEFI Secure Boot replace `OVMF_VARS.fd` with `OVMF_VARS.secboot.fd`.
-
-Following the naming convention: create a StorPool volume with exact size as the `OVMF_VARS.fd` file, attach the volume to the node where the VM is running, and dump the raw content of the `OVMF_VARS.fd` inside.
-
-```bash
-storpool volume ${ONE_PX}-sys-${VM_ID}-NVRAM size 528k template ${ONE_PX}-ds-${SYSTEM_DS_ID} tag nvm=${VM_ID} tag vc-policy=${VM_VC_POLICY}
-storpool attach volume ${ONE_PX}-sys-${VM_ID}-NVRAM here
-dd if=.../OVMF_VARS.fd of=/dev/storpool/${ONE_PX}-sys-${VM_ID}-NVRAM oflag=direct
-```
-Note: `tag vc-policy=${VM_VC_POLICY}` could be skipped when there is no VC_policy defined for the given VM.
-
-When the StorPool Volume is ready, define *T_OS_LOADER* and *T_OS_NVRAM* (*T_FEATURE_SMM* for SecureBoot) as "VM Attributes":
+Define *T_OS_LOADER* and *T_OS_NVRAM* (*T_FEATURE_SMM* for SecureBoot) as
+"VM Attributes":
 
 ```bash
 # from command line
@@ -165,4 +177,9 @@ echo "T_OS_NVRAM = \"storpool:template=OVMF_VARS.fd\"" >>append.template
 onevm update $VM_ID --append append.template
 ```
 
-Finally, the VM should be restarted from OpenNebula with power cycling (power-off --> resume) for the change to take effect.
+Note: for UEFI Secure Boot replace `OVMF_VARS.fd` with `OVMF_VARS.secboot.fd`.
+
+Finally, power cycle the VM from OpenNebula (power-off --> resume): the
+`context` driver creates and seeds the volume at the next deployment, no
+manual volume creation is needed. An existing volume with the right name is
+attached and used as is.
