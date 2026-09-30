@@ -178,6 +178,8 @@ rm -rf "${ISO_DIR}" > /dev/null 2>&1
 if [[ -n ${T_OS_NVRAM} ]]; then
     NVRAM_TEMPLATE=""
     for _kv in ${T_OS_NVRAM#*:}; do
+        # Only template= is required. Other attributes are ignored.
+        # shellcheck disable=SC2249
         case "${_kv%%=*}" in
             template)
                 NVRAM_TEMPLATE="${_kv#*=}"

@@ -248,7 +248,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     if [[ "${IS_DISK}" == "0" ]]; then
         # check DISK_TM_MADS
         STORPOOL_ONLY=0
-        if boolTrue "SP_CHECKPOINT_BD" "${SP_CHECKPOINT_BD}" && ! boolTrue "FORCE_VM_DIR_TRANSFER"; then
+        if boolTrue "SP_CHECKPOINT_BD" "${SP_CHECKPOINT_BD}" && ! boolTrue "FORCE_VM_DIR_TRANSFER" "${FORCE_VM_DIR_TRANSFER}"; then
             STORPOOL_ONLY=1
             for tm_mad in "${DISK_TM_MAD_ARRAY[@]}"; do
                 if [[ "${tm_mad/storpool/}" == "${tm_mad}" ]]; then
