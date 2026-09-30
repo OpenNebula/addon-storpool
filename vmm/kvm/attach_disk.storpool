@@ -55,6 +55,7 @@ T_PERSISTENT_CDROM_VM="$(echo "${DRV_ACTION}" | base64 -d | \
               xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM)"
 
 PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
+PERSISTENT_CDROM="${PERSISTENT_CDROM//[[:space:]]/}"
 
 DEV_PREFIX="${DEV_PREFIX:-${3:0:2}}"  # workaround a bug in 7.2.[0-1]
 
@@ -65,7 +66,9 @@ if [[ -n "${DEBUG_ATTACH_DISK}" ]]; then
     fi
 fi
 
-if [[ -n "${PERSISTENT_CDROM}" ]]; then
+# USER_TEMPLATE/T_PERSISTENT_CDROM=0 disables the feature for this VM.
+# A non-empty "0" must not count as enabled.
+if [[ "${PERSISTENT_CDROM}" =~ ^[0-9]+$ ]] && [[ "$((10#${PERSISTENT_CDROM}))" -gt 0 ]]; then
     if [[ "${TYPE^^}" == "CDROM" ]]; then
         case "${DEV_PREFIX,,}" in
             hd|sd|[a-z])

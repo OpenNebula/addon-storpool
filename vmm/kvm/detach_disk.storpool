@@ -43,8 +43,37 @@ if [[ -n "${DEBUG_DETACH_DISK}" ]]; then
     splog "[D] $0 $*"
 fi
 
-${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM:-0}"
-ret=$?
-splog "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/detach_disk.cdrom $* ${T_PERSISTENT_CDROM:-0} (ret:${ret})"
+# This action runs locally. OpenNebula passes the VM XML on stdin, base64-encoded.
+# USER_TEMPLATE/T_PERSISTENT_CDROM overrides the global value; 0 disables it.
+T_PERSISTENT_CDROM_VM=""
+HAVE_VM_XML=0
+if [[ ! -t 0 ]]; then
+    DRV_ACTION="$(cat || true)"
+    if [[ -n "${DRV_ACTION}" ]]; then
+        VM_XML="$(printf '%s' "${DRV_ACTION}" | base64 -d 2>/dev/null || true)"
+        if printf '%s' "${VM_XML}" | xmlstarlet sel -t -c '/VM' >/dev/null 2>&1; then
+            HAVE_VM_XML=1
+            T_PERSISTENT_CDROM_VM="$(printf '%s' "${VM_XML}" | \
+                xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM || true)"
+        fi
+    fi
+fi
+if [[ "${HAVE_VM_XML}" -eq 0 && -n "${VM_ID}" ]]; then
+    T_PERSISTENT_CDROM_VM="$(onevm show "${VM_ID}" --xml 2>/dev/null | \
+        xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM || true)"
+fi
+PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
+PERSISTENT_CDROM="${PERSISTENT_CDROM//[[:space:]]/}"
+
+REMOTE_VMM="${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm"
+if [[ "${PERSISTENT_CDROM}" =~ ^[0-9]+$ ]] && [[ "$((10#${PERSISTENT_CDROM}))" -gt 0 ]]; then
+    ${SSH:-ssh} "${KVMHOST}" "${REMOTE_VMM}/detach_disk.cdrom $* ${PERSISTENT_CDROM}"
+    ret=$?
+    splog "${REMOTE_VMM}/detach_disk.cdrom $* ${PERSISTENT_CDROM} (ret:${ret})"
+else
+    ${SSH:-ssh} "${KVMHOST}" "${REMOTE_VMM}/detach_disk $*"
+    ret=$?
+    splog "${REMOTE_VMM}/detach_disk $* (ret:${ret})"
+fi
 
 exit "${ret}"
