@@ -95,7 +95,6 @@ oneTemplateInfo "${TEMPLATE}"
 #-------------------------------------------------------------------------------
 declare -A volumesToDetach
 
-json=
 for i in "${!DISK_ID_ARRAY[@]}"; do
     DISK_ID="${DISK_ID_ARRAY[i]}"
     if [[ "${DISK_TM_MAD_ARRAY[i]}" == "storpool" ]]; then

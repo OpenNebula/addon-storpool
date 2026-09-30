@@ -176,6 +176,7 @@ if [[ -d "${0}.d" ]]; then
                 splog "[E] stderr:${errline}"
             done {errfd}< <(cat "${ERR_FILE}" || true)
             exec {errfd}<&-
+            # shellcheck disable=SC2312
             error_message "[E][deploy-tweaks] ${hook##*/} aborted the deploy of VM ${VM_ID}: $(tr '\n' ' ' <"${ERR_FILE}")"
             exit 255
         else

@@ -1,0 +1,6 @@
+# Optional checks. -o all on the command line is the same switch.
+enable=all
+# Follow source files that are not themselves on the command line.
+external-sources=true
+# shellcheck.sh runs from the repo root. source=addon-storpoolrc is that file.
+source-path=./

@@ -286,6 +286,7 @@ EOF
             splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} restarted XML:${restartDomain}"
             rm -f "/tmp/sprevert-${VM_ID}"*
         else
+            # shellcheck disable=SC2002,SC2312
             splog "[W] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} failed to restart from ${restartDomain} (${ret}): $(cat "/tmp/sprevert-${VM_ID}-create.err" 2>/dev/null | tr '\n' ' ')"
             log_error "VM ${VM_ID} volumes reverted but the domain could not be restarted (${ret}), resume the VM"
         fi

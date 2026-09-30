@@ -1657,7 +1657,8 @@ function storpoolDelete()
                     exit "${_ret}"
                 fi
             else
-                local newName="${_SP_VOL:-${_SP_UID#\~}}_DELETE$(date +%s||true)"
+                local newName
+                newName="${_SP_VOL:-${_SP_UID#\~}}_DELETE$(date +%s||true)"
                 splog "[E] Unsupported format in DELAY_DELETE='${_DELAY_DELETE}' (expected <n>[s|m|h|d]). Preserving ${_SP_UID} (${_SP_VOL}) as ${newName}"
                 if DO_REMOTE="" storpoolVolumeRename "${_SP_UID}" "${_SP_VOL}" "${newName}" >/dev/null; then
                     if storpoolVolumeFreeze "${_SP_UID}" "volume"; then

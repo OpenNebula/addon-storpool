@@ -83,7 +83,7 @@ function exclude_cpus()
 read -r -a mem_arr <<< "$(free -b | grep -i "mem:" || true)"
 root_mem="${mem_arr[1]}"
 
-read -r -a cgmount <<<"$(grep cgroup /proc/mounts)"
+read -r -a cgmount <<< "$(grep cgroup /proc/mounts || true)"
 #cgroup2 /sys/fs/cgroup cgroup2 rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot 0 0
 if [[ "${cgmount[2]}" == "cgroup2" ]]; then
     cgver="2"
