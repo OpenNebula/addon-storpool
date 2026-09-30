@@ -308,8 +308,62 @@ function delayDeleteSeconds()
 }
 
 #-------------------------------------------------------------------------------
-# trap handling functions
+# trap handling
 #-------------------------------------------------------------------------------
+TRAP_USER_A=()
+
+function _trapCompose()
+{
+    local _c
+    TRAP_CMD=""
+    for _c in "${TRAP_USER_A[@]}"; do
+        TRAP_CMD+="${_c};"
+    done
+    # shellcheck disable=SC2089
+    TRAP_CMD+="rm -rf \"${TMPDIR}\";"
+    # shellcheck disable=SC2090
+    export TRAP_CMD
+}
+
+function _trapArm()
+{
+    trap '_sp_trap_run' TERM INT QUIT EXIT
+}
+
+# Return $1 so the next command sees it in $?.
+function _sp_trap_rc()
+{
+    return "${1:-0}"
+}
+
+function _sp_trap_run()
+{
+    local _rc=$? _c _cret _errexit=0
+    [[ -n ${_SP_TRAP_RUNNING} ]] && return 0
+    _SP_TRAP_RUNNING=1
+    case $- in
+        *e*) _errexit=1 ;;
+    esac
+    trap '' TERM INT QUIT
+    set +e
+    for _c in "${TRAP_USER_A[@]}"; do
+        (
+            trap - EXIT TERM INT QUIT
+            _sp_trap_rc "${_rc}"
+            eval "${_c}"
+        )
+        _cret=$?
+        if [[ ${_cret} -ne 0 ]]; then
+            splog "[E] trap command failed (${_cret}): ${_c}"
+        fi
+    done
+    rm -rf "${TMPDIR}"
+    _SP_TRAP_RUNNING=
+    _trapArm
+    [[ ${_errexit} -eq 1 ]] && set -e
+    return 0
+}
+
 function trapReset()
 {
     if [[ ! -d "${TMPDIR}" ]]; then
@@ -317,52 +371,70 @@ function trapReset()
         export TMPDIR
     fi
     local OLD_TRAP_CMD="${TRAP_CMD}"
-    export TRAP_CMD="rm -rf \"${TMPDIR}\";"
+    TRAP_USER_A=()
+    _trapCompose
     if boolTrue "DDEBUG_TRAPS"; then
         splog "[DD] trapReset:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
     fi
-    # shellcheck disable=SC2064
-    trap "${TRAP_CMD}" TERM INT QUIT EXIT
+    _trapArm
 }
+
+# trapAdd [APPEND|PREPEND] CMD
 function trapAdd()
 {
-    local _trap_cmd="$1"
+    local _where="front" _trap_cmd="$1"
     if boolTrue "DEBUG_TRAPS"; then
         splog "[D] trapAdd:'$*'"
     fi
 
-    [[ -n "${TRAP_CMD}" ]] || TRAP_CMD="rm -rf \"${TMPDIR}\";"
+    case "${_trap_cmd}" in
+        APPEND)
+            _where="end"
+            _trap_cmd="${2-}"
+            ;;
+        PREPEND)
+            _trap_cmd="${2-}"
+            ;;
+    esac
 
-    if [[ "${_trap_cmd}" == "PREPEND" ]]; then
-        _trap_cmd="$2"
-        export TRAP_CMD="${TRAP_CMD}${_trap_cmd};"
-    else
-        export TRAP_CMD="${_trap_cmd};${TRAP_CMD}"
+    if [[ -z "${_trap_cmd}" ]]; then
+        splog "[E] trapAdd: empty command"
+        return 1
     fi
 
+    if [[ "${_where}" == "end" ]]; then
+        TRAP_USER_A+=("${_trap_cmd}")
+    else
+        TRAP_USER_A=("${_trap_cmd}" "${TRAP_USER_A[@]}")
+    fi
+    _trapCompose
     if boolTrue "DDEBUG_TRAPS"; then
         splog "[DD] trapAdd:[${TRAP_CMD}]"
     fi
-    # shellcheck disable=SC2064
-    trap "${TRAP_CMD}" TERM INT QUIT EXIT
+    _trapArm
 }
+
 function trapDel()
 {
-    local _trap_cmd="$1"
+    local _trap_cmd="$1" _i _found=0
+    local -a _keep=()
     if boolTrue "DEBUG_TRAPS"; then
         splog "[D] trapDel:$*"
     fi
     local OLD_TRAP_CMD="${TRAP_CMD}"
-    export TRAP_CMD="${TRAP_CMD/${_trap_cmd};/}"
-    if [[ -n "${TRAP_CMD}" ]]; then
-        if boolTrue "DDEBUG_TRAPS"; then
-            splog "[DD] trapDel:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
+    for _i in "${!TRAP_USER_A[@]}"; do
+        if [[ ${_found} -eq 0 && "${TRAP_USER_A[_i]}" == "${_trap_cmd}" ]]; then
+            _found=1
+            continue
         fi
-        # shellcheck disable=SC2064
-        trap "${TRAP_CMD}" TERM INT QUIT EXIT
-    else
-        trapReset
+        _keep+=("${TRAP_USER_A[_i]}")
+    done
+    TRAP_USER_A=("${_keep[@]}")
+    _trapCompose
+    if boolTrue "DDEBUG_TRAPS"; then
+        splog "[DD] trapDel:[${TRAP_CMD}] (old:[${OLD_TRAP_CMD}])"
     fi
+    _trapArm
 }
 
 trapReset

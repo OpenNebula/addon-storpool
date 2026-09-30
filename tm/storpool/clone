@@ -109,7 +109,7 @@ else
     exit 1
 fi
 
-trapAdd "storpoolVolumeDelete \"${VOL_UID}\" \"force\""
+trapAdd "storpoolDelete \"${VOL_UID}\" \"force\""
 
 if [[ -n "${SIZE}" ]]; then
     if [[ ${SIZE} -gt ${ORIGINAL_SIZE:-0} ]]; then
@@ -126,7 +126,7 @@ fi
 
 storpoolAttach "${VOL_UID}" "${DST_HOST}" "${mode}"
 
-trapAdd "storpoolVolumeDetach \"${VOL_UID}\" \"\" \"${DST_HOST}\""
+trapAdd "storpoolDetach \"${VOL_UID}\" \"\" \"${DST_HOST}\""
 
 storpoolVolumeTag "${VOL_UID}" \
         "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \

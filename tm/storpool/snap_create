@@ -103,7 +103,7 @@ kvGetUid "${SP_VOL}" fatal
 
 if [[ "$0" =~ "_live" ]] && boolTrue "DISK_SNAPSHOT_FSFREEZE"; then
     oneFsfreeze "${DST_HOST}" "${DEPLOY_ID}"
-    trapAdd APPEND "oneFsthaw \"${DST_HOST}\" \"${DEPLOY_ID}\""
+    trapAdd "oneFsthaw \"${DST_HOST}\" \"${DEPLOY_ID}\""
 fi
 
 storpoolSnapshotCreate "${SP_SNAP}" "${SP_UID}" \

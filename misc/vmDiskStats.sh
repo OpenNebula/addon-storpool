@@ -33,7 +33,7 @@ source "${ONE_PATH}/tm/storpool/storpool_common.sh"
 source "${ONE_PATH}/addon-storpoolrc"
 
 TMP_DIR="$(mktemp --tmpdir -d)"
-trapAdd APPEND 'rm -rf "$TMP_DIR"'
+trapAdd 'rm -rf "$TMP_DIR"'
 
 echo -n "*** StorPool Volumes JSON " >&2
 spVols="${TMP_DIR}/spVols.json"

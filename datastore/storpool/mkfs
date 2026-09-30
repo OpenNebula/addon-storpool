@@ -155,7 +155,7 @@ if [[ -n "${FSTYPE}" && "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
     if boolTrue "DEBUG_DS_MKFS"; then
         splog "FSTYPE='${FSTYPE}' FS='${FS}'"
     fi
-    trapAdd "storpoolVolumeDelete \"${VOL_UID}\" force snaps"
+    trapAdd "storpoolDelete \"${VOL_UID}\" force snaps"
     trapAdd "splog \"trap errno \$? \""
 
     storpoolAttach "${VOL_UID}" "${DST_HOST}"
