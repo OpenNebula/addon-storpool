@@ -136,6 +136,39 @@ def pin_persistent_sata_addresses(devices_e: ET.Element) -> bool:
     return changed
 
 
+def drop_unused_sata_controllers(devices_e: ET.Element) -> bool:
+    """Drop oned's per-disk AHCI controllers once no SATA disk uses them.
+
+    Libvirt requires SATA bus=0 and target=0, but unit is the port (six
+    per controller). Since #5705, LibVirtDriverKVM.cc still gives every
+    sd* SATA disk its own controller at unit 0. On q35 the index starts
+    at 1 because controller 0 is the implicit ICH9 AHCI (the context
+    CDROM, which has no address). After this tweak moves a CDROM onto
+    controller 0 that extra controller element is empty.
+    """
+    used = set()
+    for disk_e in devices_e.findall('./disk'):
+        target_e = disk_e.find('./target')
+        address_e = disk_e.find('./address')
+        if (target_e is None or target_e.get('bus') != 'sata' or
+                address_e is None or address_e.get('type') != 'drive'):
+            continue
+        controller = address_e.get('controller')
+        if controller is not None:
+            used.add(controller)
+    changed = False
+    for controller_e in list(devices_e.findall('./controller')):
+        if controller_e.get('type') != 'sata':
+            continue
+        index = controller_e.get('index')
+        if index is None or index == '0' or index in used:
+            continue
+        devices_e.remove(controller_e)
+        log_inf(f"removed unused SATA controller index={index}")
+        changed = True
+    return changed
+
+
 def cdrom_has_source(disk_e: ET.Element) -> bool:
     source_e = disk_e.find('./source')
     if source_e is None:
@@ -450,6 +483,8 @@ if pers_cdroms_count > 0:
                 changed = True
                 total_cdroms_count += 1
         if pin_persistent_sata_addresses(devices_e):
+            changed = True
+        if drop_unused_sata_controllers(devices_e):
             changed = True
 
 
