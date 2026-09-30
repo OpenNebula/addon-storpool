@@ -293,6 +293,7 @@ else
 
         storpoolVolumeRename "${TEMP_VOL_UID}" "${SP_TEMP_VOL}" "${SP_VOL}" "${SP_TEMPLATE}"
         VOL_UID="${TEMP_VOL_UID}"
+        trapDel "storpoolDelete \"${TEMP_VOL_UID}\" force snaps"
     else
         storpoolVolumeCreate "${SP_VOL}" "${CREATE_SIZE}" "${SP_TEMPLATE}"
 

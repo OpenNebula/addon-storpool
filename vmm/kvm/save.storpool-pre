@@ -62,13 +62,15 @@ if boolTrue "SP_CHECKPOINT_BD"; then
             "CHECKPOINT;${SP_VOL};one;${LOC_TAG_VAL};${VM_ID}"
     trapAdd "storpoolDelete \"${SP_UID}\" \"force\""
 
-    storpoolVolumeAttach "${SP_UID}" "${HVHOST}"
-    trapReset
-
+    storpoolAttach "${SP_UID}" "${HVHOST}"
     SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
     ln -sf "${SP_LINK}" "${FILE}"
     ret=$?
     splog "ln -sf ${SP_LINK} ${FILE} (${ret})"
+    if [[ ${ret} -ne 0 ]]; then
+        exit "${ret}"
+    fi
+    trapReset
 
     oneVmInfo "${VM_ID}"
 

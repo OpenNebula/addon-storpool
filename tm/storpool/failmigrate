@@ -41,7 +41,7 @@ source "${TM_PATH}/storpool_common.sh"
 
 if [[ ! -t 0 ]]; then
     tmpxml="$(mktemp --tmpdir "failmigrate-${VM_ID}-XXXXXXXX")"
-    trapAdd APPEND "rm -rf \"${tmpxml}\""
+    trapAdd "rm -rf \"${tmpxml}\""
     cat > "${tmpxml}"
     if [[ -s "${tmpxml}" ]]; then
         SYSTEM_MAD="$6"

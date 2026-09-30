@@ -42,7 +42,7 @@ source "${TM_PATH}/storpool_common.sh"
 
 if [[ ! -t 0 ]]; then
     tmpxml="$(mktemp --tmpdir "postmigrate-${VM_ID}-XXXXXXXX")"
-    trapAdd APPEND "rm -rf \"${tmpxml}\""
+    trapAdd "rm -rf \"${tmpxml}\""
     # TEMPLATE_64 is for compatibility with migrate_other()
     TEMPLATE_64="$(tee "${tmpxml}" || true)"
     export TEMPLATE_64

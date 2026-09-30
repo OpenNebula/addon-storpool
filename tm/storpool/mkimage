@@ -141,7 +141,10 @@ if [[ "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
     fi
     splog "MKFS_CMD=${MKFS_CMD}"
 
-    trapAdd "splog \"return \$? \"; storpoolDetach \"${VOL_UID}\" \"force\" \"\" \"all\"; storpoolDelete \"${VOL_UID}\" force snaps"
+    # Newest entry runs first: log, detach, delete, then rm $TMPDIR.
+    trapAdd "storpoolDelete \"${VOL_UID}\" force snaps"
+    trapAdd "storpoolDetach \"${VOL_UID}\" \"force\" \"\" \"all\""
+    trapAdd "splog \"return \$?\""
 
     splog "ssh_exec_and_log ${DST_HOST} ${MKFS_CMD}"
     ssh_exec_and_log "${DST_HOST}" "${MKFS_CMD}" \
