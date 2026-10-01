@@ -43,14 +43,6 @@ parser still reads controllers from both, then `qemu_validate.c` requires
 every `pcie-root` index to be 0. The extra root gets the next index and the
 define fails with "Index for 'pcie-root' controllers must be 0".
 
-### `nvme-disk.py` and `nvme-block.py`: namespace 0
-
-`<disk type='nvme'>` with `<source type='pci' managed='yes'>` and a PCI
-`<address>` is the documented host-NVMe backend. `namespace='0'` is not:
-namespaces start at 1 (`domain_validate.c`, "NVMe namespace can't be zero").
-Both scripts set `namespace` from the attribute index, so index 0 is
-rejected. The two scripts emit the same XML.
-
 ### `console.py`: a fixed pty path
 
 `tty` and `<source path>` are in the character-device schema, but they are
@@ -199,9 +191,13 @@ Root ports can also set `model name=`, `hotplug`, and
 `<target chassis= port=>`. Libvirt fills chassis and port when they are
 omitted.
 
-Host NVMe presented as virtio (`type='nvme'`, `target bus='virtio'`) is one
-backend. The other is an emulated guest controller:
-`<controller type='nvme'>` and `<target bus='nvme' dev='nvme0n1'>`.
+`nvme-disk.py` and `nvme-block.py` append `<disk type='nvme' device='disk'>`
+with `<source type='pci' managed='yes' namespace='N'>` and
+`<target bus='virtio'>`. `namespace` is an integer starting at 1; libvirt
+rejects 0. It comes from `namespace=` on the attribute, or from the
+attribute index when that index is at least 1. `nvme-disk.py` also replaces
+every `<controller type='nvme'>` with `T_NVME_CONTROLLER` controllers
+indexed from 0.
 
 ### 10. Video (`video.py`)
 

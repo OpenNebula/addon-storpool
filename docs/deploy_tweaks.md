@@ -246,6 +246,16 @@ Set KVM feature children under `domain/features/kvm`. `on` creates `<features>` 
 
 `T_KVM_DIRTY_RING=on:size=4096` sets `size`. The size must be a power of two from 1024 to 65536. `on` alone keeps a size already on the element. `off` drops `size`.
 
+### `nvme-disk.py`
+
+Append a host NVMe disk for each set `USER_TEMPLATE/T_NVME_DEVICE0` through `T_NVME_DEVICE31`. The value is a PCI address `DOMAIN:BUS:SLOT.FUNC`, plus an optional `namespace=N`. Example: `0000:81:00.0 namespace=2`.
+
+Each disk is `<disk type='nvme' device='disk'>` with `<driver name='qemu' type='raw'/>`, `<source type='pci' managed='yes' namespace='N'>`, a PCI `<address>`, and `<target dev='vdX' bus='virtio'/>`. `X` runs backward from `z`, so index 0 is `vdz` and index 1 is `vdy`. Existing disks are left in place.
+
+`namespace` must be an integer >= 1. Libvirt rejects 0. If `namespace=` is omitted and the index is >= 1, the namespace is the index. Index 0 with no `namespace=` exits 2. A PCI address that is not three colon-separated parts with `SLOT.FUNC`, or any trailing key other than `namespace`, exits 2.
+
+`T_NVME_CONTROLLER=N` removes every `<controller type='nvme'>` and appends controllers `index` 0 through `N-1`. `N` must be a positive integer. With neither a device key nor `T_NVME_CONTROLLER` set, the domain is left unchanged. A missing `<devices>` exits 2 when a device key or `T_NVME_CONTROLLER` is set. A `USER_TEMPLATE` value wins over the environment; an empty value is unset. A bad value exits 2, which aborts the deploy.
+
 ### os.py
 
 Set/update `domain/os` element; see [UEFI boot](uefi_boot.md).
