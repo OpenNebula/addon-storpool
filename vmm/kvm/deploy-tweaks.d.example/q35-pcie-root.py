@@ -47,7 +47,14 @@ def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
             elem.tail = i
 
 
-changed: bool = False
+def fatal(msg: str) -> None:
+    print(f"Error in q35-pcie-root: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def is_pci(elem: ET.Element) -> bool:
+    return elem.tag == 'controller' and elem.get('type') == 'pci'
+
 
 xmlDomain: str = sys.argv[1]
 doc: ET.ElementTree = ET.parse(xmlDomain)
@@ -60,30 +67,80 @@ vm: ET.Element = vm_e.getroot()
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-xpath: str = './USER_TEMPLATE/Q35_PCIE_ROOT_PORTS'
-t_q35_ports_e: Optional[ET.Element] = vm.find(xpath)
-if t_q35_ports_e is not None and t_q35_ports_e.text is not None:
-    q35_ports: int = int(t_q35_ports_e.text)
-    os_type: Optional[ET.Element] = root.find('./os/type')
-    if os_type is not None and os_type.attrib['machine'] is not None:
-        if 'q35' in os_type.attrib['machine']:
-            new_device_e: ET.Element = ET.SubElement(root, 'devices', {})
+ports_e: Optional[ET.Element] = vm.find('.//USER_TEMPLATE/T_Q35_PCIE_ROOT_PORTS')
+if ports_e is None or ports_e.text is None or ports_e.text.strip() == '':
+    sys.exit(0)
 
-            ET.SubElement(new_device_e, 'controller', {
-                    'type': 'pci',
-                    'model': 'pcie-root'
-                })
-            for i in range(0, q35_ports):
-                ET.SubElement(new_device_e, 'controller', {
-                        'type': 'pci',
-                        'model': 'pcie-root-port'
-                    })
-            ET.SubElement(new_device_e, 'controller', {
-                'type': 'pci',
-                'model': 'pcie-to-pci-bridge'
-            })
-            changed = True
+ports_text: str = ports_e.text.strip()
+if not ports_text.isdigit():
+    fatal(f"T_Q35_PCIE_ROOT_PORTS '{ports_text}' is not a non-negative integer")
+ports: int = int(ports_text)
 
-if changed:
-    indent(root)
-    doc.write(xmlDomain)
+os_type: Optional[ET.Element] = root.find('./os/type')
+machine: str = ''
+if os_type is not None and os_type.get('machine') is not None:
+    machine = os_type.get('machine') or ''
+if 'q35' not in machine:
+    fatal('T_Q35_PCIE_ROOT_PORTS requires machine type q35')
+
+devices_list = root.findall('./devices')
+if not devices_list:
+    fatal('missing devices')
+
+first: ET.Element = devices_list[0]
+hole: Optional[ET.Element] = None
+insert_after: Optional[ET.Element] = None
+placed: bool = False
+
+for devices in devices_list:
+    for child in list(devices):
+        if not is_pci(child):
+            if devices is first and not placed:
+                insert_after = child
+            continue
+        if hole is None and child.get('model') == 'pcie-root':
+            found: Optional[ET.Element] = child.find('pcihole64')
+            if found is not None:
+                child.remove(found)
+                hole = found
+        devices.remove(child)
+        if devices is first:
+            placed = True
+
+for devices in devices_list[1:]:
+    if len(devices) == 0:
+        root.remove(devices)
+
+if insert_after is None:
+    insert_at: int = 0
+else:
+    insert_at = list(first).index(insert_after) + 1
+
+root_e: ET.Element = ET.Element('controller', {
+    'type': 'pci',
+    'index': '0',
+    'model': 'pcie-root',
+})
+if hole is not None:
+    root_e.append(hole)
+first.insert(insert_at, root_e)
+insert_at += 1
+
+for idx in range(1, ports + 1):
+    port_e: ET.Element = ET.Element('controller', {
+        'type': 'pci',
+        'index': str(idx),
+        'model': 'pcie-root-port',
+    })
+    first.insert(insert_at, port_e)
+    insert_at += 1
+
+bridge_e: ET.Element = ET.Element('controller', {
+    'type': 'pci',
+    'index': str(ports + 1),
+    'model': 'pcie-to-pci-bridge',
+})
+first.insert(insert_at, bridge_e)
+
+indent(root)
+doc.write(xmlDomain)
