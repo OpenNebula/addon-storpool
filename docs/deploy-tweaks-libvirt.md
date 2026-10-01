@@ -151,6 +151,8 @@ A set key replaces that part of the domain. With the key unset, OpenNebula's ele
 
 `T_CPU_CACHE` writes `<cache>`. `emulate` requires `level=3`. `passthrough` requires `mode` `host-passthrough` or `maximum`. `T_CPU_MAXPHYSADDR` writes `<maxphysaddr>`. `emulate` requires `bits`. `limit` is only for `passthrough`. A bad value exits 2.
 
+`T_VCPU_MAX` rewrites `<vcpu current>` and `<vcpus>`. `T_MEMORY_MAX` is MiB, converted into the `<memory>` unit, and becomes the balloon ceiling: `<memory>` is the max and `<currentMemory>` is the current size. `T_MAXMEMORY` and `T_MAXMEMORY_SLOTS` together replace `<maxMemory slots>`. A bad value exits 2.
+
 ### 7. Queues and iothreads
 
 `blk-queues.py`, `scsi-queues.py`, `nic-queues.py`, and `iothreads.py`

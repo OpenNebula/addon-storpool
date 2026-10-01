@@ -45,8 +45,9 @@ Tested with OpenNebula 5.10; should work with 5.12. 6.0+ has native functionalit
 
 To trigger the reconfiguration of the domain XML:
 
-* Set *T_VCPU_MAX* to enable VCPU hotplug.
-* Set *T_MEMORY_MAX* to enable Memory hotplug.
+* Set *T_VCPU_MAX* to replace `<vcpu>` and `<vcpus>`. The previous count stays in `current`.
+* Set *T_MEMORY_MAX* (MiB) to replace the balloon ceiling. It is converted into the `<memory>` unit. `<memory>` becomes that maximum and `<currentMemory>` keeps the current size.
+* Set *T_MAXMEMORY* (MiB) and *T_MAXMEMORY_SLOTS* together to replace `<maxMemory slots='N'>`. Either one alone aborts the deploy. The size must be at least `<memory>`.
 
 ## Usage
 
