@@ -111,12 +111,16 @@ SMM is on.
 
 ### 4. SMBIOS (`sysinfo_smbios.py`)
 
+`sysinfo_smbios.py` writes this shape.
+
 `<os><smbios mode='sysinfo'/></os>` and `<sysinfo type='smbios'>` with
-`bios`, `system`, `baseBoard`, `chassis`, and `oemStrings` match the docs.
-Unknown `bios`, `system`, and `baseBoard` entry names are dropped with no
-error. The other sysinfo type is `fwcfg` (`<entry name='opt/...'>` or
-`file=`). The docs prefer `oemStrings` over `fwcfg`. `baseBoard` may be
-repeated; the tweak writes one.
+`bios`, `system`, `baseBoard`, `chassis`, and `oemStrings`. Unknown entry
+names are omitted. `bios` `date` must be `mm/dd/yy` or `mm/dd/yyyy`.
+`system` `uuid` must match `<hwuuid>` when that element is present,
+otherwise `<uuid>`.
+
+`<baseBoard>` may be repeated. `T_SMBIOS_BASEBOARD` separates boards with
+`|`. Guest data stays in `oemStrings`.
 
 ### 5. UEFI (`os.py`)
 

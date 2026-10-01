@@ -334,6 +334,12 @@ Adds `smbios` information to the VMs. An entry in the OS element is created to e
 
 When at least one of the following variables are defined in the USER_TEMPLATE.
 
+An existing `<smbios mode='sysinfo'/>` is left in place and the entries are still written. Any other `mode` exits 2, which aborts the deploy. A missing `<smbios>` is created with `mode='sysinfo'`.
+
+A block named in the template replaces that block's entries. Unknown entry names are omitted. `bios` `date` must be `mm/dd/yy` or `mm/dd/yyyy`. `system` `uuid` is accepted in addition to the names below. It must be a UUID, and it must match `<hwuuid>` when that element is present, otherwise `<uuid>`.
+
+`<baseBoard>` may be repeated. Separate boards with `|`.
+
 #### `T_SMBIOS_BIOS`
 
 A list of variables in format `key=value` separated by a semi-colon. Here is an example:
@@ -384,7 +390,7 @@ Will generate the following element in the domain XML:
 A list of variables in format `key=value` separated by a semi-colon. Here is an example:
 
 ```
-USER_TEMPLATE/T_SMBIOS_BASEBOARD="manufacturer=BBManufacturer;version=BBVersion;serial=BBSerial;product=BBProduct;asset=BBAsset;location=BBLocation"
+USER_TEMPLATE/T_SMBIOS_BASEBOARD="manufacturer=BBManufacturer;version=BBVersion;serial=BBSerial;product=BBProduct;asset=BBAsset;location=BBLocation|manufacturer=Second"
 ```
 Will generate the following element in the domain XML:
 
@@ -400,6 +406,8 @@ Will generate the following element in the domain XML:
     </baseBoard>
   </sysinfo>
 ```
+
+The `|manufacturer=Second` above starts a second `<baseBoard>`.
 
 #### `T_SMBIOS_CHASSIS`
 
