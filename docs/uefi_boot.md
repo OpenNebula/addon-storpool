@@ -34,25 +34,19 @@
 
 ### T_FEATURE_SMM
 
-Format: `:space separated list of element attributes`
+Format: `:state=on` or `:state=off`. `on`, `1`, `off`, and `0` are also accepted. Text before the colon is ignored.
 
-Common element attributes:
-| attribute | description |
-| --------- | ----------- |
-| `state=on` | optional |
+`state` is the only attribute. A missing state means `on`. Any other attribute exits 2, which aborts the deploy.
 
 For details, see the [libvirt docs](https://libvirt.org/formatdomain.html#hypervisor-features).
 
 ### T_FEATURE_SMM_TSEG
 
-Format: `SIZE:space separated list of element attributes`
+Format: `SIZE:unit=MiB`
 
-Where `SIZE` is the amount of RAM reserved for TSEG.
+`SIZE` is an unsigned integer, the amount of RAM reserved for TSEG. An empty size means `0`. `unit` defaults to `MiB`. The size must be a whole number of MiB.
 
-Common element attributes:
-| attribute | description |
-| --------- | ----------- |
-| `unit=MiB` | mandatory |
+`<tseg>` is written only when SMM is `state='on'`, from `T_FEATURE_SMM` or from the domain XML already. SMM off or missing exits 2. Turning SMM off drops `<tseg>`.
 
 ### T_OS
 
