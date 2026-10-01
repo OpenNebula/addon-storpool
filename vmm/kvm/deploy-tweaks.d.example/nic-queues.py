@@ -17,7 +17,7 @@
 # -------------------------------------------------------------------------- #
 """
 
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 import os
 import sys
 from xml.etree import ElementTree as ET
@@ -27,9 +27,11 @@ ns = {
     "one": "http://opennebula.org/xmlns/libvirt/1.0",
 }
 
+AUTO = ("auto", "vcpu", "yes", "y", "1")
+TXMODE = ("iothread", "timer")
+
 
 def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
-    """Fix XML indent"""
     i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
@@ -49,6 +51,91 @@ def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
             elem.tail = i
 
 
+def fatal(msg: str) -> None:
+    print(f"Error in nic-queues: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def template_text(tag: str) -> Optional[str]:
+    element: Optional[ET.Element] = vm.find(f".//USER_TEMPLATE/{tag}")
+    if element is not None:
+        raw: Optional[str] = element.text
+    else:
+        raw = os.getenv(tag)
+    if raw is None:
+        return None
+    text: str = raw.strip()
+    if text == "":
+        return None
+    return text
+
+
+def split_spec(text: str) -> Tuple[str, Dict[str, str]]:
+    if ":" not in text:
+        return text, {}
+    head, rest = text.split(":", 1)
+    attrs: Dict[str, str] = {}
+    for item in rest.split():
+        if "=" not in item:
+            fatal(f"bad attribute '{item}'")
+        key, value = item.split("=", 1)
+        attrs[key] = value
+    return head, attrs
+
+
+def current_vcpus() -> int:
+    vcpu_e: Optional[ET.Element] = root.find("./vcpu")
+    if vcpu_e is None:
+        fatal("missing vcpu")
+    current: Optional[str] = vcpu_e.get("current")
+    if current is not None and current.isdigit() and int(current) >= 1:
+        return int(current)
+    if vcpu_e.text is not None and vcpu_e.text.strip().isdigit():
+        count: int = int(vcpu_e.text.strip())
+        if count >= 1:
+            return count
+    fatal("missing vcpu")
+    return 1
+
+
+def queue_count(tag: str, text: str) -> int:
+    if text.lower() in AUTO:
+        return current_vcpus()
+    if text.isdigit() and int(text) >= 1:
+        return int(text)
+    fatal(f"{tag} '{text}' is not a positive integer or auto")
+    return 1
+
+
+def checked_spec(tag: str, spec: str) -> Tuple[int, Dict[str, str]]:
+    head, attrs = split_spec(spec)
+    unknown: List[str] = [
+        key for key in attrs
+        if key not in ("rx_queue_size", "tx_queue_size", "txmode")
+    ]
+    if unknown:
+        fatal(f"unknown nic attribute '{unknown[0]}'")
+    queues: int = queue_count(tag, head)
+    if "txmode" in attrs and attrs["txmode"] not in TXMODE:
+        fatal(f"txmode '{attrs['txmode']}' is not iothread or timer")
+    for key in ("rx_queue_size", "tx_queue_size"):
+        if key in attrs and (not attrs[key].isdigit() or int(attrs[key]) < 1):
+            fatal(f"{key} '{attrs[key]}' is not a positive integer")
+    return queues, attrs
+
+
+def apply_driver(nic_e: ET.Element, queues: int, attrs: Dict[str, str]) -> None:
+    driver_e: Optional[ET.Element] = nic_e.find("./driver")
+    if driver_e is None:
+        driver_e = ET.SubElement(nic_e, "driver")
+    if driver_e.get("name") is None:
+        driver_e.set("name", "vhost")
+    driver_e.set("queues", str(queues))
+    for key in ("rx_queue_size", "tx_queue_size", "txmode"):
+        if key in attrs:
+            driver_e.set(key, attrs[key])
+
+
 xmlDomain: str = sys.argv[1]
 doc: ET.ElementTree = ET.parse(xmlDomain)
 root: ET.Element = doc.getroot()
@@ -57,56 +144,36 @@ xmlVm: str = sys.argv[2]
 vm_e: ET.ElementTree = ET.parse(xmlVm)
 vm: ET.Element = vm_e.getroot()
 
+global_spec: Optional[str] = template_text("T_NIC_QUEUES")
+pending: List[Tuple[ET.Element, int, Dict[str, str]]] = []
+
+for nic_e in root.findall("./devices/interface"):
+    model_e: Optional[ET.Element] = nic_e.find("./model[@type='virtio']")
+    if model_e is None:
+        continue
+    spec: Optional[str] = global_spec
+    tag: str = "T_NIC_QUEUES"
+    target_e: Optional[ET.Element] = nic_e.find("./target")
+    if target_e is not None and target_e.get("dev"):
+        nic_id: str = target_e.get("dev", "").split("-")[-1]
+        if nic_id.isdigit():
+            per_tag: str = f"T_NIC{nic_id}_QUEUES"
+            per_nic: Optional[str] = template_text(per_tag)
+            if per_nic is not None:
+                spec = per_nic
+                tag = per_tag
+    if spec is None:
+        continue
+    queues, attrs = checked_spec(tag, spec)
+    pending.append((nic_e, queues, attrs))
+
+if not pending:
+    sys.exit(0)
+
+for nic_e, queues, attrs in pending:
+    apply_driver(nic_e, queues, attrs)
+
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
-
-vcpu: int = 1
-vcpu_e: Optional[ET.Element] = root.find("./vcpu")
-if vcpu_e is None:
-    vcpu_e = ET.SubElement(root, "vcpu")
-    vcpu_e.text = str(vcpu)
-elif vcpu_e.text is not None:
-    vcpu = int(vcpu_e.text)
-
-nic_queues: int = 0
-nic_queues_env: str = os.getenv("T_NIC_QUEUES", "0")  # type: ignore[attr-defined] # noqa: E501
-if nic_queues_env.isnumeric():
-    nic_queues = int(nic_queues_env)
-elif nic_queues_env.upper() == "VCPU":
-    nic_queues = vcpu
-
-# check VM attributes
-xpath: str = ".//USER_TEMPLATE/T_NIC_QUEUES"
-t_nic_queues_e: Optional[ET.Element] = vm.find(xpath)
-if t_nic_queues_e is not None and t_nic_queues_e.text is not None:
-    if t_nic_queues_e.text.isnumeric() and int(t_nic_queues_e.text) >= 0:
-        nic_queues = int(t_nic_queues_e.text)
-    elif t_nic_queues_e.text.upper() == "VCPU":
-        nic_queues = vcpu
-
-changed: bool = False
-for nic_e in root.findall("./devices/interface"):
-    nic_q: int = nic_queues
-    model_e: Optional[ET.Element] = nic_e.find("./model[@type='virtio']")
-    if model_e is not None:
-        target_e: Optional[ET.Element] = nic_e.find("./target")
-        if target_e is not None and "dev" in target_e.attrib:
-            nic_id: int = int(target_e.attrib["dev"].split("-")[-1])
-            # check VM attributes for per-NIC queues
-            xpath = f".//USER_TEMPLATE/T_NIC{nic_id}_QUEUES"
-            nic_q_e: Optional[ET.Element] = vm.find(xpath)
-            if nic_q_e is not None and nic_q_e.text is not None:
-                if nic_q_e.text.isnumeric():
-                    nic_q = int(nic_q_e.text)
-                elif nic_q_e.text.upper() == "VCPU":
-                    nic_q = vcpu
-        if nic_q > 0:
-            driver_e: Optional[ET.Element] = nic_e.find("./driver")
-            if driver_e is None:
-                driver_e = ET.SubElement(nic_e, "driver", {"name": "vhost"})
-            driver_e.attrib["queues"] = f"{nic_q}"
-            changed = True
-
-if changed:
-    indent(root)
-    doc.write(xmlDomain)
+indent(root)
+doc.write(xmlDomain)

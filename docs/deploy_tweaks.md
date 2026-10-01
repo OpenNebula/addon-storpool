@@ -232,6 +232,10 @@ See [Live resize CPU and Memory](resizeCpuMem.md).
 
 `USER_TEMPLATE` wins over the environment (`addon-storpoolrc` or `vmm/kvmrc`). Empty or whitespace is unset. With both keys unset, or when `T_BLK_QUEUES` is set but no `vd` disk exists, the domain file is not rewritten. A bad value prints `Error in scsi-queues: …` to stderr and exits 2 before the domain is written, which aborts the deploy and leaves the on-disk XML unchanged.
 
+### `nic-queues.py`
+
+`T_NIC_QUEUES` sets `<driver queues=>` on each interface whose `<model type='virtio'/>`. `auto`, `vcpu`, `yes`, `y`, and `1` use the current vCPU count: `<vcpu current>` when that attribute is a positive integer, otherwise the `<vcpu>` text. Any other positive integer is the queue count. `T_NIC<id>_QUEUES` overrides the global value for the NIC whose `<target dev>` has that id as its last hyphen segment, and only when the segment is all digits. `:rx_queue_size=N tx_queue_size=N txmode=iothread|timer` sets those attributes; `N` is a positive integer and `txmode` is `iothread` or `timer`. `name='vhost'` is written only when `name` is missing. An existing name, every other driver attribute, and driver children stay. A `USER_TEMPLATE` value overrides the environment, and empty or whitespace leaves the key unset. With neither key set for a NIC, or when no virtio NIC is updated, the domain is not written. A missing `<vcpu>` for an automatic count, an unknown attribute, or any other bad value exits 2, which aborts the deploy.
+
 ### uuid.py
 
 Override/define `domain/uuid` with the value from `USER_TEMPLATE/T_UUID`.
