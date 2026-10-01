@@ -83,8 +83,18 @@ The four timers in `hyperv-clock.py` match the schema: `rtc`
 
 ### 2. KVM hide (`kvm-hide.py`)
 
-`<kvm><hidden state='on'/></kvm>` is valid. The same element also has
-`hint-dedicated`, `poll-control`, `pv-ipi`, and `dirty-ring` (with `size`).
+`kvm-hide.py` writes this shape.
+
+`<kvm>` children are `hidden`, `hint-dedicated`, `poll-control`, `pv-ipi`,
+and `dirty-ring`. `T_KVM_HIDE` is `hidden`. The other template keys are
+`T_KVM_HINT_DEDICATED`, `T_KVM_POLL_CONTROL`, `T_KVM_PV_IPI`, and
+`T_KVM_DIRTY_RING`. `on` or `1` sets `state='on'` and creates `<features>`
+and `<kvm>` when they are missing. `off` or `0` sets `state='off'` on an
+existing child.
+
+`dirty-ring` `size` is required when `state='on'`: a power of two from 1024
+to 65536. `T_KVM_DIRTY_RING=on:size=4096` sets it. `on` alone keeps a size
+already on the element. `off` drops `size`.
 
 ### 3. SMM (`feature_smm.py`)
 
