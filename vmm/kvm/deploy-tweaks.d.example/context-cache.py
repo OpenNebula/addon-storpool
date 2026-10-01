@@ -17,13 +17,30 @@
 #--------------------------------------------------------------------------- #
 """
 
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
+import os
 import sys
 from xml.etree import ElementTree as ET
 
 ns = {
     'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
     'one': "http://opennebula.org/xmlns/libvirt/1.0",
+}
+
+CHOICES: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
+    ('CACHE', 'cache', (
+        'default', 'none', 'writeback', 'writethrough',
+        'directsync', 'unsafe')),
+    ('IO', 'io', ('threads', 'native', 'io_uring')),
+    ('DISCARD', 'discard', ('unmap', 'ignore')),
+    ('DETECT_ZEROES', 'detect_zeroes', ('off', 'on', 'unmap')),
+    ('IOEVENTFD', 'ioeventfd', ('on', 'off')),
+)
+ORDER: Tuple[str, ...] = (
+    'cache', 'io', 'discard', 'detect_zeroes', 'ioeventfd', 'queue_size')
+DEFAULTS: Dict[str, str] = {
+    'cache': 'none',
+    'io': 'native',
 }
 
 
@@ -47,22 +64,79 @@ def indent(elem: ET.Element, level: int = 0, ind: str = "  ") -> None:
             elem.tail = i
 
 
+def fatal(msg: str) -> None:
+    print(f"Error in context-cache: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def template_text(tag: str) -> Optional[str]:
+    element: Optional[ET.Element] = vm.find(f".//USER_TEMPLATE/{tag}")
+    if element is not None:
+        raw: Optional[str] = element.text
+    else:
+        raw = os.getenv(tag)
+    if raw is None:
+        return None
+    text: str = raw.strip()
+    if text == '':
+        return None
+    return text
+
+
+def driver_values() -> List[Tuple[str, str]]:
+    values: Dict[str, str] = dict(DEFAULTS)
+    suffix: str
+    attr: str
+    allowed: Tuple[str, ...]
+    for suffix, attr, allowed in CHOICES:
+        tag: str = f"T_CONTEXT_{suffix}"
+        text: Optional[str] = template_text(tag)
+        if text is None:
+            continue
+        if text not in allowed:
+            fatal(f"{tag} '{text}' is not one of {', '.join(allowed)}")
+        values[attr] = text
+    qtag: str = 'T_CONTEXT_QUEUE_SIZE'
+    qtext: Optional[str] = template_text(qtag)
+    if qtext is not None:
+        if not qtext.isdigit() or int(qtext) < 1:
+            fatal(f"{qtag} '{qtext}' is not a positive integer")
+        values['queue_size'] = qtext
+    pairs: List[Tuple[str, str]] = []
+    name: str
+    for name in ORDER:
+        if name in values:
+            pairs.append((name, values[name]))
+    return pairs
+
+
+def apply_driver(disk: ET.Element, pairs: List[Tuple[str, str]]) -> None:
+    driver_e: Optional[ET.Element] = disk.find('./driver')
+    if driver_e is None:
+        driver_e = ET.SubElement(disk, 'driver')
+    item: Tuple[str, str]
+    for item in pairs:
+        driver_e.set(item[0], item[1])
+
+
 xmlDomain: str = sys.argv[1]
 doc: ET.ElementTree = ET.parse(xmlDomain)
 root: ET.Element = doc.getroot()
 
+xmlVm: str = sys.argv[2]
+vm_e: ET.ElementTree = ET.parse(xmlVm)
+vm: ET.Element = vm_e.getroot()
+
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-changed: bool = False
-xpath: str = './devices/disk[@type="file"][@device="cdrom"]'
-for disk in root.findall(xpath):
-    driver: Optional[ET.Element] = disk.find('./driver')
-    if driver is not None:
-        driver.attrib['cache'] = 'none'
-        driver.attrib['io'] = 'native'
-        changed = True
-
-if changed:
-    indent(root)
-    doc.write(xmlDomain)
+pairs: List[Tuple[str, str]] = driver_values()
+cdroms: List[ET.Element] = root.findall(
+    './devices/disk[@type="file"][@device="cdrom"]')
+if not cdroms:
+    sys.exit(0)
+disk: ET.Element
+for disk in cdroms:
+    apply_driver(disk, pairs)
+indent(root)
+doc.write(xmlDomain)

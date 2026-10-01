@@ -26,7 +26,18 @@ Once all helper scripts are processed, the native _vmm/kvm/deploy_ script on the
 
 ### context-cache.py
 
-Replaces the `devices/disk/driver` attributes _cache=none_ and _io=native_ on all found cdrom disks that had _type=file_ and _device=cdrom_.
+Sets `cache='none'` and `io='native'` on every `devices/disk` with `type='file'` and `device='cdrom'`. The `driver` element is created when it is missing. A block disk and a file disk that is not a cdrom are left unchanged.
+
+Optional `USER_TEMPLATE` keys use the same values as `disk-cache-io.py`. The template overrides the environment. An empty value is unset. The keys are read from the VM XML.
+
+* `T_CONTEXT_CACHE`: `default`, `none`, `writeback`, `writethrough`, `directsync`, `unsafe`
+* `T_CONTEXT_IO`: `threads`, `native`, `io_uring`
+* `T_CONTEXT_DISCARD`: `unmap`, `ignore`
+* `T_CONTEXT_DETECT_ZEROES`: `off`, `on`, `unmap`
+* `T_CONTEXT_IOEVENTFD`: `on`, `off`
+* `T_CONTEXT_QUEUE_SIZE`: a positive integer, written as `queue_size`
+
+Every set key is checked before any disk is edited. A bad value exits 2, which aborts the deploy. If there is no file cdrom and the keys are valid, the script exits 0 and leaves the domain unchanged.
 
 ### cpu.py
 
