@@ -522,9 +522,11 @@ Will generate the following element in the domain XML:
 
 ### persistent-cdrom.py
 
-Enable IDE CDROM image attaching/detaching by replacing the corresponding actions with insert/eject (`DEV_PREFIX=hd`).
+Attach and detach of a CD-ROM eject or insert the medium (`virsh change-media`) instead of removing the device.
 
-The virtual machine could work with up to 4 CDROM devices. Usually one is occupied by the CONTEXTUALIZATION CDROM, though.
+On pc the IDE bus has four names, `hda`–`hdd`. The context CD-ROM already has one of them. The tweak adds empty drives for the names that are left, and it will not add a fifth.
+
+On q35 each image CD-ROM is moved to `sdzz`, `sdzy`, `sdzx`, or `sdzw`, and empty trays are added until `T_PERSISTENT_CDROM` of those names exist. Context is not one of them: that disk stays as OpenNebula wrote it, and `onevm updateconf` keeps using `CONTEXT/TARGET`. The trays are addressed on the next SATA controller after the disks that remain, units 0–3, `bus=0`, `target=0`. Controller 0 is the chipset AHCI, where the address-less context disk lands. After an eject the empty tray is still `sdzz`–`sdzw`, so OpenNebula can assign `sda` again without colliding with a device that is still in the domain.
 
 #### System configuration
 
