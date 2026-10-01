@@ -17,7 +17,8 @@
 #--------------------------------------------------------------------------- #
 """
 
-from typing import Optional, List
+from typing import Dict, Optional, Tuple
+import os
 import sys
 from xml.etree import ElementTree as ET
 
@@ -26,9 +27,14 @@ ns = {
     'one': "http://opennebula.org/xmlns/libvirt/1.0",
 }
 
+IO: Tuple[str, ...] = ('threads', 'native', 'io_uring')
+POOL_ATTRS: Tuple[str, ...] = ('thread_pool_min', 'thread_pool_max')
+POLL_ATTRS: Tuple[str, ...] = ('poll_max', 'poll_grow', 'poll_shrink')
+KNOWN: Tuple[str, ...] = POOL_ATTRS + POLL_ATTRS + ('io', 'queue')
 
-def indent(elem, level=0, ind="  "):
-    i = "\n" + level * ind
+
+def indent(elem: ET.Element, level: int = 0, ind: str = "  ") -> None:
+    i: str = "\n" + level * ind
     if len(elem):
         if not elem.text or not elem.text.strip():
             elem.text = i + ind
@@ -47,6 +53,69 @@ def indent(elem, level=0, ind="  "):
             elem.tail = i
 
 
+def fatal(msg: str) -> None:
+    print(f"Error in iothreads: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def template_text(tag: str) -> Optional[str]:
+    text: Optional[str]
+    element: Optional[ET.Element] = vm.find(f".//USER_TEMPLATE/{tag}")
+    if element is not None:
+        text = element.text
+    else:
+        text = os.getenv(tag)
+    if text is None:
+        return None
+    text = text.strip()
+    if text == '':
+        return None
+    return text
+
+
+def split_spec(text: str) -> Tuple[str, Dict[str, str]]:
+    if ':' not in text:
+        return text, {}
+    head, rest = text.split(':', 1)
+    attrs: Dict[str, str] = {}
+    for item in rest.split():
+        if '=' not in item:
+            fatal(f"bad attribute '{item}'")
+        key, value = item.split('=', 1)
+        attrs[key] = value
+    return head, attrs
+
+
+def unsigned(tag: str, text: str) -> str:
+    if not text.isdigit():
+        fatal(f"{tag} '{text}' is not an unsigned integer")
+    return text
+
+
+def assign(driver_e: ET.Element, iothread_id: str, queue: Optional[str],
+           io_mode: Optional[str]) -> None:
+    if io_mode is not None:
+        driver_e.set('io', io_mode)
+    for old in list(driver_e.findall('iothreads')):
+        driver_e.remove(old)
+    if 'iothread' in driver_e.attrib:
+        del driver_e.attrib['iothread']
+    if queue is None:
+        driver_e.set('iothread', iothread_id)
+        return
+    mapping: ET.Element = ET.SubElement(driver_e, 'iothreads')
+    thread_e: ET.Element = ET.SubElement(
+        mapping, 'iothread', {'id': iothread_id})
+    ET.SubElement(thread_e, 'queue', {'id': queue})
+
+
+def ensure_driver(parent: ET.Element) -> ET.Element:
+    driver_e: Optional[ET.Element] = parent.find('./driver')
+    if driver_e is None:
+        driver_e = ET.SubElement(parent, 'driver')
+    return driver_e
+
+
 xmlDomain: str = sys.argv[1]
 doc: ET.ElementTree = ET.parse(xmlDomain)
 root: ET.Element = doc.getroot()
@@ -58,56 +127,78 @@ vm: ET.Element = vm_e.getroot()
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-t_iothreads_e: Optional[ET.Element] = vm.find('.//T_IOTHREADS_OVERRIDE')
-if t_iothreads_e is not None:
-    if t_iothreads_e.text == '0':
-        print('T_IOTHREADS_OVERRIDE=0, Bail out!', file=sys.stderr)
-        sys.exit(1)
-iothreads_e: Optional[ET.Element] = root.find('./iothreads')
+spec: Optional[str] = template_text('T_IOTHREADS')
+override: Optional[str] = template_text('T_IOTHREADS_OVERRIDE')
+if override == '0':
+    sys.exit(0)
+if spec is None:
+    spec = override
+if spec is None:
+    sys.exit(0)
+
+head, attrs = split_spec(spec)
+unknown = [key for key in attrs if key not in KNOWN]
+if unknown:
+    fatal(f"unknown iothread attribute '{unknown[0]}'")
+if not head.isdigit() or int(head) < 1:
+    fatal(f"count '{head}' is not a positive integer")
+count: int = int(head)
+io_mode: str = attrs.get('io', 'native')
+if io_mode not in IO:
+    fatal(f"io '{io_mode}' is not threads, native, or io_uring")
+queue: Optional[str] = attrs.get('queue')
+if queue is not None:
+    unsigned('queue', queue)
+for key in POOL_ATTRS + POLL_ATTRS:
+    if key in attrs:
+        unsigned(key, attrs[key])
+
+iothreads_e: Optional[ET.Element] = root.find('iothreads')
 if iothreads_e is None:
-    iothreads_e = ET.SubElement(root, 'iothreads')
-else:
-    if t_iothreads_e is None:
-        print(f"Found iothreads={iothreads_e.text}"
-              f", but T_IOTHREADS_OVERRIDE is not set", file=sys.stderr)
-        sys.exit(1)
+    iothreads_e = ET.Element('iothreads')
+    devices_e: Optional[ET.Element] = root.find('devices')
+    if devices_e is None:
+        root.append(iothreads_e)
+    else:
+        root.insert(list(root).index(devices_e), iothreads_e)
+iothreads_e.text = str(count)
 
-iothreads_e.text = "1"
+for old_ids in list(root.findall('iothreadids')):
+    root.remove(old_ids)
+if any(key in attrs for key in POOL_ATTRS + POLL_ATTRS):
+    ids_e: ET.Element = ET.Element('iothreadids')
+    want_poll: bool = any(key in attrs for key in POLL_ATTRS)
+    for idx in range(1, count + 1):
+        thread_attrs: Dict[str, str] = {'id': str(idx)}
+        if 'thread_pool_min' in attrs:
+            thread_attrs['thread_pool_min'] = attrs['thread_pool_min']
+        if 'thread_pool_max' in attrs:
+            thread_attrs['thread_pool_max'] = attrs['thread_pool_max']
+        thread_e: ET.Element = ET.SubElement(ids_e, 'iothread', thread_attrs)
+        if want_poll:
+            poll_attrs: Dict[str, str] = {}
+            if 'poll_max' in attrs:
+                poll_attrs['max'] = attrs['poll_max']
+            if 'poll_grow' in attrs:
+                poll_attrs['grow'] = attrs['poll_grow']
+            if 'poll_shrink' in attrs:
+                poll_attrs['shrink'] = attrs['poll_shrink']
+            ET.SubElement(thread_e, 'poll', poll_attrs)
+    root.insert(list(root).index(iothreads_e) + 1, ids_e)
 
-driver_e: Optional[ET.Element] = None
-target_e: Optional[ET.Element] = None
-device_e: Optional[ET.Element] = None
-scsi_e: Optional[ET.Element] = None
-
-# virtio-blk
+nth: int = 1
 for disk in root.findall('./devices/disk'):
-    target_e = disk.find('./target')
-    if target_e is None or target_e.attrib['dev'][:2] != 'vd':
+    target_e: Optional[ET.Element] = disk.find('./target')
+    if target_e is None or not target_e.get('dev', '').startswith('vd'):
         continue
-    driver_e = disk.find('./driver')
-    if driver_e is None:
-        driver_e = ET.SubElement(disk, 'driver')
-    driver_e.attrib['io'] = 'native'
-    driver_e.attrib['iothread'] = '1'
+    assign(ensure_driver(disk), str(nth), queue, io_mode)
+    nth = (nth % count) + 1
 
-# virtio-scsi
-controllers: List[ET.Element] = root.findall(
-    "./devices/controller[@type='scsi']")
-if not controllers:
-    device_e = root.find('./devices')
-    if device_e is None:
-        raise RuntimeError("Can't find devices element")
-    scsi_e = ET.SubElement(device_e, 'controller', {
-            'type': 'scsi',
-            'model': 'virtio-scsi'
-        })
-    controllers = [scsi_e]
-
-for scsi in controllers:
-    driver_e = scsi.find('./driver')
-    if driver_e is None:
-        driver_e = ET.SubElement(scsi, 'driver')
-    driver_e.attrib['iothread'] = '1'
+for scsi in root.findall("./devices/controller[@type='scsi']"):
+    if (scsi.get('model') or 'virtio-scsi') != 'virtio-scsi':
+        continue
+    assign(ensure_driver(scsi), str(nth), queue, None)
+    nth = (nth % count) + 1
 
 indent(root)
 doc.write(xmlDomain)
