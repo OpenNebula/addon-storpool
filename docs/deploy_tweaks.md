@@ -256,6 +256,10 @@ Each disk is `<disk type='nvme' device='disk'>` with `<driver name='qemu' type='
 
 `T_NVME_CONTROLLER=N` removes every `<controller type='nvme'>` and appends controllers `index` 0 through `N-1`. `N` must be a positive integer. With neither a device key nor `T_NVME_CONTROLLER` set, the domain is left unchanged. A missing `<devices>` exits 2 when a device key or `T_NVME_CONTROLLER` is set. A `USER_TEMPLATE` value wins over the environment; an empty value is unset. A bad value exits 2, which aborts the deploy.
 
+### `nvme-block.py`
+
+Same disks as `nvme-disk.py`, from `USER_TEMPLATE/T_NVME_PCIDEVICE0` through `T_NVME_PCIDEVICE31`. This script does not read `T_NVME_CONTROLLER`. With no device key set, the domain is left unchanged. A missing `<devices>` exits 2 when a device key is set. A bad value exits 2, which aborts the deploy.
+
 ### os.py
 
 Set/update `domain/os` element; see [UEFI boot](uefi_boot.md).
