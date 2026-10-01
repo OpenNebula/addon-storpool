@@ -226,20 +226,11 @@ See [Live resize CPU and Memory](resizeCpuMem.md).
 
 ### scsi-queues.py
 
-Set the number of `nqueues` for `virtio-scsi` controllers to match the number of VCPUs. This code is triggered when there are already defined number of queues for a given VM.
+`T_SCSI_QUEUES` sets `<driver queues>` on every virtio-scsi controller. A controller with no `model` counts as virtio-scsi. The value is a positive integer, or `auto`, `vcpu`, `yes`, `y`, or `1` for the current vCPU count: the `<vcpu current>` attribute when that attribute is a positive integer, otherwise the element text. A missing `<vcpu>` aborts the deploy. Optional `:cmd_per_lun=N max_sectors=N` sets those attributes; both are unsigned, so `0` is allowed. Unknown attributes abort the deploy. When the domain has no virtio-scsi controller, one is created under the first `<devices>` element. Other driver attributes are kept.
 
-```xml
-<domain>
-  <vcpu>4</vcpu>
-  <devices>
-    <controller index="0" model="virtio-scsi" type="scsi">
-      <driver queues="4" />
-    </controller>
-  </devices>
-</domain>
-```
-There is an option to enable the queues for `virtio-blk` disks too by defining `T_BLK_QUEUES=YES` per VM in the `USER_TEMPLATE`, or globally in addon-storpoolrc or vmm/kvmrc file.
-Note that this functionality must be supported by the installed qemu-kvm.
+`T_BLK_QUEUES` is `YES`, `1`, `auto`, `vcpu`, or a positive integer, with optional `:queue_size=N`. `queue_size` is a positive integer. The script sets those attributes on disks whose target `dev` starts with `vd`. It does not create disks. A `<driver>` is added when the disk has none. Other driver attributes are kept.
+
+`USER_TEMPLATE` wins over the environment (`addon-storpoolrc` or `vmm/kvmrc`). Empty or whitespace is unset. With both keys unset, or when `T_BLK_QUEUES` is set but no `vd` disk exists, the domain file is not rewritten. A bad value prints `Error in scsi-queues: …` to stderr and exits 2 before the domain is written, which aborts the deploy and leaves the on-disk XML unchanged.
 
 ### uuid.py
 

@@ -17,15 +17,17 @@
 #--------------------------------------------------------------------------- #
 """
 
-from typing import Optional, List
-import sys
+from typing import Dict, List, Optional, Tuple
 import os
+import sys
 from xml.etree import ElementTree as ET
 
 ns = {
     'qemu': 'http://libvirt.org/schemas/domain/qemu/1.0',
     'one': "http://opennebula.org/xmlns/libvirt/1.0"
 }
+
+AUTO = ('auto', 'vcpu', 'yes', 'y', '1')
 
 
 def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
@@ -48,6 +50,81 @@ def indent(elem: ET.Element, level: int = 0, ind: str = "  "):
             elem.tail = i
 
 
+def fatal(msg: str) -> None:
+    print(f"Error in scsi-queues: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+
+def template_text(tag: str) -> Optional[str]:
+    element: Optional[ET.Element] = vm.find(f".//USER_TEMPLATE/{tag}")
+    if element is not None:
+        text: Optional[str] = element.text
+    else:
+        text = os.getenv(tag)
+    if text is None:
+        return None
+    text = text.strip()
+    if text == '':
+        return None
+    return text
+
+
+def split_spec(text: str) -> Tuple[str, Dict[str, str]]:
+    if ':' not in text:
+        return text, {}
+    head, rest = text.split(':', 1)
+    attrs: Dict[str, str] = {}
+    for item in rest.split():
+        if '=' not in item:
+            fatal(f"bad attribute '{item}'")
+        key, value = item.split('=', 1)
+        attrs[key] = value
+    return head, attrs
+
+
+def current_vcpus() -> int:
+    vcpu_e: Optional[ET.Element] = root.find('./vcpu')
+    if vcpu_e is None:
+        fatal('missing vcpu')
+    current: Optional[str] = vcpu_e.get('current')
+    if current is not None and current.isdigit() and int(current) >= 1:
+        return int(current)
+    if vcpu_e.text is not None and vcpu_e.text.strip().isdigit():
+        count: int = int(vcpu_e.text.strip())
+        if count >= 1:
+            return count
+    fatal('missing vcpu')
+    return 1
+
+
+def queue_count(tag: str, text: str) -> int:
+    if text.lower() in AUTO:
+        return current_vcpus()
+    if text.isdigit() and int(text) >= 1:
+        return int(text)
+    fatal(f"{tag} '{text}' is not a positive integer or auto")
+    return 1
+
+
+def unsigned(tag: str, text: str) -> str:
+    if not text.isdigit():
+        fatal(f"{tag} '{text}' is not an unsigned integer")
+    return text
+
+
+def positive(tag: str, text: str) -> str:
+    if not text.isdigit() or int(text) < 1:
+        fatal(f"{tag} '{text}' is not a positive integer")
+    return text
+
+
+def set_attr(elem: ET.Element, key: str, value: str) -> bool:
+    if elem.get(key) == value:
+        return False
+    elem.set(key, value)
+    return True
+
+
 xmlDomain: str = sys.argv[1]
 doc: ET.ElementTree = ET.parse(xmlDomain)
 root: ET.Element = doc.getroot()
@@ -59,50 +136,73 @@ vm: ET.Element = vm_et.getroot()
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-vcpu: int = 1
-vcpu_e: Optional[ET.Element] = root.find('./vcpu')
-if vcpu_e is not None and vcpu_e.text is not None:
-    vcpu = int(vcpu_e.text)
-else:
-    vcpu = 1
-    vcpu_e = ET.SubElement(root, 'vcpu')
-    vcpu_e.text = '1'
+scsi_text: Optional[str] = template_text('T_SCSI_QUEUES')
+blk_text: Optional[str] = template_text('T_BLK_QUEUES')
+if scsi_text is None and blk_text is None:
+    sys.exit(0)
 
+changed: bool = False
 
-controllers: List[ET.Element] = root.findall(
-    "./devices/controller[@type='scsi']")
-if len(controllers) == 0:
-    devices_e: Optional[ET.Element] = root.find('./devices')
-    if devices_e is None:
-        raise ValueError("No devices found")
-    scsi: ET.Element = ET.SubElement(devices_e, 'controller', {
+if scsi_text is not None:
+    head, attrs = split_spec(scsi_text)
+    unknown: List[str] = [key for key in attrs if key not in ('cmd_per_lun', 'max_sectors')]
+    if unknown:
+        fatal(f"unknown scsi attribute '{unknown[0]}'")
+    queues: int = queue_count('T_SCSI_QUEUES', head)
+    cmd_per_lun: Optional[str] = None
+    if 'cmd_per_lun' in attrs:
+        cmd_per_lun = unsigned('cmd_per_lun', attrs['cmd_per_lun'])
+    max_sectors: Optional[str] = None
+    if 'max_sectors' in attrs:
+        max_sectors = unsigned('max_sectors', attrs['max_sectors'])
+    controllers: List[ET.Element] = []
+    for scsi in root.findall("./devices/controller[@type='scsi']"):
+        if (scsi.get('model') or 'virtio-scsi') == 'virtio-scsi':
+            controllers.append(scsi)
+    if not controllers:
+        devices_e: Optional[ET.Element] = root.find('./devices')
+        if devices_e is None:
+            fatal('missing devices')
+        scsi_e: ET.Element = ET.SubElement(devices_e, 'controller', {
             'type': 'scsi',
-            'model': 'virtio-scsi'
+            'model': 'virtio-scsi',
         })
-    controllers = [scsi]
+        controllers.append(scsi_e)
+        changed = True
+    for scsi in controllers:
+        driver_e: Optional[ET.Element] = scsi.find('./driver')
+        if driver_e is None:
+            driver_e = ET.SubElement(scsi, 'driver')
+            changed = True
+        if set_attr(driver_e, 'queues', str(queues)):
+            changed = True
+        if cmd_per_lun is not None and set_attr(driver_e, 'cmd_per_lun', cmd_per_lun):
+            changed = True
+        if max_sectors is not None and set_attr(driver_e, 'max_sectors', max_sectors):
+            changed = True
 
-driver_e: Optional[ET.Element] = None
-for scsi in controllers:
-    driver_e = scsi.find('./driver')
-    if driver_e is None:
-        driver_e = ET.SubElement(scsi, 'driver')
-    driver_e.attrib['queues'] = str(vcpu)
-
-# virtio-blk
-blk_queues: str = os.getenv('T_BLK_QUEUES', 'NO')  # type: ignore[attr-defined]
-xpath: str = './/USER_TEMPLATE/T_BLK_QUEUES'
-t_blk_queues_e: Optional[ET.Element] = vm.find(xpath)
-if t_blk_queues_e is not None and t_blk_queues_e.text is not None:
-    blk_queues = t_blk_queues_e.text
-if blk_queues.upper() in ['1', 'YES', 'Y']:
+if blk_text is not None:
+    head, attrs = split_spec(blk_text)
+    unknown = [key for key in attrs if key != 'queue_size']
+    if unknown:
+        fatal(f"unknown blk attribute '{unknown[0]}'")
+    queues = queue_count('T_BLK_QUEUES', head)
+    qsize: Optional[str] = None
+    if 'queue_size' in attrs:
+        qsize = positive('queue_size', attrs['queue_size'])
     for disk_e in root.findall('./devices/disk'):
         target_e: Optional[ET.Element] = disk_e.find('./target')
-        if target_e is None or target_e.attrib['dev'][:2] != 'vd':
+        if target_e is None or not target_e.get('dev', '').startswith('vd'):
             continue
         driver_e = disk_e.find('./driver')
         if driver_e is None:
             driver_e = ET.SubElement(disk_e, 'driver')
-        driver_e.attrib['queues'] = str(vcpu)
+            changed = True
+        if set_attr(driver_e, 'queues', str(queues)):
+            changed = True
+        if qsize is not None and set_attr(driver_e, 'queue_size', qsize):
+            changed = True
 
-indent(root)
-doc.write(xmlDomain)
+if changed:
+    indent(root)
+    doc.write(xmlDomain)
