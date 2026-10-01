@@ -124,14 +124,22 @@ otherwise `<uuid>`.
 
 ### 5. UEFI (`os.py`)
 
-`<nvram type='block'><source dev='...'/></nvram>` is the form added in
-8.5.0 (`file`, `block`, and `network`, same `<source>` as a disk). Later
-knobs the tweak does not set: `format` and `templateFormat` (`raw` or
-`qcow2`, since 9.2.0 and 10.10.0), `<os firmware='efi'>` with
-`<loader secure= stateless= format=>` and
-`<feature name='enrolled-keys|secure-boot'>` (autoselection since 5.2.0),
-and `<varstore path= template=>` (the `uefi-vars` device, since 12.1.0)
-instead of pflash `<nvram>`.
+`os.py` writes this shape for a StorPool NVRAM volume.
+
+`<nvram type='block'><source dev='...'/></nvram>` is the default.
+`type=legacy` writes the path as element text. `type=file` remains an
+override. `format` is `raw` or `qcow2`; `storpool` rejects `qcow2`.
+`template` and `templateFormat` are not written on the domain element in
+`storpool` mode.
+
+`T_OS` sets `<os firmware='bios|efi'>` and the attribute is written on its
+own. The loader accepts `readonly`, `secure`, `stateless`, `type`
+(`rom` or `pflash`), and `format` (`raw` or `qcow2`). `stateless=yes`
+cannot be combined with `<nvram>`.
+
+`T_OS_FIRMWARE` writes `<firmware><feature enabled= name=></feature>` for
+`secure-boot` and `enrolled-keys`, and requires `firmware='efi'`.
+`<varstore>` stays out of this script.
 
 ### 6. CPU (`cpu.py`, `resizeCpuMem.py`)
 

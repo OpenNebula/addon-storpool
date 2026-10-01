@@ -50,12 +50,9 @@ Format: `SIZE:unit=MiB`
 
 ### T_OS
 
-Format: `:space separated list of element attributes`
+Format: `firmware=efi` or `firmware=bios`.
 
-Common element attributes:
-| attribute | description |
-| --------- | ----------- |
-| `firmware=efi` | optional |
+`firmware` is the only `<os>` attribute. It is written even when the loader and nvram are unchanged. Any other attribute exits 2, which aborts the deploy.
 
 ### T_OS_LOADER
 
@@ -63,12 +60,21 @@ Format: `PATH_TO_LOADER:space separated list of element attributes in format key
 
 Where `PATH_TO_LOADER` is the absolute path to the firmware file on the KVM node.
 
-Common element attributes:
-| attribute | description |
-| --------- | ----------- |
-| `readonly=yes` | mandatory |
-| `type=pflash` | mandatory |
-| `secure=yes` | optional, used to define secure boot, require T_FEATURE_SMM=":state=on" |
+| attribute | values |
+| --------- | ------ |
+| `readonly` | `yes` or `no` |
+| `type` | `rom` or `pflash` |
+| `secure` | `yes` or `no`. Secure boot also needs `T_FEATURE_SMM=":state=on"` |
+| `stateless` | `yes` or `no`. `yes` cannot be combined with `T_OS_NVRAM` |
+| `format` | `raw` or `qcow2` |
+
+Any other attribute exits 2.
+
+### T_OS_FIRMWARE
+
+Format: `secure-boot=yes enrolled-keys=no`
+
+Writes `<firmware><feature enabled= name=/></firmware>`. The names are `secure-boot` and `enrolled-keys`. `enabled` is `yes` or `no`. `<os firmware='efi'>` must already be set, from `T_OS` or from the domain XML. Otherwise the script exits 2.
 
 ### T_OS_NVRAM
 
@@ -85,8 +91,10 @@ Format: `MODE:space separated list of element attributes in format key=value`
 Element attributes:
 | attribute | description |
 | --------- | ----------- |
-| `template=OVMF_VARS.fd` | in `storpool` mode mandatory: the `OVMF_VARS` file used to seed the volume, a bare file name is resolved against `OVMF_PATH` on the front-end (default `/var/lib/one/remotes/OVMF`); in file mode optional, resolved against `NVRAM_TEMPLATE_PATH` on the KVM node (default `/var/tmp/one/OVMF`) |
-| `type=[block\|file]` | optional, type of the nvram element. In `storpool` mode the default is `block` |
+| `template=OVMF_VARS.fd` | in `storpool` mode mandatory for seeding the volume, and not written on the domain element; in file mode optional, a bare file name is resolved against `NVRAM_TEMPLATE_PATH` on the KVM node (default `/var/tmp/one/OVMF`) |
+| `type` | `block`, `file`, or `legacy`. In `storpool` mode the default is `block`. `legacy` writes the path as the element text. `network` exits 2 |
+| `format` | `raw` or `qcow2`. `storpool` with `qcow2` exits 2 |
+| `templateFormat` | `raw` or `qcow2` on a file nvram. `storpool` exits 2 |
 
 In `storpool` mode the domain XML gets the "new style" nvram element that
 follows the syntax of a disk source (libvirt 8.5+):
@@ -95,6 +103,12 @@ follows the syntax of a disk source (libvirt 8.5+):
 <nvram type="block">
   <source dev="/dev/storpool-byid/${globalId}"/>
 </nvram>
+```
+
+`type=legacy` keeps the older element, with the same path as text:
+
+```
+<nvram>/dev/storpool-byid/${globalId}</nvram>
 ```
 
 Requirements and limits of the `storpool` mode (verified with libvirt 10.0/QEMU 8.2
