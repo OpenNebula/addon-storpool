@@ -182,25 +182,33 @@ The script adds additional tunes to the _clock_ entry when the _hyperv_ feature 
 
 ### iothreads.py
 
-The script will define an [iothread](https://libvirt.org/formatdomain.html#elementsIOThreadsAllocation), and will assign it to all `virtio-blk` disks and `vitio-scsi` controllers.
+`T_IOTHREADS` sets an [iothread](https://libvirt.org/formatdomain.html#elementsIOThreadsAllocation) count and assigns those threads round-robin, starting at 1, to `vd*` disks and then to virtio-scsi controllers already in the domain. A controller with no `model` counts as `virtio-scsi`. `T_IOTHREADS_OVERRIDE=0` leaves the domain unchanged, including when `T_IOTHREADS` is also set. With `T_IOTHREADS` unset, a positive `T_IOTHREADS_OVERRIDE` is the spec. With neither key set, the domain stays as it is, including an existing `<iothreads>` element. `USER_TEMPLATE` wins over the environment. Empty or whitespace leaves the key unset.
+
+The value is `N` or `N` plus attributes: `io` (`threads`, `native`, or `io_uring`, default `native`), `thread_pool_min`, `thread_pool_max`, `poll_max`, `poll_grow`, `poll_shrink`, and `queue`. `N` is a positive integer. Pool, poll, and `queue` values are unsigned integers. A bad value exits 2, which aborts the deploy.
+
+An existing `<iothreads>` element is updated in place. Otherwise it is inserted immediately before `<devices>`, or appended when `<devices>` is absent. Its text is `N`. When any pool or poll attribute is set, `<iothreadids>` is replaced with ids `1..N` and placed immediately after `<iothreads>`. Each id has `thread_pool_min` and `thread_pool_max` when those were given. Poll values become `<poll max= grow= shrink=>` using only the attributes that were given. With no pool or poll attributes, an existing `<iothreadids>` is removed.
+
+Disk drivers receive `io` and `iothread`. Virtio-scsi drivers receive `iothread`. `queue` writes `<iothreads><iothread id=><queue id=/></iothread></iothreads>` on both disks and virtio-scsi, in place of the `iothread` attribute. `cache`, `name`, `type`, and `queues` stay on the driver.
 
 ```xml
 <domain>
   <iothreads>1</iothreads>
+  <iothreadids>
+    <iothread id="1" thread_pool_min="1" thread_pool_max="16">
+      <poll max="64" grow="4" shrink="2"/>
+    </iothread>
+  </iothreadids>
   <devices>
     <disk device="disk" type="block">
-      <source dev="/var/lib/one//datastores/0/42/disk.2" />
-      <target dev="vda" />
-      <driver cache="none" discard="unmap" io="native" iothread="1" name="qemu" type="raw" />
+      <target dev="vda"/>
+      <driver cache="none" io="native" iothread="1" name="qemu" type="raw"/>
     </disk>
-    <controller index="0" model="virtio-scsi" type="scsi">
-      <driver iothread="1" />
+    <controller model="virtio-scsi" type="scsi">
+      <driver iothread="1"/>
     </controller>
   </devices>
 </domain>
 ```
-
-With OpenNebula 6.0+, use `USER_TEMPLATE/T_IOTHREADS_OVERRIDE` to override the default values.
 
 ### kvm-hide.py
 

@@ -155,17 +155,26 @@ A set key replaces that part of the domain. With the key unset, OpenNebula's ele
 
 ### 7. Queues and iothreads
 
-`blk-queues.py`, `scsi-queues.py`, `nic-queues.py`, and `iothreads.py`
-write forms libvirt accepts: `<driver queues=>` on a virtio disk and on a
-SCSI controller, `<driver name='vhost' queues=>` on an interface, and
-`<iothreads>1</iothreads>` plus `<driver iothread='1'>`.
+`scsi-queues.py` writes `<driver queues=>` on every virtio-scsi controller
+(a missing `model` still counts) and, with `T_BLK_QUEUES`, on disks whose
+target `dev` starts with `vd`. A missing controller is created under the
+first `<devices>`. Optional controller attributes are `cmd_per_lun` and
+`max_sectors` (unsigned). The optional disk attribute is `queue_size`
+(a positive integer). With both keys unset, OpenNebula's queues stay.
 
-Current extras: disk `queue_size`; per-queue
-`<driver><iothreads><iothread id='1'><queue id='0'/>`; `<iothreadids>` with
-`thread_pool_min`, `thread_pool_max`, and `<poll>`; interface
-`rx_queue_size`, `tx_queue_size`, and `txmode` (`iothread` or `timer`);
-SCSI controller `cmd_per_lun` and `max_sectors`. `io` is `threads`,
-`native`, or `io_uring`. The tweaks only set `native`.
+`nic-queues.py` writes `<driver queues='N'>` on an interface with
+`<model type='virtio'/>`. `name='vhost'` is set only when `name` is
+missing. `rx_queue_size` and `tx_queue_size` are positive integers.
+`txmode` is `iothread` or `timer`. Other driver attributes and children
+stay. With the keys unset, OpenNebula's driver stays.
+
+`iothreads.py` writes `<iothreads>N</iothreads>` when `T_IOTHREADS` or a
+positive `T_IOTHREADS_OVERRIDE` is set. `T_IOTHREADS_OVERRIDE=0` leaves
+the domain unchanged. Pool or poll attributes also write `<iothreadids>`
+with `thread_pool_min`, `thread_pool_max`, and `<poll max= grow= shrink=>`.
+`vd*` disks get `io` (`threads`, `native`, or `io_uring`; default `native`)
+and `iothread`. Existing virtio-scsi controllers get `iothread`. `queue`
+uses `<driver><iothreads><iothread id=><queue id=/></iothread></iothreads>`.
 
 ### 8. Disk cache (`disk-cache-io.py`, `context-cache.py`)
 
