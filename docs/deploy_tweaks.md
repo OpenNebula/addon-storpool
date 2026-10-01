@@ -184,7 +184,13 @@ With OpenNebula 6.0+, use `USER_TEMPLATE/T_IOTHREADS_OVERRIDE` to override the d
 
 ### kvm-hide.py
 
-Set `domain/features/kvm/hidden[@state=on]` when `USER_TEMPLATE/T_KVM_HIDE` is defined.
+Set KVM feature children under `domain/features/kvm`. `on` creates `<features>` and `<kvm>` when they are missing.
+
+`T_KVM_HIDE` sets `<hidden>`. `T_KVM_HINT_DEDICATED`, `T_KVM_POLL_CONTROL`, `T_KVM_PV_IPI`, and `T_KVM_DIRTY_RING` set the other children libvirt accepts.
+
+`on` or `1` sets `state='on'`. `off` or `0` sets `state='off'` on an existing child. An existing child is updated; a second copy is not added. A bad value exits 2, which aborts the deploy.
+
+`T_KVM_DIRTY_RING=on:size=4096` sets `size`. The size must be a power of two from 1024 to 65536. `on` alone keeps a size already on the element. `off` drops `size`.
 
 ### os.py
 
