@@ -202,7 +202,7 @@ Set/update `domain/os` element; see [UEFI boot](uefi_boot.md).
 
 ### `q35-pcie-root.py`
 
-Update PCIe root ports when machine type `q35` is defined with the number defined in `USER_TEMPLATE/Q35_PCIE_ROOT_PORTS`.
+`T_Q35_PCIE_ROOT_PORTS` replaces the PCIe controllers on a q35 domain. The value is how many `pcie-root-port` controllers to write. The domain gets one `pcie-root` at index 0, root ports indexed from 1, and a `pcie-to-pci-bridge` at the next index. An existing `<pcihole64>` on the root is kept. With the key unset, the domain is left unchanged. A bad value exits 2, which aborts the deploy.
 
 ### `resizeCpuMem.py`
 

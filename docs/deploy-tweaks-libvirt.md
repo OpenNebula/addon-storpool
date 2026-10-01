@@ -178,10 +178,15 @@ has `discard` (`unmap` or `ignore`), `detect_zeroes`, `ioeventfd`, and
 
 ### 9. PCI topology and NVMe
 
+`T_Q35_PCIE_ROOT_PORTS` replaces every `type='pci'` controller in
+`<devices>` on a q35 domain: one `<controller type='pci' index='0'
+model='pcie-root'/>`, that many `pcie-root-port` controllers indexed from
+1, and a `pcie-to-pci-bridge` at the next index. An existing `<pcihole64>`
+on the root is kept. With the key unset, OpenNebula's controllers stay.
+
 Root ports can also set `model name=`, `hotplug`, and
-`<target chassis= port=>`. Libvirt fills index, chassis, and port when they
-are omitted, which is why one unindexed `pcie-root` is fine and a second
-one is not.
+`<target chassis= port=>`. Libvirt fills chassis and port when they are
+omitted.
 
 Host NVMe presented as virtio (`type='nvme'`, `target bus='virtio'`) is one
 backend. The other is an emulated guest controller:
