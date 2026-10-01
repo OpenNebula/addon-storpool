@@ -205,11 +205,16 @@ backend. The other is an emulated guest controller:
 
 ### 10. Video (`video.py`)
 
-`vga`, `cirrus`, `vmvga`, `qxl`, `virtio`, `bochs`, `ramfb`, `gop`, and
-`none` are model types. `primary`, `vram`, `heads`, and
-`<acceleration accel2d= accel3d= rendernode=>` match. Also defined:
-virtio `device` (`virtio-vga`, `virtio-gpu`, the `-gl` variants,
-`vhost-user-*`), `blob`, `edid`, and `<resolution x= y=>`.
+`T_VIDEO_MODEL` replaces every `<video>` in the first `<devices>` with one
+`<model>`. With the key unset, OpenNebula's video stays. `type` is `vga`,
+`cirrus`, `vmvga`, `xen`, `vbox`, `gop`, `none`, `bochs`, `ramfb`, `qxl`,
+or `virtio`. `device` is only for `virtio`. `primary` is `yes` or `no`.
+`blob` and `edid` are `on` or `off`. `heads` and `vram` are unsigned.
+`ram`, `vgamem`, and `vram64` are unsigned and only for `qxl`.
+`<resolution x= y=>` requires both values greater than 0.
+`<acceleration accel3d= accel2d= rendernode=>` matches; `rendernode` is an
+absolute path. The tweak drops `<driver>`, `<alias>`, and `<address>`.
+A bad value exits 2.
 
 ## Already the documented element
 

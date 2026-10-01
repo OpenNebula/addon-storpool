@@ -331,7 +331,20 @@ will be converted to:
 
 ### video.py
 
-Redefine `domain/devices/video` and use `USER_TEMPLATE/T_VIDEO_MODEL` with space separated list of attributes (_name=value_).
+`T_VIDEO_MODEL` replaces every `<video>` under the first `<devices>` with one `<video><model>`. Address, alias, and driver on the old elements are dropped. With the key unset or empty, the domain is left unchanged. A value in `USER_TEMPLATE` wins over the environment. A missing `<devices>` element exits 2, which aborts the deploy. A bad value does too.
+
+The value is space-separated `key=value`. A token without `=` is rejected. `type` is required: `vga`, `cirrus`, `vmvga`, `xen`, `vbox`, `gop`, `none`, `bochs`, `ramfb`, `qxl`, or `virtio`. `device` is only for `type=virtio`: `virtio-vga`, `virtio-vga-gl`, `virtio-gpu`, `virtio-gpu-gl`, `vhost-user-vga`, or `vhost-user-gpu`. `primary` is `yes` or `no`. `blob` and `edid` are `on` or `off`. `heads` and `vram` are unsigned integers. `ram`, `vgamem`, and `vram64` are unsigned integers and only for `type=qxl`. `resolution=WxH` (both dimensions greater than 0) is written as `<resolution x="W" y="H"/>`. `accel3d` and `accel2d` (`yes` or `no`) and `rendernode` (non-empty) are written on `<acceleration>`, not on `<model>`.
+
+Model attributes are written in this order when present: `type`, `device`, `vram`, `heads`, `primary`, `blob`, `edid`, `ram`, `vgamem`, `vram64`. Then `<resolution>`, then `<acceleration>`.
+
+```xml
+<video>
+  <model type="virtio" device="virtio-gpu" vram="16384" heads="1" primary="yes" blob="on" edid="off">
+    <resolution x="1920" y="1080" />
+    <acceleration accel3d="yes" accel2d="no" rendernode="/dev/dri/renderD128" />
+  </model>
+</video>
+```
 
 ### volatile2dev.py
 
