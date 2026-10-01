@@ -178,9 +178,14 @@ uses `<driver><iothreads><iothread id=><queue id=/></iothread></iothreads>`.
 
 ### 8. Disk cache (`disk-cache-io.py`, `context-cache.py`)
 
-`cache='none'` and `io='native'` are valid. The same driver element also
-has `discard` (`unmap` or `ignore`), `detect_zeroes`, `ioeventfd`, and
-`queue_size`.
+`disk-cache-io.py` writes `cache`, `io`, and `discard` on the StorPool disk
+`driver` (`none`, `native`, and `unmap` when the matching `T_DISK_*` key is
+unset). `context-cache.py` writes `cache='none'` and `io='native'` on each
+`type='file'` cdrom. Both can also set `detect_zeroes` (`off`, `on`, or
+`unmap`), `ioeventfd` (`on` or `off`), and `queue_size`. `cache` is
+`default`, `none`, `writeback`, `writethrough`, `directsync`, or `unsafe`.
+`io` is `threads`, `native`, or `io_uring`. `discard` is `unmap` or
+`ignore`.
 
 ### 9. PCI topology and NVMe
 

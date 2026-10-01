@@ -137,7 +137,22 @@ To override the above calculations and use the value for _/domain/cputune/shares
 
 ### disk-cache-io.py
 
-Set disk `cache=none` and `io=native` for all StorPool backed disks.
+Sets `cache='none'`, `io='native'`, and `discard='unmap'` on StorPool disks. The `driver` element is created when it is missing. Other driver attributes are kept.
+
+A disk matches when its source `file` or `dev` path carries a disk id and that disk's `TM_MAD`, compared case-insensitively, is `storpool`. The id is the last `.` component when that component is an integer (`disk.0`). A source path `/dev/sp-<id>` uses that id. Any other source attribute is skipped. A path that does not yield an integer disk id is skipped.
+
+The id is read from `TEMPLATE/DISK[DISK_ID]/TM_MAD`. When that element is missing and `TEMPLATE/CONTEXT[DISK_ID]` exists, the script uses `HISTORY_RECORDS/HISTORY[last()]/TM_MAD`.
+
+Optional `USER_TEMPLATE` keys override those defaults when set. The template overrides the environment. An empty value is unset.
+
+* `T_DISK_CACHE`: `default`, `none`, `writeback`, `writethrough`, `directsync`, `unsafe`
+* `T_DISK_IO`: `threads`, `native`, `io_uring`
+* `T_DISK_DISCARD`: `unmap`, `ignore`
+* `T_DISK_DETECT_ZEROES`: `off`, `on`, `unmap`
+* `T_DISK_IOEVENTFD`: `on`, `off`
+* `T_DISK_QUEUE_SIZE`: a positive integer, written as `queue_size`
+
+Every set key is checked before any disk is edited. A bad value exits 2, which aborts the deploy, including when no disk matches. If no StorPool disk matches and the keys are valid, the script exits 0 and leaves the domain unchanged.
 
 ### `feature_smm.py`
 
