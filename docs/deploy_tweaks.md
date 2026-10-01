@@ -125,7 +125,11 @@ Set disk `cache=none` and `io=native` for all StorPool backed disks.
 
 ### `feature_smm.py`
 
-See [UEFI boot](uefi_boot.md)
+Set `<features><smm state='on'><tseg unit='MiB'>48</tseg></smm>`. See [UEFI boot](uefi_boot.md).
+
+`T_FEATURE_SMM=:state=on` or `:state=off`. `on`, `1`, `off`, and `0` are accepted. Text before the colon is ignored. `state` is the only attribute.
+
+`T_FEATURE_SMM_TSEG=42:unit=MiB` sets the size. An empty size is `0`. An omitted unit is written as `MiB`. The size must be a whole number of MiB. `<tseg>` requires SMM `state='on'`. Turning SMM off drops `<tseg>`. A bad value exits 2, which aborts the deploy.
 
 ### `hv-enlightenments.py`
 

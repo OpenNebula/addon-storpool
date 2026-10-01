@@ -98,9 +98,16 @@ already on the element. `off` drops `size`.
 
 ### 3. SMM (`feature_smm.py`)
 
-`<smm state='on'><tseg unit='MiB'>48</tseg></smm>` is the documented shape.
-`state` is only `on` or `off`. `tseg` is a scaled integer, not a free
-attribute list.
+`feature_smm.py` writes this shape.
+
+`<smm state='on'><tseg unit='MiB'>48</tseg></smm>`. `state` is `on` or
+`off`. A missing `state` is `on`. `T_FEATURE_SMM` sets it. Text before the
+colon is ignored.
+
+`<tseg>` is a scaled integer. `T_FEATURE_SMM_TSEG=42:unit=MiB` sets the
+size. The unit defaults to `MiB`. `0` does not advertise an extended TSEG
+size. The size must be a whole number of MiB. `<tseg>` is written only when
+SMM is on.
 
 ### 4. SMBIOS (`sysinfo_smbios.py`)
 
