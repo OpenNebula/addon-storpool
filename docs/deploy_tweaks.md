@@ -72,18 +72,34 @@ The following variables were made available for use in some corner cases.
 
 ##### T_CPU_MODE
 
-Possible options: _custom_, _host-model_, _host-passthrough_.
+Possible options: _custom_, _host-model_, _host-passthrough_, _maximum_.
 
-Special keyword _delete_ will instruct the helper to delete the element from the domain XML.
+`host-model`, `host-passthrough`, and `maximum` drop `<model>`. `custom` keeps a model only from `T_CPU_MODEL`.
+
+Special keyword _delete_ removes the `mode` attribute.
 
 ##### T_CPU_FEATURES
 
-Comma-separated list of supported features. The policy could be added using a colon (':') as separator.
+Comma-separated list of features. This list replaces every `<feature>` on `<cpu>`. The policy is added after a colon (`name:require`). A missing policy is left unset. `force`, `require`, `optional`, `disable`, and `forbid` are accepted.
 
 ##### T_CPU_MODEL
 
-The optional _fallback_ attribute could be set after the model, separated with a colon (':').
-The special keyword _delete_ will instruct the helper to delete the element.
+The optional _fallback_ attribute is `allow` or `forbid`, after the model, separated with a colon (`:`).
+The special keyword _delete_ removes `<model>`.
+
+##### T_CPU_DIES and T_CPU_CLUSTERS
+
+Optional positive integers on the topology written by `T_CPU_SOCKETS`. `1` is omitted. The product `sockets × dies × clusters × cores × threads` must equal the `<vcpu>` maximum. `cores` is derived. Each cell gets `unit` from `<memory>` (default `KiB`).
+
+`T_CPU_NUMA_MEMACCESS` is `shared` or `private`. `T_CPU_NUMA_DISCARD` is `yes` or `no`.
+
+##### T_CPU_CACHE
+
+`emulate`, `passthrough`, or `disable`. `emulate` requires `level=3`. `passthrough` requires `mode` `host-passthrough` or `maximum`. Optional `level` is `1`, `2`, or `3` (`emulate:level=3`).
+
+##### T_CPU_MAXPHYSADDR
+
+`emulate:bits=42`, `passthrough`, or `passthrough:limit=39`. `bits` is required for `emulate`. `limit` is only for `passthrough`.
 
 ##### T_CPU_VENDOR
 
@@ -92,12 +108,12 @@ Could be set only when a `model` is defined.
 ##### T_CPU_CHECK
 
 Possible options: _none_, _partial_, _full_.
-The special keyword _delete_ will instruct the helper to delete the element.
+The special keyword _delete_ removes the `check` attribute.
 
 ##### T_CPU_MATCH
 
 Possible options: _minimum_, _exact_, _strict_.
-The special keyword _delete_ will instruct the helper to delete the element.
+The special keyword _delete_ removes the `match` attribute.
 
 ### `cpuShares.py`
 

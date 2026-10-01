@@ -143,18 +143,13 @@ cannot be combined with `<nvram>`.
 
 ### 6. CPU (`cpu.py`, `resizeCpuMem.py`)
 
-`<vcpu current=>`, `<vcpus><vcpu id= enabled= hotpluggable=></vcpus>`,
-`<topology sockets= cores= threads=>`, `<numa><cell id= cpus= memory=></cell>`,
-`match` (`minimum`, `exact`, `strict`), `check` (`none`, `partial`, `full`),
-feature `policy` (`force`, `require`, `optional`, `disable`, `forbid`), and
-model `fallback` (`allow`, `forbid`) are defined. `mode` also has
-`maximum`, which the tweak's list does not. Topology may also carry `dies`
-and `clusters`. A cell may set `unit` (default KiB), `memAccess`, and
-`discard`. The CPU element can also carry `<cache>` and `<maxphysaddr>`.
+A set key replaces that part of the domain. With the key unset, OpenNebula's element stays.
 
-`resizeCpuMem.py` only does ballooning (`<memory>` is the max,
-`<currentMemory>` is the current size). DIMM hotplug is
-`<maxMemory slots='N'>`.
+`T_CPU_MODE` is `custom`, `host-model`, `host-passthrough`, or `maximum`. The last three drop `<model>`. `T_CPU_MODEL` is the model name with optional `fallback` `allow` or `forbid`. `T_CPU_FEATURES` replaces every `<feature>`. `T_CPU_CHECK` and `T_CPU_MATCH` set those attributes. `delete` removes the attribute or `<model>`.
+
+`T_CPU_SOCKETS` replaces `<topology>`, `<numa>`, and `<vcpus>`. `T_CPU_DIES` and `T_CPU_CLUSTERS` default to 1 and are omitted at 1. `cores` is derived so the product equals the `<vcpu>` text. Cells use `unit` from `<memory>` (default `KiB`), plus `T_CPU_NUMA_MEMACCESS` (`shared` or `private`) and `T_CPU_NUMA_DISCARD` (`yes` or `no`).
+
+`T_CPU_CACHE` writes `<cache>`. `emulate` requires `level=3`. `passthrough` requires `mode` `host-passthrough` or `maximum`. `T_CPU_MAXPHYSADDR` writes `<maxphysaddr>`. `emulate` requires `bits`. `limit` is only for `passthrough`. A bad value exits 2.
 
 ### 7. Queues and iothreads
 
