@@ -129,7 +129,17 @@ See [UEFI boot](uefi_boot.md)
 
 ### `hv-enlightenments.py`
 
-Set HYPERV enlightenment features at `domain/features/hyperv` when defined `T_HV_SPINLOCKS`, `T_HV_RELAXED`, `T_HV_VAPIC`, `T_HV_TIME`, `T_HV_CRASH`, `T_HV_RESET`, `T_HV_VPINDEX`, `T_HV_RUNTIME`, `T_HV_SYNC`, `T_HV_STIMER`, `T_HV_FEQUENCIES` (`T_HV_REENLIGHTENMENT`,`T_HV_TLBFLUSH`,`T_HV_IPI`, and `T_HV_EVMCS`) with value _on_ or _1_ .
+Set Hyper-V enlightenment features on an existing `domain/features/hyperv` element (OpenNebula writes that element when `HYPERV=yes`).
+
+`T_HV_<FEATURE>=on` or `1` turns a feature on. `off` or `0` turns it off. An existing child is updated; a second copy is not added. The features are `relaxed`, `vapic`, `spinlocks`, `vpindex`, `runtime`, `synic`, `stimer`, `reset`, `vendor_id`, `frequencies`, `reenlightenment`, `tlbflush`, `ipi`, `evmcs`, `avic`, `emsr_bitmap`, and `xmm_input`. `T_HV_TIME` and `T_HV_CRASH` are ignored: libvirt has no such Hyper-V features.
+
+Attributes use the same `value:key=value` spelling as `feature_smm.py`. `T_HV_SPINLOCKS=on` sets `retries='8191'`. `T_HV_SPINLOCKS=on:retries=4095` overrides it. The count must be from 4095 to 4294967295.
+
+`T_HV_VENDOR_ID` is the vendor string (at most 12 characters, no comma), or `on:value=KVM Hv`. `off` clears it.
+
+Nested children follow `T_FEATURE_SMM_TSEG`: a separate template element for each child. `T_HV_STIMER_DIRECT=on` writes `<stimer><direct state='on'/></stimer>`. `T_HV_TLBFLUSH_DIRECT` and `T_HV_TLBFLUSH_EXTENDED` do the same under `<tlbflush>`. The parent must be `state='on'`, either from its own `T_HV_*` value or from the domain XML already. A bad value exits 2, which aborts the deploy.
+
+`T_HV_MODE` is `custom`, `passthrough`, or `host-model`. `passthrough` sets the attribute and leaves the children unchanged, because libvirt ignores them in that mode.
 
 ### `hyperv-clock.py`
 
