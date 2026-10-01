@@ -17,7 +17,7 @@
 #--------------------------------------------------------------------------- #
 """
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 import sys
 from xml.etree import ElementTree as ET
 
@@ -78,7 +78,7 @@ smbios_names: List[str] = [
     'chassis',
     'oemStrings',
 ]
-sysinfo: Dict[str, str | List[str] | Dict[str, str]] = {}
+sysinfo: Dict[str, Union[str, List[str], Dict[str, str]]] = {}
 
 for smbios_name in smbios_names:
     xpath: str = f'.//USER_TEMPLATE/T_SMBIOS_{smbios_name.upper()}'
@@ -100,7 +100,7 @@ if os_len > 0:
     os_e = os_elements[0]
     if os_len > 1:
         for os_element in os_elements[1:]:
-            for os_child in os_element.getchildren():  # type: ignore[attr-defined] # noqa: E501
+            for os_child in list(os_element):
                 os_e.append(os_child)
                 os_element.remove(os_child)
             for os_k, os_v in os_element.attrib.items():  # type: ignore[attr-defined] # noqa: E501
