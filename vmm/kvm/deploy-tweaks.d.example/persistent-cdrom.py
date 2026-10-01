@@ -91,19 +91,14 @@ def is_persistent_sata_slot(dev: str) -> bool:
 
 
 def sata_persistent_unit(dev: str) -> str:
-    """AHCI controller 0, units 5..2 for sdzz..sdzw.
-
-    Unit 0 is the q35 context CDROM. OpenNebula places other SATA CDROMs
-    on controllers 1+ at unit 0. Without an explicit address, libvirt maps
-    sdzz (index 701) to controller 116 and adds SATA controllers 0..116.
-    """
-    return str(ord(dev[3]) - ord('u'))
+    # sdzz..sdzw -> units 0..3 on the tray controller.
+    return str(ord('z') - ord(dev[3]))
 
 
-def set_sata_address(disk_e: ET.Element, dev: str) -> bool:
+def set_sata_address(disk_e: ET.Element, dev: str, controller: str) -> bool:
     attrs = {
         "type": "drive",
-        "controller": "0",
+        "controller": controller,
         "bus": "0",
         "target": "0",
         "unit": sata_persistent_unit(dev),
@@ -120,7 +115,10 @@ def set_sata_address(disk_e: ET.Element, dev: str) -> bool:
     return changed
 
 
-def pin_persistent_sata_addresses(devices_e: ET.Element) -> bool:
+def pin_persistent_sata_addresses(
+    devices_e: ET.Element,
+    controller: str,
+) -> bool:
     changed = False
     for disk_e in devices_e.findall('./disk'):
         target_e = disk_e.find('./target')
@@ -129,22 +127,82 @@ def pin_persistent_sata_addresses(devices_e: ET.Element) -> bool:
         dev = target_e.get('dev')
         if dev is None or not is_persistent_sata_slot(dev):
             continue
-        if set_sata_address(disk_e, dev):
+        if set_sata_address(disk_e, dev, controller):
             log_inf(f"pinned SATA address for {dev}"
-                    f" controller=0 unit={sata_persistent_unit(dev)}")
+                    f" controller={controller}"
+                    f" unit={sata_persistent_unit(dev)}")
             changed = True
     return changed
+
+
+def next_sata_controller(
+    devices_e: ET.Element,
+    skip: List[ET.Element],
+) -> str:
+    # Chipset controller 0 stays with the address-less context disk.
+    # Libvirt adds every missing SATA index from 0 through the highest
+    # drive address, so the trays take the next index still in use.
+    skip_ids = {id(element) for element in skip}
+    highest = 0
+    found = False
+    for disk_e in devices_e.findall('./disk'):
+        if id(disk_e) in skip_ids:
+            continue
+        target_e = disk_e.find('./target')
+        address_e = disk_e.find('./address')
+        if (target_e is None or target_e.get('bus') != 'sata' or
+                address_e is None or address_e.get('type') != 'drive'):
+            continue
+        dev = target_e.get('dev')
+        if dev is not None and is_persistent_sata_slot(dev):
+            continue
+        controller = address_e.get('controller')
+        if controller is None or not controller.isdecimal():
+            continue
+        value = int(controller)
+        if not found or value > highest:
+            highest = value
+            found = True
+    nxt = highest + 1 if found else 1
+    if nxt < 1:
+        nxt = 1
+    return str(nxt)
+
+
+def ensure_sata_controller(devices_e: ET.Element, index: str) -> bool:
+    for controller_e in devices_e.findall('./controller'):
+        if (controller_e.get('type') == 'sata' and
+                controller_e.get('index') == index):
+            return False
+    controller_e = ET.Element('controller', {'type': 'sata', 'index': index})
+    controllers = devices_e.findall('./controller')
+    if controllers:
+        insert_at = list(devices_e).index(controllers[-1]) + 1
+        devices_e.insert(insert_at, controller_e)
+    else:
+        devices_e.append(controller_e)
+    return True
+
+
+def persistent_tray_count(devices_e: ET.Element) -> int:
+    count = 0
+    for disk_e in devices_e.findall('./disk'):
+        if disk_e.get('device') != 'cdrom':
+            continue
+        target_e = disk_e.find('./target')
+        if target_e is None:
+            continue
+        dev = target_e.get('dev')
+        if dev is not None and is_persistent_sata_slot(dev):
+            count += 1
+    return count
 
 
 def drop_unused_sata_controllers(devices_e: ET.Element) -> bool:
     """Drop oned's per-disk AHCI controllers once no SATA disk uses them.
 
-    Libvirt requires SATA bus=0 and target=0, but unit is the port (six
-    per controller). Since #5705, LibVirtDriverKVM.cc still gives every
-    sd* SATA disk its own controller at unit 0. On q35 the index starts
-    at 1 because controller 0 is the implicit ICH9 AHCI (the context
-    CDROM, which has no address). After this tweak moves a CDROM onto
-    controller 0 that extra controller element is empty.
+    Image CD-ROMs move onto the tray controller. A controller element
+    they leave behind is removed. Index 0 is the q35 chipset AHCI.
     """
     used = set()
     for disk_e in devices_e.findall('./disk'):
@@ -207,6 +265,7 @@ def add_cdrom(
     cdrom_bus: str,
     disk_cdrom_type: str,
     dev: str,
+    controller: str = "",
 ) -> bool:
     log_dbg(f"add_cdrom({cdrom_bus=}, {disk_cdrom_type=}, {dev=})")
     disk_e = ET.SubElement(
@@ -236,8 +295,9 @@ def add_cdrom(
         },
     )
     _ = ET.SubElement(disk_e, "readonly", {})  # type: ignore[attr-defined] # noqa: E501
-    if cdrom_bus == 'sata' and is_persistent_sata_slot(dev):
-        set_sata_address(disk_e, dev)
+    if (cdrom_bus == 'sata' and controller and
+            is_persistent_sata_slot(dev)):
+        set_sata_address(disk_e, dev, controller)
     log_inf(f"added CDROM device: {dev}"
             f" type:{disk_cdrom_type} bus:{cdrom_bus}")
     return True
@@ -248,6 +308,7 @@ def change_cdrom(
     cdrom_bus: str,
     disk_cdrom_type: str,
     dev: str,
+    controller: str,
 ) -> bool:
     changed: bool = False
     msg: str = ""
@@ -269,8 +330,8 @@ def change_cdrom(
             msg += f" dev:{target_dev} -> {dev}"
             changed = True
         if cdrom_bus == 'sata' and is_persistent_sata_slot(dev):
-            if set_sata_address(disk_e, dev):
-                msg += (f" address controller=0"
+            if set_sata_address(disk_e, dev, controller):
+                msg += (f" address controller={controller}"
                         f" unit={sata_persistent_unit(dev)}")
                 changed = True
     if msg:
@@ -442,6 +503,20 @@ if pers_cdroms_count > 0:
                 total_cdroms_count += 1
 
     elif cdrom_bus == 'sata':
+        to_move: List[ET.Element] = []
+        for cdrom in all_cdroms:
+            if not cdrom.get("has_source"):
+                continue
+            disk_id = cdrom.get("disk_id")
+            if disk_id is not None and disk_id == context_disk_id:
+                continue
+            if is_persistent_sata_slot(cdrom["target_dev"]):
+                continue
+            to_move.append(cdrom["element"])
+        tray_controller = next_sata_controller(devices_e, to_move)
+        if int(tray_controller) > 99:
+            log_err(f"SATA controller index {tray_controller} is past 99")
+            exit(2)
         for cdrom in all_cdroms:
             if not cdrom.get("has_source"):
                 log_dbg(f"Skipping CDROM without source"
@@ -465,24 +540,31 @@ if pers_cdroms_count > 0:
                     cdrom_bus,
                     disk_cdrom_type,
                     dev,
+                    tray_controller,
                 ):
                     changed = True
                     cdrom["target_dev"] = dev
             else:
                 log_dbg(f"Failed to change CDROM"
                         f" {cdrom['target_dev']} {disk_id=}")
-        log_dbg(f"Adding remaining {target_count - total_cdroms_count}"
+        tray_count = persistent_tray_count(devices_e)
+        log_dbg(f"Adding remaining {target_count - tray_count}"
                 f" cdrom devices to {target_count}")
-        while total_cdroms_count < target_count:
+        while tray_count < target_count:
             dev = get_free_sata_device(used_sd_devices)
             if dev is None:
-                log_inf(f"no free SATA CDROM slot left at {total_cdroms_count}"
+                log_inf(f"no free SATA CDROM slot left at {tray_count}"
                         f"/{target_count}")
                 break
-            if add_cdrom(devices_e, cdrom_bus, disk_cdrom_type, dev):
+            if add_cdrom(
+                devices_e, cdrom_bus, disk_cdrom_type, dev, tray_controller,
+            ):
                 changed = True
-                total_cdroms_count += 1
-        if pin_persistent_sata_addresses(devices_e):
+                tray_count += 1
+        if ensure_sata_controller(devices_e, tray_controller):
+            changed = True
+            log_inf(f"added SATA controller index={tray_controller}")
+        if pin_persistent_sata_addresses(devices_e, tray_controller):
             changed = True
         if drop_unused_sata_controllers(devices_e):
             changed = True

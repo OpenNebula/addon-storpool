@@ -225,8 +225,10 @@ No libvirt-schema change suggested for these:
   `<interface type='hostdev' managed='yes'>` with `<driver name='vfio'/>`
   and `<source><address type='pci'>`. The driver may also set `iommufd`.
 * `persistent-cdrom.py` uses
-  `<address type='drive' controller= bus= target= unit=>`.
-  `qemu_validate.c` requires SATA `bus` 0 and `target` 0.
+  `<address type='drive' controller= bus= target= unit=>` on `sdzz`–`sdzw`.
+  The controller is the next SATA index after the disks that stay; unit
+  is 0–3. `qemu_validate.c` requires SATA `bus` 0 and `target` 0.
+  Libvirt adds every missing SATA controller from 0 through that index.
 * `disk-serial.py` uses `<serial>`. The allowed characters are
   `[A-Za-z0-9_ .+\\-]`.
 * `volatile2dev.py` flips `type='file'` to `type='block'` and `source file`
