@@ -16,10 +16,8 @@ which current libvirt forms the same topic already has.
 
 ### `hv-enlightenments.py`: `time` and `crash`
 
-`virDomainHyperv` has no `time` or `crash` child. The script used to append
-those elements, and a define failed with "unsupported HyperV Enlightenment
-feature". It now ignores `T_HV_TIME` and `T_HV_CRASH` and reports that on
-stderr.
+`virDomainHyperv` has no `time` or `crash` child. `T_HV_TIME` and
+`T_HV_CRASH` are ignored, with a note on stderr.
 
 The defined children are `relaxed`, `vapic`, `spinlocks`, `vpindex`,
 `runtime`, `synic`, `stimer`, `reset`, `vendor_id`, `frequencies`,
@@ -32,16 +30,16 @@ since 11.9.0). A count below `4095` is rejected. The script writes
 `retries='8191'` unless the template sets another count.
 
 A second child with the same name is not rejected by the parser, which
-stores the last `state`. The script now updates the existing child and
-drops the earlier copy.
+stores the last `state`. The script sets `state` on the existing child and
+leaves one copy.
 
-### `q35-pcie-root.py`: a second `pcie-root`
+### `q35-pcie-root.py`: NUMA expander buses are removed
 
-`pcie-root`, `pcie-root-port`, and `pcie-to-pci-bridge` are valid controller
-models. The script appends a second `<devices>`. The schema allows one. The
-parser still reads controllers from both, then `qemu_validate.c` requires
-every `pcie-root` index to be 0. The extra root gets the next index and the
-define fails with "Index for 'pcie-root' controllers must be 0".
+With NUMA nodes, `LibVirtDriverKVM.cc` writes `pcie-expander-bus`
+controllers and root ports addressed onto them. `T_Q35_PCIE_ROOT_PORTS`
+removes every `type='pci'` controller, so those buses go away while device
+PCI addresses still name them. Libvirt then rejects the domain or the
+devices land on the flat root. `CURRENT-ISSUES.md` issue 46.
 
 ### `console.py`: a fixed pty path
 
@@ -52,12 +50,11 @@ console. Hardcoding `/dev/pts/5` does not allocate that node.
 
 ## Same topic, current libvirt form
 
-Work through these one at a time. Each item is a plan, then an
-implementation, then a commit.
+What each script writes, against the current schema.
 
 ### 1. Hyper-V (`hv-enlightenments.py`, `hyperv-clock.py`)
 
-`hv-enlightenments.py` writes this shape. `hyperv-clock.py` is unchanged.
+`hv-enlightenments.py` writes this shape.
 
 Since 8.0.0 `<hyperv>` has `mode`: `custom` (the default), `passthrough`
 (every enlightenment the hypervisor supports; the parser ignores children),
@@ -119,7 +116,7 @@ otherwise `<uuid>`.
 `os.py` writes this shape for a StorPool NVRAM volume.
 
 `<nvram type='block'><source dev='...'/></nvram>` is the default.
-`type=legacy` writes the path as element text. `type=file` remains an
+`type=legacy` writes the path as element text. `type=file` is an
 override. `format` is `raw` or `qcow2`; `storpool` rejects `qcow2`.
 `template` and `templateFormat` are not written on the domain element in
 `storpool` mode.
@@ -158,7 +155,9 @@ first `<devices>`. Optional controller attributes are `cmd_per_lun` and
 `<model type='virtio'/>`. `name='vhost'` is set only when `name` is
 missing. `rx_queue_size` and `tx_queue_size` are positive integers.
 `txmode` is `iothread` or `timer`. Other driver attributes and children
-stay. With the keys unset, OpenNebula's driver stays.
+stay. With the keys unset, OpenNebula's driver stays. Libvirt's QEMU
+driver also requires `rx_queue_size` and `tx_queue_size` to be powers of
+two; the script does not check that (`CURRENT-ISSUES.md` issue 47).
 
 `iothreads.py` writes `<iothreads>N</iothreads>` when `T_IOTHREADS` or a
 positive `T_IOTHREADS_OVERRIDE` is set. `T_IOTHREADS_OVERRIDE=0` leaves
@@ -186,6 +185,8 @@ unset). `context-cache.py` writes `cache='none'` and `io='native'` on each
 model='pcie-root'/>`, that many `pcie-root-port` controllers indexed from
 1, and a `pcie-to-pci-bridge` at the next index. An existing `<pcihole64>`
 on the root is kept. With the key unset, OpenNebula's controllers stay.
+Without NUMA nodes this is the topology OpenNebula writes from
+`Q35_ROOT_PORTS`.
 
 Root ports can also set `model name=`, `hotplug`, and
 `<target chassis= port=>`. Libvirt fills chassis and port when they are
@@ -214,7 +215,7 @@ A bad value exits 2.
 
 ## Already the documented element
 
-No libvirt-schema change suggested for these:
+These write the schema element directly:
 
 * `uuid.py` writes `<uuid>`.
 * `cputune.py` writes `shares`, `period`, `quota`, `global_period`,
@@ -226,9 +227,11 @@ No libvirt-schema change suggested for these:
   and `<source><address type='pci'>`. The driver may also set `iommufd`.
 * `persistent-cdrom.py` uses
   `<address type='drive' controller= bus= target= unit=>` on `sdzz`–`sdzw`.
-  The controller is the next SATA index after the disks that stay; unit
-  is 0–3. `qemu_validate.c` requires SATA `bus` 0 and `target` 0.
-  Libvirt adds every missing SATA controller from 0 through that index.
+  The trays sit on the SATA controller after the last one a remaining disk
+  addresses, units 0–3. The script adds that controller and removes oned's
+  per-disk AHCI controllers that no SATA disk addresses. Index 0 stays for
+  the address-less context disk. `qemu_validate.c` requires SATA `bus` 0
+  and `target` 0.
 * `disk-serial.py` uses `<serial>`. The allowed characters are
   `[A-Za-z0-9_ .+\\-]`.
 * `volatile2dev.py` flips `type='file'` to `type='block'` and `source file`

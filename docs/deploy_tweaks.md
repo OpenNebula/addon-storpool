@@ -345,7 +345,7 @@ will be converted to:
 
 ### video.py
 
-`T_VIDEO_MODEL` replaces every `<video>` under the first `<devices>` with one `<video><model>`. Address, alias, and driver on the old elements are dropped. With the key unset or empty, the domain is left unchanged. A value in `USER_TEMPLATE` wins over the environment. A missing `<devices>` element exits 2, which aborts the deploy. A bad value does too.
+`T_VIDEO_MODEL` replaces every `<video>` under the first `<devices>` with one `<video><model>`. Address, alias, and driver on the replaced elements are dropped. With the key unset or empty, the domain is left unchanged. A value in `USER_TEMPLATE` wins over the environment. A missing `<devices>` element exits 2, which aborts the deploy. A bad value does too.
 
 The value is space-separated `key=value`. A token without `=` is rejected. `type` is required: `vga`, `cirrus`, `vmvga`, `xen`, `vbox`, `gop`, `none`, `bochs`, `ramfb`, `qxl`, or `virtio`. `device` is only for `type=virtio`: `virtio-vga`, `virtio-vga-gl`, `virtio-gpu`, `virtio-gpu-gl`, `vhost-user-vga`, or `vhost-user-gpu`. `primary` is `yes` or `no`. `blob` and `edid` are `on` or `off`. `heads` and `vram` are unsigned integers. `ram`, `vgamem`, and `vram64` are unsigned integers and only for `type=qxl`. `resolution=WxH` (both dimensions greater than 0) is written as `<resolution x="W" y="H"/>`. `accel3d` and `accel2d` (`yes` or `no`) and `rendernode` (non-empty) are written on `<acceleration>`, not on `<model>`.
 
@@ -522,11 +522,15 @@ Will generate the following element in the domain XML:
 
 ### persistent-cdrom.py
 
-Attach and detach of a CD-ROM eject or insert the medium (`virsh change-media`) instead of removing the device.
+CD-ROM attach and detach insert or eject the medium. The device stays in the domain. `T_PERSISTENT_CDROM` is how many of those devices to keep, at most 4. A value on the VM overrides the global one. `0` leaves the domain as OpenNebula wrote it.
 
-On pc the IDE bus has four names, `hda`–`hdd`. The context CD-ROM already has one of them. The tweak adds empty drives for the names that are left, and it will not add a fifth.
+On a pc machine the IDE bus has four slots, `hda`–`hdd`, shared with IDE hard disks. The context CD-ROM uses one. The script adds an empty drive on each free name until `T_PERSISTENT_CDROM` CD-ROM devices exist, or the slots run out.
 
-On q35 each image CD-ROM is moved to `sdzz`, `sdzy`, `sdzx`, or `sdzw`, and empty trays are added until `T_PERSISTENT_CDROM` of those names exist. Context is not one of them: that disk stays as OpenNebula wrote it, and `onevm updateconf` keeps using `CONTEXT/TARGET`. The trays are addressed on the next SATA controller after the disks that remain, units 0–3, `bus=0`, `target=0`. Controller 0 is the chipset AHCI, where the address-less context disk lands. After an eject the empty tray is still `sdzz`–`sdzw`, so OpenNebula can assign `sda` again without colliding with a device that is still in the domain.
+On q35 the context CD-ROM keeps the name OpenNebula assigned, and `onevm updateconf` updates that disk. Each image CD-ROM is renamed to `sdzz`, then `sdzy`, `sdzx`, `sdzw`. Empty trays are added until `T_PERSISTENT_CDROM` of those names exist. The guest sees the image under the tray name. Hard disks keep the names OpenNebula assigned.
+
+The trays are addressed on the SATA controller after the last one a hard disk uses, units 0–3. The script adds that controller and removes the per-disk AHCI controllers OpenNebula wrote for the CD-ROMs it moved. Controller 0 stays with the context disk.
+
+An eject leaves the tray. The tray name is one OpenNebula does not hand out, so the next disk can use `sda`. A later attach inserts the image into an empty tray. The guest keeps seeing the tray names it saw at boot.
 
 #### System configuration
 
