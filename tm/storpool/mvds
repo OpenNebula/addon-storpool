@@ -74,11 +74,7 @@ if [[ "${SP_VOL}" != "${SP_NEW}" ]]; then
     DEFERRED=1
 fi
 
-if boolTrue "NO_VOLUME_TEMPLATE"; then
-    SP_TEMPLATE=""
-else
-    SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
-fi
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
 oneImageQc "${IMAGE_ID}"
 

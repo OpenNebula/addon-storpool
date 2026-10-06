@@ -90,8 +90,9 @@ set_up_datastore "${BASE_PATH:-/var/lib/one}" "${RESTRICTED_DIRS:+/etc}" "${SAFE
 #IMAGE_HASH="$(generate_image_hash)"
 
 SP_VOL="${ONE_PX}-img-${ID}"
-SP_TEMPLATE="${ONE_PX}-ds-${DATASTORE_ID:-}"
-SP_DST="${SP_TEMPLATE}/${SP_VOL}"
+# the image SOURCE keeps the <prefix>-ds-<id>/ form regardless of the template
+SP_DST="${ONE_PX}-ds-${DATASTORE_ID:-}/${SP_VOL}"
+SP_TEMPLATE="$(spVolumeTemplateName "${DATASTORE_ID}")"
 
 #-------------------------------------------------------------------------------
 # Image FSTYPE:save_as. If it is HOT snapshot then tm/cpds will take care of it later

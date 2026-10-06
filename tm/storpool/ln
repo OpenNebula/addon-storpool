@@ -118,11 +118,7 @@ else
 fi
 VOL_UID="${SP_UID}"
 
-if boolTrue "NO_VOLUME_TEMPLATE"; then
-    SP_TEMPLATE=""
-else
-    SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
-fi
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
 if [[ "${TYPE}" == "CDROM" ]]; then
     # omit IMAGE_SP_QOSCLASS

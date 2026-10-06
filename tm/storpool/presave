@@ -48,7 +48,8 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     oneVmInfo "${VM_ID}"
 
-    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*1024*1024*2))" "${ONE_PX}-ds-${DS_ID}" \
+    SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
+    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*1024*1024*2))" "${SP_TEMPLATE}" \
             "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" \
             "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
     kvGetUid "${SP_VOL}" fatal

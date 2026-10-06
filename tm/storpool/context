@@ -122,7 +122,7 @@ exec_and_set_error "${MKISOFS:-mkisofs} -o ${ISO_FILE} -V CONTEXT -J -R ${ISO_DI
 SP_SIZE=$(du -b "${ISO_FILE}" | cut -f 1 || true)
 SP_SIZE=$(( (SP_SIZE +511) /512 *512 ))
 SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
-SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
 if kvGetUid "${SP_VOL}"; then
     VOL_UID="${SP_UID}"

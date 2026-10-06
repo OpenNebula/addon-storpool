@@ -94,7 +94,7 @@ fi
 #-------------------------------------------------------------------------------
 
 SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
-SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
 if storpoolVolumeExists "${SP_VOL}" byName; then
     storpoolDelete "${SP_UID}" "force"
