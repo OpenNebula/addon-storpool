@@ -175,7 +175,7 @@ REMOTE_BACKUP_DELETE="clusterB:del=y"
 
 In OpenNebula there are three probes for datastore related monitoring. The IMAGE datastore is monitored from the front end, and the SYSTEM datastore and the VM disks (and their snapshots) are monitored from the hosts. As this addon does not support direct access to the StorPool API from the hosts, we should provide the needed data to the related probes. This is done by the `monitor_helper-sync` script, which is run on the front-end by the `monitor_helper-sync.timer` systemd unit every 4 minutes (the unit files are in `misc/etc/systemd/system/`). The script is collecting the needed data from the StorPool API and propagating (if needed) to the hosts for use.
 
-The script calls the `ClustersList`, `VolumesSpace`, `SnapshotsSpace` and `VolumeTemplatesStatus` StorPool API methods. Each response is cached in `SP_FE_JSON_PATH` as `json-<ApiCall>-<API host>`, and for each OpenNebula cluster a symlink `<ONE cluster ID>/json-<ApiCall>-<datastore ID>` is created for the monitor probes. A cached response is reused until it is older than `SP_<APICALL>_SECONDS` (the API call name in upper case), or `SP_DEFAULT_SECONDS` when the per-call variable is not set. Here is the default configuration:
+The script calls the `ClustersList`, `VolumesSpace`, `SnapshotsSpace`, `VolumeTemplatesStatus` and `MgmtConfig` StorPool API methods. Each response is cached in `SP_FE_JSON_PATH` as `json-<ApiCall>-<API host>`, and for each OpenNebula cluster a symlink `<ONE cluster ID>/json-<ApiCall>-<datastore ID>` is created for the monitor probes. A cached response is reused until it is older than `SP_<APICALL>_SECONDS` (the API call name in upper case), or `SP_DEFAULT_SECONDS` when the per-call variable is not set. Here is the default configuration:
 
 ```
 # path to the json files on the hosts
@@ -194,6 +194,7 @@ SP_DEFAULT_SECONDS=1800
 #SP_VOLUMESSPACE_SECONDS=1800
 #SP_SNAPSHOTSSPACE_SECONDS=1800
 #SP_VOLUMETEMPLATESSTATUS_SECONDS=1800
+#SP_MGMTCONFIG_SECONDS=1800
 
 # Copy(scp) the JSON files to the remote hosts
 MONITOR_SYNC_REMOTE="YES"
@@ -212,6 +213,12 @@ MONITOR_DROP_STALE_TEMPLATE_CACHE="NO"
 #DEBUG_MONITOR_HELPER_SYNC=1
 #DDEBUG_MONITOR_HELPER_SYNC=1
 ```
+
+### Which StorPool template is reported
+
+By default (`NO_VOLUME_TEMPLATE=1` in `addon-storpoolrc`) the addon does not pass a template when it creates StorPool volumes, so new volumes are placed in the cluster's default template (`storpool mgmtConfig defaultTemplateName`), and volumes created from an existing snapshot or volume inherit its template. `monitor_helper-sync` reads the default template name from the `MgmtConfig` API response and keeps it in the `SP_DEFAULT_TEMPLATE` attribute of every StorPool datastore. The datastore monitor probes report the capacity of that template, and the `SP_REPLICATION`, `SP_PLACE*`, `SP_IOPS` and `SP_BW` attributes mirror its parameters. `SP_DEFAULT_TEMPLATE` is informational and is overwritten on each run; do not edit it by hand.
+
+With `NO_VOLUME_TEMPLATE=0` the previous behaviour applies: every volume is created in the per-datastore template `<ONE_PX>-ds-<datastore ID>`, which must exist, and the probes report that template.
 
 **Note:** The datastore usage reported by OpenNebula lags the StorPool API by up to the cache TTL plus the OpenNebula datastore monitoring interval. With the defaults (`SP_DEFAULT_SECONDS=1800` and `MONITORING_INTERVAL_DATASTORE=300` in `oned.conf`) the `FREE_MB` value could be up to ~35 minutes old. Lower the `SP_*_SECONDS` values when fresher data is needed.
 
