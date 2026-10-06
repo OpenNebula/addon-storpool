@@ -1114,7 +1114,7 @@ function storpoolWrapper()
             fi
             ;;
         # GET API -> {JSON} // ${TMPDIR}/${cmd}.json
-        AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList)
+        AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList|MgmtConfig)
             export DATA_JSON="${TMPDIR}/${method}.json"
             shift
             res="$(storpoolApi "${cmd}" "" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
@@ -1427,6 +1427,27 @@ function spVolumeTemplateName()
         return 0
     fi
     echo "${ONE_PX:-one}-ds-${1:-${DS_ID}}"
+}
+
+function spDefaultTemplateName()
+{
+    local _json="$1" _cluster="$2"
+    if [[ -z "${_json}" ]] || [[ ! -f "${_json}" ]]; then
+        return 0
+    fi
+    jq -r --arg c "${_cluster}" \
+        'if .data.clusters then ([.data.clusters[]|select($c=="" or .clusterId==$c)|.response.data.defaultTemplate.name // empty]|first // empty) else (.data.defaultTemplate.name // empty) end' \
+        "${_json}" 2>/dev/null
+}
+
+function spMonitorTemplateName()
+{
+    local _ds_template="${ONE_PX:-one}-ds-$1" _name="$2"
+    if boolTrue "NO_VOLUME_TEMPLATE"; then
+        echo "${_name:-${_ds_template}}"
+    else
+        echo "${_ds_template}"
+    fi
 }
 
 function storpoolVolumeCreate()
@@ -2832,6 +2853,7 @@ function oneDatastoreInfo()
         "/DATASTORE/TEMPLATE/DISKSNAPSHOT_LIMIT"
         "/DATASTORE/TEMPLATE/SP_QOSCLASS"
         "/DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE"
+        "/DATASTORE/TEMPLATE/SP_DEFAULT_TEMPLATE"
     )
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
@@ -2885,6 +2907,7 @@ function oneDatastoreInfo()
     fi
     DS_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     REMOTE_BACKUP_DELETE="${XPATH_ELEMENTS[i++]}"
+    SP_DEFAULT_TEMPLATE="${XPATH_ELEMENTS[i++]}"
 
     if [[ -n "${SP_API_HTTP_HOST}" ]]; then
         export SP_API_HTTP_HOST
@@ -3111,6 +3134,7 @@ function oneDsDriverAction()
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_SYSTEM"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_QOSCLASS"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_TEMPLATE_PROPAGATE"
+        "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_DEFAULT_TEMPLATE"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/NO_DECOMPRESS"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE"
@@ -3183,6 +3207,7 @@ function oneDsDriverAction()
     if [[ -n "${_TMP}" ]]; then
         SP_TEMPLATE_PROPAGATE="${_TMP}"
     fi
+    SP_DEFAULT_TEMPLATE="${XPATH_ELEMENTS[i++]}"
     NO_DECOMPRESS="${XPATH_ELEMENTS[i++]}"
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"

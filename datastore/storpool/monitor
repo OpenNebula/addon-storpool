@@ -85,6 +85,13 @@ if boolTrue "DDEBUG_DS_MONITOR"; then
 	splog "DS_ID=${DS_ID} ${SP_CLUSTER_ID} SP_TEMPLATE_STATUS_PATH:${SP_TEMPLATE_STATUS_PATH} ${SP_TEMPLATE_STATUS_JSON}"
 fi
 
+# the template to report: SP_DEFAULT_TEMPLATE (datastore attribute) or the cached MgmtConfig when NO_VOLUME_TEMPLATE
+MGMT_JSON="${SP_FE_JSON_PATH}/json-MgmtConfig-${SP_API_HTTP_HOST:-0.0.0.0}-${SP_CLUSTER_ID}"
+if [[ -z "${SP_DEFAULT_TEMPLATE}" ]]; then
+	SP_DEFAULT_TEMPLATE="$(spDefaultTemplateName "${MGMT_JSON}" "${SP_CLUSTER_ID}")"
+fi
+DS_NAME="$(spMonitorTemplateName "${DS_ID}" "${SP_DEFAULT_TEMPLATE}")"
+
 JSON_FILE="${SP_FE_JSON_PATH}/${SP_TEMPLATE_STATUS_JSON}-${SP_API_HTTP_HOST:-0.0.0.0}-${SP_CLUSTER_ID}"
 
 DS_TYPE=""

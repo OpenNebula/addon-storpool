@@ -94,6 +94,13 @@ while read -r -u "${jsfh}" json_file; do
     JSON_FILES+=("${json_file}")
 done {jsfh}< <(find "${SP_TEMPLATE_STATUS_PATH}" -type f -name "${SP_TEMPLATE_STATUS_JSON}*${SP_CLUSTER_ID}" || true)
 
+# the template to report: SP_DEFAULT_TEMPLATE (datastore attribute) or the cached MgmtConfig when NO_VOLUME_TEMPLATE
+MGMT_JSON="$(find "${SP_TEMPLATE_STATUS_PATH}" -type f -name "json-MgmtConfig*${SP_CLUSTER_ID}" 2>/dev/null | head -n 1 || true)"
+if [[ -z "${SP_DEFAULT_TEMPLATE}" ]]; then
+	SP_DEFAULT_TEMPLATE="$(spDefaultTemplateName "${MGMT_JSON}" "${SP_CLUSTER_ID}")"
+fi
+DS_NAME="$(spMonitorTemplateName "${DS_ID}" "${SP_DEFAULT_TEMPLATE}")"
+
 if boolTrue "DDDEBUG_TM_MONITOR"; then
 	splog "DS ${DS_ID} SP_TEMPLATE_STATUS_PATH:${SP_TEMPLATE_STATUS_PATH} JSON_FILES:${JSON_FILES[*]} SP_CLUSTER_ID=${SP_CLUSTER_ID}"
 fi
