@@ -95,6 +95,14 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #LOC_TAG=nloc
 
+# Do not pass a StorPool template when creating volumes. New volumes are then
+# placed in the cluster's default template, volumes created from 
+# a snapshot/volume inherit its template.
+# Set to 0 to use the per-datastore templates <ONE_PX>-ds-<datastore ID>.
+# Default: 1
+#
+#NO_VOLUME_TEMPLATE=1
+
 # Optional common arguments to OpenNebula shell tools
 #ONE_ARGS=
 
