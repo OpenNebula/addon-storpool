@@ -24,7 +24,7 @@ SP_JSON_PATH="/tmp"
 SP_FE_JSON_PATH="/var/cache/addon-storpool-monitor"
 ONE_HOME="${ONE_HOME:-/var/lib/one}"
 
-SP_API_CALLS=(ClustersList VolumesSpace SnapshotsSpace VolumeTemplatesStatus)
+SP_API_CALLS=(ClustersList VolumesSpace SnapshotsSpace VolumeTemplatesStatus MgmtConfig)
 
 ONE_VM_POOL_RUN="onevm list -x"
 ONE_VM_POOL_XML="one.pool"
@@ -168,6 +168,7 @@ _XPATH_QUERY=(
     "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_CLUSTER_ID"
     "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_REMOTE_LOCATION"
     "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_SKIP_MONITOR"
+    "/DATASTORE_POOL/DATASTORE/TEMPLATE/SP_DEFAULT_TEMPLATE"
 )
 
 unset i XPATH_ELEMENTS
@@ -192,6 +193,7 @@ _SP_AUTH_TOKEN="${XPATH_ELEMENTS[i++]}"
 _SP_CLUSTER_ID="${XPATH_ELEMENTS[i++]}"
 _SP_REMOTE_LOCATION="${XPATH_ELEMENTS[i++]}"
 _SP_SKIP_MONITOR="${XPATH_ELEMENTS[i++]}"
+_SP_DEFAULT_TEMPLATE="${XPATH_ELEMENTS[i++]}"
 
 IFS=';' read -r -a DS_ID_ARRAY <<< "${_DS_ID}"
 IFS=';' read -r -a DS_STATE_ARRAY <<< "${_DS_STATE}"
@@ -209,6 +211,7 @@ IFS=';' read -r -a SP_AUTH_TOKEN_ARRAY <<< "${_SP_AUTH_TOKEN}"
 IFS=';' read -r -a SP_CLUSTER_ID_ARRAY <<< "${_SP_CLUSTER_ID}"
 IFS=';' read -r -a SP_REMOTE_LOCATION_ARRAY <<< "${_SP_REMOTE_LOCATION}"
 IFS=';' read -r -a SP_SKIP_MONITOR_ARRAY <<< "${_SP_SKIP_MONITOR}"
+IFS=';' read -r -a SP_DEFAULT_TEMPLATE_ARRAY <<< "${_SP_DEFAULT_TEMPLATE}"
 
 ts=$(date +%s)
 
@@ -224,7 +227,6 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 	DS_ID="${DS_ID_ARRAY[i]}"
     DS_CLUSTER_ID="${DS_CLUSTER_ID_ARRAY[i]}"
     SP_REMOTE_LOCATION="${SP_REMOTE_LOCATION_ARRAY[i]}"
-	template_name="${ONE_PX}-ds-${DS_ID}"
 	sp_token="${SP_AUTH_TOKEN_ARRAY[i]}"
 	if [[ -n "${sp_token}" ]]; then
 		export SP_AUTH_TOKEN="${sp_token}"
@@ -408,6 +410,18 @@ for i in "${!DS_ID_ARRAY[@]}"; do
         bw="${SP_BW_ARRAY[i]}"
         clusterId="${SP_CLUSTER_ID_ARRAY[i]}"
     }
+    # mirror the cluster's default template (storpool mgmtConfig defaultTemplateName)
+    default_template="$(spDefaultTemplateName "${SP_FE_JSON_PATH}/json-MgmtConfig-${spApiHttpHost}" "${SP_REMOTE_LOCATION:-}")"
+    if [[ -n "${default_template}" ]]; then
+        if [[ "${default_template}" != "${SP_DEFAULT_TEMPLATE_ARRAY[i]}" ]]; then
+            echo "SP_DEFAULT_TEMPLATE=${default_template}" >>"${tmpFile}"
+            splog "[I] DS_ID ${DS_ID} update SP_DEFAULT_TEMPLATE=${default_template} //old:'${SP_DEFAULT_TEMPLATE_ARRAY[i]}'"
+        fi
+    else
+        splog "[W] DS_ID ${DS_ID} no default template in json-MgmtConfig-${spApiHttpHost} (SP_REMOTE_LOCATION=${SP_REMOTE_LOCATION})"
+    fi
+    # the template whose status is mirrored to the datastore and reported by the monitor probes
+    template_name="$(spMonitorTemplateName "${DS_ID}" "${default_template}")"
     jsonFile="${SP_FE_JSON_PATH}/json-VolumeTemplatesStatus-${spApiHttpHost}"
     #DO_REMOTE="~${SP_REMOTE_LOCATION}" storpoolRetry VolumeTemplatesList
     tmp="$(jq -r --arg clusterId "${SP_REMOTE_LOCATION:-}" --arg tName "${template_name}" '.data.clusters[]|select(.clusterId==$clusterId).response.data[]|select(.name==$tName)|(.replication|tostring)+","+.placeAll+","+.placeTail+","+.placeHead+","+(.iops|tostring)+","+(.bw|tostring)' "${jsonFile}")"
