@@ -1421,12 +1421,21 @@ function storpoolVolumeCheck()
     fi
 }
 
+function spVolumeTemplateName()
+{
+    if boolTrue "NO_VOLUME_TEMPLATE"; then
+        return 0
+    fi
+    echo "${ONE_PX:-one}-ds-${1:-${DS_ID}}"
+}
+
 function storpoolVolumeCreate()
 {
     local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3" _TAG_KEY="$4" _TAG_VAL="$5"
     local _RET=1 _DATA="" _TAGS=""
     _TAGS="$(tagsHelper "img;${LOC_TAG};virt${_TAG_KEY:+;${_TAG_KEY}}" "${_SP_VOL};${LOC_TAG_VAL};one${_TAG_VAL:+;${_TAG_VAL}}")"
-    _DATA="\"size\":\"${_SP_SIZE}\",\"tags\":{${_TAGS}},\"template\":\"${_SP_TEMPLATE}\""
+    _DATA="\"size\":\"${_SP_SIZE}\",\"tags\":{${_TAGS}}"
+    [[ -z "${_SP_TEMPLATE}" ]] || _DATA+=",\"template\":\"${_SP_TEMPLATE}\""
     SP_UID=$(storpoolRetry VolumeCreate "${_DATA}")
     _RET=$?
     if [[ -n ${SP_UID} ]]; then
@@ -1755,7 +1764,7 @@ function storpoolSnapshotRename()
         fi
         _JSON+="}"
         if [[ -n "${_SP_TEMPLATE}" ]]; then
-            _JSON+="\",template\":\"${_SP_TEMPLATE}\""
+            _JSON+=",\"template\":\"${_SP_TEMPLATE}\""
         fi
         storpoolRetry SnapshotUpdate "${_SNAP_UID}" "${_JSON}"
         _ret=$?
@@ -1926,6 +1935,12 @@ function storpoolDetach()
 function storpoolVolumeTemplate()
 {
     local _VOLUME="$1" _TEMPLATE="$2"
+    if [[ -z "${_TEMPLATE}" ]]; then
+        if boolTrue "DEBUG_SP_RUN_CMD"; then
+            splog "[D] storpoolVolumeTemplate(${_VOLUME}) no template (NO_VOLUME_TEMPLATE), skipped"
+        fi
+        return 0
+    fi
     DO_MULTICLUSTER=1 storpoolRetry VolumeUpdate "${_VOLUME}" "\"template\":\"${_TEMPLATE}\"" >/dev/null
 }
 
@@ -2160,7 +2175,7 @@ function storpoolVolumeFromSnapshot()
     local _RET=1 _TAGS=""
     _TAGS="$(tagsHelper "${_TAG_KEY}" "${_TAG_VAL}")"
     local _CMD="\"parent\":\"${_SNAPSHOT_UID}\",\"tags\":{${_TAGS}}"
-    [[ -z "${_SP_TEMPLATE}" ]] || _CMD+=",\"template\":\"${_SP_TEMPLATE}\"}"
+    [[ -z "${_SP_TEMPLATE}" ]] || _CMD+=",\"template\":\"${_SP_TEMPLATE}\""
     SP_UID=$(DO_MULTICLUSTER=1 storpoolRetry VolumeCreate "${_CMD}" 2>/dev/null)
     _RET=$?
     export SP_UID
@@ -2305,7 +2320,7 @@ function oneCheckpointSave()
     _vmid="$(basename "${_path}")"
     _dsid="$(basename "$(dirname "${_path}")")"
     _checkpoint="${_path}/checkpoint"
-    _template="${ONE_PX:-one}-ds-${_dsid}"
+    _template="$(spVolumeTemplateName "${_dsid}")"
     _volume="${ONE_PX:-one}-sys-${_vmid}-checkpoint"
     _sp_link="/dev/storpool-byid/${_SP_UID#*~}"
     _file_size=$(${SSH:-ssh} "${_host}" "du -b \"${_checkpoint}\" | cut -f 1" || true)

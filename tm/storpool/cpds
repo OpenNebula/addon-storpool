@@ -75,11 +75,7 @@ fi
 kvGetUid "${SP_PARENT}" fatal
 PARENT_ID="${SP_UID}"
 
-if boolTrue "NO_VOLUME_TEMPLATE"; then
-	SP_TEMPLATE=
-else
-	SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
-fi
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
 splog "DISK_ID=${DISK_ID} SP_SRC=${SP_SRC} SP_VOL=${SP_VOL} SP_PARENT=${SP_PARENT} PARENT_UID=${PARENT_ID}${SP_TEMPLATE:+ SP_TEMPLATE=${SP_TEMPLATE}}"
 

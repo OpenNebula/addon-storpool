@@ -62,6 +62,8 @@ fi
 
 oneDatastoreInfo "${DS_ID}"
 
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
+
 #-------------------------------------------------------------------------------
 # Get VM information
 #-------------------------------------------------------------------------------
@@ -304,9 +306,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 fi
             fi
             if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
-                if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                    storpoolVolumeTemplate "${VOL_UID}" "${ONE_PX}-ds-${DS_ID}"
-                fi
+                storpoolVolumeTemplate "${VOL_UID}" "${SP_TEMPLATE}"
             fi
         fi
         # NVRAM volume
@@ -326,10 +326,8 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                  fi
             fi
             if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
-                if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                    if [[ -n "${VOL_UID}" ]]; then
-                        storpoolVolumeTemplate "${VOL_UID}" "${ONE_PX}-ds-${DS_ID}"
-                    fi
+                if [[ -n "${VOL_UID}" ]]; then
+                    storpoolVolumeTemplate "${VOL_UID}" "${SP_TEMPLATE}"
                 fi
             fi
         fi
@@ -444,9 +442,7 @@ EOF
                     fi
                 fi
                 if [[ "${SRC_PATH}" != "${DST_PATH}" ]]; then
-                    if ! boolTrue "NO_VOLUME_TEMPLATE"; then
-                        storpoolVolumeTemplate "${VOL_UID}" "${ONE_PX}-ds-${DS_ID}"
-                    fi
+                    storpoolVolumeTemplate "${VOL_UID}" "${SP_TEMPLATE}"
                 fi
             fi
         done
@@ -503,12 +499,7 @@ VOL_UID="${SP_UID}"
 if [[ "${TYPE}" == "CDROM" ]]; then
     CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
     if ! kvGetUid "${CDROM_VOL}"; then
-        if boolTrue "NO_VOLUME_TEMPLATE"; then
-            SP_TEMPLATE_CD=""
-        else
-            SP_TEMPLATE_CD="${ONE_PX}-ds-${DS_ID}"
-        fi
-        storpoolVolumeClone "${VOL_UID}" "${CDROM_VOL}" "${SP_TEMPLATE_CD}"
+        storpoolVolumeClone "${VOL_UID}" "${CDROM_VOL}" "${SP_TEMPLATE}"
         kvGetUid "${CDROM_VOL}" fatal
         VOL_UID="${SP_UID}"
         storpoolVolumeTag "${VOL_UID}" \

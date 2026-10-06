@@ -63,11 +63,7 @@ if boolTrue "MULTICLUSTER"; then
     DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
 fi
 
-if boolTrue "NO_VOLUME_TEMPLATE"; then
-    SP_TEMPLATE=""
-else
-    SP_TEMPLATE="${ONE_PX}-ds-${DS_ID}"
-fi
+SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
 
 splog "SRC_HOST=${SRC_HOST} DST_HOST=${DST_HOST} VM_PATH=${VM_PATH} VM_ID=${VM_ID} DS_ID=${DS_ID} SYSTEM_MAD=${SYSTEM_MAD} ${tmpxml:+${tmpxml}}"

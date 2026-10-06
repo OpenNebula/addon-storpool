@@ -61,8 +61,9 @@ IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
 
 SP_VOL="${ONE_PX:-one}-img-${ID}"
 SP_PARENT="${IMAGE_PATH##*/}"
-SP_TEMPLATE="${ONE_PX:-one}-ds-${DATASTORE_ID}"
-SP_DST="${SP_TEMPLATE}/${SP_VOL}"
+# the image SOURCE keeps the <prefix>-ds-<id>/ form regardless of the template
+SP_DST="${ONE_PX:-one}-ds-${DATASTORE_ID}/${SP_VOL}"
+SP_TEMPLATE="$(spVolumeTemplateName "${DATASTORE_ID}")"
 PARENT_UID=$(kvGet byName "${SP_PARENT}")
 
 if [[ -z "${PARENT_UID}" ]]; then
@@ -151,7 +152,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         export CLONE_GW
 
         #create DST volume with the given SIZE
-        storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${ONE_PX}-ds-${DATASTORE_ID}"
+        storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${SP_TEMPLATE}"
         DST_VOL_UID="${SP_UID}"
         #attach DST volume to BRIDGE_LIST or here
         storpoolAttach "${DST_VOL_UID}" "${DST_SP_CLONE_GW}"
