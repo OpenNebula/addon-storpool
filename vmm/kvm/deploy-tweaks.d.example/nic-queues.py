@@ -119,8 +119,13 @@ def checked_spec(tag: str, spec: str) -> Tuple[int, Dict[str, str]]:
     if "txmode" in attrs and attrs["txmode"] not in TXMODE:
         fatal(f"txmode '{attrs['txmode']}' is not iothread or timer")
     for key in ("rx_queue_size", "tx_queue_size"):
-        if key in attrs and (not attrs[key].isdigit() or int(attrs[key]) < 1):
+        if key not in attrs:
+            continue
+        if not attrs[key].isdigit() or int(attrs[key]) < 1:
             fatal(f"{key} '{attrs[key]}' is not a positive integer")
+        size: int = int(attrs[key])
+        if size & (size - 1):
+            fatal(f"{key} '{attrs[key]}' is not a power of two")
     return queues, attrs
 
 
