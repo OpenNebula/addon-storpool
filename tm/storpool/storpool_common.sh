@@ -4185,7 +4185,7 @@ function tpmSave()
             splog "[D] StorPool volume ${SP_UID} ${_SP_VOL} already exists"
         fi
     fi
-    storpoolVolumeAttach "${SP_UID}" "${_RHOST}"
+    storpoolAttach "${SP_UID}" "${_RHOST}"
     _SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
     _remote_cmd=$(cat <<EOF
     #
@@ -4201,7 +4201,7 @@ EOF
     ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
                 "Error saving TPM data to ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
 
-    storpoolVolumeDetach "${SP_UID}" "" "${_RHOST}" "all"
+    storpoolDetach "${SP_UID}" "" "${_RHOST}" "all"
 
     storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${_VM_ID};${VC_POLICY};${SP_QOSCLASS};SWTPM"
 
@@ -4223,7 +4223,7 @@ function tpmRestore()
         if boolTrue "DEBUG_tpm"; then
             splog "[D] Attaching StorPool volume ${SP_UID} ${_SP_VOL} to host ${_RHOST}"
         fi
-        storpoolVolumeAttach "${SP_UID}" "${_RHOST}"
+        storpoolAttach "${SP_UID}" "${_RHOST}"
         _SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
         _remote_cmd=$(cat <<EOF
     #
@@ -4234,7 +4234,7 @@ EOF
         splog "VM ${_VM_ID} Restoring TPM data from ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
         ssh_exec_and_log "${_RHOST}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
                     "Error restoring TPM data from ${SP_UID} ${_SP_VOL} on host ${_RHOST}"
-        storpoolVolumeDetach "${SP_UID}" "" "${_RHOST}" "all"
+        storpoolDetach "${SP_UID}" "" "${_RHOST}" "all"
     fi
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} END"
