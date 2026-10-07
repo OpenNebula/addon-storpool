@@ -130,7 +130,7 @@ EOF
         rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
     mkdir -p "${restartDomainDirname}"
-    virsh --connect "\$LIBVIRT_URI" dumpxml "${DOMAIN}" --inactive 2>"/tmp/sprevert-${VM_ID}-dumpxml.err" >"${restartDomain}"
+    virsh --connect "\$LIBVIRT_URI" dumpxml "${DOMAIN}" 2>"/tmp/sprevert-${VM_ID}-dumpxml.err" >"${restartDomain}"
     dret=\$?
     logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh dumpxml ${DOMAIN} > ${restartDomain} ret:\$dret"
     if [[ \$dret -ne 0 ]] || ! grep -q "</domain>" "${restartDomain}"; then
