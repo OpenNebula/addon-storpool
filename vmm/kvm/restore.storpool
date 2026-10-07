@@ -46,7 +46,7 @@ splog "$*"
 if boolTrue "SP_CHECKPOINT_BD"; then
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
     if storpoolVolumeExists "${SP_VOL}" byName; then
-        storpoolVolumeAttach "${SP_UID}" "${HVHOST}"
+        storpoolAttach "${SP_UID}" "${HVHOST}"
         SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
         ln -sf "${SP_LINK}" "${FILE}"
         ret=$?
