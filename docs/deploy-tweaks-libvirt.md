@@ -153,11 +153,10 @@ first `<devices>`. Optional controller attributes are `cmd_per_lun` and
 
 `nic-queues.py` writes `<driver queues='N'>` on an interface with
 `<model type='virtio'/>`. `name='vhost'` is set only when `name` is
-missing. `rx_queue_size` and `tx_queue_size` are positive integers.
-`txmode` is `iothread` or `timer`. Other driver attributes and children
-stay. With the keys unset, OpenNebula's driver stays. Libvirt's QEMU
-driver also requires `rx_queue_size` and `tx_queue_size` to be powers of
-two; the script does not check that (`CURRENT-ISSUES.md` issue 47).
+missing. `rx_queue_size` and `tx_queue_size` are powers of two, which is
+what libvirt's QEMU driver requires. `txmode` is `iothread` or `timer`.
+Other driver attributes and children stay. With the keys unset,
+OpenNebula's driver stays. A size that is not a power of two exits 2.
 
 `iothreads.py` writes `<iothreads>N</iothreads>` when `T_IOTHREADS` or a
 positive `T_IOTHREADS_OVERRIDE` is set. `T_IOTHREADS_OVERRIDE=0` leaves
