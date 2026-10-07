@@ -83,7 +83,7 @@ SNAP_UID="${SP_UID}"
 
 kvGetUid "${SP_VOL}" fatal
 
-storpoolVolumeInfo "${SP_UID}" byName
+storpoolVolumeInfo "${SP_UID}"
 
 storpoolDetach "${SP_UID}" "force" "${SRC_HOST}" "all"
 
@@ -95,7 +95,7 @@ storpoolVolumeRevert "${SP_UID}" "${SP_VOL}" "${SNAP_UID}" "${REMOTE_BACKUP_DELE
 
 if boolTrue "REVERT_SIZE"; then
     OLD_SIZE_M=$((V_SIZE/1024/1024))
-    storpoolVolumeInfo "${SP_UID}" byName
+    storpoolVolumeInfo "${SP_UID}"
     NEW_SIZE_M=$((V_SIZE/1024/1024))
     if [[ ${OLD_SIZE_M} -ne ${NEW_SIZE_M} ]]; then
         oneVmVolumes "${VM_ID}"
