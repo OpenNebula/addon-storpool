@@ -157,7 +157,7 @@ for bak in ${backups}; do
     RCMD=$(cat <<EOF
 umask 077
 mkdir -p "${B_DIR}"
-qemu-img convert -T none -t none -O qcow2 "${snapPath}" "${dstFile}"
+qemu-img convert -f raw -T none -t none -O qcow2 "${snapPath}" "${dstFile}"
 EOF
 )
     splog "[I] RCMD ${KVMHOST}::$(echo "${RCMD}" | tr '\n' ';' || true)"
