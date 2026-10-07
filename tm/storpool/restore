@@ -118,7 +118,7 @@ for did in ${!disksUrl_a[*]}; do
     BACKUP_URL="${disksUrl_a[${did}]}"
     COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp \"${BACKUP_URL}\" -"
     kvGetUid "${SP_VOL}" fatal
-    storpoolVolumeInfo "${SP_UID:?}" byName
+    storpoolVolumeInfo "${SP_UID:?}"
     if [[ -z "${V_SIZE}" ]]; then
         if [[ "${did}" == "tpm" ]]; then
             V_SIZE="4M"
