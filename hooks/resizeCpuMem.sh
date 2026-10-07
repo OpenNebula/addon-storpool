@@ -116,7 +116,7 @@ if validate "VCPU_MAX"; then
                         onedb change-body vm --id $VM_ID "/VM/USER_TEMPLATE/T_VCPU_NEW" --delete
                         ret=$?
                         splog "($ret) onedb change-body vm --id $VM_ID /VM/USER_TEMPLATE/T_VCPU_NEW --delete"
-                        if [ -n "CPU_SHARES" ]; then
+                        if [ -n "$CPU_SHARES" ]; then
                             shares=$(awk "BEGIN {printf(\"%.f\", (1024*$CPU_SHARES)+0.5)}")
                             cmd="virsh --connect $LIBVIRT_URI schedinfo $DOMAIN --live cpu_shares=$shares"
                             ssh -t "$kvmhost" "$cmd"
