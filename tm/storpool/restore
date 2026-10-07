@@ -23,6 +23,22 @@ source "${DRIVER_PATH}/../../scripts_common.sh"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
+# returns on error (multiline_exec_and_log exits), so the rollback runs
+function restoreCopyToLink()
+{
+    local _LINK="$1"
+    local _PIPE="" _ERR="" _RET=0
+    _PIPE="set -e -o pipefail; eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct"
+    splog "${_PIPE}"
+    _ERR=$(bash -c "${_PIPE}" 2>&1 1>/dev/null)
+    _RET=$?
+    if [[ ${_RET} -ne 0 ]]; then
+        splog "[E] Error restoring ${BACKUP_URL} to ${DST_HOST}:${_LINK} (${_RET}) ${_ERR}"
+        error_message "Error restoring ${BACKUP_URL} to ${DST_HOST}:${_LINK}"
+    fi
+    return "${_RET}"
+}
+
 DST_HOST="${1%%:*}"
 SYSTEM_DS_PATH="${1#*:}"
 VM_ID="$2"
@@ -77,6 +93,7 @@ declare -A disksMap_a
 declare -A diskTypeMap_a  # diskTypeMap_a[oneName]=DISK_TYPE
 declare -A disksOldUid_a
 declare -A disksNewUid_a
+declare -A disksIngressUid_a  # disksIngressUid_a[did]=uid of the scratch volume
 
 while IFS=' ' read -r -u "${jqfh}" did url; do
     if [[ -z "${did}" ]]; then
@@ -145,10 +162,63 @@ for did in ${!disksUrl_a[*]}; do
             storpoolAttach "${SP_UID}" "${DST_HOST}"
             RET=$?
             if [[ ${RET} -eq 0 ]]; then # 3
-                splog "eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct"
-                multiline_exec_and_log "set -e -o pipefail; eval ${COPY_CMD//&/\\&} | ${SSH:-ssh} ${DST_HOST} ${DD:-dd} of=${SP_LINK} bs=\"${COPY_CMD_DD_BS:-1M}\" status=none iflag=fullblock oflag=direct" \
-                     "Error restoring ${BACKUP_URL} to ${DST_HOST}:${SP_LINK}"
-                RET=$?
+                if [[ "${did}" == "tpm" ]]; then
+                    # disk.tpm.0 is a tar.gz; tpmRestore extracts it from the volume
+                    restoreCopyToLink "${SP_LINK}"
+                    RET=$?
+                else
+                    # a qcow2 of a fully written disk is larger than its virtual size
+                    INGRESS_VOL="${SP_VOL}-ing-${_TMP_NAME}"
+                    INGRESS_SIZE=$(( (V_SIZE + V_SIZE / 64 + 16 * 1048576 + 1048575) / 1048576 * 1048576 ))
+                    _SOFT_FAIL=1 storpoolVolumeCreate "${INGRESS_VOL}" "${INGRESS_SIZE}" "${V_TEMPLATE_NAME}"
+                    RET=$?
+                    if [[ ${RET} -eq 0 ]] && [[ -n "${SP_UID}" ]]; then
+                        INGRESS_UID="${SP_UID}"
+                        disksIngressUid_a["${did}"]="${INGRESS_UID}"
+                        INGRESS_LINK="/dev/storpool-byid/${INGRESS_UID#*~}"
+                        _SOFT_FAIL=1 storpoolAttach "${INGRESS_UID}" "${DST_HOST}"
+                        RET=$?
+                        if [[ ${RET} -eq 0 ]]; then
+                            restoreCopyToLink "${INGRESS_LINK}"
+                            RET=$?
+                        fi
+                        if [[ ${RET} -eq 0 ]]; then
+                            qemu_img_info "${INGRESS_LINK}" "${DST_HOST}"
+                            RET=$?
+                            if [[ ${RET} -ne 0 ]] || [[ -z "${QEMU_IMG_FORMAT}" ]]; then
+                                splog "[E] VM ${VM_ID} disk.${did} qemu-img info failed on ${DST_HOST}:${INGRESS_LINK}"
+                                error_message "qemu-img info failed on ${DST_HOST}:${INGRESS_LINK}"
+                                RET=1
+                            elif [[ "${QEMU_IMG_VIRTUAL_SIZE}" != "${V_SIZE}" ]]; then
+                                splog "[E] VM ${VM_ID} disk.${did} backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} != volume ${V_SIZE}"
+                                error_message "backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} != volume ${V_SIZE}"
+                                RET=1
+                            else
+                                POST_COPY_CMD=$(cat <<EOF
+set -e
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
+${QEMU_IMG:-qemu-img} convert -f ${QEMU_IMG_FORMAT} -t none -T none -O raw -S 4k ${INGRESS_LINK} ${SP_LINK}
+sync
+EOF
+)
+                                splog "${QEMU_IMG_FORMAT} qemu-img convert -f ${QEMU_IMG_FORMAT} -t none -T none -O raw -S 4k ${INGRESS_LINK} ${SP_LINK}"
+                                ssh_exec_and_log_no_error "${DST_HOST}" "${POST_COPY_CMD}" \
+                                    "Error converting ${BACKUP_URL} on ${DST_HOST}"
+                                RET=$?
+                            fi
+                        fi
+                        DELAY_DELETE="" storpoolDelete "${INGRESS_UID}" "force"
+                        INGRESS_RET=$?
+                        if [[ ${INGRESS_RET} -eq 0 ]]; then
+                            unset "disksIngressUid_a[${did}]"
+                        else
+                            splog "[E] VM ${VM_ID} ingress volume ${INGRESS_UID} (${INGRESS_VOL}) not deleted"
+                        fi
+                    else
+                        [[ ${RET} -ne 0 ]] || RET=1
+                    fi
+                    SP_UID="${disksNewUid_a[${did}]}"
+                fi
                 if [[ ${RET} -eq 0 ]]; then # 4
                     DST_PATH="${SYSTEM_DS_PATH}/disk.${did}"
                     oneSymlink "${DST_HOST}" "${SP_UID}" "${DST_PATH}"
@@ -189,6 +259,10 @@ for did in ${!disksUrl_a[*]}; do
     BACKUP_URL="${disksUrl_a[${did}]}"
     SP_VOL="${disksMap_a[${did}]}"
     TMP_NAME="${SP_VOL}-${_TMP_NAME}"
+    if [[ -n "${disksIngressUid_a[${did}]:-}" ]]; then
+        splog "[I] VM ${VM_ID} delete ingress volume ${disksIngressUid_a[${did}]}"
+        DELAY_DELETE="" storpoolDelete "${disksIngressUid_a[${did}]}" "force"
+    fi
     if [[ ${ERROR} -eq 0 ]]; then
         OLD_UID="${disksOldUid_a[${did}]}"
         splog "[I] VM ${VM_ID} Restore success, cleaning up ${OLD_UID} (${TMP_NAME})"
