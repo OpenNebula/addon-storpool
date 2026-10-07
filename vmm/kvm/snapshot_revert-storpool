@@ -116,10 +116,31 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
 
     rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-	while read -r -u 4 out; do
-        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
-    done 4< <(virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" 2>&1)
-    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$?"
+	# A second attempt covers a monitor holding the state-change lock, and a
+	# destroy that killed QEMU but still returned an error.
+	vret=1
+	for _try in 1 2; do
+		vret=0
+		virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" >"/tmp/sprevert-${VM_ID}-destroy.log" 2>&1 || vret=\$?
+		while read -r out; do
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
+		done <"/tmp/sprevert-${VM_ID}-destroy.log"
+		if [[ \$vret -eq 0 ]]; then
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:0"
+			break
+		fi
+		if grep -qiE 'not running|Domain not found' "/tmp/sprevert-${VM_ID}-destroy.log"; then
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$vret (domain already stopped)"
+			vret=0
+			break
+		fi
+		logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$vret (attempt \$_try)"
+		if [[ \$_try -eq 1 ]]; then
+			sleep 1
+		fi
+	done
+	[[ \$vret -eq 0 ]] || cat "/tmp/sprevert-${VM_ID}-destroy.log" >&2
+	exit \$vret
 EOF
 )
     RESTART_DOMAIN=0
@@ -138,29 +159,85 @@ EOF
         rm -f "${restartDomain}"
         exit 3
     fi
-	while read -r -u 4 out; do
-        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
-    done 4< <(virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" 2>&1)
-    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$?"
+	vret=1
+	for _try in 1 2; do
+		vret=0
+		virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" >"/tmp/sprevert-${VM_ID}-destroy.log" 2>&1 || vret=\$?
+		while read -r out; do
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
+		done <"/tmp/sprevert-${VM_ID}-destroy.log"
+		if [[ \$vret -eq 0 ]]; then
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:0"
+			break
+		fi
+		if grep -qiE 'not running|Domain not found' "/tmp/sprevert-${VM_ID}-destroy.log"; then
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$vret (domain already stopped)"
+			vret=0
+			break
+		fi
+		logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$vret (attempt \$_try)"
+		if [[ \$_try -eq 1 ]]; then
+			sleep 1
+		fi
+	done
+	[[ \$vret -eq 0 ]] || cat "/tmp/sprevert-${VM_ID}-destroy.log" >&2
+	exit \$vret
 EOF
 )
     fi
     ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
     ret=$?
+    # 255 is ssh itself (connection dropped). The remote status is passed through.
+    if [[ ${ret} -eq 255 ]]; then
+        splog "[W] VM ${VM_ID} host:${VMHOST} ssh failed (${ret}), retrying the destroy once"
+        sleep 1
+        ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+        ret=$?
+    fi
     if [[ ${ret} -eq 3 ]] && boolTrue "RESTART_DOMAIN"; then
         # the domain is still running: destroy it without the restart (the old behaviour)
         splog "[W] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} domain XML dump failed, the domain will not be restarted"
         RESTART_DOMAIN=0
         rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
-	while read -r -u 4 out; do
-        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
-    done 4< <(virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" 2>&1)
-    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$?"
+	vret=1
+	for _try in 1 2; do
+		vret=0
+		virsh --connect "\$LIBVIRT_URI" destroy "${DOMAIN}" >"/tmp/sprevert-${VM_ID}-destroy.log" 2>&1 || vret=\$?
+		while read -r out; do
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh: \$out"
+		done <"/tmp/sprevert-${VM_ID}-destroy.log"
+		if [[ \$vret -eq 0 ]]; then
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:0"
+			break
+		fi
+		if grep -qiE 'not running|Domain not found' "/tmp/sprevert-${VM_ID}-destroy.log"; then
+			logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$vret (domain already stopped)"
+			vret=0
+			break
+		fi
+		logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh destroy ${DOMAIN} ret:\$vret (attempt \$_try)"
+		if [[ \$_try -eq 1 ]]; then
+			sleep 1
+		fi
+	done
+	[[ \$vret -eq 0 ]] || cat "/tmp/sprevert-${VM_ID}-destroy.log" >&2
+	exit \$vret
 EOF
 )
         ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
         ret=$?
+        if [[ ${ret} -eq 255 ]]; then
+            splog "[W] VM ${VM_ID} host:${VMHOST} ssh failed (${ret}), retrying the destroy once"
+            sleep 1
+            ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+            ret=$?
+        fi
+    fi
+    if [[ ${ret} -ne 0 ]]; then
+        splog "[E] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} was not destroyed (${ret}), snapshot revert aborted"
+        log_error "VM ${VM_ID} snapshot revert aborted, the domain on ${VMHOST} was not destroyed (${ret})"
+        exit "${ret}"
     fi
     splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed (${ret})${RESTART_DOMAIN:+ restart XML:${restartDomain}}"
     sleep .5
