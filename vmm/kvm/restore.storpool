@@ -18,7 +18,7 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-DRIVER_PATH="{$(dirname "$0")"
+DRIVER_PATH="$(dirname "$0")"
 
 if [[ -f "${DRIVER_PATH}/../../etc/vmm/kvm/kvmrc" ]]; then
     # shellcheck source=/dev/null
