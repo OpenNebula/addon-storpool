@@ -360,6 +360,7 @@ if nvram_file is not None:
                         nvram_e, "source", {source: nvram_filepath}
                     )
                     nvram_e.attrib["type"] = nvram_type
+                    changed = True
                 else:
                     nvram_e.text = nvram_filepath
                     changed = True
