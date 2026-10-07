@@ -64,11 +64,14 @@ if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
     xTYPE="NPERS"
 fi
+SP_MODE="rw"
 if boolTrue "READONLY"; then
     xTYPE="${xTYPE}RO"
-    if boolTrue "CDROM"; then
+    if [[ "${TYPE}" == "CDROM" ]]; then
         xTYPE="CDROM"
     fi
+    # same mode tm/storpool/ln uses; the default READONLY_MODE is rw
+    SP_MODE="${READONLY_MODE,,}"
 fi
 
 SP_SNAP="${SP_VOL}-snap${SNAP_ID}"
@@ -87,7 +90,7 @@ storpoolVolumeInfo "${SP_UID}"
 
 storpoolDetach "${SP_UID}" "force" "${SRC_HOST}" "all"
 
-trapAdd "storpoolAttach \"${SP_UID}\" \"${SRC_HOST}\"; oneSymlink \"${SRC_HOST}\" \"${SP_UID}\" \"${SRC_PATH}\""
+trapAdd "storpoolAttach \"${SP_UID}\" \"${SRC_HOST}\" \"${SP_MODE}\"; oneSymlink \"${SRC_HOST}\" \"${SP_UID}\" \"${SRC_PATH}\""
 
 boolTrue "UPDATE_ONE_DISK_SIZE" && REVERT_SIZE=1 || REVERT_SIZE=0
 
@@ -113,7 +116,7 @@ if boolTrue "REVERT_SIZE"; then
     fi
 fi
 
-storpoolAttach "${SP_UID}" "${SRC_HOST}"
+storpoolAttach "${SP_UID}" "${SRC_HOST}" "${SP_MODE}"
 oneSymlink "${SRC_HOST}" "${SP_UID}" "${SRC_PATH}"
 trapReset
 
