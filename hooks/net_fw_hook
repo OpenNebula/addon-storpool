@@ -170,7 +170,7 @@ else
 
     # alias deleted - DEL ipset IPv6
     if [[ -n "${A_IP6_GLOBAL}" ]]; then
-        sudo ipset -exist del "${chain6}" "${A_IP6_GLOBAL}  "
+        sudo ipset -exist del "${chain6}" "${A_IP6_GLOBAL}"
         ret=$?
         if [[ ${ret} -ne 0 ]]; then
             logger -t "${me}" -- "VM ${VM_ID} NIC_ALIAS[ID=${A_ID}, IP=${A_IP6_GLOBAL}, PARENT_ID=${A_PARENT_ID}] ipset DEL failed (${ret})"
