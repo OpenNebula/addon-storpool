@@ -99,8 +99,10 @@ if [[ "${SNAP_ID}" == "-1" ]]; then
 else
     SP_SNAPSHOT="${SP_PARENT}-snap${SNAP_ID}"
     kvGetUid "${SP_SNAPSHOT}" fatal
-    SNAP_ID="${SP_UID}"
-    storpoolVolumeFromSnapshot "${SNAP_ID}" "${SP_VOL}" "${SP_TEMPLATE}"
+    SNAP_UID="${SP_UID}"
+    storpoolVolumeFromSnapshot "${SNAP_UID}" "${SP_VOL}" "${SP_TEMPLATE}" \
+            "img;${LOC_TAG};virt;qc" \
+            "${SP_VOL};${LOC_TAG_VAL};one;${SP_QOSCLASS}"
     storpoolVolumeFreeze "${SP_UID}" "volume"
 fi
 
