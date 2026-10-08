@@ -89,7 +89,7 @@ if [[ "${SNAP_ID}" == "-1" ]]; then
         trapAdd "oneFsthaw \"${SRC_HOST}\" \"${DEPLOY_ID}\""
     fi
     storpoolSnapshotCreate "${SP_VOL}" "${PARENT_ID}" \
-            "img;${LOC_TAG};virt;qc" \
+            "img;${LOC_TAG};virt;${SP_QOSCLASS:+qc}" \
             "${SP_VOL};${LOC_TAG_VAL};one;${SP_QOSCLASS}"
 
     if boolTrue "DISK_SAVEAS_FSFREEZE"; then
@@ -101,7 +101,7 @@ else
     kvGetUid "${SP_SNAPSHOT}" fatal
     SNAP_UID="${SP_UID}"
     storpoolVolumeFromSnapshot "${SNAP_UID}" "${SP_VOL}" "${SP_TEMPLATE}" \
-            "img;${LOC_TAG};virt;qc" \
+            "img;${LOC_TAG};virt;${SP_QOSCLASS:+qc}" \
             "${SP_VOL};${LOC_TAG_VAL};one;${SP_QOSCLASS}"
     storpoolVolumeFreeze "${SP_UID}" "volume"
 fi
