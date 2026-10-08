@@ -189,11 +189,14 @@ for did in ${!disksUrl_a[*]}; do
                                 splog "[E] VM ${VM_ID} disk.${did} qemu-img info failed on ${DST_HOST}:${INGRESS_LINK}"
                                 error_message "qemu-img info failed on ${DST_HOST}:${INGRESS_LINK}"
                                 RET=1
-                            elif [[ "${QEMU_IMG_VIRTUAL_SIZE}" != "${V_SIZE}" ]]; then
-                                splog "[E] VM ${VM_ID} disk.${did} backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} != volume ${V_SIZE}"
-                                error_message "backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} != volume ${V_SIZE}"
+                            elif [[ "${QEMU_IMG_VIRTUAL_SIZE}" -gt "${V_SIZE}" ]]; then
+                                splog "[E] VM ${VM_ID} disk.${did} backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} > volume ${V_SIZE}"
+                                error_message "backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} > volume ${V_SIZE}"
                                 RET=1
                             else
+                                if [[ "${QEMU_IMG_VIRTUAL_SIZE}" -lt "${V_SIZE}" ]]; then
+                                    splog "[W] VM ${VM_ID} disk.${did} backup virtual-size ${QEMU_IMG_VIRTUAL_SIZE} < volume ${V_SIZE}"
+                                fi
                                 POST_COPY_CMD=$(cat <<EOF
 set -e
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin:\$PATH
