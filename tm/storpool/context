@@ -49,6 +49,7 @@ function exit_error()
     error_message "${ERROR}"
     splog "${ERROR}"
     [[ -d "${ISO_DIR}" ]] && rm -rf "${ISO_DIR}" > /dev/null 2>&1
+    [[ -f "${ISO_FILE}" ]] && rm -f "${ISO_FILE}" > /dev/null 2>&1
     exit 255
 }
 
@@ -75,7 +76,12 @@ DISK_ID="$(echo "${DST}" | awk -F. '{print $NF}')"
 log "Generating context block device"
 
 ISO_DIR="${DST_DIR}/.isofiles/${VM_ID}"
-ISO_FILE="${ISO_DIR}/${VM_ID}.iso"
+ISO_FILE="${DST_DIR}/.isofiles/${VM_ID}.iso"
+
+# Drop leftovers from an aborted earlier attempt before reusing the directory
+exec_and_set_error "rm -rf ${ISO_DIR} ${ISO_FILE}" \
+    "Could not delete tmp dir to make context dev"
+[[ -n "${ERROR}" ]] && exit_error
 
 exec_and_set_error "mkdir -p ${ISO_DIR}" \
     "Could not create tmp dir to make context dev"
