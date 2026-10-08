@@ -418,7 +418,14 @@ for i in "${!DS_ID_ARRAY[@]}"; do
             splog "[I] DS_ID ${DS_ID} update SP_DEFAULT_TEMPLATE=${default_template} //old:'${SP_DEFAULT_TEMPLATE_ARRAY[i]}'"
         fi
     else
-        splog "[W] DS_ID ${DS_ID} no default template in json-MgmtConfig-${spApiHttpHost} (SP_REMOTE_LOCATION=${SP_REMOTE_LOCATION})"
+        # The default name is used only when NO_VOLUME_TEMPLATE is set. An older
+        # StorPool release has no defaultTemplate key, so the warning is limited
+        # to the mode that falls back to <prefix>-ds-<id>.
+        if boolTrue "NO_VOLUME_TEMPLATE"; then
+            splog "[W] DS_ID ${DS_ID} no default template in json-MgmtConfig-${spApiHttpHost} (SP_REMOTE_LOCATION=${SP_REMOTE_LOCATION})"
+        elif boolTrue "DEBUG_MONITOR_HELPER_SYNC"; then
+            splog "[D] DS_ID ${DS_ID} no default template in json-MgmtConfig-${spApiHttpHost} (SP_REMOTE_LOCATION=${SP_REMOTE_LOCATION})"
+        fi
     fi
     # the template whose status is mirrored to the datastore and reported by the monitor probes
     template_name="$(spMonitorTemplateName "${DS_ID}" "${default_template}")"
