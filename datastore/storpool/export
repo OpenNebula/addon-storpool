@@ -119,12 +119,18 @@ if [[ -n "${EXPORT_FILE_FORMAT}" ]]; then
     RCMD=$(cat <<EOF
 set -o pipefail
 logger -t "ds_sp_export_r[$$]" -- "Begin ${EXPORT_FILE} (\$?)"
-${QEMU_IMG:-qemu-img} convert -f raw ${EXPORT_QEMU_IMG_ARGS:-} -O "${FORMAT}" "${SP_LINK}" "${EXPORT_FILE}" 2>&1 >"/tmp/export$$.log"
-logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG} convert -f raw ${EXPORT_QEMU_IMG_ARGS} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$?)"
+${QEMU_IMG:-qemu-img} convert -f raw ${EXPORT_QEMU_IMG_ARGS:-} -O "${FORMAT}" "${SP_LINK}" "${EXPORT_FILE}" >"/tmp/export$$.log" 2>&1
+cret=\$?
+logger -t "ds_sp_export_r[$$]" -- "${QEMU_IMG} convert -f raw ${EXPORT_QEMU_IMG_ARGS} -O ${FORMAT} ${SP_LINK} ${EXPORT_FILE} (\$cret)"
 while read -u "\${logfh}" line; do
   logger -t "ds_sp_export_r[$$]" -- "LOG:\$line"
-done {logfh}< <("cat /tmp/export$$.log")
+done {logfh}< <(cat "/tmp/export$$.log")
 exec {logfh}<&-
+if [[ \$cret -ne 0 ]]; then
+  cat "/tmp/export$$.log" >&2
+  rm -f "/tmp/export$$.log"
+  exit \$cret
+fi
 rm -f "/tmp/export$$.log"
 ${DU:-du} -Lm "${EXPORT_FILE}" | cut -f1
 EOF
