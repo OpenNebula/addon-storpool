@@ -115,6 +115,9 @@ def unsigned(tag: str, text: str) -> str:
 def positive(tag: str, text: str) -> str:
     if not text.isdigit() or int(text) < 1:
         fatal(f"{tag} '{text}' is not a positive integer")
+    size: int = int(text)
+    if size & (size - 1):
+        fatal(f"{tag} '{text}' is not a power of two")
     return text
 
 

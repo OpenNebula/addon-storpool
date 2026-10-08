@@ -35,7 +35,7 @@ Optional `USER_TEMPLATE` keys use the same values as `disk-cache-io.py`. The tem
 * `T_CONTEXT_DISCARD`: `unmap`, `ignore`
 * `T_CONTEXT_DETECT_ZEROES`: `off`, `on`, `unmap`
 * `T_CONTEXT_IOEVENTFD`: `on`, `off`
-* `T_CONTEXT_QUEUE_SIZE`: a positive integer, written as `queue_size`
+* `T_CONTEXT_QUEUE_SIZE`: a power of two, written as `queue_size`
 
 Every set key is checked before any disk is edited. A bad value exits 2, which aborts the deploy. If there is no file cdrom and the keys are valid, the script exits 0 and leaves the domain unchanged.
 
@@ -161,7 +161,7 @@ Optional `USER_TEMPLATE` keys override those defaults when set. The template ove
 * `T_DISK_DISCARD`: `unmap`, `ignore`
 * `T_DISK_DETECT_ZEROES`: `off`, `on`, `unmap`
 * `T_DISK_IOEVENTFD`: `on`, `off`
-* `T_DISK_QUEUE_SIZE`: a positive integer, written as `queue_size`
+* `T_DISK_QUEUE_SIZE`: a power of two, written as `queue_size`
 
 Every set key is checked before any disk is edited. A bad value exits 2, which aborts the deploy, including when no disk matches. If no StorPool disk matches and the keys are valid, the script exits 0 and leaves the domain unchanged.
 
@@ -276,7 +276,7 @@ See [Live resize CPU and Memory](resizeCpuMem.md).
 
 `T_SCSI_QUEUES` sets `<driver queues>` on every virtio-scsi controller. A controller with no `model` counts as virtio-scsi. The value is a positive integer, or `auto`, `vcpu`, `yes`, `y`, or `1` for the current vCPU count: the `<vcpu current>` attribute when that attribute is a positive integer, otherwise the element text. A missing `<vcpu>` aborts the deploy. Optional `:cmd_per_lun=N max_sectors=N` sets those attributes; both are unsigned, so `0` is allowed. Unknown attributes abort the deploy. When the domain has no virtio-scsi controller, one is created under the first `<devices>` element. Other driver attributes are kept.
 
-`T_BLK_QUEUES` is `YES`, `1`, `auto`, `vcpu`, or a positive integer, with optional `:queue_size=N`. `queue_size` is a positive integer. The script sets those attributes on disks whose target `dev` starts with `vd`. It does not create disks. A `<driver>` is added when the disk has none. Other driver attributes are kept.
+`T_BLK_QUEUES` is `YES`, `1`, `auto`, `vcpu`, or a positive integer, with optional `:queue_size=N`. `queue_size` is a power of two. The script sets those attributes on disks whose target `dev` starts with `vd`. It does not create disks. A `<driver>` is added when the disk has none. Other driver attributes are kept.
 
 `USER_TEMPLATE` wins over the environment (`addon-storpoolrc` or `vmm/kvmrc`). Empty or whitespace is unset. With both keys unset, or when `T_BLK_QUEUES` is set but no `vd` disk exists, the domain file is not rewritten. A bad value prints `Error in scsi-queues: …` to stderr and exits 2 before the domain is written, which aborts the deploy and leaves the on-disk XML unchanged.
 
