@@ -250,7 +250,7 @@ Set KVM feature children under `domain/features/kvm`. `on` creates `<features>` 
 
 Append a host NVMe disk for each set `USER_TEMPLATE/T_NVME_DEVICE0` through `T_NVME_DEVICE31`. The value is a PCI address `DOMAIN:BUS:SLOT.FUNC`, plus an optional `namespace=N`. Example: `0000:81:00.0 namespace=2`.
 
-Each disk is `<disk type='nvme' device='disk'>` with `<driver name='qemu' type='raw'/>`, `<source type='pci' managed='yes' namespace='N'>`, a PCI `<address>`, and `<target dev='vdX' bus='virtio'/>`. `X` runs backward from `z`, so index 0 is `vdz` and index 1 is `vdy`. Existing disks are left in place.
+Each disk is `<disk type='nvme' device='disk'>` with `<driver name='qemu' type='raw'/>`, `<source type='pci' managed='yes' namespace='N'>`, a PCI `<address>`, and `<target dev='vdX' bus='virtio'/>`. `X` runs backward from `z` through `b`, so index 0 is `vdz`, index 1 is `vdy` and index 24 is `vdb`. Indexes 25 through 31 continue with two letters, `vdaa` through `vdag`, so `vda` stays free for the boot disk. Existing disks are left in place.
 
 `namespace` must be an integer >= 1. Libvirt rejects 0. If `namespace=` is omitted and the index is >= 1, the namespace is the index. Index 0 with no `namespace=` exits 2. A PCI address that is not three colon-separated parts with `SLOT.FUNC`, or any trailing key other than `namespace`, exits 2.
 

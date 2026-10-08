@@ -113,6 +113,13 @@ def parse_device(tag: str, text: str, index: int) -> Tuple[str, str, str, str, s
     return parts[0], parts[1], slot, func, namespace
 
 
+def target_dev(index: int) -> str:
+    """Index 0..24 is vdz..vdb; 25..31 continue as vdaa..vdag. vda stays free."""
+    if index < 25:
+        return 'vd' + chr(ord('z') - index)
+    return 'vda' + chr(ord('a') + index - 25)
+
+
 def add_disk(parent: ET.Element, index: int, domain: str, bus: str,
              slot: str, func: str, namespace: str) -> None:
     disk_e: ET.Element = ET.SubElement(parent, 'disk', {
@@ -135,7 +142,7 @@ def add_disk(parent: ET.Element, index: int, domain: str, bus: str,
         'function': '0x' + func,
     })
     ET.SubElement(disk_e, 'target', {
-        'dev': 'vd' + chr(ord('z') - index),
+        'dev': target_dev(index),
         'bus': 'virtio',
     })
 
