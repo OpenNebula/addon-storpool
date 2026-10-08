@@ -114,10 +114,10 @@ def parse_device(tag: str, text: str, index: int) -> Tuple[str, str, str, str, s
 
 
 def target_dev(index: int) -> str:
-    """Index 0..24 is vdz..vdb; 25..31 continue as vdaa..vdag. vda stays free."""
-    if index < 25:
-        return 'vd' + chr(ord('z') - index)
-    return 'vda' + chr(ord('a') + index - 25)
+    """Index 0..25 is vdzz..vdza; 26..31 continue as vdyz..vdyu."""
+    group: int = index // 26
+    pos: int = index % 26
+    return 'vd' + chr(ord('z') - group) + chr(ord('z') - pos)
 
 
 def add_disk(parent: ET.Element, index: int, domain: str, bus: str,
