@@ -151,13 +151,17 @@ EOF
         rCMD=$(cat <<EOF
     [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
     mkdir -p "${restartDomainDirname}"
-    virsh --connect "\$LIBVIRT_URI" dumpxml "${DOMAIN}" 2>"/tmp/sprevert-${VM_ID}-dumpxml.err" >"${restartDomain}"
-    dret=\$?
-    logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh dumpxml ${DOMAIN} > ${restartDomain} ret:\$dret"
-    if [[ \$dret -ne 0 ]] || ! grep -q "</domain>" "${restartDomain}"; then
-        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} domain XML dump failed: \$(cat /tmp/sprevert-${VM_ID}-dumpxml.err)"
-        rm -f "${restartDomain}"
-        exit 3
+    if grep -q "</domain>" "${restartDomain}" 2>/dev/null; then
+        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} restart XML ${restartDomain} already present, skipping dumpxml"
+    else
+        virsh --connect "\$LIBVIRT_URI" dumpxml "${DOMAIN}" 2>"/tmp/sprevert-${VM_ID}-dumpxml.err" >"${restartDomain}"
+        dret=\$?
+        logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} virsh dumpxml ${DOMAIN} > ${restartDomain} ret:\$dret"
+        if [[ \$dret -ne 0 ]] || ! grep -q "</domain>" "${restartDomain}"; then
+            logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} domain XML dump failed: \$(cat /tmp/sprevert-${VM_ID}-dumpxml.err)"
+            rm -f "${restartDomain}"
+            exit 3
+        fi
     fi
 	vret=1
 	for _try in 1 2; do
