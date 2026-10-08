@@ -149,7 +149,7 @@ A set key replaces that part of the domain. With the key unset, OpenNebula's ele
 target `dev` starts with `vd`. A missing controller is created under the
 first `<devices>`. Optional controller attributes are `cmd_per_lun` and
 `max_sectors` (unsigned). The optional disk attribute is `queue_size`
-(a positive integer). With both keys unset, OpenNebula's queues stay.
+(a power of two). With both keys unset, OpenNebula's queues stay.
 
 `nic-queues.py` writes `<driver queues='N'>` on an interface with
 `<model type='virtio'/>`. `name='vhost'` is set only when `name` is
@@ -172,7 +172,7 @@ uses `<driver><iothreads><iothread id=><queue id=/></iothread></iothreads>`.
 `driver` (`none`, `native`, and `unmap` when the matching `T_DISK_*` key is
 unset). `context-cache.py` writes `cache='none'` and `io='native'` on each
 `type='file'` cdrom. Both can also set `detect_zeroes` (`off`, `on`, or
-`unmap`), `ioeventfd` (`on` or `off`), and `queue_size`. `cache` is
+`unmap`), `ioeventfd` (`on` or `off`), and `queue_size` (a power of two). `cache` is
 `default`, `none`, `writeback`, `writethrough`, `directsync`, or `unsafe`.
 `io` is `threads`, `native`, or `io_uring`. `discard` is `unmap` or
 `ignore`.

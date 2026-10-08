@@ -101,6 +101,9 @@ def driver_values() -> List[Tuple[str, str]]:
     if qtext is not None:
         if not qtext.isdigit() or int(qtext) < 1:
             fatal(f"{qtag} '{qtext}' is not a positive integer")
+        size: int = int(qtext)
+        if size & (size - 1):
+            fatal(f"{qtag} '{qtext}' is not a power of two")
         values['queue_size'] = qtext
     pairs: List[Tuple[str, str]] = []
     name: str
