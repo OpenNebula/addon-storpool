@@ -68,7 +68,7 @@ if [[ -d "${hookdir}" ]]; then
       if [[ -n "${haveStdin}" ]]; then
         hookRemote="${hook/\/var\/lib\/one\/remotes//var/tmp/one}"
         if [[ -z "${REMOTEHOST}" ]]; then
-          REMOTEHOST="$(echo "${stdin}" | base64 -i -d | xmllint -xpath '//HISTORY[last()]/HOSTNAME/text()' - || true)"
+          REMOTEHOST="$(echo "${stdin}" | "$(dirname "$0")/../datastore/spxml.py" sub -b '//HISTORY[last()]/HOSTNAME/text()' || true)"
         fi
         echo "Running ${REMOTEHOST}:${hookRemote} $* (with stdin)" >&2
         echo "${stdin}" | "${SSH:-ssh}" "${REMOTEHOST}" "${hookRemote}" "$@"

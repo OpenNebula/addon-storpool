@@ -25,6 +25,7 @@ if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
     source "${WORKDIR}/../../addon-storpoolrc"
 fi
+SPXML="${WORKDIR}/../../datastore/spxml.py"
 
 function splog()
 {
@@ -51,16 +52,16 @@ if [[ ! -t 0 ]]; then
     DRV_ACTION="$(cat || true)"
     if [[ -n "${DRV_ACTION}" ]]; then
         VM_XML="$(printf '%s' "${DRV_ACTION}" | base64 -d 2>/dev/null || true)"
-        if printf '%s' "${VM_XML}" | xmlstarlet sel -t -c '/VM' >/dev/null 2>&1; then
+        if printf '%s' "${VM_XML}" | "${SPXML}" sub '/VM' >/dev/null 2>&1; then
             HAVE_VM_XML=1
             T_PERSISTENT_CDROM_VM="$(printf '%s' "${VM_XML}" | \
-                xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM || true)"
+                "${SPXML}" sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM || true)"
         fi
     fi
 fi
 if [[ "${HAVE_VM_XML}" -eq 0 && -n "${VM_ID}" ]]; then
     T_PERSISTENT_CDROM_VM="$(onevm show "${VM_ID}" --xml 2>/dev/null | \
-        xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM || true)"
+        "${SPXML}" sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM || true)"
 fi
 PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
 PERSISTENT_CDROM="${PERSISTENT_CDROM//[[:space:]]/}"

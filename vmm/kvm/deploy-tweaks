@@ -114,8 +114,8 @@ fi
 
 declare -a _XPATH_A _XPATH_QUERY
 _XPATH_A=(
-    "${SCRIPT_PATH}/../../datastore/xpath.rb"
-    "--stdin"
+    "${SCRIPT_PATH}/../../datastore/spxml.py"
+    "get"
 )
 _XPATH_QUERY=(
     "/VM/DEPLOY_ID"
@@ -163,13 +163,13 @@ if [[ -d "${0}.d" ]]; then
             fi
         fi
         if [[ ${ret} -eq 0 ]]; then
-            xmllint --noout "${TMPDIR}/deployment.xml" 2>"${ERR_FILE}"
+            "${SCRIPT_PATH}/../../datastore/spxml.py" val -f "${TMPDIR}/deployment.xml" 2>"${ERR_FILE}"
             ret=$?
             if [[ ${ret} -eq 0 ]]; then
                 mv -f "${TMPDIR}/deployment.xml" "${DEP_XML}"
                 continue
             else
-                splog "[W] Error: ${hook} succeeded but xmllint failed with exit code ${ret}"
+                splog "[W] Error: ${hook} succeeded but the XML check failed with exit code ${ret}"
             fi
         elif [[ ${ret} -eq 2 ]]; then
             while read -r -u "${errfd}" errline; do

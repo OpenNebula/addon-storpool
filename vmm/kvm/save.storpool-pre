@@ -56,8 +56,7 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     IFS='/' read -r -a DS_ID_A <<< "${FILE}"
     DS_ID="${DS_ID_A[-3]}"
     SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
-    XPATH="${DRIVER_PATH}/../../datastore/xpath.rb --stdin"
-    VM_MEMORY=$(echo "${DRV_MESSAGE}" | ${XPATH} --stdin /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
+    VM_MEMORY=$("${SPXML}" get /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY <<< "${DRV_MESSAGE}" | tr -d '\0')
     storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*2))M" "${SP_TEMPLATE}" \
             "type;img;virt;${LOC_TAG};${VM_TAG}" \
             "CHECKPOINT;${SP_VOL};one;${LOC_TAG_VAL};${VM_ID}"

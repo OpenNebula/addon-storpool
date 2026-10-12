@@ -12,19 +12,23 @@ See the *Requirements* section in [StorPool storage driver](../README.md).
 
 ### Front-end dependencies
 
+XML documents are processed by `datastore/spxml.py` with the Python shipped by
+the StorPool packages (`/opt/storpool/python3`), so no XML tools are needed from
+the distribution.
+
 ```bash
  CentOS 7 front-end
-yum -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar xmllint python36-lxml
+yum -y install --enablerepo=epel jq nmap-ncat pigz tar
 ```
 
 ```bash
  AlmaLinux 8 front-end
-dnf -y install --enablerepo=epel jq xmlstarlet nmap-ncat pigz tar libxml2 python3-lxml
+dnf -y install --enablerepo=epel jq nmap-ncat pigz tar
 ```
 
 ```bash
  Ubuntu 22.04/24.04 front-end
-apt -y install tar jq xmlstarlet netcat pigz python3-lxml libxml2-utils
+apt -y install tar jq netcat pigz
 ```
 
 ### Node dependencies
@@ -33,18 +37,22 @@ Also use when adding new hosts:
 
 ```bash
  CentOS 7 node-kvm
-yum -y install --enablerepo=epel jq pigz python36-lxml xmlstarlet tar
+yum -y install --enablerepo=epel jq pigz tar
 ```
 
 ```bash
  AlmaLinux 8 node-kvm
-dnf -y install --enablerepo=epel jq pigz python3-lxml xmlstarlet tar
+dnf -y install --enablerepo=epel jq pigz tar
 ```
 
 ```bash
  Ubuntu 22.04/24.04 node-kvm
-apt -y install jq xmlstarlet pigz python3-lxml libxml2-utils tar
+apt -y install jq pigz tar
 ```
+
+SELinux and AppArmor policy is not installed by `install.sh` and is not
+copied by `onehost sync`. The front-end steps and the per-host steps are
+in [SELinux and AppArmor](selinux_apparmor.md).
 
 ## Getting the addon from GitHub
 
@@ -138,7 +146,7 @@ The following commands are related to latest Stable version of OpenNebula.
 9. Create a systemd timer for stats polling (alter the file paths if needed)
 
    ```bash
-   cp -v addon-storpool/misc/systemd/system/monitor_helper-sync* /etc/systemd/system/
+   cp -v addon-storpool/misc/etc/systemd/system/monitor_helper-sync* /etc/systemd/system/
    
    systemctl daemon-reload
    

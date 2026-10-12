@@ -144,10 +144,10 @@ EOF
         if boolTrue "ONE_TPM_SAVE"; then
             getVmDomxml "${DOMAIN}" "${VMHOST}"
             backendType="$(echo "${DOMXML}" |
-                xmlstarlet sel -t -v domain/devices/tpm/backend/@type)"
+                "${SPXML}" sel -t -v domain/devices/tpm/backend/@type)"
             if [[ "${backendType}" == "emulator" ]]; then
                 VM_PATH="$(echo "${DOMXML}" | \
-                    xmlstarlet sel -N one="http://opennebula.org/xmlns/libvirt/1.0" \
+                    "${SPXML}" sel -N one="http://opennebula.org/xmlns/libvirt/1.0" \
                     -t -v '//one:vm/one:system_datastore/text()')"
                 oneTpmBackup "${VM_ID}" "${VM_PATH}" "${VMHOST}"
                 tpmSave "${VM_ID}" "${VM_PATH}" "${VMHOST}"

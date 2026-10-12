@@ -42,9 +42,7 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     if kvGetUid "${SP_VOL}"; then
         storpoolDelete "${SP_UID}" "force" "" "" "\"sys\":\"${SP_VOL}\""
     fi
-    XPATH="${DRIVER_PATH}/../../datastore/xpath.rb"
-    VM_MEMORY=$(echo "${DRV_ACTION}" | base64 -d | \
-                      "${XPATH}" --stdin /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY)
+    VM_MEMORY=$("${SPXML}" get -b /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY <<< "${DRV_ACTION}" | tr -d '\0')
 
     oneVmInfo "${VM_ID}"
 

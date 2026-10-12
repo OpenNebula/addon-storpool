@@ -28,7 +28,7 @@ set -e -o pipefail
 
 storpool -Bj snapshot list | jq -r '.data[]|.name' >list.snapshots
 
-onevm list -x | xmlstarlet sel -t -m "//VM" -v ID -n >list.vms
+onevm list -x | /var/lib/one/remotes/datastore/spxml.py sel -t -m "//VM" -v ID -n >list.vms
 
 :>list.known
 :>list.unknown
@@ -36,7 +36,7 @@ onevm list -x | xmlstarlet sel -t -m "//VM" -v ID -n >list.vms
 while read -u 4 vmid; do
     while read -u 5 snap; do
         grep -q "$snap" list.snapshots && echo "$snap" >>list.known || echo "$snap $vmid" >>list.unknown
-    done 5< <(onevm show "$vmid" --xml | xmlstarlet sel -t -m "//TEMPLATE/SNAPSHOT" -v HYPERVISOR_ID -n)
+    done 5< <(onevm show "$vmid" --xml | /var/lib/one/remotes/datastore/spxml.py sel -t -m "//TEMPLATE/SNAPSHOT" -v HYPERVISOR_ID -n)
 done 4< <(cat list.vms)
 
 grep -v -f list.known list.snapshots >list.missing

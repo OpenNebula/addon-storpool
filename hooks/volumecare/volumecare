@@ -97,7 +97,7 @@ function alterVcPolicy()
         fi
         while read -r -u "${xfh}" _vmId; do
             alterVcPolicy "${_vmId}"
-        done {xfh}< <(${XMLSTARLET:-xmlstarlet} sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
+        done {xfh}< <("${SPXML}" sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
         exec {xfh}<&-
         return 0
     fi
@@ -278,7 +278,7 @@ function alterImagesQosClass()
 
     while read -r -u "${xfh}" dsId dsQosClass; do
         dsQosClass_a["${dsId}"]="${dsQosClass}"  # dsQosClass_a[DATASTORE_ID]=QOSCLASS
-    done {xfh}< <(xmlstarlet sel -t \
+    done {xfh}< <("${SPXML}" sel -t \
         -m "/DATASTORE_POOL/DATASTORE" \
         -v 'ID' \
         -o ' ' -v "TEMPLATE/SP_QOSCLASS" \
@@ -303,7 +303,7 @@ function alterImagesQosClass()
         [[ -z "${imgVms}" ]] || continue
         oneName="${ONE_PX:-one}-img-${image_id}"
         imagesQosClass_a["${oneName}"]="${imgQosClass:-${dsQosClass_a[${image_ds_id}]:-${DEFAULT_QOSCLASS}}}"
-    done {xfh}< <(xmlstarlet sel -t \
+    done {xfh}< <("${SPXML}" sel -t \
         -m "/IMAGE_POOL/IMAGE" \
         -o 'img;' -v 'ID' \
         -o ';' -v "DATASTORE_ID" \

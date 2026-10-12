@@ -22,9 +22,10 @@ source "${WORKDIR}/../../etc/vmm/kvm/kvmrc"
 # shellcheck source=/dev/null
 source "${WORKDIR}/../../scripts_common.sh"
 if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
-    # shellcheck source=tm/storpool/storpool_common.sh
+    # shellcheck source=addon-storpoolrc
     source "${WORKDIR}/../../addon-storpoolrc"
 fi
+SPXML="${WORKDIR}/../../datastore/spxml.py"
 
 set -o pipefail
 
@@ -39,20 +40,26 @@ fi
 
 DRV_ACTION="$5"
 
-KVMHOST="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//HISTORY[last()]' -v HOSTNAME)"
-TM_MAD="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TM_MAD)"
-DISK_TYPE="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_TYPE)"
-TYPE="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v TYPE)"
-DEV_PREFIX="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DEV_PREFIX)"
-DISK_ID="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//DISK[ATTACH="YES"]' -v DISK_ID)"
-T_PERSISTENT_CDROM_VM="$(echo "${DRV_ACTION}" | base64 -d | \
-              xmlstarlet sel -t -m '//USER_TEMPLATE' -v T_PERSISTENT_CDROM)"
+unset i XPATH_ELEMENTS
+while IFS='' read -r -u "${xfh}" -d '' element; do
+    XPATH_ELEMENTS[i++]="${element}"
+done {xfh}< <("${SPXML}" get -b \
+    '//HISTORY[last()]/HOSTNAME' \
+    '//DISK[ATTACH="YES"]/TM_MAD' \
+    '//DISK[ATTACH="YES"]/DISK_TYPE' \
+    '//DISK[ATTACH="YES"]/TYPE' \
+    '//DISK[ATTACH="YES"]/DEV_PREFIX' \
+    '//DISK[ATTACH="YES"]/DISK_ID' \
+    '//USER_TEMPLATE/T_PERSISTENT_CDROM' <<< "${DRV_ACTION}" || true)
+exec {xfh}<&-
+unset i
+KVMHOST="${XPATH_ELEMENTS[i++]}"
+TM_MAD="${XPATH_ELEMENTS[i++]}"
+DISK_TYPE="${XPATH_ELEMENTS[i++]}"
+TYPE="${XPATH_ELEMENTS[i++]}"
+DEV_PREFIX="${XPATH_ELEMENTS[i++]}"
+DISK_ID="${XPATH_ELEMENTS[i++]}"
+T_PERSISTENT_CDROM_VM="${XPATH_ELEMENTS[i++]}"
 
 PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
 PERSISTENT_CDROM="${PERSISTENT_CDROM//[[:space:]]/}"
@@ -98,9 +105,8 @@ if [[ "${TM_MAD:0:8}" == "storpool" ]]; then
                 ;;
         esac
         splog "Replacing $1 $2 $3 DISK_TYPE '${DISK_TYPE}' to BLOCK and TYPE '${TYPE}' to ${NEW_TYPE}"
-        DRV_ACTION="$(echo "${DRV_ACTION}" | base64 -d | \
-                   xmlstarlet ed -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK |\
-                   xmlstarlet ed -u '//DISK[ATTACH="YES"]/TYPE' -v "${NEW_TYPE}" |\
+        DRV_ACTION="$("${SPXML}" ed -b -u '//DISK[ATTACH="YES"]/DISK_TYPE' -v BLOCK \
+                   -u '//DISK[ATTACH="YES"]/TYPE' -v "${NEW_TYPE}" <<< "${DRV_ACTION}" |\
                    base64 -w 0 || true)"
         if [[ -n "${DDDEBUG_ATTACH_DISK}" ]]; then
             echo "${DRV_ACTION}" >/tmp/atach_disk_out.b64

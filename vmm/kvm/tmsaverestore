@@ -43,9 +43,8 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 export LOG_PREFIX=vmm
 declare -a XPATH_A
-read -r -a XPATH_A <<< "$(lookup_file "datastore/xpath.rb" || true) --stdin"
-IFS= read -r -d '' TM_MAD < <(echo "${DRV_ACTION}" | base64 -d | \
-                               "${XPATH_A[@]}" /VMM_DRIVER_ACTION_DATA/DATASTORE/TM_MAD || true)
+read -r -a XPATH_A <<< "$(lookup_file "datastore/spxml.py" || true) get -b"
+IFS= read -r -d '' TM_MAD < <("${XPATH_A[@]}" /VMM_DRIVER_ACTION_DATA/DATASTORE/TM_MAD <<< "${DRV_ACTION}" || true)
 
 VMM_MAD="$(basename "${DRIVER_PATH}")"
 PRE_SCRIPT="${DRIVER_PATH}/../../tm/${TM_MAD}/pre${ACTION}"

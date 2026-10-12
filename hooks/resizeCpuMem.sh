@@ -20,9 +20,11 @@ DELETE_T_CPU_SHARES=1
 
 source /var/lib/one/remotes/etc/vmm/kvm/kvmrc
 
+SPXML="/var/lib/one/remotes/datastore/spxml.py"
+
 me="${0##*/}"
 
-function splog() { logger -t "hook_sp_$me[$$]" -- "$*"; }
+function splog() { logger -t "hook_sp_${me}[$$]" -- "$*"; }
 
 function boolTrue()
 {
@@ -59,7 +61,7 @@ fi
 
 API="$(base64 -d - 2>/dev/null)"
 
-VM_ID="$(echo "$API"|xmlstarlet sel -t -m '//PARAMETER[POSITION=2][TYPE="IN"]' -v "VALUE")"
+VM_ID="$(echo "$API"|"${SPXML}" sel -t -m '//PARAMETER[POSITION=2][TYPE="IN"]' -v "VALUE")"
 
 if validate "VM_ID"; then
     VMXML="$(onevm show -x "$VM_ID")"
@@ -71,25 +73,25 @@ else
     exit 1
 fi
 
-state="$(echo "$VMXML"|xmlstarlet sel -t -m "/VM" -v "STATE")"
+state="$(echo "$VMXML"|"${SPXML}" sel -t -m "/VM" -v "STATE")"
 if validate "state"; then
     if [ $state -ne "3" ]; then
-        lcm_state="$(echo "$VMXML"|xmlstarlet sel -t -m "/VM" -v "LCM_STATE")"
+        lcm_state="$(echo "$VMXML"|"${SPXML}" sel -t -m "/VM" -v "LCM_STATE")"
         splog "VM $VM_ID STATE/LCM_STATE:$state/$lcm_state (Exit 0)"
         exit 0
     fi
 fi
 
-kvmhost="$(echo "$VMXML"|xmlstarlet sel -t -m "//HISTORY_RECORDS/HISTORY[last()]" -v "HOSTNAME")"
+kvmhost="$(echo "$VMXML"|"${SPXML}" sel -t -m "//HISTORY_RECORDS/HISTORY[last()]" -v "HOSTNAME")"
 
-vcpu="$(echo "$VMXML"|xmlstarlet sel -t -m "//TEMPLATE" -v "VCPU")"
+vcpu="$(echo "$VMXML"|"${SPXML}" sel -t -m "//TEMPLATE" -v "VCPU")"
 if ! validate "vcpu"; then
     vcpu="${vcpu:-1}"
 fi
 
 declare -A t_var
 for e in T_VCPU_MAX T_VCPU_NEW T_CPU_SHARES T_MEMORY_MAX T_MEMORY_NEW; do
-    t_var[$e]="$(echo "$VMXML"|xmlstarlet sel -t -m '//USER_TEMPLATE' -v "$e")"
+    t_var[$e]="$(echo "$VMXML"|"${SPXML}" sel -t -m '//USER_TEMPLATE' -v "$e")"
     if boolTrue "DDEBUG_resizeCpuMem"; then
         splog "VM=$VM_ID VCPU=$vcpu $e=${t_var[$e]} @$kvmhost"
     fi
@@ -150,7 +152,7 @@ if validate "VCPU_MAX"; then
     fi
 fi
 
-memory="$(echo "$VMXML"|xmlstarlet sel -t -m "//TEMPLATE" -v "MEMORY")"
+memory="$(echo "$VMXML"|"${SPXML}" sel -t -m "//TEMPLATE" -v "MEMORY")"
 if ! validate "memory"; then
     exit 1
 fi

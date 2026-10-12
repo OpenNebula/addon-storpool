@@ -44,7 +44,7 @@ export KVMHOST="$6"
 
 splog "$0 $*"
 
-# virsh dumpxml one-0 | xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -n
+# virsh dumpxml one-0 | spxml.py sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -n
 # hda /var/lib/one//datastores/0/0/disk.1
 # hdb
 
@@ -58,7 +58,7 @@ while read -r -u "${domfh}" target_dev source_x; do
         break
     fi
 done {domfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
-    xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
+    "${WORKDIR}/../../datastore/spxml.py" sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
 exec {domfh}<&-
 
 splog "${DOMAIN} TARGET_DEVICE='${TARGET_DEVICE}' ${source_x}"

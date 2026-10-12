@@ -145,11 +145,11 @@ if [[ ${ret} -ne 0 ]]; then
     exit "${ret}"
 fi
 
-_XPATH="${ONE_HOME}/remotes/datastore/xpath_multi.py"
+_XPATH="${ONE_HOME}/remotes/datastore/spxml.py"
 declare -a _XPATH_A _XPATH_QUERY
 _XPATH_A=(
     "${_XPATH}"
-    "-s"
+    "list"
 )
 _XPATH_QUERY=(
     "/DATASTORE_POOL/DATASTORE/ID"
@@ -278,10 +278,10 @@ for i in "${!DS_ID_ARRAY[@]}"; do
 
     # get the list of ONE clusters where the given datastore is a member
 
-    _XPATH="${ONE_HOME}/remotes/datastore/xpath.rb"
+    _XPATH="${ONE_HOME}/remotes/datastore/spxml.py"
     _XPATH_A=(
         "${_XPATH}"
-        "--stdin"
+        "get"
     )
     _XPATH_QUERY=(
         "%m%/DATASTORE_POOL/DATASTORE[ID=${DS_ID}]/CLUSTERS/ID"
@@ -486,10 +486,10 @@ if [[ ${ret} -ne 0 ]]; then
     exit "${ret}"
 fi
 
-_XPATH="${ONE_HOME}/remotes/datastore/xpath_multi.py"
+_XPATH="${ONE_HOME}/remotes/datastore/spxml.py"
 _XPATH_A=(
     "${_XPATH}"
-    "-s"
+    "list"
 )
 _XPATH_QUERY=(
     "/HOST_POOL/HOST/ID"
