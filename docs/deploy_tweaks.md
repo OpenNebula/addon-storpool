@@ -18,6 +18,36 @@ VM_MAD = [
 ```
 
 
+## Upgrading from unconditional tweaks
+
+Older `iothreads.py`, `scsi-queues.py`, and `resizeCpuMem.py` edited every
+domain they saw. They now run only when `T_IOTHREADS`, `T_SCSI_QUEUES`, or
+`T_VCPU_MAX` / `T_MEMORY_MAX` is set. `q35-pcie-root.py` reads
+`T_Q35_PCIE_ROOT_PORTS` instead of `Q35_PCIE_ROOT_PORTS`, and on q35
+`persistent-cdrom.py` keeps `T_PERSISTENT_CDROM` trays besides the context
+CD-ROM instead of counting it in. The current scripts also reject values the
+old ones ignored (`T_NIC_QUEUES=0`, `T_BLK_QUEUES=NO`, a misspelled
+`T_CPU_MODE`) and abort the deploy.
+
+`misc/deploy-tweaks-audit.py` reports what the deployed VMs got from the
+tweaks and which `addon-storpoolrc` lines keep that result. Run it on the
+front-end before the upgrade, or after it on the still-running VMs:
+
+```
+~/addon-storpool/misc/deploy-tweaks-audit.py            # every VM
+~/addon-storpool/misc/deploy-tweaks-audit.py -v 12 42   # evidence per VM
+~/addon-storpool/misc/deploy-tweaks-audit.py --json
+```
+
+It compares `deployment.N` with `deployment.N-tweaks` under
+`/var/lib/one/vms/<id>/`, reads the VM attributes from `vm.xml`, and reads
+`T_*` from `addon-storpoolrc` and `kvmrc` under `/var/lib/one/remotes`
+(`--vms`, `--remotes`, and `--rc` change the paths). The report lists the
+tweaks with evidence, the VMs that carry the key in `USER_TEMPLATE` versus
+the ones that relied on the environment, the `addon-storpoolrc` lines to
+add, the VMs that need a per-VM attribute, and the rc values the current
+scripts reject. It uses `/opt/storpool/python3` when present.
+
 ## Usage
 
 The deploy-tweaks script is called on the active front-end node. The script calls all executable helpers found in the `deploy-tweaks.d` folder one by one, passing two files as arguments - a copy of the VM domain XML file and the OpenNebula's VM definition in XML format. The helper scripts overwrite the VM domain XML copy, and on successful return code the VM domain XML is updated from the copy (and passed to the next helper).
