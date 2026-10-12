@@ -54,9 +54,7 @@ VM_XML="${TMPDIR}/oneVmInfo-${VM_ID}.XML"
 oneBackupImageInfo "${IMG_ID}"
 BACKUP_IMG_XML="${TMPDIR}/oneBackupImageInfo-${IMG_ID}.XML"
 
-trapAdd 'unset DS_RESTIC_PASSWORD'
-oneDatastoreInfo "${B_DATASTORE_ID:?}" "" secrets
-BACKUP_DS_XML="${TMPDIR}/oneDatastoreInfo-${B_DATASTORE_ID}.XML"
+oneDatastoreInfo "${B_DATASTORE_ID:?}"
 
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
 debug_sp_qosclass
@@ -79,48 +77,13 @@ splog "${MSG}"
 
 BACKUP_MAD_LS="${DRIVER_PATH}/../../datastore/${DS_DS_MAD:?}/ls"
 
-if [[ "${DS_DS_MAD}" == "restic" && -z "${DS_RESTIC_PASSWORD+x}" ]]; then
-    splog "[E] VM ${VM_ID} RESTIC_PASSWORD unavailable"
-    error_message "RESTIC_PASSWORD unavailable for VM ${VM_ID}"
-    exit 1
-fi
-
-# The listing document is a pipe. Plaintext RESTIC_PASSWORD exists only inside
-# that pipe; the datastore file on disk still holds the ciphertext.
 _errexit=0
-_xtrace=0
 case $- in
     *e*) _errexit=1; set +e ;;
     *) ;;
 esac
-case $- in
-    *x*) _xtrace=1; set +x ;;
-    *) ;;
-esac
-_ls_json=$(
-    {
-        printf '%s\n' '<DS_DRIVER_ACTION_DATA>'
-        datastoreXmlWithBackupSecrets < "${BACKUP_DS_XML}"
-        _inject_ret=$?
-        if [[ ${_inject_ret} -ne 0 ]]; then
-            exit "${_inject_ret}"
-        fi
-        cat "${VM_XML}"
-        _cat_ret=$?
-        if [[ ${_cat_ret} -ne 0 ]]; then
-            exit "${_cat_ret}"
-        fi
-        cat "${BACKUP_IMG_XML}"
-        _cat_ret=$?
-        if [[ ${_cat_ret} -ne 0 ]]; then
-            exit "${_cat_ret}"
-        fi
-        printf '%s\n' '</DS_DRIVER_ACTION_DATA>'
-    } | "${BACKUP_MAD_LS}" -i "${INC_ID}"
-)
+_ls_json=$(backupDatastoreLs "${B_DATASTORE_ID}" "${VM_XML}" "${BACKUP_IMG_XML}" "${INC_ID}" "${BACKUP_MAD_LS}")
 _ls_ret=$?
-unset DS_RESTIC_PASSWORD
-[[ ${_xtrace} -eq 1 ]] && set -x
 [[ ${_errexit} -eq 1 ]] && set -e
 
 if [[ ${_ls_ret} -ne 0 ]]; then

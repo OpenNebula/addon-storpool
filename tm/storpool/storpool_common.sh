@@ -2779,11 +2779,8 @@ ${TPM_MODEL:+TPM_MODEL=${TPM_MODEL} }\
 
 function oneDatastoreInfo()
 {
-    local _DS_ID="$1" _DS_POOL_FILE="$2" _SECRETS="${3-}"
+    local _DS_ID="$1" _DS_POOL_FILE="$2"
     local _XPATH="" _tmpXML="" _errmsg="" _ret=1 _element="" xfh=""
-
-    # Drop a password left by an earlier secrets call before this lookup.
-    unset DS_RESTIC_PASSWORD
 
     _tmpXML="${TMPDIR:-/tmp}/oneDatastoreInfo-${_DS_ID}.XML"
 
@@ -2928,11 +2925,6 @@ function oneDatastoreInfo()
         unset SP_AUTH_TOKEN
     fi
 
-    # secrets: keep only RESTIC_PASSWORD, from a decrypt pipe, not the datastore file.
-    if [[ "${_SECRETS}" == "secrets" ]]; then
-        oneDatastoreBackupSecrets "${_DS_ID}"
-    fi
-
     boolTrue "DEBUG_oneDatastoreInfo" || return 0
     local _DBGMSG="${DS_TYPE:+DS_TYPE=${DS_TYPE} }${DS_TEMPLATE_TYPE:+TEMPLATE_TYPE=${DS_TEMPLATE_TYPE} }"
     _DBGMSG+="${DS_DISK_TYPE:+DISK_TYPE=${DS_DISK_TYPE} }${DS_DS_MAD:+DS_DS_MAD=${DS_DS_MAD} }${DS_TM_MAD:+DS_TM_MAD=${DS_TM_MAD} }"
@@ -2948,109 +2940,23 @@ function oneDatastoreInfo()
     _DBGMSG+="${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=${REMOTE_BACKUP_DELETE} }"
     _DBGMSG+="${DS_RSYNC_HOST:+DS_RSYNC_HOST=${DS_RSYNC_HOST} }${DS_RSYNC_USER:+DS_RSYNC_USER=${DS_RSYNC_USER} }"
     _DBGMSG+="${DS_RESTIC_SFTP_SERVER:+DS_RESTIC_SFTP_SERVER=${DS_RESTIC_SFTP_SERVER} }${DS_RESTIC_SFTP_USER:+DS_RESTIC_SFTP_USER=${DS_RESTIC_SFTP_USER} }"
-    _DBGMSG+="${DS_RESTIC_PASSWORD+RESTIC_PASSWORD=present }"
     splog "[D][oneDatastoreInfo]${_DBGMSG}"
 }
 
-function oneDatastoreBackupSecrets()
+function backupDatastoreLs()
 {
-    local _DS_ID="$1"
-    local _xtrace=0 _allexport=0 _len="" _pw="" _ret=0 _errmsg=""
+    local _DS_ID="$1" _VM_XML="$2" _IMG_XML="$3" _INC_ID="$4" _LS="$5"
     local -a _onecmd=()
-    case $- in
-        *x*) _xtrace=1 ;;
-    esac
-    case $- in
-        *a*) _allexport=1 ;;
-    esac
-    set +x
-    set +a
-    unset DS_RESTIC_PASSWORD
-
-    if [[ "${DS_DS_MAD}" != "restic" ]]; then
-        [[ ${_allexport} -eq 1 ]] && set -a
-        [[ ${_xtrace} -eq 1 ]] && set -x
-        return 0
-    fi
-
     read -r -a _onecmd <<< "onedatastore show --decrypt ${ONE_ARGS} -x ${_DS_ID}"
-    {
-        IFS= read -r _len || _ret=1
-        if [[ ${_ret} -eq 0 && "${_len}" =~ ^[0-9a-fA-F]{8}$ ]]; then
-            LC_ALL=C IFS= read -r -N "$((16#${_len}))" _pw || _ret=1
-        else
-            _ret=1
-        fi
-    } < <(
+    (
         set -o pipefail
-        "${_onecmd[@]}" | ruby -rrexml/document -e '
-begin
-    doc = REXML::Document.new(STDIN)
-    el = doc.elements["/DATASTORE/TEMPLATE/RESTIC_PASSWORD"]
-    if el.nil? || el.text.nil? || el.text.empty?
-        STDERR.puts "RESTIC_PASSWORD missing"
-        exit 1
-    end
-    secret = el.text
-    STDOUT.binmode
-    STDOUT.write(format("%08x\n", secret.bytesize))
-    STDOUT.write(secret)
-rescue StandardError
-    STDERR.puts "failed to read RESTIC_PASSWORD"
-    exit 1
-end
-'
+        {
+            printf '%s\n' '<DS_DRIVER_ACTION_DATA>'
+            "${_onecmd[@]}" || exit $?
+            cat "${_VM_XML}" "${_IMG_XML}" || exit $?
+            printf '%s\n' '</DS_DRIVER_ACTION_DATA>'
+        } | "${_LS}" -i "${_INC_ID}"
     )
-
-    if [[ ${_ret} -ne 0 || -z "${_pw}" ]]; then
-        unset _pw
-        [[ ${_allexport} -eq 1 ]] && set -a
-        [[ ${_xtrace} -eq 1 ]] && set -x
-        _errmsg="(oneDatastoreBackupSecrets) Error: cannot read RESTIC_PASSWORD for DS=${_DS_ID}"
-        log_error "${_errmsg}"
-        splog "${_errmsg}"
-        exit 1
-    fi
-
-    export -n DS_RESTIC_PASSWORD
-    DS_RESTIC_PASSWORD="${_pw}"
-    unset _pw
-    [[ ${_allexport} -eq 1 ]] && set -a
-    [[ ${_xtrace} -eq 1 ]] && set -x
-}
-
-function datastoreXmlWithBackupSecrets()
-{
-    if [[ -z "${DS_RESTIC_PASSWORD+x}" ]]; then
-        cat
-        return
-    fi
-    local _xtrace=0 _ret=0
-    case $- in
-        *x*) _xtrace=1 ;;
-    esac
-    set +x
-    ruby -rrexml/document -e '
-begin
-    io = IO.for_fd(9)
-    io.binmode
-    secret = io.read
-    doc = REXML::Document.new(STDIN)
-    el = doc.elements["/DATASTORE/TEMPLATE/RESTIC_PASSWORD"]
-    if el.nil?
-        STDERR.puts "RESTIC_PASSWORD element missing"
-        exit 1
-    end
-    el.text = secret
-    doc.write(STDOUT)
-rescue StandardError
-    STDERR.puts "failed to set RESTIC_PASSWORD"
-    exit 1
-end
-' 9< <(printf '%s' "${DS_RESTIC_PASSWORD}")
-    _ret=$?
-    [[ ${_xtrace} -eq 1 ]] && set -x
-    return "${_ret}"
 }
 
 function dumpTemplate()
