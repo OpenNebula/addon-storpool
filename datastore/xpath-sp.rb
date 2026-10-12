@@ -20,6 +20,29 @@
 # Simple command to parse an XML document (b64 encoded) and return one or more
 # elements (refer by xpath)
 #
+ONE_LOCATION = ENV['ONE_LOCATION'] unless defined?(ONE_LOCATION)
+
+if !ONE_LOCATION
+    GEMS_LOCATION ||= '/usr/share/one/gems'
+else
+    GEMS_LOCATION ||= ONE_LOCATION + '/share/gems'
+end
+
+if File.directory?(GEMS_LOCATION)
+    real_gems_path = File.realpath(GEMS_LOCATION)
+    if !defined?(Gem) || Gem.path != [real_gems_path]
+        $LOAD_PATH.reject! {|l| l =~ /vendor_ruby/ }
+        begin
+            verb = $VERBOSE
+            $VERBOSE = nil
+            require 'rubygems'
+            Gem.use_paths(real_gems_path)
+        ensure
+            $VERBOSE = verb
+        end
+    end
+end
+
 require 'base64'
 require 'rexml/document'
 require 'getoptlong'
