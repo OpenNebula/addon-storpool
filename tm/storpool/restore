@@ -54,7 +54,8 @@ VM_XML="${TMPDIR}/oneVmInfo-${VM_ID}.XML"
 oneBackupImageInfo "${IMG_ID}"
 BACKUP_IMG_XML="${TMPDIR}/oneBackupImageInfo-${IMG_ID}.XML"
 
-oneDatastoreInfo "${B_DATASTORE_ID:?}"
+trapAdd 'unset DS_RESTIC_PASSWORD'
+oneDatastoreInfo "${B_DATASTORE_ID:?}" "" secrets
 BACKUP_DS_XML="${TMPDIR}/oneDatastoreInfo-${B_DATASTORE_ID}.XML"
 
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
@@ -76,17 +77,69 @@ else
 fi
 splog "${MSG}"
 
-DS_DRIVER_ACTION="${TMPDIR}/ds_driver_action.XML"
-
-cat >"${DS_DRIVER_ACTION}" <<EOF
-<DS_DRIVER_ACTION_DATA>
-$(cat "${BACKUP_DS_XML}"||true)
-$(cat "${VM_XML}"||true)
-$(cat "${BACKUP_IMG_XML}"||true)
-</DS_DRIVER_ACTION_DATA>
-EOF
-
 BACKUP_MAD_LS="${DRIVER_PATH}/../../datastore/${DS_DS_MAD:?}/ls"
+
+if [[ "${DS_DS_MAD}" == "restic" && -z "${DS_RESTIC_PASSWORD+x}" ]]; then
+    splog "[E] VM ${VM_ID} RESTIC_PASSWORD unavailable"
+    error_message "RESTIC_PASSWORD unavailable for VM ${VM_ID}"
+    exit 1
+fi
+
+# The listing document is a pipe. Plaintext RESTIC_PASSWORD exists only inside
+# that pipe; the datastore file on disk still holds the ciphertext.
+_errexit=0
+_xtrace=0
+case $- in
+    *e*) _errexit=1; set +e ;;
+    *) ;;
+esac
+case $- in
+    *x*) _xtrace=1; set +x ;;
+    *) ;;
+esac
+_ls_json=$(
+    {
+        printf '%s\n' '<DS_DRIVER_ACTION_DATA>'
+        datastoreXmlWithBackupSecrets < "${BACKUP_DS_XML}"
+        _inject_ret=$?
+        if [[ ${_inject_ret} -ne 0 ]]; then
+            exit "${_inject_ret}"
+        fi
+        cat "${VM_XML}"
+        _cat_ret=$?
+        if [[ ${_cat_ret} -ne 0 ]]; then
+            exit "${_cat_ret}"
+        fi
+        cat "${BACKUP_IMG_XML}"
+        _cat_ret=$?
+        if [[ ${_cat_ret} -ne 0 ]]; then
+            exit "${_cat_ret}"
+        fi
+        printf '%s\n' '</DS_DRIVER_ACTION_DATA>'
+    } | "${BACKUP_MAD_LS}" -i "${INC_ID}"
+)
+_ls_ret=$?
+unset DS_RESTIC_PASSWORD
+[[ ${_xtrace} -eq 1 ]] && set -x
+[[ ${_errexit} -eq 1 ]] && set -e
+
+if [[ ${_ls_ret} -ne 0 ]]; then
+    splog "[E] VM ${VM_ID} backup ls failed (${_ls_ret})"
+    error_message "Error listing backup disks for VM ${VM_ID}"
+    exit "${_ls_ret}"
+fi
+
+if ! printf '%s' "${_ls_json}" | jq -e 'type == "object" and length > 0' >/dev/null; then
+    splog "[E] VM ${VM_ID} backup lists no disks"
+    error_message "backup lists no disks for VM ${VM_ID}"
+    exit 1
+fi
+
+if ! _disk_lines=$(printf '%s' "${_ls_json}" | jq -r 'to_entries[]|"\(.key) \(.value)"'); then
+    splog "[E] VM ${VM_ID} backup ls output is not a disk map"
+    error_message "backup ls output is not a disk map for VM ${VM_ID}"
+    exit 1
+fi
 
 declare -A disksUrl_a
 declare -A disksMap_a
@@ -100,11 +153,7 @@ while IFS=' ' read -r -u "${jqfh}" did url; do
         continue
     fi
     disksUrl_a["${did}"]="${url}"
-done {jqfh}< <(
-    "${BACKUP_MAD_LS}" -i "${INC_ID}" <"${DS_DRIVER_ACTION}" \
-    | jq -r 'to_entries[]|"\(.key) \(.value)"' \
-    || true
-)
+done {jqfh}< <(printf '%s\n' "${_disk_lines}")
 exec {jqfh}<&-
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}"
@@ -119,12 +168,14 @@ done
 _TMP_NAME=$(mktemp --dry-run tmRestoreXXXXXXXX)
 ERROR=0
 RET=0
+_selected=0
 for did in ${!disksUrl_a[*]}; do
     if [[ ${DISK_ID} != "-1" ]]; then
         if [[ ${DISK_ID} != "${did}" ]]; then
             continue
         fi
     fi
+    _selected=1
     if [[ "${did}" == "tpm" ]]; then
         disksMap_a["${did}"]="${ONE_PX}-sys-${VM_ID}-SWTPM"
         diskTypeMap_a["${disksMap_a[${did}]}"]="SWTPM"
@@ -252,6 +303,12 @@ EOF
     fi
 
 done
+
+if [[ ${_selected} -eq 0 ]]; then
+    splog "[E] VM ${VM_ID} backup has no disk to restore"
+    error_message "backup has no disk to restore for VM ${VM_ID}"
+    exit 1
+fi
 
 for did in ${!disksUrl_a[*]}; do
     if [[ "${DISK_ID}" != "-1" ]]; then
