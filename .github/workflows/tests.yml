@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  spxml:
+    name: spxml.py (python ${{ matrix.python }}, ${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.12"]
+        engine: ["lxml", "etree"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest flake8
+          if [ "${{ matrix.engine }}" = "lxml" ]; then python -m pip install lxml; fi
+      - name: Lint
+        run: flake8 --max-line-length=130 --extend-ignore=E203 datastore/spxml.py tests/python
+      - name: Test
+        env:
+          SPXML_ENGINE: ${{ matrix.engine }}
+        run: pytest -v tests/python
+
+  shell:
+    name: shell tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck python3-lxml
+      - name: Restic password handling
+        run: bash tests/tm/restic-password.sh
+      - name: Lint the converted drivers
+        run: |
+          shellcheck -x -S error tm/storpool/restore tm/storpool/presave tm/storpool/monitor \
+            vmm/kvm/deploy-tweaks vmm/kvm/attach_disk.storpool vmm/kvm/detach_disk.storpool \
+            vmm/kvm/attach_disk.cdrom vmm/kvm/detach_disk.cdrom vmm/kvm/snapshot_create-storpool \
+            vmm/kvm/tmsave vmm/kvm/tmrestore vmm/kvm/tmsaverestore vmm/kvm/save.storpool-pre \
+            hooks/hookmux.sh hooks/resizeCpuMem.sh hooks/net_fw_hook \
+            hooks/volumecare/vc-policy.sh hooks/volumecare/volumecare \
+            datastore/storpool/monitor_helper-sync tests/tm/restic-password.sh
