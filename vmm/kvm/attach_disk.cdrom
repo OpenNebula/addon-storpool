@@ -53,7 +53,7 @@ while read -r -u "${lvfh}" target_dev source_x; do
         available_a[${target_dev}]="${target_dev}"
     fi
 done {lvfh}< <(virsh --connect "${LIBVIRT_URI:-qemu:///system}" dumpxml "${DOMAIN}" | \
-    xmlstarlet sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
+    "${WORKDIR}/../../datastore/spxml.py" sel -t -m './/devices/disk[@device="cdrom"]' -v "target/@dev" -o " " -v "source/@dev" -v "source/@file" -n || true)
 exec {lvfh}<&-
 
 # Prefer persistent empty slots: q35 sdzz..sdzw, then pc hda..hdd.

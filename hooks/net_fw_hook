@@ -48,18 +48,18 @@ if [[ ! -s "${tmpb64}" ]]; then
 fi
 
 ts="$(date +%s || true)"
+_XPATH="${CWD}/../datastore/spxml.py"
 
 if [[ -n "${DEBUG}" ]]; then
-    base64 -d "${tmpb64}" | xmllint --format - >"/tmp/${me}-${ts}.xml" || true
+    "${_XPATH}" fo -b -f "${tmpb64}" >"/tmp/${me}-${ts}.xml" || true
     # shellcheck disable=SC2024
     sudo ipset save >"/tmp/${me}-${ts}.ipset"
 fi
 
-_XPATH="${CWD}/../datastore/xpath.rb"
 declare -a _XPATH_A _XPATH_QUERY
 _XPATH_A=(
     "${_XPATH}"
-    "--stdin"
+    "get"
 )
 _XPATH_QUERY=(
     "/VM/ID"
@@ -73,7 +73,7 @@ _XPATH_QUERY=(
 unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" -d '' element;do
     XPATH_ELEMENTS[i++]="${element}"
-done {xpathfh}< <(base64 -d "${tmpb64}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
+done {xpathfh}< <("${_XPATH_A[@]}" -b -f "${tmpb64}" "${_XPATH_QUERY[@]}" || true)
 exec {xpathfh}<&-
 unset i
 VM_ID="${XPATH_ELEMENTS[i++]}"
@@ -99,7 +99,7 @@ _XPATH_QUERY=(
 unset i XPATH_ELEMENTS
 while IFS='' read -r -u "${xpathfh}" -d '' element;do
     XPATH_ELEMENTS[i++]="${element}"
-done {xpathfh}< <(base64 -d "${tmpb64}" | "${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" || true)
+done {xpathfh}< <("${_XPATH_A[@]}" -b -f "${tmpb64}" "${_XPATH_QUERY[@]}" || true)
 exec {xpathfh}<&-
 unset i
 NIC_IP="${XPATH_ELEMENTS[i++]}"

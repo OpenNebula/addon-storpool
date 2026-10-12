@@ -46,7 +46,7 @@ function msg()
 function xmlget()
 {
     # shellcheck disable=SC2086
-    xmlstarlet sel -t -m "$1" -v "$2" ${3:-}
+    /var/lib/one/remotes/datastore/spxml.py sel -t -m "$1" -v "$2" ${3:-}
 }
 
 function do_waitfor()

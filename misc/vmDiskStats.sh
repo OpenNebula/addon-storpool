@@ -77,7 +77,7 @@ echo "*** Processing Image Pool ..." >&2
 unset i x
 while read -u 4 -r e; do
     x[i++]="$e"
-done 4< <($ONE_PATH/datastore/xpath_multi.py -s <"$imagePool" \
+done 4< <("${ONE_PATH}/datastore/spxml.py" list <"$imagePool" \
 		/IMAGE_POOL/IMAGE/ID \
                 /IMAGE_POOL/IMAGE/SIZE \
                 /IMAGE_POOL/IMAGE/PERSISTENT < "${imagePool}" )
@@ -136,7 +136,7 @@ while read -r -u 4 -d' ' VM_ID; do
         oneVol["${VOL}"]="${VM_ID}"
         diskSum=$((diskSum + SIZE))
     done
-done 4< <("${ONE_PATH}/datastore/xpath.rb" --stdin %m%/VM_POOL/VM/ID < "${vmPool}"||true; echo " ")
+done 4< <("${ONE_PATH}/datastore/spxml.py" get %m%/VM_POOL/VM/ID < "${vmPool}" | tr -d '\0' || true; echo " ")
 echo "VMDISKS: ${diskSum} // $((diskSum/1024**3)) GiB"
 
 imgSum=0
@@ -184,7 +184,7 @@ while read -r -u 4 -d' ' entry; do
     if [[ -n "${entry}" ]]; then
         vmSnaps["${entry}"]="${entry}"
     fi
-done 4< <("${ONE_PATH}/datastore/xpath.rb" --stdin %m%/VM_POOL/VM/TEMPLATE/SNAPSHOT/HYPERVISOR_ID < "${vmPool}"||true; echo " ")
+done 4< <("${ONE_PATH}/datastore/spxml.py" get %m%/VM_POOL/VM/TEMPLATE/SNAPSHOT/HYPERVISOR_ID < "${vmPool}" | tr -d '\0' || true; echo " ")
 
 echo "*** Processing StorPool Snapshots ..." >&2
 snapSum=0

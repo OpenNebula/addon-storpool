@@ -251,18 +251,18 @@ if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
         declare -A disk_type_a
         declare -A disk_image_a
         declare -A vm_snapshots_a
-        vm_disks="<TEMPLATE>$(xmllint -xpath "/VM_POOL/VM[ID=${VM_ID}]/TEMPLATE/DISK" "${ONE_VM_POOL_XML}")</TEMPLATE>"
+        vm_disks="<TEMPLATE>$("${SPXML}" sub -f "${ONE_VM_POOL_XML}" "/VM_POOL/VM[ID=${VM_ID}]/TEMPLATE/DISK" || true)</TEMPLATE>"
         while read -r -u "${vdfh}" DISK_ID; do
             unset i xp
             for e in DATASTORE_ID TYPE CLONE IMAGE_ID; do
-                xp[i++]="$(echo "${vm_disks}" | xmlstarlet sel -t -m "//DISK[DISK_ID=${DISK_ID}]" -v "${e}")"
+                xp[i++]="$("${SPXML}" sel -t -m "//DISK[DISK_ID=${DISK_ID}]" -v "${e}" <<< "${vm_disks}" || true)"
             done
             unset i
             disk_datastore_a[${DISK_ID}]="${xp[i++]}"
             disk_type_a[${DISK_ID}]="${xp[i++]}"
             disk_clone_a[${DISK_ID}]="${xp[i++]}"
             disk_image_a[${DISK_ID}]="${xp[i++]}"
-        done {vdfh}< <(xmlstarlet sel -t -m "//DISK" -v "DISK_ID" -n <<<"${vm_disks}" || true)
+        done {vdfh}< <("${SPXML}" sel -t -m "//DISK" -v "DISK_ID" -n <<<"${vm_disks}" || true)
         exec {vdfh}<&-
         vm_monitor=""
         for DISK_ID in ${!disk_datastore_a[*]}; do
@@ -349,7 +349,7 @@ if [[ -d "$(readlink -f "${BASE_PATH}" || true)" ]]; then
                 splog "[DD] DS ${DS_ID} VM=[ID=${VM_ID},MONITOR=\"${vm_monitor_b64}\"]"
             fi
         fi
-    done {vmfh}< <(xmlstarlet sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=${DS_ID}][STATE=3]" -v "ID" -n "${ONE_VM_POOL_XML}" || true)
+    done {vmfh}< <("${SPXML}" sel -t -m "//VM[HISTORY_RECORDS/HISTORY/DS_ID=${DS_ID}][STATE=3]" -v "ID" -n "${ONE_VM_POOL_XML}" || true)
     if [[ ${MONITOR_TAG} == "MONITOR" ]];  then
         if [[ -n ${monitor} ]]; then
             monitor_b64="$(echo "${monitor}" | tr ' ' '\n' | \

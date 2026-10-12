@@ -192,6 +192,8 @@ function lookup_file()
     done
 }
 
+SPXML="${SPXML:-$(lookup_file "datastore/spxml.py")}"
+
 function get_one_version()
 {
     local ONE_VERSION_FILE="" ONE_EDITION_FILE=""
@@ -662,11 +664,11 @@ function oneHostInfo()
             splog "${errmsg}"
             exit "${ret}"
         fi
-        _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+        _XPATH="${SPXML}"
         declare -a _XPATH_A _XPATH_QUERY
         _XPATH_A=(
             "${_XPATH}"
-            "--stdin"
+            "get"
         )
         _XPATH_QUERY=(
             "/HOST/ID"
@@ -2460,11 +2462,11 @@ function oneBackupImageInfo()
 
     oneCallXml oneimage show "${_IMAGE_ID}" "${_tmpXML}"
 
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
     _XPATH_A=(
         "${_XPATH}"
-        "--stdin"
+        "get"
     )
     _XPATH_QUERY=(
         "/IMAGE/NAME"
@@ -2517,7 +2519,7 @@ function oneImageInfo()
                 exit "${_ret}"
             fi
         fi
-        xmllint -xpath "/IMAGE_POOL/IMAGE[ID=${_IMAGE_ID}]" "${_IMAGE_POOL_FILE}" >"${_tmpXML}"
+        "${SPXML}" sub -f "${_IMAGE_POOL_FILE}" "/IMAGE_POOL/IMAGE[ID=${_IMAGE_ID}]" >"${_tmpXML}"
         _ret=$?
     else
         oneCallXml oneimage show "${_IMAGE_ID}" "${_tmpXML}"
@@ -2532,11 +2534,11 @@ function oneImageInfo()
     fi
 
     sed -i '/\/>$/d' "${_tmpXML}"
-    _XPATH="$(lookup_file "datastore/xpath.rb")"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
     _XPATH_A=(
         "${_XPATH}"
-        "--stdin"
+        "get"
     )
     _XPATH_QUERY=(
         "/IMAGE/NAME"
@@ -2599,11 +2601,11 @@ function oneVmInfo()
         exit "${_ret}"
     fi
     sed -i '/\/>$/d' "${_tmpXML}"
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
     _XPATH_A=(
         "${_XPATH}"
-        "--stdin"
+        "get"
     )
     _XPATH_QUERY=(
         "/VM/DEPLOY_ID"
@@ -2798,7 +2800,7 @@ function oneDatastoreInfo()
                 exit "${_ret}"
             fi
         fi
-        xmllint -xpath "/DATASTORE_POOL/DATASTORE[ID=${_DS_ID}]" "${_DS_POOL_FILE}" >"${_tmpXML}"
+        "${SPXML}" sub -f "${_DS_POOL_FILE}" "/DATASTORE_POOL/DATASTORE[ID=${_DS_ID}]" >"${_tmpXML}"
         _ret=$?
     else
         oneCallXml onedatastore show "${_DS_ID}" "${_tmpXML}"
@@ -2813,11 +2815,11 @@ function oneDatastoreInfo()
     fi
 
     sed -i '/\/>$/d' "${_tmpXML}"
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
     _XPATH_A=(
         "${_XPATH}"
-        "--stdin"
+        "get"
     )
     _XPATH_QUERY=(
         "/DATASTORE/NAME"
@@ -2962,7 +2964,7 @@ function backupDatastoreLs()
 function dumpTemplate()
 {
     local _TEMPLATE="$1"
-    echo "${_TEMPLATE}" | base64 -d | xmllint --format - > "/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml" || true
+    "${SPXML}" fo -b > "/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml" <<< "${_TEMPLATE}" || true
 }
 
 function oneTemplateInfo()
@@ -2996,11 +2998,11 @@ function oneTemplateInfo()
         fi
     fi
 
-    _XPATH="$(lookup_file "datastore/xpath-sp.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "-b")
+    _XPATH_A=("${_XPATH}" "get" "-b")
     if [[ -f "${_TEMPLATE}" ]]; then
-        _XPATH_A+=("yes" "-f")
+        _XPATH_A+=("-f" "${_TEMPLATE}")
     fi
     _XPATH_QUERY=(
         "/VM/ID"
@@ -3022,7 +3024,7 @@ function oneTemplateInfo()
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xfh}< <("${_XPATH_A[@]}" "${_TEMPLATE}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" <<< "${_TEMPLATE}" || true)
     exec {xfh}<&-
 
     unset i
@@ -3049,10 +3051,9 @@ function oneTemplateInfo()
         splog "[D][oneTemplateInfo]${_DBGMSG}"
     fi
 
-    _XPATH="$(lookup_file "datastore/xpath_multi.py" || true)"
-    _XPATH_A=("${_XPATH}" "-b")
+    _XPATH_A=("${_XPATH}" "list" "-b")
     if [[ -f "${_TEMPLATE}" ]]; then
-        _XPATH_A+=("-f")
+        _XPATH_A+=("-f" "${_TEMPLATE}")
     fi
     _XPATH_QUERY=(
         "/VM/TEMPLATE/DISK/TM_MAD"
@@ -3071,7 +3072,7 @@ function oneTemplateInfo()
     unset i XPATH_ELEMENTS
     while read -r -u "${xfh}" _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xfh}< <("${_XPATH_A[@]}" "${_TEMPLATE}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" <<< "${_TEMPLATE}" || true)
     exec {xfh}<&-
 
     unset i
@@ -3117,13 +3118,13 @@ function oneDsDriverAction()
 
     if boolTrue "DDDDEBUG_oneDsDriverAction"; then
         local _DBGFILE="/tmp/${LOG_PREFIX:-tm}_${0##*/}-$$.xml"
-        echo "${DRV_ACTION:-}" |base64 -d | xmllint --format - >"${_DBGFILE}" || true
+        "${SPXML}" fo -b >"${_DBGFILE}" <<< "${DRV_ACTION:-}" || true
         splog "[DDDD][DriverAction] ${_DBGFILE}"
     fi
 
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "-b")
+    _XPATH_A=("${_XPATH}" "get" "-b")
     _XPATH_QUERY=(
         "/DS_DRIVER_ACTION_DATA/DATASTORE/BASE_PATH"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/ID"
@@ -3187,7 +3188,7 @@ function oneDsDriverAction()
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xfh}< <("${_XPATH_A[@]}" "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" <<< "${DRV_ACTION}" || true)
     exec {xfh}<&-
     unset i
     # shellcheck disable=SC2034
@@ -3335,9 +3336,9 @@ function oneMarketDriverAction()
 {
     local _XPATH="" _element="" xfh=""
 
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "-b")
+    _XPATH_A=("${_XPATH}" "get" "-b")
     _XPATH_QUERY=(
         "/MARKET_DRIVER_ACTION_DATA/IMPORT_SOURCE"
         "/MARKET_DRIVER_ACTION_DATA/FORMAT"
@@ -3354,7 +3355,7 @@ function oneMarketDriverAction()
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
         XPATH_ELEMENTS[i++]="${_element}"
-    done {xfh}< <("${_XPATH_A[@]}" "${DRV_ACTION}" "${_XPATH_QUERY[@]}" || true)
+    done {xfh}< <("${_XPATH_A[@]}" "${_XPATH_QUERY[@]}" <<< "${DRV_ACTION}" || true)
     exec {xfh}<&-
 
     unset i
@@ -3417,7 +3418,7 @@ function oneImageQc()
             splog "${_errmsg}"
             exit "${_ret}"
         fi
-        xmlstarlet sel -t -m '//IMAGE' \
+        "${SPXML}" sel -t -m '//IMAGE' \
             -o 'img;' -v 'ID' \
             -o ';' -v "DATASTORE_ID" \
             -o ';' -v "PERSISTENT" \
@@ -3462,7 +3463,7 @@ function oneVmVolumes()
     if [[ -z "${VM_XML_FILE}" ]]; then
         _tmpXML="${TMPDIR:-/tmp}/oneVmVolumes-${VM_ID}.XML"
         if [[ -f "${VM_POOL_FILE}" ]]; then
-            xmllint -xpath "/VM_POOL/VM[ID=${VM_ID}]" "${VM_POOL_FILE}" >"${_tmpXML}"
+            "${SPXML}" sub -f "${VM_POOL_FILE}" "/VM_POOL/VM[ID=${VM_ID}]" >"${_tmpXML}"
             _ret=$?
         else
             oneCallXml onevm show "${VM_ID}" "${_tmpXML}"
@@ -3477,9 +3478,9 @@ function oneVmVolumes()
         VM_XML_FILE="${_tmpXML}"
     fi
 
-    _XPATH="$(lookup_file "datastore/xpath-sp.rb")"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "-s")
+    _XPATH_A=("${_XPATH}" "get")
     _XPATH_QUERY=(
         "/VM/STATE"
         "/VM/LCM_STATE"
@@ -3496,9 +3497,8 @@ function oneVmVolumes()
     # shellcheck disable=SC2034
     VM_LCM_STATE=${XPATH_ELEMENTS[i++]}
 
-    _XPATH="$(lookup_file "datastore/xpath_multi.py")"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "-s")
+    _XPATH_A=("${_XPATH}" "list")
     _XPATH_QUERY=(
         "/VM/HISTORY_RECORDS/HISTORY[last()]/DS_ID"
         "/VM/TEMPLATE/CONTEXT/DISK_ID"
@@ -3763,9 +3763,9 @@ function oneVmDiskSnapshots()
         exit "${_ret}"
     fi
 
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "--stdin")
+    _XPATH_A=("${_XPATH}" "get")
     _XPATH_QUERY=(
         "%m%/VM/SNAPSHOTS[DISK_ID=${DISK_ID}]/SNAPSHOT/ID"
     )
@@ -3809,9 +3809,9 @@ function oneVmSnapshots()
         splog "${_errmsg}"
         exit "${_ret}"
     fi
-    _XPATH="$(lookup_file "datastore/xpath.rb" || true)"
+    _XPATH="${SPXML}"
     declare -a _XPATH_A _XPATH_QUERY
-    _XPATH_A=("${_XPATH}" "--stdin")
+    _XPATH_A=("${_XPATH}" "get")
     _XPATH_QUERY=(
         "/VM/UID"
         "/VM/GID"
@@ -4111,7 +4111,7 @@ function remove_off_hosts {
         echo -ne "${hst} "
         _RET=0
     done {xfh}< <(oneCallXml onehost list | \
-        xmlstarlet sel -t -m '//HOST' -v NAME -o ',' -v STATE -n 2>/dev/null \
+        "${SPXML}" sel -t -m '//HOST' -v NAME -o ',' -v STATE -n 2>/dev/null \
         || true)
     exec {xfh}<&-
     if [[ ${_RET} -ne 0 ]]; then
@@ -4268,10 +4268,10 @@ function oneTpmBackup()
     _remote_cmd=$(cat <<EOF
     #
     source /var/tmp/one/etc/vmm/kvm/kvmrc
-    XPATH_RB="/var/tmp/one/datastore/xpath.rb"
+    SPXML="/var/tmp/one/datastore/spxml.py"
     domxml="\$(virsh --connect "\${LIBVIRT_URI:-qemu:///system}" dumpxml "one-${_VM_ID}")"
-    if echo "\${domxml}" | "\${XPATH_RB}" -t '/domain/devices/tpm/backend[@type="emulator"]' > /dev/null 2>&1; then
-        DOM_UUID="\$(echo "\${domxml}" | "\${XPATH_RB}" '/domain/uuid')"
+    if echo "\${domxml}" | "\${SPXML}" sub '/domain/devices/tpm/backend[@type="emulator"]' > /dev/null 2>&1; then
+        DOM_UUID="\$(echo "\${domxml}" | "\${SPXML}" get '/domain/uuid' | tr -d '\\0')"
         if sudo -l | grep -q vtpm_setup; then
             splog "VM ${_VM_ID} Backing up vTPM data to ${_VM_PATH} DOM_UUID=\${DOM_UUID}"
             sudo /var/tmp/one/vtpm_setup backup "\${DOM_UUID}" "${_VM_PATH}"

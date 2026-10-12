@@ -21,7 +21,7 @@ ONE_LOCATION="${ONE_LOCATION:-/var/lib/one/remotes}"
 
 XML="$(base64 -d - 2>/dev/null)"
 
-VMID=$(echo "${XML}" | xmllint -xpath '/CALL_INFO/PARAMETERS/PARAMETER[TYPE="IN" and POSITION=2]/VALUE/text()' - || true)
+VMID=$(echo "${XML}" | "${ONE_LOCATION}/datastore/spxml.py" sub '/CALL_INFO/PARAMETERS/PARAMETER[TYPE="IN" and POSITION=2]/VALUE/text()' || true)
 
 if [[ -z "${VMID}" ]]; then
     logger -t vc_sp_vc-policy.sh -- "Error! Can't get VM id!"

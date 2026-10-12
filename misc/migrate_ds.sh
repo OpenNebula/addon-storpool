@@ -28,7 +28,7 @@ function splog()
 function xpathGet()
 {
     local xpath=$1 xmlFile=$2
-    xmlstarlet sel -t -m "/" -v "${xpath}" -n "$xmlFile"
+    /var/lib/one/remotes/datastore/spxml.py sel -t -v "${xpath}" -n "$xmlFile"
 }
 
 VM_ID=$1

@@ -71,13 +71,9 @@ for MAD in datastore tm; do
     chmod u+x -R "${M_DIR}/storpool"
 done
 
-# install xpath_multi.py and xpath-sp.rb
-for xpath_file in xpath_multi.py xpath-sp.rb; do
-    XPATH_MULTI="${ONE_VAR:-/var/lib/one}/remotes/datastore/${xpath_file}"
-    echo "*** Installing ${xpath_file} ..."
-    cp "${CP_ARGS[@]}" "datastore/${xpath_file}" "${XPATH_MULTI}"
-    chmod a+x "${XPATH_MULTI}"
-done
+echo "*** Installing spxml.py ..."
+cp "${CP_ARGS[@]}" "datastore/spxml.py" "${ONE_VAR:-/var/lib/one}/remotes/datastore/spxml.py"
+chmod a+x "${ONE_VAR:-/var/lib/one}/remotes/datastore/spxml.py"
 
 # volumecare hook files
 echo "*** Installing volumecare hook files..."
@@ -245,7 +241,7 @@ fi
 
 echo "*** Registering the vc-policy hook"
 if onehook list -x >"${TMPDIR}/onehook.xml" 2>/dev/null; then
-    vc_policy="$(xmlstarlet sel -t -m //HOOK -v NAME -o " COMMAND=" -v TEMPLATE/COMMAND -n "${TMPDIR}/onehook.xml" | grep vc-policy || true)"
+    vc_policy="$("${CWD}/datastore/spxml.py" sel -t -m //HOOK -v NAME -o " COMMAND=" -v TEMPLATE/COMMAND -n "${TMPDIR}/onehook.xml" | grep vc-policy || true)"
     if [[ -n "${vc_policy}" ]]; then
         echo "--- already registered HOOK=${vc_policy}"
     else

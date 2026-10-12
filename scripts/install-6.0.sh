@@ -118,13 +118,9 @@ for MAD in datastore tm; do
     chmod u+x -R "${M_DIR}/storpool"
 done
 
-# install xpath_multi.py and xpath-sp.rb
-for f in xpath_multi.py xpath-sp.rb; do
-    XPATH_MULTI="$ONE_VAR/remotes/datastore/$f"
-    echo "*** Installing $f ..."
-    cp $CP_ARG "datastore/$f" "$XPATH_MULTI"
-    chmod a+x "$XPATH_MULTI"
-done
+echo "*** Installing spxml.py ..."
+cp $CP_ARG "datastore/spxml.py" "$ONE_VAR/remotes/datastore/spxml.py"
+chmod a+x "$ONE_VAR/remotes/datastore/spxml.py"
 
 echo "*** Clean up old style crontab jobs"
 (crontab -u oneadmin -l | grep -v monitor_helper-sync | crontab -u oneadmin -)

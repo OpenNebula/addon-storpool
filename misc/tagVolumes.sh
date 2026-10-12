@@ -106,6 +106,6 @@ while read -r -u "${vmfh}" -d' ' VM_ID; do
             echo "# skipping ${vol}"
         fi
     done
-done {vmfh}< <(xmlstarlet sel -t -m //VM -v ID -n "${vmPoolXml}" || true)
+done {vmfh}< <("${ONE_PATH}/datastore/spxml.py" sel -t -m //VM -v ID -n "${vmPoolXml}" || true)
 exec {vmfh}<&-
 rm -f "${snapshotsJson}" "${vmPoolXml}" "${dsPoolXml}"
