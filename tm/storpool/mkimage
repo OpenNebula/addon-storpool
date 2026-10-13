@@ -141,7 +141,10 @@ if [[ "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
                 ext*)      MKFS_FORCE="-F" ;;
                 *)         MKFS_FORCE="" ;;
             esac
-            MKFS_CMD="${SUDO:-sudo -n} ${MKFS:-mkfs} -t \"${FS}\" ${MKFS_FORCE} ${!FS_OPTS} \"${SP_LINK}\""
+            # ONE_FS (since 7.4.1) allows /usr/sbin/mkfs only. Older releases
+            # need the same sudoers entry; see docs/installation.md. -t before
+            # -f/-F: util-linux passes the force flag through (OpenNebula/one#5810).
+            MKFS_CMD="${SUDO:-sudo -n} /usr/sbin/mkfs -t \"${FS}\" ${MKFS_FORCE} ${!FS_OPTS} \"${SP_LINK}\""
         else
             MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}")"
         fi

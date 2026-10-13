@@ -175,10 +175,12 @@ if [[ -n "${FSTYPE}" && "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
             ext*)      MKFS_FORCE="-F" ;;
             *)         MKFS_FORCE="" ;;
         esac
-        # mkfs on a block device needs CAP_SYS_ADMIN (BLKBSZSET); run it through
-        # sudo like the stock tm/fs_lvm/mkimage does. sudoers ONE_FS allows
-        # /usr/sbin/mkfs only, so always go through the mkfs wrapper.
-        MKFS_CMD="${SUDO:-sudo -n} ${MKFS:-mkfs} -t \"${FS}\" ${MKFS_FORCE} ${!FS_OPTS} \"${SP_LINK}\""
+        # mkfs on a block device needs CAP_SYS_ADMIN (BLKBSZSET). OpenNebula
+        # 7.4.1+ allows this via the ONE_FS alias (OpenNebula/one#7746), which
+        # is /usr/sbin/mkfs only, so call that wrapper. Older releases need
+        # the same sudoers entry; see docs/installation.md. -t is before
+        # -f/-F so util-linux passes the force flag through (OpenNebula/one#5810).
+        MKFS_CMD="${SUDO:-sudo -n} /usr/sbin/mkfs -t \"${FS}\" ${MKFS_FORCE} ${!FS_OPTS} \"${SP_LINK}\""
     else
         MKFS_CMD="$(mkfs_command "${SP_LINK}" "${FSTYPE}" "${SIZE}")"
     fi
