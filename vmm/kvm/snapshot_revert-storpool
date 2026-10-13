@@ -245,7 +245,6 @@ EOF
     fi
     splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed (${ret})${RESTART_DOMAIN:+ restart XML:${restartDomain}}"
     sleep .5
-    declare -a tmpVolumes_a=()
     declare -a snapList_a=()
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
     DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList
@@ -332,17 +331,6 @@ EOF
         te="$(date +%s%N)"
         splog "-=[E]=- snapshot ${snapentry} (${te} dt:$((te-tb)))"
     done
-    if boolTrue "finish" "${finish}"; then # make shellcheck happy
-        for volume in "${tmpVolumes_a[@]}"; do
-            sp_uid="${volume%%-*}"
-            sp_uid="${sp_uid#*~}"
-            vname="${volume#*-}"
-            splog "-=[F]=- ${volume}: sp_uid ${sp_uid} volume ${vname}"
-            storpoolDelete "${sp_uid}" "force" "" "" "\"vname\":\"${vname}\",\"reason\":\"snapshot_revert\""
-            kvDelByKey "/byUid/${sp_uid}"
-            kvDelByKey "/byName/${vname}"
-        done
-    fi
     if boolTrue "RESTART_DOMAIN"; then
         # the ssh exit status must be the one of virsh create, not of the logger call after it
         rCMD=$(cat <<EOF
