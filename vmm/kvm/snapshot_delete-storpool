@@ -76,7 +76,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
             fi
             if [[ -z ${diskVolumes["${img}"]} ]]; then
                 if boolTrue "DEBUG_VMSNAPSHOT"; then
-                    splog "[D] VM ${VM_ID} Skip ${snap} for ${img} (not in diskVolumes:${diskVolumes[*]})"
+                    splog "[D] VM ${VM_ID} Skip ${img} (not in diskVolumes:${diskVolumes[*]})"
                 fi
                 continue
             fi
