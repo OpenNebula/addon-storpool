@@ -161,7 +161,7 @@ def apply_children(parent_e: ET.Element, parent: str, state: str) -> None:
             fatal(
                 f"T_HV_{parent.upper()}_{child.upper()} requires "
                 f"T_HV_{parent.upper()}=on or an existing "
-                "<{parent} state='on'/>")
+                f"<{parent} state='on'/>")
         child_e: ET.Element = upsert(parent_e, child)
         child_e.attrib.clear()
         child_e.set('state', child_state)
