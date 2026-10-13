@@ -131,7 +131,8 @@ storpoolAttach "${VOL_UID}" "${DST_HOST}"
 
 if [[ "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
     if [[ "${FSTYPE}" == "swap" ]]; then
-        MKFS_CMD="${MKSWAP:-mkswap} -L swap \"${SP_LINK}\""
+        # ssh as oneadmin does not have sbin on PATH; fs_lvm/mkimage exports it.
+        MKFS_CMD="export PATH=/usr/sbin:/sbin:\$PATH; ${MKSWAP:-mkswap} -L swap \"${SP_LINK}\""
     else
         if [[ -n "${FS}" ]]; then
             FS_OPTS="FS_OPTS_${FS}"
