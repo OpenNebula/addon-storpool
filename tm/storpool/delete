@@ -232,7 +232,6 @@ fi
 
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     if [[ ${LCM_STATE} -ne 15 ]]; then
-        storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
         # Check if we need to also delete regular snapshots
         if boolTrue "IMMUTABLE" "${IMMUTABLE}" && [[ "${TYPE}" == "CDROM" ]]; then
             # CDROM case: delete both regular "snap" and VM "ONESNAP" snapshots
