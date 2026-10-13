@@ -272,18 +272,25 @@ EOF
 
     splog "snapList_a: [${snapList_a[*]}]"
     finish=1
+    if [[ ${#snapList_a[@]} -eq 0 ]]; then
+        res="VM ${VM_ID} snapshot ${SNAP_ID} not found"
+        splog "[E] ${res}"
+        finish=0
+    fi
     for snapentry in "${snapList_a[@]}"; do
         tb="$(date +%s%N)"
         splog "-=[B]=- snapshot ${snapentry} (${tb})"
         snapUid="${snapentry%%-*}"
         snap="${snapentry#*-}"
         volume="${snap%-"${SNAP_ID}"}"
-        sp_uid=$(kvGet "byName" "${volume}")
-        if [[ -z ${sp_uid} ]]; then
-            splog "Can't get StorPool UID for ${volume} //next"
+        kvGetUid "${volume}"
+        _kvret=$?
+        if [[ ${_kvret} -ne 0 ]]; then
+            splog "Can't get StorPool UID for ${volume} (${_kvret}) //next"
             finish=0
             continue
         fi
+        sp_uid="${SP_UID}"
         [[ ${volume%-iso} == "${volume}" ]] && mode="rw" || mode="${READONLY_MODE}"
 
         VM_DISK_SP_QOSCLASS="${vmVolumesQc_a[${volume}]}"
@@ -302,7 +309,15 @@ EOF
         fi
         storpoolDetach "${sp_uid}" "force" "${VMHOST}" "all"
         trapAdd "storpoolAttach \"${sp_uid}\" \"${VMHOST}\" \"${mode}\""
-        storpoolVolumeRevert "${sp_uid}" "${volume}" "${snapUid}" "${REMOTE_BACKUP_DELETE}" "${REVERT_SIZE}" "vm_snap_revert" || exit $?
+        storpoolVolumeRevert "${sp_uid}" "${volume}" "${snapUid}" "${REMOTE_BACKUP_DELETE}" "${REVERT_SIZE}" "vm_snap_revert"
+        _rret=$?
+        if [[ ${_rret} -ne 0 ]]; then
+            splog "[E] revert ${volume} to ${snapUid} failed (${_rret})"
+            finish=0
+            storpoolAttach "${sp_uid}" "${VMHOST}" "${mode}"
+            trapReset
+            continue
+        fi
         if boolTrue "REVERT_SIZE"; then
             OLD_SIZE_M=$((V_SIZE/1024/1024))
             storpoolVolumeInfo "~${SP_GLOBALID}"
@@ -359,6 +374,18 @@ EOF
             splog "[W] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} failed to restart from ${restartDomain} (${ret}): $(cat "/tmp/sprevert-${VM_ID}-create.err" 2>/dev/null | tr '\n' ' ')"
             log_error "VM ${VM_ID} volumes reverted but the domain could not be restarted (${ret}), resume the VM"
         fi
+    fi
+    if [[ ${finish} -eq 0 ]]; then
+        if [[ -z "${res}" ]]; then
+            res="VM ${VM_ID} snapshot ${SNAP_ID} was not fully reverted"
+            splog "[E] ${res}"
+        fi
+        error_message "${res}"
+        exit 1
+    fi
+    if boolTrue "RESTART_DOMAIN" && [[ ${ret} -ne 0 ]]; then
+        error_message "VM ${VM_ID} volumes reverted but the domain could not be restarted (${ret}), resume the VM"
+        exit 1
     fi
     splog "END VM ${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID}"
     exit 0
