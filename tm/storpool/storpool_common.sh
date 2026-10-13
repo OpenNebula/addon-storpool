@@ -2286,7 +2286,7 @@ function oneFsfreeze()
     if [[ -n "${_domain}" ]]; then
         [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         tmplog="\$(mktemp --tmpdir oneFsfreeze-XXXXXXXX)"
-        if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsfreeze "${_domain}" 2>&1 >"\${tmplog}"; then
+        if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsfreeze "${_domain}" >"\${tmplog}" 2>&1; then
             splog "domfsfreeze ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
         else
             splog "($?) ${_domain} domfsfreeze failed! snapshot not consistent! \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
@@ -2312,12 +2312,12 @@ function oneFsthaw()
     if [[ -n "${_domain}" ]]; then
         [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
         tmplog="\$(mktemp --tmpdir oneFsthaw-XXXXXXXX)"
-        if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsthaw "${_domain}" 2>&1 >"\${tmplog}"; then
+        if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsthaw "${_domain}" >"\${tmplog}" 2>&1; then
             splog "domfsthaw ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
         else
             splog "(\$?) ${_domain} domfsthaw failed! VM fs freezed? (retry in 200 ms) \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
             sleep .2
-            if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsthaw "${_domain}" 2>&1 >"\${tmplog}"; then
+            if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsthaw "${_domain}" >"\${tmplog}" 2>&1; then
                 splog "domfsthaw ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
             else
                 splog "(\$?) ${_domain} domfsthaw failed! VM fs freezed? \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
