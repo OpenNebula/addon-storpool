@@ -189,13 +189,13 @@ EOF
 EOF
 )
     fi
-    ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+    ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-destroy.out"
     ret=$?
     # 255 is ssh itself (connection dropped). The remote status is passed through.
     if [[ ${ret} -eq 255 ]]; then
         splog "[W] VM ${VM_ID} host:${VMHOST} ssh failed (${ret}), retrying the destroy once"
         sleep 1
-        ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+        ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-destroy.out"
         ret=$?
     fi
     if [[ ${ret} -eq 3 ]] && boolTrue "RESTART_DOMAIN"; then
@@ -229,12 +229,12 @@ EOF
 	exit \$vret
 EOF
 )
-        ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+        ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-destroy.out"
         ret=$?
         if [[ ${ret} -eq 255 ]]; then
             splog "[W] VM ${VM_ID} host:${VMHOST} ssh failed (${ret}), retrying the destroy once"
             sleep 1
-            ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-desctroy.out"
+            ${SSH:-ssh} "${VMHOST}" "${rCMD}" 2>"/tmp/sprevert-${VM_ID}-destroy.err" >"/tmp/sprevert-${VM_ID}-destroy.out"
             ret=$?
         fi
     fi
@@ -243,7 +243,7 @@ EOF
         log_error "VM ${VM_ID} snapshot revert aborted, the domain on ${VMHOST} was not destroyed (${ret})"
         exit "${ret}"
     fi
-    splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed (${ret})${RESTART_DOMAIN:+ restart XML:${restartDomain}}"
+    splog "VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} destroyed (${ret})${restartDomain:+ restart XML:${restartDomain}}"
     sleep .5
     declare -a snapList_a=()
     MEM_VOL="${ONE_PX}-sys-${VM_ID}"
