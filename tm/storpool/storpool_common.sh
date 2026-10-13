@@ -1205,6 +1205,7 @@ function tagsHelper()
 
 function storpoolRetry() {
     local _retries=${STORPOOL_RETRIES:-10}
+    local _transient_left=${TRANSIENT_RETRIES:-20}
     local _errfile="" _err="1" DO_MULTICLUSTER="${DO_MULTICLUSTER}"
     _errfile="$(mktemp --tmpdir storpoolRetry-XXXXXXXX.err || mktemp --tmpdir=/tmp storpoolRetry-XXXXXX.err)"
     if boolTrue "DEBUG_storpoolRetry"; then
@@ -1249,11 +1250,18 @@ function storpoolRetry() {
                 fi
             fi
             if [[ "${TRANSIENT,,}" == "true" ]]; then
-                # retry forever, reduce logs flooding with a bit longer retry
-                _retries=$((_retries + 1))
-                splog "VM ${VM_ID} TRANSIENT error! Waiting ${TRANSIENT_ERROR_SLEEP_SECONDS:-3} seconds before retry"
-                # reduce logs flooding with a bit longer delay
-                sleep "${TRANSIENT_ERROR_SLEEP_SECONDS:-3}"
+                _transient_left=$((_transient_left - 1))
+                if [[ ${_transient_left} -ge 1 ]]; then
+                    splog "VM ${VM_ID} TRANSIENT error! Waiting ${TRANSIENT_ERROR_SLEEP_SECONDS:-3} seconds before retry (${_transient_left} left)"
+                    sleep "${TRANSIENT_ERROR_SLEEP_SECONDS:-3}"
+                    continue
+                fi
+                splog "storpoolRetry($*) FAILED (try:[${_transient_left}], err:${_err})"
+                splogFile "${_errfile}" clean
+                if boolTrue "_SOFT_FAIL"; then
+                    break
+                fi
+                exit "${_err}"
             elif [[ -n "${COMM_ERROR}" ]]; then
                 # API unreachable (curl:${COMM_ERROR}), e.g. mgmt failover in
                 # progress: bounded retry with a longer pause
@@ -1274,6 +1282,9 @@ function storpoolRetry() {
             if [[ ${_err} -gt 1 ]]; then
                 splog "storpoolRetry($*) FAILED (try:${_retries}, err:[${_err}])"
                 splogFile "${_errfile}"
+                if boolTrue "_SOFT_FAIL"; then
+                    break
+                fi
                 exit "${_err}"
             fi
             splogFile "${_errfile}"
@@ -1480,6 +1491,9 @@ function storpoolVolumeCreate()
     [[ -z "${_SP_TEMPLATE}" ]] || _DATA+=",\"template\":\"${_SP_TEMPLATE}\""
     SP_UID=$(storpoolRetry VolumeCreate "${_DATA}")
     _RET=$?
+    if [[ ${_RET} -ne 0 ]] && ! boolTrue "_SOFT_FAIL"; then
+        exit "${_RET}"
+    fi
     if [[ -n ${SP_UID} ]]; then
         kvPut "${_SP_VOL}" "${SP_UID}"
         _RET=$?
