@@ -104,7 +104,15 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     snap_name="${VMSNAPSHOT_TAG}-${SNAP_ID}-${ts}"
     snapjson=""
     for volume in ${vmVolumes}; do
-        sp_uid=$(kvGet "byName" "${volume}")
+        kvGetUid "${volume}"
+        _kvret=$?
+        if [[ ${_kvret} -ne 0 ]]; then
+            res="Can't look up ${volume} (${_kvret})"
+            splog "[E] ${res}"
+            error_message "${res}"
+            exit "${_kvret}"
+        fi
+        sp_uid="${SP_UID}"
         snap="${volume}-${snap_name}"
         #list+=("${volume}" "${snap}")
         [[ -z "${snapjson}" ]] || snapjson+=","
@@ -137,7 +145,7 @@ EOF
     fi
     if boolTrue "MULTICLUSTER"; then
         oneHostInfo "${VMHOST}"
-        DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
+        [[ -z "${HOST_SP_CLUSTER_ID}" ]] || DO_REMOTE="~${HOST_SP_CLUSTER_ID}"
     fi
 
     if [[ -n "${TPM_MODEL}" ]]; then
@@ -165,14 +173,19 @@ EOF
     fi
 
     json="\"volumes\":[${snapjson}]"
-    snapshots="$(storpoolRetry VolumesGroupSnapshot "${json}")"
-    ret=$?
-    if [[ ${ret} -eq 0 ]]; then
-        while read -r -u 5 name snapshot_globalid; do
-            vname="$(echo "{${json}}" | jq -r --arg volume "${name}" \
-                        '.volumes[]|select(.volume==$volume)|"\(.tags.img)-\(.tags.snap)"')"
-            kvPut "${vname}" "~${snapshot_globalid}"
-        done 5< <(echo "${snapshots}" | jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId)"' || true)
+    snapret=0
+    if [[ -n "${snapjson}" ]]; then
+        snapshots="$(storpoolRetry VolumesGroupSnapshot "${json}")"
+        snapret=$?
+        if [[ ${snapret} -eq 0 ]]; then
+            while read -r -u 5 name snapshot_globalid; do
+                vname="$(echo "{${json}}" | jq -r --arg volume "${name}" \
+                            '.volumes[]|select(.volume==$volume)|"\(.tags.img)-\(.tags.snap)"')"
+                kvPut "${vname}" "~${snapshot_globalid}"
+            done 5< <(echo "${snapshots}" | jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId)"' || true)
+        fi
+    else
+        snapret=1
     fi
     if boolTrue "VMSNAPSHOT_FSFREEZE"; then
         declare -a pids_a
@@ -191,6 +204,16 @@ EOF
                 splog "Unable to kill the process holding the VM with freezed filesystem VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN}"
             fi
         fi
+    fi
+    if [[ ${snapret} -ne 0 ]]; then
+        if [[ -z "${snapjson}" ]]; then
+            res="VM ${VM_ID} has no volumes to snapshot"
+        else
+            res="VolumesGroupSnapshot failed (${snapret})"
+        fi
+        splog "[E] ${res}"
+        error_message "${res}"
+        exit 1
     fi
     echo "${snap_name}"
     splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID} suffix:${res}"
