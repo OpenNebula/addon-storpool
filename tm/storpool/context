@@ -121,7 +121,16 @@ if boolTrue "INCLUDE_CONTEXT_PACKAGES"; then
     fi
 fi
 
-exec_and_set_error "${MKISOFS:-mkisofs} -o ${ISO_FILE} -V CONTEXT -J -R ${ISO_DIR}" \
+# 6.4..7.0 set MKISOFS=genisoimage. 7.2+ removed it and call
+# "xorriso -as mkisofs" with the same flags (OpenNebula/one#4059).
+if [[ -n "${MKISOFS}" ]]; then
+    ISO_CMD="${MKISOFS}"
+elif command -v xorriso >/dev/null 2>&1; then
+    ISO_CMD="xorriso -as mkisofs"
+else
+    ISO_CMD="genisoimage"
+fi
+exec_and_set_error "${ISO_CMD} -o ${ISO_FILE} -V CONTEXT -J -R ${ISO_DIR}" \
     "Error creating iso fs"
 [[ -n "${ERROR}" ]] && exit_error
 
