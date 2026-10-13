@@ -81,6 +81,25 @@ if [[ -n "${DRIVER}" ]] && [[ "${DRIVER,,}" != "raw" ]]; then
     exit 1
 fi
 
+# Same rule as datastore/storpool/mkfs: an FS outside SUPPORTED_FS fails the
+# action instead of leaving a raw volume.
+_SUPPORTED_FS="${SUPPORTED_FS:-ext2,ext3,ext4,xfs}"
+if [[ -n "${FS}" ]]; then
+    if ! type -t contains &>/dev/null; then
+        msg="Cannot check FS='${FS}': contains() is not defined"
+        log_error "${msg}"
+        splog "${msg}"
+        exit 1
+    fi
+    if ! contains "${_SUPPORTED_FS}" "${FS}" ","; then
+        msg="Unsupported file system type: ${FS}. Supported types are: ${_SUPPORTED_FS}"
+        log_error "${msg}"
+        splog "${msg}"
+        exit 1
+    fi
+    splog "FS:'${FS}' is SUPPORTED_FS:${_SUPPORTED_FS}"
+fi
+
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"
 debug_sp_qosclass
 
@@ -107,19 +126,6 @@ storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${SP_TEMPLATE}" \
 
 VOL_UID="${SP_UID}"
 SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
-
-if [[ -n ${FS} ]]; then
-    if type -t contains &>/dev/null; then
-        if contains "${SUPPORTED_FS:-ext2,ext3,ext4,xfs}" "${FS}" ","; then
-            splog "FS:'${FS}' is SUPPORTED_FS:${SUPPORTED_FS}"
-        else
-            splog "FS:'${FS}' not in SUPPORTED_FS:${SUPPORTED_FS}"
-            FS=
-        fi
-    else
-        FS=
-    fi
-fi
 
 storpoolAttach "${VOL_UID}" "${DST_HOST}"
 

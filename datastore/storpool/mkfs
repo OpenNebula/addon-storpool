@@ -125,6 +125,26 @@ if boolTrue "SAVE_AS_HOT"; then
     exit 0
 fi
 
+# Reject an unknown FS before the volume exists. OpenNebula's fs and fs_lvm
+# drivers fail the action; clearing FS and returning a raw volume leaves the
+# image recorded as formatted.
+_SUPPORTED_FS="${SUPPORTED_FS:-ext2,ext3,ext4,xfs}"
+if [[ -n "${FS}" ]]; then
+    if ! type -t contains &>/dev/null; then
+        msg="Cannot check FS='${FS}': contains() is not defined"
+        log_error "${msg}"
+        splog "${msg}"
+        exit 1
+    fi
+    if ! contains "${_SUPPORTED_FS}" "${FS}" ","; then
+        msg="Unsupported file system type: ${FS}. Supported types are: ${_SUPPORTED_FS}"
+        log_error "${msg}"
+        splog "${msg}"
+        exit 1
+    fi
+    splog "FS:'${FS}' is SUPPORTED_FS:${_SUPPORTED_FS}"
+fi
+
 storpoolVolumeCheck "${SP_VOL}" byName
 
 #-------------------------------------------------------------------------------
@@ -137,19 +157,6 @@ if storpoolVolumeCreate "${SP_VOL}" "$((SIZE*1024*1024))" "${SP_TEMPLATE}"; then
 else
     splog "[E] Failed to create volume ${SP_VOL} ($?)"
     exit 1
-fi
-
-if [[ -n "${FS}" ]]; then
-    if type -t contains &>/dev/null; then
-        if contains "${SUPPORTED_FS:-ext2,ext3,ext4,xfs}" "${FS}" ","; then
-            splog "FS:'${FS}' is SUPPORTED_FS:${SUPPORTED_FS}"
-        else
-            splog "FS:'${FS}' not in SUPPORTED_FS:${SUPPORTED_FS}"
-            FS=""
-        fi
-    else
-        FS=""
-    fi
 fi
 
 if [[ -n "${FSTYPE}" && "${FSTYPE,,}" != "raw" ]] || [[ -n "${FS}" ]]; then
