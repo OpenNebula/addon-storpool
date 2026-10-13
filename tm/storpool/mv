@@ -347,7 +347,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 RANDOM_FILE="$(${SSH:-ssh} "${DST_HOST}" "mktemp --tmpdir=\"${DST_DIR}\"" || true)"
                 trapAdd "${SSH:-ssh} ${DST_HOST} \"rm -f '${RANDOM_FILE}'\""
                 if ${SSH:-ssh} "${SRC_HOST}" "test -f '${RANDOM_FILE}'"; then
-                    msg "VM ${VM_ID} on same path(${SRC_PATH})${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
+                    msg="VM ${VM_ID} on same path(${SRC_PATH})${MIGRATE_UNKNOWN:+ MIGRATE_UNKNOWN}"
                     log "${msg}"
                     splog "${msg}"
                 else
