@@ -1238,7 +1238,7 @@ function storpoolRetry() {
             elif [[ -n "${COMM_ERROR}" ]]; then
                 # API unreachable (curl:${COMM_ERROR}), e.g. mgmt failover in
                 # progress: bounded retry with a longer pause
-                splog "API ${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81} unreachable (curl:${COMM_ERROR})! Waiting ${COMM_ERROR_SLEEP_SECONDS:-3} seconds before retry (${_retries} left)"
+                splog "API ${SP_API_HTTP_HOST}:${SP_API_HTTP_PORT:-81} unreachable (curl:${COMM_ERROR})! Waiting ${COMM_ERROR_SLEEP_SECONDS:-3} seconds before retry ($((_retries - 1)) left)"
                 sleep "${COMM_ERROR_SLEEP_SECONDS:-3}"
             else
                 splog "TRANSIENT=${TRANSIENT}"
