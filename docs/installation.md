@@ -54,6 +54,19 @@ SELinux and AppArmor policy is not installed by `install.sh` and is not
 copied by `onehost sync`. The front-end steps and the per-host steps are
 in [SELinux and AppArmor](selinux_apparmor.md).
 
+## sudoers for mkfs before OpenNebula 7.4.1
+
+Backward compatibility only. OpenNebula 7.4.1 and later grant `oneadmin`
+`/usr/sbin/mkfs` through the `ONE_FS` sudoers alias (OpenNebula/one#7746).
+Nothing on the OpenNebula side installs an addon sudoers file: `onehost sync`
+does not deploy sudoers, and releases before 7.4.1 have no `ONE_FS` alias.
+The addon does not ship one either.
+
+On 6.4 through 7.4.0, a datablock with `FS=` or a volatile disk with a
+filesystem runs `sudo -n /usr/sbin/mkfs` on the bridge or KVM host. Allow that
+command for `oneadmin` on those hosts. Without it the image or VM log shows
+`sudo: a password is required`.
+
 ## Getting the addon from GitHub
 
 ```bash
