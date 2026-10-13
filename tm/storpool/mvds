@@ -98,7 +98,7 @@ fi
 storpoolVolumeFreeze "${VOL_UID}" "volume"
 
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-    storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}" "VMSNAPSHOT_DELETE_ON_TERMINATE"
+    storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
 fi
 
 oneMvds "${SP_VOL}"
