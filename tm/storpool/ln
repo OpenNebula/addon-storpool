@@ -41,7 +41,7 @@ splog "SRC=${SRC} DST=${DST} VM_ID=${VM_ID} DS_ID=${DS_ID}"
 # Do nothing if src and dst are same
 #-------------------------------------------------------------------------------
 
-if [[ "{${SRC}" == "${DST}" ]]; then
+if [[ "${SRC}" == "${DST}" ]]; then
     msg="Not moving ${SRC} to ${DST}, they are the same path"
     log "[I] ${msg}"
     splog "END ${VM_ID} ${msg}"
