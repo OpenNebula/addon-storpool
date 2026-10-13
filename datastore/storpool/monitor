@@ -122,4 +122,9 @@ while read -r -u "${jqfh}" name storedCapacity storedFree u2 u3; do
 	fi
 done {jqfh}< <( jq -r '.data[]|.name+" "+(.stored.capacity|tostring)+" "+(.stored.free|tostring)+" "+(.stored.internal.u2|tostring)+" "+(.stored.internal.u3|tostring)' "${JSON_FILE}" || true)
 
-splog "[I] DS ${DS_ID} ${DS_TYPE:-${DRV_ACTION:0:6}} END (${DS_NAME}${found:+ found}${found:- missing in ${JSON_FILE}})"
+if [[ -n ${found} ]]; then
+	_found_msg=" found"
+else
+	_found_msg=" missing in ${JSON_FILE}"
+fi
+splog "[I] DS ${DS_ID} ${DS_TYPE:-${DRV_ACTION:0:6}} END (${DS_NAME}${_found_msg})"
