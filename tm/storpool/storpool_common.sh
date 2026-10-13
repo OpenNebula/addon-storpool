@@ -524,20 +524,39 @@ function kvGetFamily()
 function kvGetUid()
 {
     local _NAME="$1" _FATAL="$2"
-    local ret=0 errmsg=""
+    local ret=0 kvret=0 errmsg="" _try=0
+    # a leader election is usually over within a second; three attempts
+    # absorb that without hiding an etcd that is actually down
+    local _tries="${KV_UID_RETRIES:-3}" _pause="${KV_UID_RETRY_SECONDS:-1}"
     unset SP_UID
-    SP_UID="$(kvGet byName "${_NAME}")"
-    if [[ -z "${SP_UID}" ]]; then
+    while true; do
+        SP_UID="$(kvGet byName "${_NAME}")"
+        kvret=$?
+        [[ ${kvret} -eq 0 ]] && break
+        _try=$((_try + 1))
+        [[ ${_try} -ge ${_tries} ]] && break
+        splog "[W] KV kvGetUid(${_NAME}) etcdctl failed (${kvret}), retry ${_try}/$((_tries - 1))"
+        sleep "${_pause}"
+    done
+    if [[ ${kvret} -ne 0 ]]; then
+        # distinct from "no such name" (return 1): the lookup itself failed
+        ret=2
+        SP_UID=""
+        errmsg="etcd lookup failed for ${_NAME} (${kvret})"
+        splog "[E] KV kvGetUid($*) ${errmsg}"
+    elif [[ -z "${SP_UID}" ]]; then
         ret=1
         errmsg="Can't get StorPool generic name for ${_NAME}!"
         if [[ -n "${_FATAL}" ]]; then
             splog "[E] KV Error: ${errmsg}"
-            exit "${ret}"
         else
             splog "[W] KV kvGetUid($*) ${errmsg}"
         fi
     fi
     export SP_UID
+    if [[ ${ret} -ne 0 ]] && [[ -n "${_FATAL}" ]]; then
+        exit "${ret}"
+    fi
     return "${ret}"
 }
 

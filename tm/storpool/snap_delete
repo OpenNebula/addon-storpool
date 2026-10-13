@@ -67,8 +67,15 @@ DST_HOST="${SRC_HOST}"
 # Delete snapshot
 #-------------------------------------------------------------------------------
 
-if kvGetUid "${SP_SNAP}"; then
+kvGetUid "${SP_SNAP}"
+_kvret=$?
+if [[ ${_kvret} -eq 0 ]]; then
     storpoolSnapshotDelete "${SP_UID}"
+elif [[ ${_kvret} -eq 1 ]]; then
+    splog "[W] ${SP_SNAP} has no KV entry"
+else
+    splog "[E] ${SP_SNAP} not deleted, KV lookup failed (${_kvret})"
+    exit "${_kvret}"
 fi
 
 splog "END ${VM_ID}"

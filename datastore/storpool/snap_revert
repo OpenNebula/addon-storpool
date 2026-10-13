@@ -63,10 +63,17 @@ SP_SNAP="${SP_VOL}-snap${TARGET_SNAPSHOT}"
 
 if boolTrue "DISKSNAPSHOT_REVERT_STRICT"; then
     kvGetUid "${SP_SNAP}" fatal
-elif ! kvGetUid "${SP_SNAP}"; then
-    splog "[W] Can't find ${SP_SNAP} for ${SP_VOL}, skipping the revert (DISKSNAPSHOT_REVERT_STRICT=0)"
-    splog "END"
-    exit 0
+else
+    kvGetUid "${SP_SNAP}"
+    _kvret=$?
+    if [[ ${_kvret} -eq 2 ]]; then
+        splog "[E] Can't look up ${SP_SNAP} for ${SP_VOL} (${_kvret})"
+        exit "${_kvret}"
+    elif [[ ${_kvret} -ne 0 ]]; then
+        splog "[W] Can't find ${SP_SNAP} for ${SP_VOL}, skipping the revert (DISKSNAPSHOT_REVERT_STRICT=0)"
+        splog "END"
+        exit 0
+    fi
 fi
 
 storpoolSnapshotRevert "${SP_UID}" "${SP_VOL}" "IS_SNAPSHOT"

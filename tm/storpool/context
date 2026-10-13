@@ -139,14 +139,19 @@ SP_SIZE=$(( (SP_SIZE +511) /512 *512 ))
 SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID}"
 SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
 
-if kvGetUid "${SP_VOL}"; then
+kvGetUid "${SP_VOL}"
+_kvret=$?
+if [[ ${_kvret} -eq 0 ]]; then
     VOL_UID="${SP_UID}"
     storpoolVolumeResize "${VOL_UID}" "${SP_SIZE}" "shrinkOk"
-else
+elif [[ ${_kvret} -eq 1 ]]; then
     storpoolVolumeCreate "${SP_VOL}" "${SP_SIZE}" "${SP_TEMPLATE}" \
         "virt;${LOC_TAG};type;diskid;${VM_TAG}" \
         "one;${LOC_TAG_VAL};CNTXT;${DISK_ID};${VM_ID}"
     VOL_UID="${SP_UID}"
+else
+    splog "[E] ${SP_VOL} not created, KV lookup failed (${_kvret})"
+    exit "${_kvret}"
 fi
 
 SP_LINK="/dev/storpool-byid/${VOL_UID#*~}"
