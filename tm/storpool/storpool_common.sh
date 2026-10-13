@@ -508,7 +508,7 @@ function kvGetFamily()
 {
     local _kvName="$1" _keysAndVals="$2"
     local _key="" _val="" kvfh=""
-    local _re="^/byName/${_kvName//./\\.}(-(snap[0-9]+|${VMSNAPSHOT_TAG:-ONESNAP}-.+|TEMP-[A-Za-z0-9]+|[0-9]{9,}))?$"
+    local _re="^/byName/${_kvName//./\\.}(-(snap[0-9]+|${VMSNAPSHOT_TAG:-ONESNAP}-.+|TEMP-[A-Za-z0-9]+|[0-9]{9,}|(ing-)?tmRestore[A-Za-z0-9]+))?$"
     while read -r -u "${kvfh}" _key; do
         read -r -u "${kvfh}" _val || break
         [[ "${_key}" =~ ${_re} ]] || continue
