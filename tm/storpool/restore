@@ -39,6 +39,38 @@ function restoreCopyToLink()
     return "${_RET}"
 }
 
+function restoreRollbackDelete()
+{
+    local _did="$1"
+    local _ing="${disksIngressUid_a[${_did}]:-}"
+    local _new="${disksNewUid_a[${_did}]:-}"
+    if [[ -n "${_ing}" ]]; then
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_ing}" "force"
+    fi
+    if [[ -n "${_new}" ]]; then
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_new}" "force"
+    fi
+}
+
+function restoreRollbackRename()
+{
+    local _did="$1"
+    local _old="${disksOldUid_a[${_did}]:-}"
+    local _vol="${disksMap_a[${_did}]}"
+    [[ -n "${_old}" ]] || return 0
+    _SOFT_FAIL=1 storpoolVolumeRename "${_old}" "${_vol}-${_TMP_NAME}" "${_vol}"
+}
+
+function restoreCommitCleanup()
+{
+    local _did _old
+    for _did in "${!disksCommitted_a[@]}"; do
+        _old="${disksOldUid_a[${_did}]:-}"
+        [[ -n "${_old}" ]] || continue
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_old}" "force" "" "" "\"reason\":\"tm_restore\""
+    done
+}
+
 DST_HOST="${1%%:*}"
 SYSTEM_DS_PATH="${1#*:}"
 VM_ID="$2"
@@ -110,6 +142,7 @@ declare -A diskTypeMap_a  # diskTypeMap_a[oneName]=DISK_TYPE
 declare -A disksOldUid_a
 declare -A disksNewUid_a
 declare -A disksIngressUid_a  # disksIngressUid_a[did]=uid of the scratch volume
+declare -A disksCommitted_a
 
 while IFS=' ' read -r -u "${jqfh}" did url; do
     if [[ -z "${did}" ]]; then
@@ -121,17 +154,18 @@ exec {jqfh}<&-
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}"
 for entry in ${vmDisksMap:-}; do
-    # URL:DISK_ID
-    disksMap_a["${entry##*:}"]="${entry%:*}"
+    _did="${entry##*:}"
+    [[ -n "${_did}" ]] || continue
+    disksMap_a["${_did}"]="${entry%:*}"
 done
 for entry in ${vmDisksTypeMap}; do
     # vmDisksTypeMap: 'oneName:DISK_TYPE ...'
     diskTypeMap_a["${entry%%:*}"]="${entry#*:}"  # diskTypeMap_a[oneName]=DISK_TYPE
 done
 _TMP_NAME=$(mktemp --dry-run tmRestoreXXXXXXXX)
-ERROR=0
 RET=0
 _selected=0
+trapAdd "restoreCommitCleanup"
 for did in ${!disksUrl_a[*]}; do
     if [[ ${DISK_ID} != "-1" ]]; then
         if [[ ${DISK_ID} != "${did}" ]]; then
@@ -142,29 +176,40 @@ for did in ${!disksUrl_a[*]}; do
     if [[ "${did}" == "tpm" ]]; then
         disksMap_a["${did}"]="${ONE_PX}-sys-${VM_ID}-SWTPM"
         diskTypeMap_a["${disksMap_a[${did}]}"]="SWTPM"
-        DISK_ID=""
     fi
     SP_VOL="${disksMap_a[${did}]}"
     TMP_NAME="${SP_VOL}-${_TMP_NAME}"
     BACKUP_URL="${disksUrl_a[${did}]}"
     COPY_CMD="${DRIVER_PATH}/../../datastore/downloader.sh --nodecomp \"${BACKUP_URL}\" -"
-    kvGetUid "${SP_VOL}" fatal
+    if [[ "${did}" == "tpm" ]]; then
+        kvGetUid "${SP_VOL}"
+        _kvret=$?
+        if [[ ${_kvret} -eq 1 ]]; then
+            storpoolVolumeCreate "${SP_VOL}" "4M"
+            _kvret=$?
+        fi
+        if [[ ${_kvret} -ne 0 ]]; then
+            splog "[E] VM ${VM_ID} ${SP_VOL} not restored, KV lookup failed (${_kvret})"
+            error_message "Can't look up ${SP_VOL}"
+            exit "${_kvret}"
+        fi
+    else
+        kvGetUid "${SP_VOL}" fatal
+    fi
     storpoolVolumeInfo "${SP_UID:?}"
     if [[ -z "${V_SIZE}" ]]; then
-        if [[ "${did}" == "tpm" ]]; then
-            V_SIZE="4M"
-            storpoolVolumeCreate "${SP_VOL}" "${V_SIZE}"
-        fi
-        splog "VM ${VM_ID} volume ${SP_UID} (${SP_VOL}) not found"
-        ERROR=1
-        break
+        splog "[E] VM ${VM_ID} volume ${SP_UID} (${SP_VOL}) not found"
+        error_message "volume ${SP_VOL} not found"
+        exit 1
     fi
     VOL_UID="${SP_UID}"
     splog "VM ${VM_ID} restoring disk.${did} ${SP_UID} (${SP_VOL})"
     storpoolVolumeRename "${VOL_UID}" "${SP_VOL}" "${TMP_NAME}" ""  # TBD: "${TAGS}"
     RET=$?
+    disksOldUid_a["${did}"]="${VOL_UID}"
+    trapAdd "restoreRollbackRename '${did}'"
+    trapAdd "restoreRollbackDelete '${did}'"
     if [[ ${RET} -eq 0 ]]; then # 1
-        disksOldUid_a["${did}"]="${VOL_UID}"
         xTYPE="${diskTypeMap_a[${SP_VOL}]}"
         storpoolVolumeCreate "${SP_VOL}" "${V_SIZE}" "${V_TEMPLATE_NAME:?}" \
             "virt;${LOC_TAG};diskid;${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" \
@@ -240,27 +285,26 @@ EOF
                     DST_PATH="${SYSTEM_DS_PATH}/disk.${did}"
                     oneSymlink "${DST_HOST}" "${SP_UID}" "${DST_PATH}"
                     RET=$?
-                    if [[ ${RET} -ne 0 ]]; then # 5
-                        ERROR=5
-                        break
+                    if [[ ${RET} -ne 0 ]]; then
+                        error_message "Error linking ${DST_PATH} on ${DST_HOST}"
+                        exit "${RET}"
                     fi
                 else
-                    ERROR=4
-                    break
+                    exit "${RET}"
                 fi
             else
-                ERROR=3
-                break
+                exit "${RET}"
             fi
         else
-            ERROR=2
-            break
+            exit "${RET}"
         fi
     else
-        ERROR=1
-        break
+        exit "${RET}"
     fi
 
+    trapReset
+    disksCommitted_a["${did}"]=1
+    trapAdd "restoreCommitCleanup"
     if [[ "${did}" == "tpm" ]]; then
         tpmRestore "${VM_ID}" "${SYSTEM_DS_PATH}" "${DST_HOST}"
     fi
@@ -273,41 +317,30 @@ if [[ ${_selected} -eq 0 ]]; then
     exit 1
 fi
 
+trapReset
+_cleanup_ret=0
 for did in ${!disksUrl_a[*]}; do
     if [[ "${DISK_ID}" != "-1" ]]; then
         if [[ "${DISK_ID}" != "${did}" ]]; then
             continue
         fi
     fi
-    BACKUP_URL="${disksUrl_a[${did}]}"
     SP_VOL="${disksMap_a[${did}]}"
     TMP_NAME="${SP_VOL}-${_TMP_NAME}"
     if [[ -n "${disksIngressUid_a[${did}]:-}" ]]; then
         splog "[I] VM ${VM_ID} delete ingress volume ${disksIngressUid_a[${did}]}"
-        DELAY_DELETE="" storpoolDelete "${disksIngressUid_a[${did}]}" "force"
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${disksIngressUid_a[${did}]}" "force"
+        _dret=$?
+        [[ ${_dret} -eq 0 ]] || _cleanup_ret=${_dret}
     fi
-    if [[ ${ERROR} -eq 0 ]]; then
-        OLD_UID="${disksOldUid_a[${did}]}"
+    OLD_UID="${disksOldUid_a[${did}]:-}"
+    if [[ -n "${OLD_UID}" ]]; then
         splog "[I] VM ${VM_ID} Restore success, cleaning up ${OLD_UID} (${TMP_NAME})"
-        storpoolDelete "${OLD_UID}" "force" "" "" "\"reason\":\"tm_restore\""
-    else
-        splog "[E] VM ${VM_ID} Error:${ERROR} Restore failed, trying to rollback ${SP_UID}"
-        case "${ERROR}" in
-            3|4|5)
-                NEW_UID="${disksNewUid_a[${did}]}"
-                splog "[I] VM ${VM_ID} delete volume ${NEW_UID} (the new one)"
-                storpoolDelete "${NEW_UID}" "force"
-                ;&
-            2)
-                OLD_UID="${disksOldUid_a[${did}]}"
-                splog "[I] VM ${VM_ID} rename temp volume ${OLD_UID} (${TMP_NAME}) to ${SP_VOL}"
-                storpoolVolumeRename "${OLD_UID}" "${TMP_NAME}" "${SP_VOL}"
-                ;;
-            *)
-                storpoolVolumeInfo "${OLD_UID}"
-        esac
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${OLD_UID}" "force" "" "" "\"reason\":\"tm_restore\""
+        _dret=$?
+        [[ ${_dret} -eq 0 ]] || _cleanup_ret=${_dret}
     fi
 done
 
 splog "END ${VM_ID}"
-exit "${RET}"
+exit "${_cleanup_ret}"
