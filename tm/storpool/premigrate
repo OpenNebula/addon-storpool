@@ -141,7 +141,12 @@ for i in "${!DISK_ID_ARRAY[@]}"; do
                 SP_VOL+="-${VM_ID}-${DISK_ID}"
             elif [[ "${DISK_TYPE_ARRAY[i]}" == "CDROM" ]]; then
                 CDROM_VOL="${SP_VOL}-${VM_ID}-${DISK_ID}"
-                if ! kvGetUid "${CDROM_VOL}"; then
+                kvGetUid "${CDROM_VOL}"
+                _kvret=$?
+                if [[ ${_kvret} -eq 2 ]]; then
+                    splog "[E] ${CDROM_VOL} not created, KV lookup failed (${_kvret})"
+                    exit "${_kvret}"
+                elif [[ ${_kvret} -ne 0 ]]; then
                     kvGetUid "${SP_VOL}" fatal
                     storpoolVolumeClone "${SP_UID}" "${CDROM_VOL}" "${SP_TEMPLATE}"
                     kvGetUid "${CDROM_VOL}" fatal
