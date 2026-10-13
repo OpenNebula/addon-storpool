@@ -164,8 +164,7 @@ EOF
         fi
     fi
 
-    tags="$(tagsHelper "virt;${VM_TAG};${LOC_TAG}" "one;${VM_ID};${LOC_TAG_VAL}")"
-    json="\"volumes\":[${snapjson}],\"tags\":{${tags}}"
+    json="\"volumes\":[${snapjson}]"
     snapshots="$(storpoolRetry VolumesGroupSnapshot "${json}")"
     ret=$?
     if [[ ${ret} -eq 0 ]]; then
