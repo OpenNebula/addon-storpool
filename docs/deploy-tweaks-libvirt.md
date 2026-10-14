@@ -171,7 +171,8 @@ uses `<driver><iothreads><iothread id=><queue id=/></iothread></iothreads>`.
 `disk-cache-io.py` writes `cache`, `io`, and `discard` on the StorPool disk
 `driver` (`none`, `native`, and `unmap` when the matching `T_DISK_*` key is
 unset). `context-cache.py` writes `cache='none'` and `io='native'` on each
-`type='file'` cdrom. Both can also set `detect_zeroes` (`off`, `on`, or
+`type='file'` cdrom, and on the context CD-ROM when it is already
+`type='block'`. Both can also set `detect_zeroes` (`off`, `on`, or
 `unmap`), `ioeventfd` (`on` or `off`), and `queue_size` (a power of two). `cache` is
 `default`, `none`, `writeback`, `writethrough`, `directsync`, or `unsafe`.
 `io` is `threads`, `native`, or `io_uring`. `discard` is `unmap` or

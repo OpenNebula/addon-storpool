@@ -61,7 +61,6 @@ vm: ET.Element = vm_e.getroot()
 for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
-delete_shares: bool = False
 cputune: Dict[str, str] = {}
 for pfx in [None, "global", "emulator", "iothread"]:
     for entry in ["period", "quota"]:
@@ -82,23 +81,9 @@ if cputune_e is None:
 
 for key, val in cputune.items():
     if val:
-        delete_shares = True
         t_cputune_e = ET.SubElement(cputune_e, key)
         t_cputune_e.text = str(val)
         changed = True
-
-cputune_shares_keep: Optional[str] = os.getenv("T_CPUTUNE_SHARES_KEEP")  # type: ignore[attr-defined] # noqa: E501
-if cputune_shares_keep is not None:
-    delete_shares = False
-t_cputune_shares_keep_e: Optional[ET.Element] = vm.find(
-    "./USER_TEMPLATE/T_CPUTUNE_SHARES_KEEP")
-if t_cputune_shares_keep_e is not None:
-    delete_shares = False
-
-if delete_shares:
-    shares_e: Optional[ET.Element] = cputune_e.find("./shares")
-    if shares_e is not None:
-        cputune_e.remove(shares_e)
 
 if changed:
     indent(root)
