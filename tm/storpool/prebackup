@@ -124,8 +124,10 @@ for map in ${vmDisksMap}; do
     fi
 done
 json="\"volumes\":[${json_volumes}]"
+oneBackupConsistencyBegin "${KVMHOST}" "${DEPLOY_ID}" "${BACKUP_FS_FREEZE-}"
 DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesGroupSnapshot "${json}" >/dev/null
 ret=$?
+oneBackupConsistencyEnd "${KVMHOST}" "${DEPLOY_ID}"
 if [[ ${ret} -ne 0 ]]; then
     splog "Error: Can't create volumes group snapshots (${ret})"
     exit 1

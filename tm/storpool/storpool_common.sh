@@ -2366,6 +2366,113 @@ EOF
     splog "fsthaw ${_domain} on ${_host} ($?)"
 }
 
+function oneDomSuspend()
+{
+    local _host="$1" _domain="$2"
+    local _SCRIPTS_REMOTE_DIR="" _remote_cmd=""
+    _SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+
+    _remote_cmd=$(cat <<EOF
+    #_SUSPEND
+    if [[ -n "${_domain}" ]]; then
+        [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        tmplog="\$(mktemp --tmpdir oneDomSuspend-XXXXXXXX)"
+        if virsh --connect \${LIBVIRT_URI:-qemu:///system} suspend "${_domain}" >"\${tmplog}" 2>&1; then
+            splog "suspend ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
+        else
+            splog "(\$?) ${_domain} suspend failed! \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
+            rm -rf "\${tmplog}"
+            exit 1
+        fi
+        rm -rf "\${tmplog}"
+    fi
+
+EOF
+)
+    ssh_exec_and_log "${_host}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
+                 "Error in suspend of domain ${_domain} on host ${_host}"
+    splog "suspend ${_domain} on ${_host} ($?)"
+}
+
+function oneDomResume()
+{
+    local _host="$1" _domain="$2"
+    local _SCRIPTS_REMOTE_DIR="" _remote_cmd=""
+    _SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+
+    _remote_cmd=$(cat <<EOF
+    #_RESUME
+    if [[ -n "${_domain}" ]]; then
+        [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+        tmplog="\$(mktemp --tmpdir oneDomResume-XXXXXXXX)"
+        if virsh --connect \${LIBVIRT_URI:-qemu:///system} resume "${_domain}" >"\${tmplog}" 2>&1; then
+            splog "resume ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
+        else
+            splog "(\$?) ${_domain} resume failed! VM suspended? (retry in 200 ms) \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
+            sleep .2
+            if virsh --connect \${LIBVIRT_URI:-qemu:///system} resume "${_domain}" >"\${tmplog}" 2>&1; then
+                splog "resume ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
+            else
+                splog "(\$?) ${_domain} resume failed! VM suspended? \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
+            fi
+        fi
+        rm -rf "\${tmplog}"
+    fi
+
+EOF
+)
+    ssh_exec_and_log "${_host}" "${REMOTE_HDR}${_remote_cmd}${REMOTE_FTR}" \
+                 "Error in resume of domain ${_domain} on host ${_host}"
+    splog "resume ${_domain} on ${_host} ($?)"
+}
+
+function oneBackupConsistencyBegin()
+{
+    local _host="$1" _domain="$2" _mode="${3-}" _release=""
+    BACKUP_CONSISTENCY=""
+    _mode="${_mode//[[:space:]]/}"
+    _mode="${_mode^^}"
+    case "${_mode}" in
+        ""|NONE)
+            return 0
+            ;;
+        AGENT)
+            oneFsfreeze "${_host}" "${_domain}"
+            _release="oneFsthaw \"${_host}\" \"${_domain}\""
+            ;;
+        SUSPEND)
+            oneDomSuspend "${_host}" "${_domain}"
+            _release="oneDomResume \"${_host}\" \"${_domain}\""
+            ;;
+        *)
+            splog "[W] Unsupported FS_FREEZE='${3-}', backup snapshot is crash-consistent"
+            return 0
+            ;;
+    esac
+    BACKUP_CONSISTENCY="${_mode}"
+    trapAdd "${_release}"
+}
+
+function oneBackupConsistencyEnd()
+{
+    local _host="$1" _domain="$2" _release=""
+    case "${BACKUP_CONSISTENCY}" in
+        AGENT)
+            _release="oneFsthaw \"${_host}\" \"${_domain}\""
+            oneFsthaw "${_host}" "${_domain}"
+            ;;
+        SUSPEND)
+            _release="oneDomResume \"${_host}\" \"${_domain}\""
+            oneDomResume "${_host}" "${_domain}"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+    trapDel "${_release}"
+    BACKUP_CONSISTENCY=""
+}
+
 function oneCheckpointSave()
 {
     local _host="${1%%:*}" _path="${1#*:}"
