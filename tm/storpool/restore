@@ -71,6 +71,26 @@ function restoreCommitCleanup()
     done
 }
 
+function restoreDropForgottenSnapshots()
+{
+    local _vol _type _prefix
+    for _vol in ${vmVolumes}; do
+        [[ -n "${_vol}" ]] || continue
+        _type="${diskTypeMap_a[${_vol}]:-}"
+        _prefix="${VMSNAPSHOT_TAG}"
+        case "${_type}" in
+            NPERS*) _prefix+=",snap" ;;
+        esac
+        splog "[I] VM ${VM_ID} restore drop ${_prefix} of ${_vol}"
+        _SOFT_FAIL=1 storpoolSnapshotsDelete "${_vol}" "${_prefix}"
+    done
+    if [[ -n "${TPM_MODEL}" ]]; then
+        _vol="${ONE_PX}-sys-${VM_ID}-SWTPM"
+        splog "[I] VM ${VM_ID} restore drop ${VMSNAPSHOT_TAG} of ${_vol}"
+        _SOFT_FAIL=1 storpoolSnapshotsDelete "${_vol}" "${VMSNAPSHOT_TAG}"
+    fi
+}
+
 DST_HOST="${1%%:*}"
 SYSTEM_DS_PATH="${1#*:}"
 VM_ID="$2"
@@ -318,6 +338,7 @@ if [[ ${_selected} -eq 0 ]]; then
 fi
 
 trapReset
+restoreDropForgottenSnapshots
 _cleanup_ret=0
 for did in ${!disksUrl_a[*]}; do
     if [[ "${DISK_ID}" != "-1" ]]; then
