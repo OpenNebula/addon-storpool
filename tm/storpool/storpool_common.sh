@@ -451,7 +451,10 @@ function oneBackupPublish()
     ssh_forward ssh_exec_and_log "${B_HOST}" "mkdir -p \"${B_DIR}\"" \
         "Error creating ${B_DIR} on ${B_HOST}"
     if [[ "${B_HOST}:${B_DIR}" != "${_kvm}:${B_DISK_DIR}" ]]; then
-        signalWait "${RSYNC:-rsync}" -a "${_kvm}:${B_DISK_DIR}/" "${B_HOST}:${B_DIR}/" || return $?
+        splog "[I] rsync ${_kvm}:${B_DISK_DIR}/ ${B_HOST}:${B_DIR}/"
+        signalWait ssh_forward ssh_exec_and_log "${_kvm}" \
+            "${RSYNC:-rsync} -a \"${B_DISK_DIR}/\" \"${B_HOST}:${B_DIR}/\"" \
+            "Error publishing ${_kvm}:${B_DISK_DIR} to ${B_HOST}:${B_DIR}" || return $?
     fi
     signalWait "${RSYNC:-rsync}" -a "${B_LOCAL}/" "${B_HOST}:${B_DIR}/" || _rc=$?
     return "${_rc}"

@@ -172,9 +172,33 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     exit 0
 fi
 
+storpoolDeleteRestoreLeftovers()
+{
+    local _name="$1" _key="" _uid="" _base="" kvfh="" _ret=0
+    [[ -n "${_name}" ]] || return 0
+    while read -r -u "${kvfh}" _key; do
+        read -r -u "${kvfh}" _uid || break
+        _base="${_key##*/}"
+        [[ "${_base}" == "${_name}-tmRestore"* || "${_base}" == "${_name}-ing-tmRestore"* ]] || continue
+        splog "[I] delete restore leftover ${_base} (${_uid})"
+        # restore itself deletes these immediately; an API error must not
+        # abort the rest of terminate
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_uid}" "force" "" "" \
+            "\"img\":\"${_base}\",\"reason\":\"tm_delete\"" || _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            splog "[E] restore leftover ${_base} (${_uid}) not deleted (${_ret})"
+            _ret=0
+        fi
+    done {kvfh}< <(kvGetFamily "${_name}" KeysAndVals || true)
+    exec {kvfh}<&-
+}
+
 oneVmInfo "${VM_ID}" "${DISK_ID}"
 
 IMMUTABLE="$(isImmutable "${CLONE}" "${SAVE}" "${READONLY}")"
+# restore renames the oneVmVolumes name. CLONE and CDROM append
+# -<vm>-<disk>. A persistent or other immutable disk keeps the image name.
+_restore_vol="${SP_VOL}"
 
 if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
@@ -228,6 +252,12 @@ else # image persist
                 ;;
         esac
     fi
+fi
+
+if boolTrue "CLONE" || [[ "${TYPE}" == "CDROM" ]]; then
+    storpoolDeleteRestoreLeftovers "${SP_VOL}"
+else
+    storpoolDeleteRestoreLeftovers "${_restore_vol}"
 fi
 
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
