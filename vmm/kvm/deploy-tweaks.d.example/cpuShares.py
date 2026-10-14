@@ -82,11 +82,15 @@ for t_cputune_shares_e in vm.findall(xpath):
             t_cputune_shares_e.text.isnumeric()):
         set_cputune_shares = int(t_cputune_shares_e.text)
 
-cputune_shares_e: Optional[ET.Element] = root.find('./cputune/shares')
-if cputune_shares_e is not None:
-    if int(cputune_shares_e.text or "0") != set_cputune_shares:
-        cputune_shares_e.text = str(set_cputune_shares)
-        changed = True
+cputune_e: Optional[ET.Element] = root.find('./cputune')
+if cputune_e is None:
+    cputune_e = ET.SubElement(root, 'cputune')
+cputune_shares_e: Optional[ET.Element] = cputune_e.find('./shares')
+if cputune_shares_e is None:
+    cputune_shares_e = ET.SubElement(cputune_e, 'shares')
+if (cputune_shares_e.text or '') != str(set_cputune_shares):
+    cputune_shares_e.text = str(set_cputune_shares)
+    changed = True
 
 if changed:
     indent(root)

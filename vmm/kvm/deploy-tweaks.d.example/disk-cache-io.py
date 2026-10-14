@@ -148,12 +148,21 @@ def tm_mad_for(disk_id: str) -> Optional[str]:
     return tm_mad_e.text.strip().lower()
 
 
+def is_context_disk(disk_id: str) -> bool:
+    element: Optional[ET.Element] = vm.find('./TEMPLATE/CONTEXT/DISK_ID')
+    if element is None or element.text is None:
+        return False
+    return element.text.strip() == disk_id
+
+
 def is_storpool(disk: ET.Element) -> bool:
     path: Optional[str] = source_path(disk)
     if path is None:
         return False
     disk_id: Optional[str] = disk_id_text(path)
     if disk_id is None:
+        return False
+    if is_context_disk(disk_id):
         return False
     return tm_mad_for(disk_id) == 'storpool'
 

@@ -76,9 +76,9 @@ The cache half of `disk-cache-io.py` already matches upstream for every disk,
 not just StorPool. The useful delta is `io='native'` on StorPool volumes.
 
 Context disks are hardcoded `cache='none'` with no `io` and no `discard`.
-`context-cache.py` sets `io='native'` on every `type='file'` CD-ROM. That is
-order-dependent with `volatile2dev.py`: if the file disk is flipped to
-`type='block'` first, this script does not match. `io='native'` on a
+`context-cache.py` sets `io='native'` on every `type='file'` CD-ROM and on
+the context CD-ROM after `volatile2dev.py` has flipped it to `type='block'`.
+`disk-cache-io.py` leaves that disk id alone. `io='native'` on a
 file-backed context ISO is a poor fit.
 
 ### `disk-serial.py`
@@ -177,9 +177,8 @@ These change the domain in ways `LibVirtDriverKVM.cc` does not.
   vs `T_NVME_PCIDEVICE*`). Upstream has no NVMe disk type. One of the two
   is enough.
 * **`cputune.py`.** `period` / `quota` for vcpu, global, emulator, and
-  iothread. Upstream never emits those. When any quota is set it also
-  deletes `<shares>`, which fights both `cpuShares.py` and the upstream
-  shares element.
+  iothread. Upstream never emits those. `<shares>` is left for
+  `cpuShares.py` and for the element OpenNebula already wrote.
 * **`force-detach.py`.** Reads the system datastore id and then exits. It
   does not change the domain.
 

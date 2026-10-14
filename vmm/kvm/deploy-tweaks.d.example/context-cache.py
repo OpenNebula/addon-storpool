@@ -122,6 +122,47 @@ def apply_driver(disk: ET.Element, pairs: List[Tuple[str, str]]) -> None:
         driver_e.set(item[0], item[1])
 
 
+def source_path(disk: ET.Element) -> Optional[str]:
+    source_e: Optional[ET.Element] = disk.find('./source')
+    if source_e is None:
+        return None
+    if 'file' in source_e.attrib:
+        return source_e.attrib['file']
+    if 'dev' in source_e.attrib:
+        return source_e.attrib['dev']
+    return None
+
+
+def disk_id_text(path: str) -> Optional[str]:
+    dotted: str = path.split('.')[-1]
+    if dotted.isdigit():
+        return dotted
+    leaf: str = path.rsplit('/', 1)[-1]
+    if leaf.startswith('sp-') and leaf[3:].isdigit():
+        return leaf[3:]
+    return None
+
+
+def context_disk_id() -> Optional[str]:
+    element: Optional[ET.Element] = vm.find('./TEMPLATE/CONTEXT/DISK_ID')
+    if element is None or element.text is None:
+        return None
+    text: str = element.text.strip()
+    if text.isdigit():
+        return text
+    return None
+
+
+def is_context_cdrom(disk: ET.Element) -> bool:
+    wanted: Optional[str] = context_disk_id()
+    if wanted is None:
+        return False
+    path: Optional[str] = source_path(disk)
+    if path is None:
+        return False
+    return disk_id_text(path) == wanted
+
+
 xmlDomain: str = sys.argv[1]
 doc: ET.ElementTree = ET.parse(xmlDomain)
 root: ET.Element = doc.getroot()
@@ -134,8 +175,10 @@ for prefix, uri in ns.items():
     ET.register_namespace(prefix, uri)
 
 pairs: List[Tuple[str, str]] = driver_values()
-cdroms: List[ET.Element] = root.findall(
-    './devices/disk[@type="file"][@device="cdrom"]')
+cdroms: List[ET.Element] = []
+for disk in root.findall('./devices/disk[@device="cdrom"]'):
+    if disk.get('type') == 'file' or is_context_cdrom(disk):
+        cdroms.append(disk)
 if not cdroms:
     sys.exit(0)
 disk: ET.Element

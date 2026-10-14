@@ -56,7 +56,7 @@ Once all helper scripts are processed, the native _vmm/kvm/deploy_ script on the
 
 ### context-cache.py
 
-Sets `cache='none'` and `io='native'` on every `devices/disk` with `type='file'` and `device='cdrom'`. The `driver` element is created when it is missing. A block disk and a file disk that is not a cdrom are left unchanged.
+Sets `cache='none'` and `io='native'` on every `devices/disk` with `device='cdrom'` that is `type='file'`, and on the context CD-ROM (`TEMPLATE/CONTEXT/DISK_ID`) when that disk is already `type='block'`. The `driver` element is created when it is missing. A block disk that is not the context disk, and a file disk that is not a cdrom, are left unchanged.
 
 Optional `USER_TEMPLATE` keys use the same values as `disk-cache-io.py`. The template overrides the environment. An empty value is unset. The keys are read from the VM XML.
 
@@ -67,7 +67,7 @@ Optional `USER_TEMPLATE` keys use the same values as `disk-cache-io.py`. The tem
 * `T_CONTEXT_IOEVENTFD`: `on`, `off`
 * `T_CONTEXT_QUEUE_SIZE`: a power of two, written as `queue_size`
 
-Every set key is checked before any disk is edited. A bad value exits 2, which aborts the deploy. If there is no file cdrom and the keys are valid, the script exits 0 and leaves the domain unchanged.
+Every set key is checked before any disk is edited. A bad value exits 2, which aborts the deploy. If no CD-ROM matches and the keys are valid, the script exits 0 and leaves the domain unchanged.
 
 ### cpu.py
 
@@ -158,7 +158,7 @@ The special keyword _delete_ removes the `match` attribute.
 
 ### `cpuShares.py`
 
-The script will reconfigure _/domain/cputune/shares_ using the following formula
+The script writes _/domain/cputune/shares_, creating `cputune` and `shares` when they are missing, using the following formula
 
 `( VCPU * multiplier ) * 1024`
 
@@ -182,7 +182,7 @@ Sets `cache='none'`, `io='native'`, and `discard='unmap'` on StorPool disks. The
 
 A disk matches when its source `file` or `dev` path carries a disk id and that disk's `TM_MAD`, compared case-insensitively, is `storpool`. The id is the last `.` component when that component is an integer (`disk.0`). A source path `/dev/sp-<id>` uses that id. Any other source attribute is skipped. A path that does not yield an integer disk id is skipped.
 
-The id is read from `TEMPLATE/DISK[DISK_ID]/TM_MAD`. When that element is missing and `TEMPLATE/CONTEXT[DISK_ID]` exists, the script uses `HISTORY_RECORDS/HISTORY[last()]/TM_MAD`.
+The id is read from `TEMPLATE/DISK[DISK_ID]/TM_MAD`. When that element is missing and `TEMPLATE/CONTEXT[DISK_ID]` exists, the script uses `HISTORY_RECORDS/HISTORY[last()]/TM_MAD`. A disk whose id is `TEMPLATE/CONTEXT/DISK_ID` is left unchanged, so `context-cache.py` owns its driver.
 
 Optional `USER_TEMPLATE` keys override those defaults when set. The template overrides the environment. An empty value is unset.
 
@@ -611,7 +611,7 @@ An eject leaves the tray. The tray name is one OpenNebula does not hand out, so 
 
 ## `cputune.py`
 
-Use libvirt `vCPU` tune parameters instead of cpu/shares (or in addition to the `cpushares`). Refer to the documentation if libvirt for details.
+Use libvirt `vCPU` tune parameters. The script writes the period and quota elements and leaves `<shares>` in place. Refer to the libvirt documentation for the parameters.
 
 The following parameters could be set as a global defaults in the `addon-storpoolrc` file, and as overrides per VM in the VM Attributes:
 
@@ -624,11 +624,5 @@ T_CPUTUNE_EMULATOR_PERIOD
 T_CPUTUNE_EMULATOR_QUOTA
 T_CPUTUNE_IOTHREAD_PERIOD
 T_CPUTUNE_IOTHREAD_QUOTA
-```
-
-By default, the script removes the cpu/shares when a CPU tune parameter is defined. To keep the cpu/shares, define the following variable as a global variable or as VM attribute:
-
-```
-T_CPUTUNE_SHARES_KEEP=1
 ```
 
