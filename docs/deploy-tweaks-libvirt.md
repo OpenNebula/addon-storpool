@@ -33,13 +33,13 @@ A second child with the same name is not rejected by the parser, which
 stores the last `state`. The script sets `state` on the existing child and
 leaves one copy.
 
-### `q35-pcie-root.py`: NUMA expander buses are removed
+### `q35-pcie-root.py`: indexed root ports are left alone
 
-With NUMA nodes, `LibVirtDriverKVM.cc` writes `pcie-expander-bus`
-controllers and root ports addressed onto them. `T_Q35_PCIE_ROOT_PORTS`
-removes every `type='pci'` controller, so those buses go away while device
-PCI addresses still name them. Libvirt then rejects the domain or the
-devices land on the flat root. `CURRENT-ISSUES.md` issue 46.
+`T_Q35_PCIE_ROOT_PORTS` rewrites the PCIe controllers only when no
+`pcie-root-port` has an `index`. OpenNebula 7.2 and later writes that
+index on the flat topology, and 7.0 and later writes it on the NUMA
+expander ports. Those domains, including `pcie-expander-bus` and the
+device addresses that name them, stay as OpenNebula wrote them.
 
 ### `console.py`: a fixed pty path
 
@@ -181,12 +181,13 @@ unset). `context-cache.py` writes `cache='none'` and `io='native'` on each
 ### 9. PCI topology and NVMe
 
 `T_Q35_PCIE_ROOT_PORTS` replaces every `type='pci'` controller in
-`<devices>` on a q35 domain: one `<controller type='pci' index='0'
-model='pcie-root'/>`, that many `pcie-root-port` controllers indexed from
-1, and a `pcie-to-pci-bridge` at the next index. An existing `<pcihole64>`
-on the root is kept. With the key unset, OpenNebula's controllers stay.
-Without NUMA nodes this is the topology OpenNebula writes from
-`Q35_ROOT_PORTS`.
+`<devices>` on a q35 domain when no `pcie-root-port` has an `index`: one
+`<controller type='pci' index='0' model='pcie-root'/>`, that many
+`pcie-root-port` controllers indexed from 1, and a `pcie-to-pci-bridge`
+at the next index. An existing `<pcihole64>` on the root is kept. An
+indexed root port is left unchanged, which is what OpenNebula writes from
+7.2 (flat) and from 7.0 (NUMA expander buses). With the key unset,
+OpenNebula's controllers stay.
 
 Root ports can also set `model name=`, `hotplug`, and
 `<target chassis= port=>`. Libvirt fills chassis and port when they are

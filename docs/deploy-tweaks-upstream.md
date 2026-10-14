@@ -22,7 +22,7 @@ second and can undo the upstream XML.
 |---|---|---|---|
 | `resizeCpuMem.py` | `VCPU` / `VCPU_MAX`, `MEMORY` / `MEMORY_MAX`, `MEMORY_RESIZE_MODE` | 6.0 | The tweak writes `<vcpu current>` and `<vcpus>` from `T_VCPU_MAX`, a balloon ceiling from `T_MEMORY_MAX` (`<memory>` is the max, `<currentMemory>` the current size), and `<maxMemory slots>` from `T_MAXMEMORY` plus `T_MAXMEMORY_SLOTS`. Upstream writes the same elements from the template attributes, with `MEMORY_SLOTS` default 16. |
 | `cpuShares.py` | `<cputune><shares>` from the VM `CPU` attribute | long-standing; cgroup v2 scaling is in this tree | Upstream uses `ceil(CPU × 1024)` on cgroup v1 and `ceil(CPU × 100)` on cgroup v2, clamped. The tweak uses `ceil(VCPU × T_CPUTUNE_MUL × 1024)` with mul default `0.1`, and ignores cgroup v2. An absolute `T_CPUTUNE_SHARES` is the only extra knob. |
-| `q35-pcie-root.py` | `Q35_ROOT_PORTS` (default 16), plus a NUMA expander topology | 6.8 | Both write an indexed `pcie-root`, root ports, and a `pcie-to-pci-bridge`. The tweak replaces every `type='pci'` controller with that flat set, so on a VM with NUMA nodes it removes the `pcie-expander-bus` controllers upstream wrote (`CURRENT-ISSUES.md` issue 46). `Q35_ROOT_PORTS` is host/cluster only; a per-VM port count is the one knob upstream lacks. |
+| `q35-pcie-root.py` | `Q35_ROOT_PORTS` (default 16), plus a NUMA expander topology | 6.8; indexed flat ports in 7.2 | The tweak rewrites only when no `pcie-root-port` has an `index` (OpenNebula before 7.2 on a flat VM, and before 6.8 when it wrote none). An indexed port, including the 7.0 NUMA expander topology, is left as upstream wrote it. `Q35_ROOT_PORTS` is host/cluster only; the per-VM count applies only to those older domains. |
 | `uuid.py` | `OS/UUID` | 6.0 | Same `<uuid>` element. `OS/UUID` is the attribute that belongs in the template. |
 | `hyperv-clock.py` | `HYPERV_TIMERS` | same shape as the tweak | The four timers match the stock config: rtc catchup, pit delay, hpet off, hypervclock on. Emitted when `FEATURES/HYPERV=yes`. The tweak deletes and rewrites those same timers. |
 | `blk-queues.py` | `FEATURES/VIRTIO_SCSI_QUEUES=auto` | 6.8 | `auto` means "equal to `VCPU`". The stock config already sets that. This script only edits the SCSI controller. `T_BLK_QUEUES` does not match what it changes. |
@@ -197,8 +197,8 @@ Leave these linked:
 
 Do not link these on 6.8 and later:
 
-* `q35-pcie-root.py`, unless no VM has NUMA nodes and a per-VM port count
-  is needed
+* `q35-pcie-root.py` on 7.2 and later: an indexed `pcie-root-port` is left
+  unchanged, so the link does not apply a per-VM port count
 * `blk-queues.py`
 * `hyperv-clock.py`
 * `uuid.py`

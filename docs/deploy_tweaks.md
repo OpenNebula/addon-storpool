@@ -296,7 +296,7 @@ Set/update `domain/os` element; see [UEFI boot](uefi_boot.md).
 
 ### `q35-pcie-root.py`
 
-`T_Q35_PCIE_ROOT_PORTS` replaces the PCIe controllers on a q35 domain. The value is how many `pcie-root-port` controllers to write. The domain gets one `pcie-root` at index 0, root ports indexed from 1, and a `pcie-to-pci-bridge` at the next index. An existing `<pcihole64>` on the root is kept. With the key unset, the domain is left unchanged. A bad value exits 2, which aborts the deploy.
+`T_Q35_PCIE_ROOT_PORTS` replaces the PCIe controllers on a q35 domain when OpenNebula has not already indexed them. The value is how many `pcie-root-port` controllers to write. The domain gets one `pcie-root` at index 0, root ports indexed from 1, and a `pcie-to-pci-bridge` at the next index. An existing `<pcihole64>` on the root is kept. If any `pcie-root-port` already has an `index`, the domain is left unchanged: that is the flat topology from 7.2 on, and the NUMA expander topology from 7.0 on. With the key unset, the domain is left unchanged. A bad value exits 2, which aborts the deploy.
 
 ### `resizeCpuMem.py`
 

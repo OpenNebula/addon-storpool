@@ -83,6 +83,16 @@ if os_type is not None and os_type.get('machine') is not None:
 if 'q35' not in machine:
     fatal('T_Q35_PCIE_ROOT_PORTS requires machine type q35')
 
+# OpenNebula 7.2 and later writes an index on each pcie-root-port (flat),
+# and 7.0 and later does so for the NUMA expander topology. Rewriting those
+# controllers drops the expander buses. Older domains have no root ports,
+# or root ports with no index.
+for controller in root.iter('controller'):
+    if (controller.get('type') == 'pci'
+            and controller.get('model') == 'pcie-root-port'
+            and controller.get('index') is not None):
+        sys.exit(0)
+
 devices_list = root.findall('./devices')
 if not devices_list:
     fatal('missing devices')
