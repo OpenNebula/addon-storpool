@@ -44,13 +44,22 @@ if [[ -n "$6" ]]; then
 fi
 export BJ_ID  #  TBD: remove
 
-splog "${VM_ID} ${KVMHOST} ${VMDIR} DISKS='${DISKS}' ${DEPLOY_ID}${BJ_ID:+ JOB_ID=${BJ_ID}} SYSDS_ID=${SYSDS_ID}"
+# backup-cancel delivers TERM. Exit after the trap cleanup, and run the
+# long copy steps under signalWait so that signal is not held until they end.
+SP_EXIT_ON_SIGNAL=1
+# datastore backup_cancel keeps processes named ruby, then matches this
+# command line (the script path and the deploy id). The shebang name is bash.
+if [[ -w /proc/self/comm ]]; then
+    printf '%s' ruby > /proc/self/comm || true
+fi
 
-B_DIR="${VMDIR}/backup"
+splog "${VM_ID} ${KVMHOST} ${VMDIR} DISKS='${DISKS}' ${DEPLOY_ID}${BJ_ID:+ JOB_ID=${BJ_ID}} SYSDS_ID=${SYSDS_ID}"
 
 VM_XML="$(mktemp -t "prebackup-${VM_ID}-XXXXXXXX")"
 trapAdd "rm -f \"${VM_XML}\""
 cat > "${VM_XML}"
+
+oneBackupTarget "${KVMHOST}" "${VMDIR}" "${VM_ID}" "${VM_XML}"
 
 oneHostInfo "${KVMHOST}"
 
@@ -58,10 +67,10 @@ oneDatastoreInfo "${SYSDS_ID}"
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
 
-SNAPSHOTS_LIST="${B_DIR}/.storpool_snapshots"
+SNAPSHOTS_LIST="${B_LOCAL}/.storpool_snapshots"
 
-if [[ -d "${B_DIR}" ]]; then
-    splog "[I] pre-clean ${B_DIR} ..."
+if [[ -d "${B_LOCAL}" ]]; then
+    splog "[I] pre-clean ${B_LOCAL} ..."
     if [[ -f "${SNAPSHOTS_LIST}" ]]; then
         while read -r -u "${spfh}" volume sGlobalId sName; do
             splog "[I] Removing snapshot ${sName}, volume ${volume}"
@@ -71,15 +80,19 @@ if [[ -d "${B_DIR}" ]]; then
         done {spfh}< <(cat "${SNAPSHOTS_LIST}" || true)
         exec {spfh}<&-
     fi
-    rm -rf "${B_DIR}"
+    rm -rf "${B_LOCAL}"
     splog "[I] pre-clean completed ($?)"
 fi
+oneBackupRemoveDir "${KVMHOST}" "${B_DISK_DIR}"
+if [[ "${B_HOST}:${B_DIR}" != "${KVMHOST}:${B_DISK_DIR}" ]]; then
+    oneBackupRemoveDir "${B_HOST}" "${B_DIR}"
+fi
 
-mkdir -p "${B_DIR}"
-splog "mkdir -p ${B_DIR}"
+mkdir -p "${B_LOCAL}"
+splog "mkdir -p ${B_LOCAL}"
 
-base64 -w 60 "${VM_XML}" >"${B_DIR}/vm.xml"
-splog "base64 ${VM_XML} to ${B_DIR}/vm.xml ($?)"
+base64 -w 60 "${VM_XML}" >"${B_LOCAL}/vm.xml"
+splog "base64 ${VM_XML} to ${B_LOCAL}/vm.xml ($?)"
 
 rm -f "${VM_XML}"
 trapDel "rm -f \"${VM_XML}\""
@@ -92,7 +105,7 @@ for disk in ${DISKS//:/ }; do
 done
 
 B_SUFFIX="ONEBACKUP-$(date +%s || true)"
-echo "${B_SUFFIX}" >"${B_DIR}/.snapshot_suffix"
+echo "${B_SUFFIX}" >"${B_LOCAL}/.snapshot_suffix"
 declare -a list_a
 backups=
 
@@ -129,7 +142,7 @@ done {xfh}< <(jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId) \(.snaps
 exec {xfh}<&-
 
 if [[ -n "${TPM_MODEL}" ]]; then
-    oneTpmBackup "${VM_ID}" "${VMDIR}" "${KVMHOST}" "${B_DIR}/disk.tpm.0"
+    oneTpmBackup "${VM_ID}" "${VMDIR}" "${KVMHOST}" "${B_DISK_DIR}"
 fi
 
 for bak in ${backups}; do
@@ -146,20 +159,20 @@ for bak in ${backups}; do
         exit 1
     fi
     snapPath="/dev/storpool-byid/${sGlobalId}"
-    dstFile="${B_DIR}/disk.${did}.0"
+    dstFile="${B_DISK_DIR}/disk.${did}.0"
     RCMD=$(cat <<EOF
 umask 077
-mkdir -p "${B_DIR}"
+mkdir -p "${B_DISK_DIR}"
 ${QEMU_IMG:-qemu-img} convert -f raw -T none -t none -O qcow2 "${snapPath}" "${dstFile}"
 EOF
 )
     splog "[I] RCMD ${KVMHOST}::$(echo "${RCMD}" | tr '\n' ';' || true)"
-    ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" "Error extracting ${RCMD} on ${KVMHOST}"
+    signalWait ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" "Error extracting ${RCMD} on ${KVMHOST}" || exit $?
     json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
     DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
 done
 
-${RSYNC:-rsync} -a "${B_DIR}"/ "${KVMHOST}:${B_DIR}"/
-splog "[I] ${RSYNC:-rsync} -a ${B_DIR}/ ${KVMHOST}:${B_DIR}/ ($?)"
+oneBackupPublish "${KVMHOST}" || exit $?
+splog "[I] backup published to ${B_HOST}:${B_DIR}"
 
 splog "END ${VM_ID}"

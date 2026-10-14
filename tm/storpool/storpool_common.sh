@@ -329,7 +329,10 @@ function _trapCompose()
 
 function _trapArm()
 {
-    trap '_sp_trap_run' TERM INT QUIT EXIT
+    trap '_sp_trap_run TERM' TERM
+    trap '_sp_trap_run INT' INT
+    trap '_sp_trap_run QUIT' QUIT
+    trap '_sp_trap_run EXIT' EXIT
 }
 
 # Return $1 so the next command sees it in $?.
@@ -340,7 +343,7 @@ function _sp_trap_rc()
 
 function _sp_trap_run()
 {
-    local _rc=$? _c _cret _errexit=0
+    local _sig="${1-}" _rc=$? _c _cret _errexit=0 _job=""
     [[ -n ${_SP_TRAP_RUNNING} ]] && return 0
     _SP_TRAP_RUNNING=1
     case $- in
@@ -348,6 +351,13 @@ function _sp_trap_run()
     esac
     trap '' TERM INT QUIT
     set +e
+    # A cancel signal must stop signalWait's process group before the
+    # cleanup commands start their own children.
+    if [[ -n "${SP_EXIT_ON_SIGNAL-}" && "${_sig}" =~ ^(TERM|INT|QUIT)$ ]]; then
+        for _job in $(jobs -p); do
+            kill -TERM -- "-${_job}" 2>/dev/null || kill -TERM "${_job}" 2>/dev/null || true
+        done
+    fi
     for _c in "${TRAP_USER_A[@]}"; do
         (
             trap - EXIT TERM INT QUIT
@@ -360,10 +370,91 @@ function _sp_trap_run()
         fi
     done
     rm -rf "${TMPDIR}"
+    if [[ -n "${SP_EXIT_ON_SIGNAL-}" ]]; then
+        case "${_sig}" in
+            TERM) exit 143 ;;
+            INT)  exit 130 ;;
+            QUIT) exit 131 ;;
+        esac
+    fi
     _SP_TRAP_RUNNING=
     _trapArm
     [[ ${_errexit} -eq 1 ]] && set -e
     return 0
+}
+
+function signalWait()
+{
+    local _pid="" _rc=0 _mon=0
+    case $- in
+        *m*) _mon=1 ;;
+    esac
+    set -m
+    (
+        trap - TERM INT QUIT EXIT
+        # Stay out of `ps -C ruby`. Cancel must signal the parent, whose
+        # trap kills this process group. A direct TERM here drops the group.
+        if [[ -w /proc/self/comm ]]; then
+            printf '%s' bash > /proc/self/comm || true
+        fi
+        "$@"
+    ) &
+    _pid=$!
+    [[ ${_mon} -eq 0 ]] && set +m
+    wait "${_pid}" || _rc=$?
+    return "${_rc}"
+}
+
+function oneBackupTarget()
+{
+    local _host="$1" _vmdir="$2" _vmid="$3" _xml="$4"
+    local _bridge="" _base="" _conf=""
+    B_LOCAL="${_vmdir}/backup"
+    _bridge="$("${SPXML}" get /VM/BACKUPS/BACKUP_CONFIG/LAST_BRIDGE <"${_xml}" 2>/dev/null | tr -d '\0' || true)"
+    B_HOST="${_bridge:-${_host}}"
+    for _conf in \
+        "${ONE_LOCATION:+${ONE_LOCATION}/var/remotes/etc/datastore/datastore.conf}" \
+        "/var/lib/one/remotes/etc/datastore/datastore.conf"
+    do
+        [[ -n "${_conf}" && -f "${_conf}" ]] || continue
+        _base="$(getFromConf "${_conf}" "BACKUP_BASE_PATH")"
+        if [[ -z "${_base}" ]]; then
+            _base="$(getFromConf "${_conf}" "export BACKUP_BASE_PATH")"
+        fi
+        break
+    done
+    if [[ -n "${_base}" ]]; then
+        B_DIR="${_base}/${_vmid}/backup"
+    else
+        B_DIR="${B_LOCAL}"
+    fi
+    if [[ "${B_HOST}" == "${_host}" ]]; then
+        B_DISK_DIR="${B_DIR}"
+    else
+        B_DISK_DIR="${B_LOCAL}"
+    fi
+    splog "[I] backup destination ${B_HOST}:${B_DIR} (disks on ${_host}:${B_DISK_DIR})"
+}
+
+function oneBackupRemoveDir()
+{
+    local _host="$1" _dir="$2"
+    [[ -n "${_host}" && -n "${_dir}" ]] || return 0
+    splog "[I] rm -rf ${_host}:${_dir}"
+    ssh_forward ssh_exec_and_log "${_host}" "rm -rf \"${_dir}\"" \
+        "Error removing ${_dir} on ${_host}"
+}
+
+function oneBackupPublish()
+{
+    local _kvm="$1" _rc=0
+    ssh_forward ssh_exec_and_log "${B_HOST}" "mkdir -p \"${B_DIR}\"" \
+        "Error creating ${B_DIR} on ${B_HOST}"
+    if [[ "${B_HOST}:${B_DIR}" != "${_kvm}:${B_DISK_DIR}" ]]; then
+        signalWait "${RSYNC:-rsync}" -a "${_kvm}:${B_DISK_DIR}/" "${B_HOST}:${B_DIR}/" || return $?
+    fi
+    signalWait "${RSYNC:-rsync}" -a "${B_LOCAL}/" "${B_HOST}:${B_DIR}/" || _rc=$?
+    return "${_rc}"
 }
 
 function trapReset()
