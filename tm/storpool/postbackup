@@ -45,8 +45,6 @@ if [[ -n "$6" ]]; then
 fi
 export DISKS BJ_ID
 
-B_DIR="${VMDIR}/backup"
-
 if boolTrue "DEBUG_POSTBACKUP"; then
     splog "${KVMHOST} ${VMDIR} ${DISKS} ${DEPLOY_ID}${BJ_ID:+ ${BJ_ID}} ${VM_ID} ${SYSDS_ID}"
 fi
@@ -59,9 +57,11 @@ VM_XML="$(mktemp -t "postbackup-${VM_ID}-XXXXXXXX")"
 trapAdd "rm -f \"${VM_XML}\""
 cat > "${VM_XML}"
 
-if [[ -d "${B_DIR}" ]]; then
-    splog "[I] post-clean ${B_DIR} ..."
-    snapshots_list="${B_DIR}/.storpool_snapshots"
+oneBackupTarget "${KVMHOST}" "${VMDIR}" "${VM_ID}" "${VM_XML}"
+
+if [[ -d "${B_LOCAL}" ]]; then
+    splog "[I] post-clean ${B_LOCAL} ..."
+    snapshots_list="${B_LOCAL}/.storpool_snapshots"
     if [[ -f ${snapshots_list} ]]; then
         while read -r -u "${spfh}" volume sGlobalId sName; do
             if boolTrue "DEBUG_BACKUP"; then
@@ -75,18 +75,15 @@ if [[ -d "${B_DIR}" ]]; then
         done {spfh}< <(cat "${snapshots_list}" || true)
         exec {spfh}<&-
     fi
-    rm -rf "${B_DIR}"
+    rm -rf "${B_LOCAL}"
     splog "[I] post-clean completed ($?)"
 else
-    splog "[W] Folder not found. ${B_DIR}"
+    splog "[W] Folder not found. ${B_LOCAL}"
 fi
 
-RCMD=$(cat <<EOF
-rm -rf "${B_DIR}"
-EOF
-)
-splog "[I]RCMD ${KVMHOST}::${RCMD}"
-ssh_forward ssh_exec_and_log "${KVMHOST}" "${RCMD}" \
-                  "Error extracting ${RCMD} on ${KVMHOST}"
+oneBackupRemoveDir "${KVMHOST}" "${B_DISK_DIR}"
+if [[ "${B_HOST}:${B_DIR}" != "${KVMHOST}:${B_DISK_DIR}" ]]; then
+    oneBackupRemoveDir "${B_HOST}" "${B_DIR}"
+fi
 
 splog "END"
