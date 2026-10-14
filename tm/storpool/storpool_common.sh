@@ -2080,7 +2080,7 @@ function storpoolSnapshotRevert()
         if [[ -n "${_IS_SNAPSHOT}" ]]; then
             storpoolSnapshotDelete "${_VOL_UID}" "UID_only"
             storpoolVolumeTag "${SP_UID}" "${LOC_TAG};virt;img" "${LOC_TAG_VAL};one;${_SP_VOL}"
-            storpoolVolumeFreeze "${SP_UID}"
+            storpoolVolumeFreeze "${SP_UID}" "volume"
         else
             storpoolDelete "${_VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${_SP_VOL}\",\"reason\":\"snap_revert\"" "1"  # TBD: tags
         fi
