@@ -92,55 +92,6 @@ function do_patch()
     return 0
 }
 
-function patch_hook()
-{
-    local _hook="$1"
-    local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
-    local _is_sh=0 _is_patched=0 _backup="" _is_bash=""
-    grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
-    grep  "${_hook_line}" "${_hook}" &>/dev/null && _is_patched=1
-    if [[ "$(grep -v -E '^#|^$' "${_hook}" || true)" == "exit 0" ]]; then
-        if [[ "${_is_patched}" == "1" ]]; then
-            echo "*** ${_hook} already patched"
-        else
-            _backup="${_hook}.backup$(date +%s)"
-            echo "*** Create backup of ${_hook} as ${_backup}"
-            cp "${CP_ARGS[@]}" "${_hook}" "${_backup}"
-            if [[ "${_is_sh}" == "1" ]]; then
-                grep -E '^#!/bin/bash$' "${_hook}" &>/dev/null && _is_bash=1
-                if [[ "${_is_bash}" == "1" ]]; then
-                    echo "*** ${_hook} already bash script"
-                else
-                    sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
-                fi
-            fi
-            sed -i -e "s|^exit 0|${_hook_line}\nexit 0|" "${_hook}"
-        fi
-    else
-        echo "*** ${_hook} file not empty!"
-        echo " ** Note! Please merge the following line to ${_hook}"
-        echo " **"
-        echo " ** ${_hook_line//\\&/&}"
-        echo " **"
-        if [[ "${_is_sh}" == "1" ]]; then
-            echo " ** Note! Set script to bash:"
-            echo " **   sed -i -e 's|^#!/bin/sh\$|#!/bin/bash|' \"${_hook}\""
-        fi
-    fi
-}
-
-function findFile()
-{
-    local c="" f="" d="$1" csum="$2" xfh=""
-    while read -r -u "${xfh}" c f; do
-        if [[ "${c}" == "${csum}" ]]; then
-            echo "${f}"
-            break
-        fi
-    done {xfh}< <(md5sum "${d}"/* 2>/dev/null || true)
-    exec {xfh}<&-
-}
-
 oneVersion(){
     local arr=()
     read -r -a arr <<< "${1//\./ }"
@@ -159,6 +110,7 @@ if [[ -f "${ONE_VAR}/remotes/VERSION" ]]; then
 fi
 
 oneVersion "${ONE_VER}"
+echo "*** OpenNebula version ${ONE_VER} edition ${ONE_EDITION}"
 
 if [[ -f "scripts/install-${ONE_VER}.sh" ]]; then
     INSTALL_SCRIPT="scripts/install-${ONE_VER}.sh"
@@ -170,7 +122,7 @@ else
     exit 1
 fi
 
-TMPDIR="$(mktemp -d addon-storpool-install-XXXXXXXX)"
+TMPDIR="$(mktemp -d -t addon-storpool-install.XXXXXXXX)"
 export TMPDIR
 # shellcheck disable=SC2064
 trap "rm -rf \"${TMPDIR}\"" EXIT QUIT TERM
