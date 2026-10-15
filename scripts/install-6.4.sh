@@ -35,6 +35,37 @@ ONE_MAJOR="${ONE_MAJOR:-0}"
 ONE_MINOR="${ONE_MINOR:-0}"
 ONE_USER="${ONE_USER:-oneadmin}"
 
+function run_patches()
+{
+    local _mode="$1" _mad="" _ver="" _patchdir="" _patchfile="" _failed=0 patchfh=""
+    for _mad in im vmm vnm datastore; do
+        [[ -d "${CWD}/patches/${_mad}" ]] || continue
+        for _ver in "${ONE_VER:-}" "${ONE_MAJOR:-}.${ONE_MINOR:-}"; do
+            _patchdir="${CWD}/patches/${_mad}/${_ver}"
+            [[ -d "${_patchdir}" ]] || continue
+            if [[ "${_mode}" == "apply" ]]; then
+                echo "*** Applying patches found in ${_patchdir} ..."
+            fi
+            pushd "${ONE_VAR}" >/dev/null || exit 1
+            while read -r -u "${patchfh}" _patchfile; do
+                if [[ "${_mode}" == "apply" ]]; then
+                    do_patch "${_patchfile}" "backup" || exit 1
+                elif ! patch_ok "${_patchfile}"; then
+                    echo "   *** Note! Can't apply patch ${_patchfile}! Please merge manually." >&2
+                    _failed=1
+                fi
+            done {patchfh}< <(ls -1 "${_patchdir}"/*.patch || true)
+            exec {patchfh}<&-
+            popd >/dev/null || exit 1
+            break
+        done
+    done
+    [[ "${_failed}" -eq 0 ]] || exit 1
+}
+
+run_patches check
+run_patches apply
+
 # install datastore and tm MAD
 for MAD in datastore tm; do
     M_DIR="${ONE_VAR:-/var/lib/one}/remotes/${MAD}"
@@ -115,25 +146,6 @@ for f in {save,restore}.storpool{,-pre,-post}; do
     if [[ -f "${ONE_VAR}/remotes/vmm/kvm/${f}" ]]; then
         rm -vf "${ONE_VAR}/remotes/vmm/kvm/${f}"
     fi
-done
-
-for mad in im vmm vnm datastore; do
-    [[ -d "patches/${mad}" ]] || continue
-    for ver in "${ONE_VER:-}" "${ONE_MAJOR:-}.${ONE_MINOR:-}"; do
-        patchdir="${PWD}/patches/${mad}/${ver}"
-        [[ -d "${patchdir}" ]] || continue
-        echo "*** Applying patches found in ${patchdir} ..."
-        pushd "${ONE_VAR}" || exit 1
-        while read -r -u "${patchfh}" patchfile; do
-            do_patch "${patchfile}" "backup" || exit 1
-        done {patchfh}< <(ls -1 "${patchdir}"/*.patch || true)
-        exec {patchfh}<&-
-        if ! popd; then
-            echo "ERROR!" >&2
-            exit 1
-        fi
-        break 1
-    done
 done
 
 echo -n "*** addon-storpoolrc "
