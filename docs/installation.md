@@ -12,23 +12,19 @@ See the *Requirements* section in [StorPool storage driver](../README.md).
 
 ### Front-end dependencies
 
-XML documents are processed by `datastore/spxml.py` with the Python shipped by
-the StorPool packages (`/opt/storpool/python3`), so no XML tools are needed from
-the distribution.
-
 ```bash
  CentOS 7 front-end
-yum -y install --enablerepo=epel jq nmap-ncat pigz tar
+yum -y install --enablerepo=epel jq nmap-ncat pigz python3-lxml tar
 ```
 
 ```bash
  AlmaLinux 8 front-end
-dnf -y install --enablerepo=epel jq nmap-ncat pigz tar
+dnf -y install --enablerepo=epel jq nmap-ncat pigz python3-lxml tar
 ```
 
 ```bash
  Ubuntu 22.04/24.04 front-end
-apt -y install tar jq netcat pigz
+apt -y install tar jq netcat pigz python3-lxml
 ```
 
 ### Node dependencies
@@ -37,17 +33,17 @@ Also use when adding new hosts:
 
 ```bash
  CentOS 7 node-kvm
-yum -y install --enablerepo=epel jq pigz tar
+yum -y install --enablerepo=epel jq pigz python3-lxml tar
 ```
 
 ```bash
  AlmaLinux 8 node-kvm
-dnf -y install --enablerepo=epel jq pigz tar
+dnf -y install --enablerepo=epel jq pigz python3-lxml tar
 ```
 
 ```bash
  Ubuntu 22.04/24.04 node-kvm
-apt -y install jq pigz tar
+apt -y install jq pigz python3-lxml tar
 ```
 
 SELinux and AppArmor policy is not installed by `install.sh` and is not
