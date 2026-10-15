@@ -22,13 +22,9 @@ AUGEAS_LENSES="${AUGEAS_LENSES:-/usr/share/augeas/lenses}"
 
 AUTOCONF="${AUTOCONF:-0}"
 
-ONED="${ONED:-1}"
-
-SUNSTONE="${SUNSTONE:-0}"
-
 # some fixtures
 CWD="${CWD:-$(pwd)}"
-if [[ "$(declare -p CP_ARGS)" == "declare -a" ]]; then
+if [[ "$(declare -p CP_ARGS 2>/dev/null || true)" != declare\ -a* ]]; then
     read -r -a CP_ARGS <<< "${CP_ARG:-"-v -L -f"}"
 fi
 
@@ -38,30 +34,6 @@ ONE_VER="${ONE_VER:-0.0.0}"
 ONE_MAJOR="${ONE_MAJOR:-0}"
 ONE_MINOR="${ONE_MINOR:-0}"
 ONE_USER="${ONE_USER:-oneadmin}"
-
-function patch_hook()
-{
-    local _hook="$1"
-    local _hook_line="[ -d \"\${0}.d\" ] \&\& for hook in \"\${0}.d\"/* ; do source \"\$hook\"; done"
-    local _is_sh=0 _is_patched=0 _backup="" _is_bash=""
-    grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null && _is_sh=1
-    if grep -q "${_hook_line}" "${_hook}" &>/dev/null; then
-        echo "*** ${_hook} already patched"
-    else
-        _backup="${_hook}.backup$(date +%s)"
-        echo "*** Create backup of ${_hook} as ${_backup}"
-        cp "${CP_ARGS[@]}" "${_hook}" "${_backup}"
-        if grep -E '^#!/bin/sh$' "${_hook}" &>/dev/null; then
-            echo "*** Replacing #!/bin/sh with #!/bin/bash in ${_hook}"
-            sed -i -e 's|^#!/bin/sh$|#!/bin/bash|' "${_hook}"
-            echo "*** Inserting the hook in ${_hook}"
-            sed -i -e "s|^exit 0|${_hook_line}\nexit 0|" "${_hook}"
-        else
-            echo "*** Inserting the hook in ${_hook}"
-            sed -i -e "s|#!/bin/bash|#!/bin/bash\n${_hook_line}\n|" "${_hook}"
-        fi
-    fi
-}
 
 # install datastore and tm MAD
 for MAD in datastore tm; do
@@ -96,7 +68,7 @@ for cronfile in "/etc/cron.d/addon-storpool" "/etc/cron.d/vc-policy"; do
     fi
 done
 
-echo "*** Create tmpfiles.d configuration to handle /var/cache/addon-storpoolrc-monitor folder"
+echo "*** Create tmpfiles.d configuration to handle /var/cache/addon-storpool-monitor folder"
 cp -v "${CWD}/misc/etc/tmpfiles.d/addon-storpool-monitor.conf" /etc/tmpfiles.d/
 systemd-tmpfiles --create
 
@@ -128,7 +100,7 @@ for vmm in {attach,detach}_disk.{storpool,cdrom}; do
     chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/${vmm}"
 done
 
-echo "*** Copy tmsaverestore script ant symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
+echo "*** Copy tmsaverestore script and symlinks to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 # shellcheck disable=SC2154
 cp "${CP_ARGS[@]}" "${CWD}/vmm/kvm/"tm* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"tm*
@@ -238,17 +210,12 @@ if onehook list -x >"${TMPDIR}/onehook.xml" 2>/dev/null; then
     fi
 else
     echo "Can't get hooks list. Is the opennebula service running?"
-    echo "Please check the existance of the vc-policy hook"
+    echo "Please check the existence of the vc-policy hook"
     echo "and register it if missing 'onehook create ${CWD}/misc/volumecare.hook'"
 fi
 
 echo "*** Please sync hosts (onehost sync --force)"
 
-echo "*** Please restart opennebula${end_msg:+ and ${end_msg}} service${end_msg:+s}"
-
-if [[ -n "${SUNSTONE_BACKUP}" ]] && [[ -d "${SUNSTONE_BACKUP}" ]]; then
-    echo "*** There is a backup of the sunstone interface that could be removed in case of no issues"
-    echo "*** (rm -rf ${SUNSTONE_BACKUP})"
-fi
+echo "*** Please restart the opennebula service"
 
 echo "*** Please update RESERVED_CPU and RESERVED_MEM with the values from '/var/tmp/one/reserved.sh' run on each host"
