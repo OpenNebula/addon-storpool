@@ -166,7 +166,7 @@ for mad in im vmm vnm datastore; do
         echo "*** Applying patches found in ${patchdir} ..."
         pushd "${ONE_VAR}" || exit 1
         while read -r -u "${patchfh}" patchfile; do
-            do_patch "${patchfile}" "backup"
+            do_patch "${patchfile}" "backup" || exit 1
         done {patchfh}< <(ls -1 "${patchdir}"/*.patch || true)
         exec {patchfh}<&-
         if ! popd; then
