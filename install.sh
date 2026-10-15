@@ -102,16 +102,20 @@ function patch_ok()
 }
 
 oneVersion(){
-    local arr=()
+    local arr=() edition_file=""
     read -r -a arr <<< "${1//\./ }"
     export ONE_MAJOR="${arr[0]}"
     export ONE_MINOR="${arr[1]}"
     export ONE_VERSION=$((arr[0]*10000 + arr[1]*100 + arr[2]))
-    if [[ ${#arr[*]} -eq 4 || ${ONE_VERSION} -lt 51200 ]]; then
-        export ONE_EDITION="CE${arr[3]}"
-    else
-        export ONE_EDITION="EE"
+    ONE_EDITION="CE"
+    edition_file="${ONE_VAR}/remotes/EDITION"
+    if [[ -f "${edition_file}" ]]; then
+        ONE_EDITION="$(head -n 1 "${edition_file}")"
     fi
+    if [[ ${#arr[*]} -gt 3 ]]; then
+        ONE_EDITION="CE${arr[3]}"
+    fi
+    export ONE_EDITION
 }
 
 if [[ -f "${ONE_VAR}/remotes/VERSION" ]]; then
