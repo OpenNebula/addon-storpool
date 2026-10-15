@@ -32,6 +32,7 @@ if [[ "$(declare -p CP_ARGS)" == "declare -a" ]]; then
     read -r -a CP_ARGS <<< "${CP_ARG:-"-v -L -f"}"
 fi
 
+ONE_ETC="${ONE_ETC:-/etc/one}"
 ONE_VAR="${ONE_VAR:-/var/lib/one}"
 ONE_VER="${ONE_VER:-0.0.0}"
 ONE_MAJOR="${ONE_MAJOR:-0}"
@@ -99,40 +100,26 @@ echo "*** Create tmpfiles.d configuration to handle /var/cache/addon-storpoolrc-
 cp -v "${CWD}/misc/etc/tmpfiles.d/addon-storpool-monitor.conf" /etc/tmpfiles.d/
 systemd-tmpfiles --create
 
-echo "*** Processing the systemd timers"
+echo "*** Installing systemd timers"
 for sName in monitor_helper-sync vc-policy; do
     for sType in service timer; do
-        sFile="/etc/systemd/system/${sName}.${sType}"
-        if [[ ! -f "${sFile}" ]]; then
-            cp -v "${CWD}/misc${sFile}" /etc/systemd/system/
-        fi
+        cp -v "${CWD}/misc/etc/systemd/system/${sName}.${sType}" /etc/systemd/system/
     done
 done
 
 systemctl daemon-reload
 
 echo "*** Activating systemd timers ..."
-systemctl enable monitor_helper-sync.timer --now
-systemctl enable vc-policy.timer --now
+systemctl enable --now monitor_helper-sync.timer
+systemctl enable --now vc-policy.timer
+systemctl restart monitor_helper-sync.timer
+systemctl restart vc-policy.timer
 
 echo "*** Copy deploy-tweaks* ${ONE_VAR}/remotes/vmm/kvm/ ..."
 # shellcheck disable=SC2154
 cp "${CP_ARGS[@]}" -a "${CWD}/vmm/kvm/"deploy-tweaks* "${ONE_VAR}/remotes/vmm/kvm/"
 chmod  a+x "${ONE_VAR}/remotes/vmm/kvm/"deploy-tweaks
 mkdir -p "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
-if pushd "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"; then
-    read -r -a DEFAULT_TWEAKS <<< "volatile2dev.py persistent-cdrom.py ${DEFAULT_TWEAKS[*]}"
-    for tweak in "${DEFAULT_TWEAKS[@]}"; do
-        if [[ -L "./${tweak}" ]]; then
-            rm -vf "./${tweak}"
-        fi
-        cp "${CP_ARGS[@]}" "../deploy-tweaks.d.example/${tweak}" "./${tweak}"
-    done
-    if ! popd; then
-        echo "ERROR!" >&2
-        exit 1
-    fi
-fi
 
 echo "*** Copy {attach,detach}_disk.{storpool,cdrom} to ${ONE_VAR}/remotes/vmm/kvm/ ..."
 for vmm in {attach,detach}_disk.{storpool,cdrom}; do
@@ -210,23 +197,25 @@ else
     "${CWD}/misc/autoconf.rb" -v -w "${AUTOCONF_FILES_ARRAY[@]}"
 fi
 
-if [[ -f /var/lib/one/remotes/addon-storpoolrc ]]; then
+if [[ -f "${ONE_VAR}/remotes/addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source /var/lib/one/remotes/addon-storpoolrc
+    source "${ONE_VAR}/remotes/addon-storpoolrc"
 fi
 
-echo "*** Refresh deploy-tweaks"
-read -r -a DEPLOY_TWEAKS_ARRAY <<< "${DEPLOY_TWEAKS:-} $(find "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/" -maxdepth 1 \( -type f -o -type l \) -printf "%f " 2>/dev/null || true)";
+echo "*** Install deploy-tweaks"
+TWEAKS_D="${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d"
+TWEAKS_EXAMPLE="${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d.example"
+read -r -a DEPLOY_TWEAKS_ARRAY <<< "volatile2dev.py persistent-cdrom.py ${DEFAULT_TWEAKS:-} ${DEPLOY_TWEAKS:-}"
 declare -A KNOWN_TWEAKS
 for tweak in "${DEPLOY_TWEAKS_ARRAY[@]}"; do
-    [[ -z "${KNOWN_TWEAKS[${tweak//[^[:alnum:]]/}]}" ]] || continue
-    KNOWN_TWEAKS[${tweak//[^[:alnum:]]/}]="${tweak}"
-    if [[ -L "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/${tweak}" ]]; then
-        rm -vf "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/${tweak}"
-    fi
-    src_tweak="${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d.example/${tweak}"
+    [[ -z "${KNOWN_TWEAKS[${tweak}]}" ]] || continue
+    KNOWN_TWEAKS[${tweak}]="${tweak}"
+    src_tweak="${TWEAKS_EXAMPLE}/${tweak}"
     if [[ -f "${src_tweak}" ]]; then
-        cp "${CP_ARGS[@]}" "${src_tweak}" "${ONE_VAR}/remotes/vmm/kvm/deploy-tweaks.d/"
+        if [[ -L "${TWEAKS_D}/${tweak}" ]]; then
+            rm -vf "${TWEAKS_D}/${tweak}"
+        fi
+        cp "${CP_ARGS[@]}" "${src_tweak}" "${TWEAKS_D}/"
     fi
 done
 
@@ -234,7 +223,7 @@ echo "*** chown -R ${ONE_USER:-oneadmin}:${ONE_GROUP:-oneadmin} ${ONE_VAR:-/var/
 chown -R "${ONE_USER:-oneadmin}:${ONE_GROUP:-oneadmin}" "${ONE_VAR:-/var/lib/one}/remotes"
 
 if boolTrue "STORPOOL_EXTRAS"; then
-    if ! grep -q 'deploy=deploy-tweaks' /etc/one/oned.conf; then
+    if ! grep -q 'deploy=deploy-tweaks' "${ONE_ETC}/oned.conf"; then
         echo "!!! Please enable deploy-tweaks in the VM_MAD configuration"
     fi
 fi
