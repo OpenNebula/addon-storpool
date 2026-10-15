@@ -18,6 +18,8 @@ It is possible to use the OpenNebula's Cluster configuration to manage hosts tha
 * `SP_API_HTTP_HOST`: The IP address of the StorPool API to use for this datastore. IP address.
 * `SP_API_HTTP_PORT`: (optional) The port of the StorPool API to use for this datastore. Number.
 
+The monitor reads the volume-template status of one StorPool cluster. Set `SP_CLUSTER_ID` on the datastore when the API serves more than one cluster and the front end is not a member of the cluster this datastore should use. Otherwise the monitor helper records it: from `SP_REMOTE_LOCATION` when that is set, from the only cluster in the API response, or from the front end's `SP_CLUSTER_ID` when that id is one of the clusters in the response.
+
 There are rare cases when the driver could not determine the StorPool node ID. To resolve this issue, set in the OpenNebula's **Host** template the `SP_OURID` variable (see [Identification and voting](https://kb.storpool.com/admin_guide/conf_file/conf_file_id_voting.html)).
 
 * `SP_OURID`: The node id in the StorPool's configuration. Number.

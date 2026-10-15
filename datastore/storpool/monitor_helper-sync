@@ -410,8 +410,31 @@ for i in "${!DS_ID_ARRAY[@]}"; do
         bw="${SP_BW_ARRAY[i]}"
         clusterId="${SP_CLUSTER_ID_ARRAY[i]}"
     }
+    jsonFile="${SP_FE_JSON_PATH}/json-VolumeTemplatesStatus-${spApiHttpHost}"
+    resolved="${SP_REMOTE_LOCATION:-${clusterId}}"
+    if [[ -z "${resolved}" ]]; then
+        cluster_ids=()
+        while read -r cid; do
+            [[ -n "${cid}" ]] || continue
+            cluster_ids+=("${cid}")
+        done < <(jq -r '.data.clusters[].clusterId // empty' "${jsonFile}" 2>/dev/null || true)
+        if [[ ${#cluster_ids[@]} -eq 1 ]]; then
+            resolved="${cluster_ids[0]}"
+        elif [[ ${#cluster_ids[@]} -gt 1 ]]; then
+            local_line="$(storpool_confshow -e SP_CLUSTER_ID 2>/dev/null || true)"
+            local_cluster="${local_line#SP_CLUSTER_ID=}"
+            local_cluster="${local_cluster%\"}"
+            local_cluster="${local_cluster#\"}"
+            for cid in "${cluster_ids[@]}"; do
+                if [[ "${cid}" == "${local_cluster}" ]]; then
+                    resolved="${cid}"
+                    break
+                fi
+            done
+        fi
+    fi
     # mirror the cluster's default template (storpool mgmtConfig defaultTemplateName)
-    default_template="$(spDefaultTemplateName "${SP_FE_JSON_PATH}/json-MgmtConfig-${spApiHttpHost}" "${SP_REMOTE_LOCATION:-}")"
+    default_template="$(spDefaultTemplateName "${SP_FE_JSON_PATH}/json-MgmtConfig-${spApiHttpHost}" "${resolved}")"
     if [[ -n "${default_template}" ]]; then
         if [[ "${default_template}" != "${SP_DEFAULT_TEMPLATE_ARRAY[i]}" ]]; then
             echo "SP_DEFAULT_TEMPLATE=${default_template}" >>"${tmpFile}"
@@ -429,9 +452,8 @@ for i in "${!DS_ID_ARRAY[@]}"; do
     fi
     # the template whose status is mirrored to the datastore and reported by the monitor probes
     template_name="$(spMonitorTemplateName "${DS_ID}" "${default_template}")"
-    jsonFile="${SP_FE_JSON_PATH}/json-VolumeTemplatesStatus-${spApiHttpHost}"
     #DO_REMOTE="~${SP_REMOTE_LOCATION}" storpoolRetry VolumeTemplatesList
-    tmp="$(jq -r --arg clusterId "${SP_REMOTE_LOCATION:-}" --arg tName "${template_name}" '.data.clusters[]|select(.clusterId==$clusterId).response.data[]|select(.name==$tName)|(.replication|tostring)+","+.placeAll+","+.placeTail+","+.placeHead+","+(.iops|tostring)+","+(.bw|tostring)' "${jsonFile}")"
+    tmp="$(jq -r --arg clusterId "${resolved}" --arg tName "${template_name}" '.data.clusters[]|select(.clusterId==$clusterId).response.data[]|select(.name==$tName)|(.replication|tostring)+","+.placeAll+","+.placeTail+","+.placeHead+","+(.iops|tostring)+","+(.bw|tostring)' "${jsonFile}")"
     ret=$?
     if [[ -z "${tmp}" ]]; then
         splog "[W] Missing StorPool template '${template_name}' for datastore ${DS_ID} SP_REMOTE_LOCATION=${SP_REMOTE_LOCATION} file:${jsonFile} (${ret})"
@@ -451,9 +473,9 @@ for i in "${!DS_ID_ARRAY[@]}"; do
             fi
         fi
     done
-    if [[ ${clusterId} != "${SP_REMOTE_LOCATION}" ]]; then
-        echo "SP_CLUSTER_ID=${SP_REMOTE_LOCATION}" >>"${tmpFile}"
-        splog "[I] DS_ID ${DS_ID} update SP_CLUSTER_ID=${SP_REMOTE_LOCATION} //old:'${clusterId}'"
+    if [[ -n "${resolved}" && "${clusterId}" != "${resolved}" ]]; then
+        echo "SP_CLUSTER_ID=${resolved}" >>"${tmpFile}"
+        splog "[I] DS_ID ${DS_ID} update SP_CLUSTER_ID=${resolved} //old:'${clusterId}'"
     fi
     if [[ -s ${tmpFile} ]]; then
         # shellcheck disable=SC2086
