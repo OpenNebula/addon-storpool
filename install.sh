@@ -92,6 +92,15 @@ function do_patch()
     return 0
 }
 
+function patch_ok()
+{
+    local _patch="$1"
+    if patch --dry-run --reverse --forward --strip=0 --input="${_patch}" >/dev/null 2>&1; then
+        return 0
+    fi
+    patch --dry-run --forward --strip=0 --input="${_patch}" >/dev/null 2>&1
+}
+
 oneVersion(){
     local arr=()
     read -r -a arr <<< "${1//\./ }"
