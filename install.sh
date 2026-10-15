@@ -75,17 +75,21 @@ function do_patch()
             read -r -a _backup_a <<< "${_backup}"
             if patch "${_backup_a[@]}" --strip=0 --forward --input="${_patch}"; then
                 DO_PATCH="done"
-            else
-                DO_PATCH="failed"
-                patch_err="${_patch}"
+                export DO_PATCH
+                return 0
             fi
-            export DO_PATCH
-        else
+            DO_PATCH="failed"
             patch_err="${_patch}"
-            echo "   *** Note! Can't apply patch ${patch_err}! Please merge manually."
+            export DO_PATCH patch_err
+            return 1
         fi
+        patch_err="${_patch}"
+        DO_PATCH="failed"
         export patch_err DO_PATCH
+        echo "   *** Note! Can't apply patch ${patch_err}! Please merge manually."
+        return 1
     fi
+    return 0
 }
 
 function patch_hook()
@@ -156,21 +160,21 @@ fi
 
 oneVersion "${ONE_VER}"
 
+if [[ -f "scripts/install-${ONE_VER}.sh" ]]; then
+    INSTALL_SCRIPT="scripts/install-${ONE_VER}.sh"
+elif [[ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]]; then
+    INSTALL_SCRIPT="scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
+else
+    echo "ERROR: Unknown OpenNebula version '${ONE_VER}' detected!" >&2
+    echo "Please contact StorPool support for assistance" >&2
+    exit 1
+fi
+
 TMPDIR="$(mktemp -d addon-storpool-install-XXXXXXXX)"
 export TMPDIR
 # shellcheck disable=SC2064
 trap "rm -rf \"${TMPDIR}\"" EXIT QUIT TERM
 
-if [[ -f "scripts/install-${ONE_VER}.sh" ]]; then
-    echo "*** Using scripts/install-${ONE_VER}.sh"
-    # shellcheck source=scripts/install-6.4.sh
-    source "scripts/install-${ONE_VER}.sh"
-elif [[ -f "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh" ]]; then
-    echo "*** Using scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
-    # shellcheck source=scripts/install-6.4.sh
-    source "scripts/install-${ONE_MAJOR}.${ONE_MINOR}.sh"
-else
-    echo "ERROR: Unknown OpenNebula version '${ONE_VER}' detected!"
-    echo "Please contact StorPool support for assistance"
-    echo
-fi
+echo "*** Using ${INSTALL_SCRIPT}"
+# shellcheck source=scripts/install-6.4.sh
+source "${INSTALL_SCRIPT}"
