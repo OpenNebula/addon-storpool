@@ -334,8 +334,6 @@ EOF
 
         trapDel "storpoolDelete \"${VOL_UID}\" force snaps"
 
-        storpoolDetach "${TEMP_VOL_UID}" "" "${DST_HOST}"
-
         trapDel "storpoolDelete \"${TEMP_VOL_UID}\" force snaps"
 
         DELAY_DELETE="" storpoolDelete "${TEMP_VOL_UID}" "force" "snaps"

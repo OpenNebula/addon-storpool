@@ -138,7 +138,6 @@ EOF
     splog "RCMD=${RCMD}"
     QCOW_SIZE="$(ssh_monitor_and_log "${DST_HOST}" "${RCMD}" "export file convert ")"
     splog "${EXPORT_FILE} SIZE=${SIZE} QCOW_SIZE=${QCOW_SIZE} ($?)"
-    storpoolDetach "${EXPORT_UID}" "force" "${DST_HOST}"
     storpoolDelete "${EXPORT_UID}"
     DISPOSE_CMD="${EXPORT_DELETE} ${DST_HOST} ${EXPORT_FILE}"
 else
@@ -156,7 +155,6 @@ if [[ ${RET} -ne 0 ]]; then
     splog "${msg}"
     error_message "${msg}"
     if [[ -z "${EXPORT_FILE_FORMAT}" ]]; then
-        storpoolDetach "${EXPORT_UID}" "force" "${DST_HOST}"
         storpoolDelete "${EXPORT_UID}"
     fi
     exit 255
