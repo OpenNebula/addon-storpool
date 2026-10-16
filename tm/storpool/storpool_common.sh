@@ -1760,6 +1760,12 @@ function storpoolDelayDeleteSnapshot()
     return 0
 }
 
+function storpoolVolumeDelete()
+{
+    local _SP_UID="$1"
+    DO_REMOTE="" storpoolRetry VolumeDelete "${_SP_UID}" "\"onAttached\":\"detachForce\"" >/dev/null
+}
+
 function storpoolDelete()
 {
     local _SP_UID="$1" _FORCE="$2" _SNAPSHOTS="$3" _REMOTE="$4" _DD_TAGS="$5" _UID_ONLY="$6"
@@ -1790,8 +1796,10 @@ function storpoolDelete()
             *)
                 _DELAY_DELETE="${DELAY_DELETE}"
                 [[ "${X_FOUND_AS,,}" == "volume" ]] || _snapshot=1
-                DO_REMOTE="" storpoolDetach "${_SP_UID}" "${_FORCE}" "" "all" "" "${_snapshot}"
-                _ret=$?
+                if [[ -n "${_snapshot}" ]]; then
+                    DO_REMOTE="" storpoolDetach "${_SP_UID}" "${_FORCE}" "" "all" "" "${_snapshot}"
+                    _ret=$?
+                fi
                 ;;
         esac
 
@@ -1810,7 +1818,7 @@ function storpoolDelete()
                 storpoolDelayDeleteSnapshot "${_SP_UID}" "${_SP_VOL}" "${_dd_reason}" "${_dd_extra}"
                 _ret=$?
                 if [[ ${_ret} -eq 0 ]]; then
-                    DO_REMOTE="" storpoolRetry VolumeDelete "${_SP_UID}" >/dev/null
+                    storpoolVolumeDelete "${_SP_UID}"
                     _ret=$?
                 else
                     exit "${_ret}"
@@ -1836,7 +1844,7 @@ function storpoolDelete()
             if [[ -n "${_snapshot}" ]]; then
                 DO_REMOTE="" storpoolRetry SnapshotDelete "${_SP_UID}" >/dev/null
             else
-                DO_REMOTE="" storpoolRetry VolumeDelete "${_SP_UID}" >/dev/null
+                storpoolVolumeDelete "${_SP_UID}"
             fi
             _ret=$?
         fi

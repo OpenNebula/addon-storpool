@@ -33,10 +33,7 @@ RET=$?
 if [[ ${RET} -eq 0 ]]; then
     splog "${SSH} ${DST_HOST} test -L ${FILE} (${RET}) -- symlink"
     SP_VOLUME="${FILE##*/}"
-    if kvGetUid "${SP_VOLUME}"; then
-        storpoolDetach "${SP_UID}" "force" "${DST_HOST}"
-        splog "Detach ${SP_UID} (${SP_VOLUME}) from ${DST_HOST} ($?)"
-    else
+    if ! kvGetUid "${SP_VOLUME}"; then
         splog "[W] Can't get StorPool UID for ${SP_VOLUME}"
     fi
     storpoolDelete "${SP_UID}"  # TBD: check if this is correct? Should be in the above if and with exit on error?
