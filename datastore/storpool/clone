@@ -175,9 +175,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         # detach DST_VOL
         storpoolDetach "${DST_VOL_UID}" "" "${DST_SP_CLONE_GW}"
 
-        storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
-
-        storpoolVolumeFreeze "${DST_VOL_UID}" "volume"
+        storpoolVolumeFreeze "${DST_VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
 
         if [[ -n "${SRC_SP_API_HTTP_HOST}" ]]; then
             export SP_API_HTTP_HOST="${SRC_SP_API_HTTP_HOST}"
@@ -216,8 +214,6 @@ storpoolVolumeFromSnapshot "${PARENT_UID}" "${SP_VOL}"
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
-
-storpoolVolumeFreeze "${SP_UID}" "volume"
+storpoolVolumeFreeze "${SP_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
 
 splog "END ${SP_DST}"

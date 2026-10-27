@@ -89,19 +89,17 @@ splog "SRC_HOST=${SRC_HOST} ${VOL_UID} (${SP_VOL}) ${DEFERRED:+DEFERRED SP_NEW=$
 
 storpoolDetach "${VOL_UID}" "force" "${SRC_HOST}" "all" "${READONLY}"
 
-storpoolVolumeTag "${VOL_UID}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};vc-policy;qc;type;diskid" "one;${LOC_TAG_VAL};;;${SP_QOSCLASS};;"
-
 if boolTrue "DEFERRED"; then
     storpoolVolumeRename "${VOL_UID}" "${SP_VOL}" "${SP_NEW}" "${SP_TEMPLATE}"
 fi
 
-storpoolVolumeFreeze "${VOL_UID}" "volume"
+storpoolVolumeFreeze "${VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};vc-policy;qc;type;diskid" "one;${LOC_TAG_VAL};;;${SP_QOSCLASS};;"
 
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
     storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
 fi
 
-oneMvds "${SP_VOL}"
+oneMvds "${SP_VOL}" "${SP_UID}"
 
 splog "deleting ${SRC_PATH} on ${SRC_HOST}"
 ssh_exec_and_log "${SRC_HOST}" "rm -vf ${SRC_PATH}*" \

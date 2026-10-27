@@ -244,8 +244,7 @@ else # image persist
                 ;;
             volume)
                 storpoolDetach "${SP_UID}" "force" "" "all" "${READONLY}"
-                storpoolVolumeTag "${SP_UID}" "diskid;${VM_TAG};vc-policy;qc;type" ";;;${DEFAULT_QOSCLASS};"
-                storpoolVolumeFreeze "${SP_UID}" "volume"
+                storpoolVolumeFreeze "${SP_UID}" "volume" "diskid;${VM_TAG};vc-policy;qc;type" ";;;${DEFAULT_QOSCLASS};"
                 ;;
             *)
                 splog "WARNING ${DST_PATH} not found ${SP_UID} (${SP_VOL})"

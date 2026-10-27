@@ -345,9 +345,7 @@ fi
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeTag "${VOL_UID}" "virt;${LOC_TAG:-nloc};img;qc" "one;${LOC_TAG_VAL:-};${SP_VOL};${SP_QOSCLASS}"
-
-storpoolVolumeFreeze "${VOL_UID}" "volume"
+storpoolVolumeFreeze "${VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};img;qc" "one;${LOC_TAG_VAL:-};${SP_VOL};${SP_QOSCLASS}"
 ret=$?
 if [[ ${ret} -ne 0 ]]; then
     splog "Error: Volume to snapshot conversion failed! (${ret})"
