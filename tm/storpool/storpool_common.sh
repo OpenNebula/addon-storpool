@@ -618,7 +618,7 @@ function kvGetFamily()
 function kvGetUid()
 {
     local _NAME="$1" _FATAL="$2"
-    local ret=0 kvret=0 errmsg="" _try=0
+    local ret=0 kvret=0 errmsg="" _try=0 _DBGPX=""
     # a leader election is usually over within a second; three attempts
     # absorb that without hiding an etcd that is actually down
     local _tries="${KV_UID_RETRIES:-3}" _pause="${KV_UID_RETRY_SECONDS:-1}"
@@ -637,7 +637,8 @@ function kvGetUid()
         ret=2
         SP_UID=""
         errmsg="etcd lookup failed for ${_NAME} (${kvret})"
-        splog "[E] KV kvGetUid($*) ${errmsg}"
+        boolTrue "KV_UID_SOFT_FAIL" && _DBGPX="W" || _DBGPX="E"
+        splog "[${_DBGPX}] KV kvGetUid($*) ${errmsg}"
     elif [[ -z "${SP_UID}" ]]; then
         ret=1
         errmsg="Can't get StorPool generic name for ${_NAME}!"
