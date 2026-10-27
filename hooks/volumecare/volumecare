@@ -33,6 +33,7 @@ source "${ONE_HOME}/remotes/tm/storpool/storpool_common.sh"
 source "${ONE_HOME}/remotes/addon-storpoolrc"
 
 boolTrue "DEBUG_alterVcPolicy" || export DEBUG_KV=""
+export KV_UID_SOFT_FAIL=1
 
 if boolTrue "DDDEBUG_alterVcPolicy"; then
     parent="${PPID}"
@@ -84,7 +85,7 @@ function update_volume_vc_policy()
 function alterVcPolicy()
 {
     local vmId="$1"
-    local volumeListJsonFile="" xfh=""
+    local volumeListJsonFile="" xfh="" _kvret=0
 
     if [[ -z "${vmId}" ]]; then
         oneCallXml onevm list --extended "${vmPoolFile}"
@@ -97,6 +98,10 @@ function alterVcPolicy()
         fi
         while read -r -u "${xfh}" _vmId; do
             alterVcPolicy "${_vmId}"
+            if [[ -n "${KV_UNREACHABLE:-}" ]]; then
+                splog "[W] etcd is unreachable, the remaining VMs are skipped"
+                break
+            fi
         done {xfh}< <("${SPXML}" sel -t -m "/VM_POOL/VM" -v 'ID' -n "${vmPoolFile}" || true)
         exec {xfh}<&-
         return 0
@@ -152,10 +157,15 @@ function alterVcPolicy()
         oneName="${disk%:*}"
         disk_id="${disk#*:}"
         diskNames_a["disk${disk_id}"]="${oneName}"
-        if kvGetUid "${oneName}"; then
+        kvGetUid "${oneName}" && _kvret=0 || _kvret=$?
+        if [[ ${_kvret} -eq 0 ]]; then
             uidsDiskid_a["${SP_UID}"]="${disk_id}"
             volUidName_a["${SP_UID}"]="${oneName}"
             volUids_a["${oneName}"]="${SP_UID}"
+        elif [[ ${_kvret} -eq 2 ]]; then
+            splog "[W] VM ${vmId} skipped, etcd lookup failed"
+            KV_UNREACHABLE=1
+            return 0
         else
             splog "Can't get SP UID for volume '${oneName}' disk_id:${disk_id} disk:${disk} //PATH=${PATH}"
         fi
