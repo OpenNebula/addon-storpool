@@ -1877,7 +1877,7 @@ function storpoolDelete()
 function storpoolVolumeFreeze()
 {
     local _VOL_UID="$1" _ONLY_DELETE="$2"
-    local _SP_NAME="" _TMP_NAME="" _RET=1
+    local _SP_NAME="" _TMP_NAME="" _IMG_TAG="" _RET=1
     _SP_NAME="$(kvGet byUid "${_VOL_UID}")"
     if [[ -z "${_SP_NAME}" ]]; then
         splog "[E] Volume not found ${_VOL_UID}"
@@ -1885,10 +1885,18 @@ function storpoolVolumeFreeze()
     fi
     _TMP_NAME="${_SP_NAME}-TEMP-$(mktemp --dry-run XXXXXXXX)"
     if storpoolVolumeInfo "${_VOL_UID}"; then
+        _IMG_TAG="${V_TAGS_ARR["img"]:-}"
         if storpoolSnapshotCreate "${_TMP_NAME}" "${_VOL_UID}" "${V_TAG_KEYS}" "${V_TAG_VALS}"; then
             if ONLY_DELETE="${_ONLY_DELETE:+volume}" storpoolDelete "${_VOL_UID}"; then
-                DO_REMOTE="" storpoolSnapshotRename "${SP_UID}" "${_TMP_NAME}" "${_SP_NAME}"
-                _RET=$?
+                if [[ "${_IMG_TAG}" == "${_SP_NAME}" ]]; then
+                    kvDel "${_TMP_NAME}"
+                    kvPut "${_SP_NAME}" "${SP_UID}"
+                    _RET=$?
+                    splog "[I] ${SP_UID} renamed ${_TMP_NAME} to ${_SP_NAME} in KV only (${_RET})"
+                else
+                    DO_MULTICLUSTER=1 DO_REMOTE="" storpoolSnapshotRename "${SP_UID}" "${_TMP_NAME}" "${_SP_NAME}"
+                    _RET=$?
+                fi
             else
                 _RET=$?
                 splog "[E] Can't delete ${_VOL_UID}(${_SP_NAME})"
