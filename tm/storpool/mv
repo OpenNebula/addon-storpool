@@ -504,12 +504,9 @@ if [[ "${TYPE}" == "CDROM" ]]; then
         splog "[E] ${CDROM_VOL} not created, KV lookup failed (${_kvret})"
         exit "${_kvret}"
     elif [[ ${_kvret} -ne 0 ]]; then
-        storpoolVolumeClone "${VOL_UID}" "${CDROM_VOL}" "${SP_TEMPLATE}"
+        storpoolVolumeClone "${VOL_UID}" "${CDROM_VOL}" "${SP_TEMPLATE}" "diskid;type" "${DISK_ID};CDROM"
         kvGetUid "${CDROM_VOL}" fatal
         VOL_UID="${SP_UID}"
-        storpoolVolumeTag "${VOL_UID}" \
-                "virt;${LOC_TAG};diskid;type" \
-                "one;${LOC_TAG_VAL};${DISK_ID};CDROM"
     fi
     SP_MODE="${READONLY_MODE,,}"
     SP_VOL="${CDROM_VOL}"

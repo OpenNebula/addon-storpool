@@ -1395,7 +1395,7 @@ function storpoolRetry() {
 function storpoolVolumeInfo()
 {
     local _SP_UID="$1" STORPOOL_RETRIES="${2:-${STORPOOL_RETRIES}}"
-    local _V_TAGS="" _RET=1
+    local _V_TAGS="" _RET=1 _TAG_KEY="" _TAG_VAL="" tagline=""
     if boolTrue "DDEBUG_storpoolVolumeInfo"; then
         splog "[DD]storpoolVolumeInfo($*) DO_REMOTE=${DO_REMOTE} DO_MULTICLUSTER=${DO_MULTICLUSTER} STORPOOL_RETRIES=${STORPOOL_RETRIES}"
     fi
@@ -1827,8 +1827,9 @@ function storpoolDelete()
                 local newName
                 newName="${_SP_VOL:-${_SP_UID#\~}}_DELETE$(date +%s||true)"
                 splog "[E] Unsupported format in DELAY_DELETE='${_DELAY_DELETE}' (expected <n>[s|m|h|d]). Preserving ${_SP_UID} (${_SP_VOL}) as ${newName}"
-                if DO_REMOTE="" storpoolVolumeRename "${_SP_UID}" "${_SP_VOL}" "${newName}" >/dev/null; then
-                    if storpoolVolumeFreeze "${_SP_UID}" "volume"; then
+                kvDel "${_SP_VOL}"
+                if kvPut "${newName}" "${_SP_UID}"; then
+                    if storpoolVolumeFreeze "${_SP_UID}" "volume" "img" "${newName}"; then
                         _ret=0
                         splog "[I] ${_SP_UID} preserved as snapshot ${newName} (${SP_UID})"
                     else
@@ -1876,8 +1877,8 @@ function storpoolDelete()
 
 function storpoolVolumeFreeze()
 {
-    local _VOL_UID="$1" _ONLY_DELETE="$2"
-    local _SP_NAME="" _TMP_NAME="" _IMG_TAG="" _RET=1
+    local _VOL_UID="$1" _ONLY_DELETE="$2" _TAG_KEY="$3" _TAG_VAL="$4"
+    local _SP_NAME="" _TMP_NAME="" _IMG_TAG="" _RET=1 _i=""
     _SP_NAME="$(kvGet byUid "${_VOL_UID}")"
     if [[ -z "${_SP_NAME}" ]]; then
         splog "[E] Volume not found ${_VOL_UID}"
@@ -1885,6 +1886,24 @@ function storpoolVolumeFreeze()
     fi
     _TMP_NAME="${_SP_NAME}-TEMP-$(mktemp --dry-run XXXXXXXX)"
     if storpoolVolumeInfo "${_VOL_UID}"; then
+        if [[ -n "${_TAG_KEY}" ]]; then
+            IFS=';' read -r -a _tagKeys <<< "${_TAG_KEY}"
+            IFS=';' read -r -a _tagVals <<< "${_TAG_VAL}"
+            for _i in "${!_tagKeys[@]}"; do
+                [[ -n "${_tagKeys[_i]}" ]] || continue
+                if [[ -n "${_tagVals[_i]:-}" ]]; then
+                    V_TAGS_ARR["${_tagKeys[_i]}"]="${_tagVals[_i]}"
+                else
+                    unset "V_TAGS_ARR[${_tagKeys[_i]}]"
+                fi
+            done
+            V_TAG_KEYS=""
+            V_TAG_VALS=""
+            for _i in "${!V_TAGS_ARR[@]}"; do
+                V_TAG_KEYS+="${V_TAG_KEYS:+;}${_i}"
+                V_TAG_VALS+="${V_TAG_VALS:+;}${V_TAGS_ARR[${_i}]}"
+            done
+        fi
         _IMG_TAG="${V_TAGS_ARR["img"]:-}"
         if storpoolSnapshotCreate "${_TMP_NAME}" "${_VOL_UID}" "${V_TAG_KEYS}" "${V_TAG_VALS}"; then
             if ONLY_DELETE="${_ONLY_DELETE:+volume}" storpoolDelete "${_VOL_UID}"; then
@@ -2189,7 +2208,6 @@ function storpoolSnapshotRevert()
         ret=$?
         if [[ -n "${_IS_SNAPSHOT}" ]]; then
             storpoolSnapshotDelete "${_VOL_UID}" "UID_only"
-            storpoolVolumeTag "${SP_UID}" "${LOC_TAG};virt;img" "${LOC_TAG_VAL};one;${_SP_VOL}"
             storpoolVolumeFreeze "${SP_UID}" "volume"
         else
             storpoolDelete "${_VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${_SP_VOL}\",\"reason\":\"snap_revert\"" "1"  # TBD: tags
@@ -2274,8 +2292,9 @@ function storpoolSnapshotsDelete()
 
 function oneMvds()
 {
-    local _SP_VOL="$1" _SP_UID=""
+    local _SP_VOL="$1" _SKIP_UID="$2" _SP_UID=""
     for _SP_UID in $(kvGetFamily "${_SP_VOL}"); do
+        [[ "${_SP_UID}" != "${_SKIP_UID}" ]] || continue
         storpoolSnapshotTag "${_SP_UID}" \
                 "diskid;${VM_TAG};img;${LOC_TAG};virt" \
                 ";;${_SP_VOL};${LOC_TAG_VAL};one"
