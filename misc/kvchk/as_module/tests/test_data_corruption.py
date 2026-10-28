@@ -248,6 +248,37 @@ class TestStorPoolCorruption:
         assert "<TO_MIGRATE>" in out
 
 
+    def test_image_in_error_state_without_volume(self, corrupted_setup,
+                                                 capsys):
+        """An image whose datablock creation failed (state ERROR) has no
+        StorPool volume and no KV entry: it is reported as a dead
+        OpenNebula record, not as a legacy volume to migrate"""
+        processor = corrupted_setup
+        processor.sp.data = {}
+        processor.one.ds_images = {
+            "one-img-138086": {
+                "image_id": 138086,
+                "legacy": "one-img-138086",
+                "disktype": DiskType.NONPERSISTENT,
+                "name": "[DRE] volume-from-snapshot-13020 (9047)",
+                "imagetype": ImageType.OS,
+                "state": 5,
+                "vms": 1,
+                "vmlist": [18028],
+                "snapshot": True,
+                "snapshots": {}
+            }
+        }
+
+        processor.analyze_one_images()
+
+        out = capsys.readouterr().out
+        assert "[Issue]" in out
+        assert "one-img-138086" in out
+        assert "image in ERROR state, no StorPool volume" in out
+        assert "Should migrate" not in out
+
+
 class TestOpenNebulaCorruption:
     """Test scenarios with corrupted OpenNebula data"""
 

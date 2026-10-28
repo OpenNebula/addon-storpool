@@ -1051,6 +1051,59 @@ class TestoneManager:
         mock_system_disks.assert_called()
 
 
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    @patch.object(OpenNebulaManager, '_host_symlinks')
+    @patch.object(OpenNebulaManager, '_process_vm_disks')
+    @patch.object(OpenNebulaManager, '_process_vm_system_disks')
+    def test_get_vm_disks_skips_never_deployed_vm(
+        self, mock_system_disks, mock_process_disks, mock_host_symlinks,
+        mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api,
+        capsys
+    ):
+        """A VM in CLONING_FAILURE (11) has no HISTORY_RECORDS: it was
+        never scheduled, so kvchk skips it instead of aborting"""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"18028\n"
+        vm_mock = mock_pyone_api.vm.info.return_value
+        vm_mock.ID = 18028
+        vm_mock.NAME = "[DRE] MEUSWE-TEST (9047)"
+        vm_mock.STATE = 11
+        vm_mock.LCM_STATE = 0
+        vm_mock.HISTORY_RECORDS.HISTORY = []
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        assert 18028 not in manager.one_vms
+        assert manager.vm_disks == {}
+        mock_host_symlinks.assert_not_called()
+        mock_process_disks.assert_not_called()
+        mock_system_disks.assert_not_called()
+        assert "Error" not in capsys.readouterr().out
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    def test_get_vm_disks_empty_history_in_deployed_state_aborts(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager,
+        mock_pyone_api, capsys
+    ):
+        """An ACTIVE VM without HISTORY_RECORDS is a broken record"""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+        vm_mock = mock_pyone_api.vm.info.return_value
+        vm_mock.STATE = 3
+        vm_mock.LCM_STATE = 3
+        vm_mock.HISTORY_RECORDS.HISTORY = []
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        with pytest.raises(ValueError, match="empty HISTORY_RECORDS"):
+            oneManager(mock_args, mock_ssh_manager)
+        out = capsys.readouterr().out
+        assert "VM 123" in out
+        assert "onedb" in out
+
+
 class TestQosClassSelector:
     """Test QoS class selector logic"""
 

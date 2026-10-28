@@ -21,6 +21,10 @@ VM_ON_HOST_STATES = (3, 5, 8)
 # 4 - STOPPED, 9 - UNDEPLOYED
 VM_ON_FRONTEND_STATES = (4, 9)
 
+# OpenNebula image states where the datastore driver has not (yet, or
+# at all) created the StorPool volume: LOCKED (4) and ERROR (5)
+IMAGE_NOT_CREATED_STATES = (4, 5)
+
 
 class DataProcessing(BaseManager):
     """Analyzes data and relationships between
@@ -700,6 +704,15 @@ class DataProcessing(BaseManager):
                                     "\n\tON:"
                                     f"{repr(data)}"
                                 )
+                        elif data.get("state") in IMAGE_NOT_CREATED_STATES:
+                            img_state: str = (
+                                "LOCKED" if data["state"] == 4 else "ERROR"
+                            )
+                            msg += (
+                                f" image in {img_state} state, no StorPool"
+                                " volume - clean up the OpenNebula image"
+                            )
+                            msg += "\n\tON:" + repr(data)
                         else:
                             msg += " Should migrate but not found in StorPool"
                             msg += "\n\tON:" + repr(data)
@@ -748,7 +761,11 @@ class DataProcessing(BaseManager):
                                     f"{repr(self.sp.data[legacy_name])}"
                                 )
                             else:
-                                print(f"ZDBG not in storpool {snapdata=}")
+                                self.dbg(
+                                    2,
+                                    f"{legacy_name} not in StorPool"
+                                    f" {snapdata=}",
+                                )
                             msg += "\n\tON:" + repr(snapdata)
                     else:
                         msg += " Should migrate but not found in StorPool"

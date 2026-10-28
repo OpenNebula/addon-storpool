@@ -36,6 +36,12 @@ HOST_SYMLINK_STATES = (0, 1, 2, 4, 7)
 # go missing from ds_images.
 ONE_POOL_INFO_ALL = -2
 
+# VM states that legitimately have no HISTORY_RECORDS yet: the VM was
+# never scheduled to a host, so no TM driver ran for it and it has no
+# system datastore, no host symlinks and no StorPool volumes of its own
+# (INIT, PENDING, HOLD, CLONING, CLONING_FAILURE)
+VM_NEVER_DEPLOYED_STATES = (0, 1, 2, 10, 11)
+
 
 def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     """A disk/datastore is StorPool-backed when its TM_MAD starts with
@@ -156,6 +162,10 @@ class oneManager(BaseManager):
     def __init__(self, args: argparse.Namespace, ssh_mngr: SshManager):
         super().__init__(args)
         self.ssh = ssh_mngr
+        # per-instance state (the class-level dicts are only mutated in
+        # place and would be shared between instances)
+        self.vm_disks = {}
+        self.one_vms = {}
         # Use ONE_TOKEN
         one_token: str = self.get_one_token()
         one_api_url: str = os.getenv("ONE_API_URL", ONE_API_URL)  # type: ignore[attr-defined] # noqa: E501
@@ -222,6 +232,18 @@ class oneManager(BaseManager):
                 f" '{state}'?) - fix or remove it (onedb) and re-run."
             )
             raise error
+
+    @staticmethod
+    def _vm_history(vm_e: Any) -> List[Any]:
+        """The VM HISTORY records as a list (pyone gives an empty
+        HISTORY_RECORDS element for a VM that was never scheduled)"""
+        records: Any = getattr(vm_e, "HISTORY_RECORDS", None)
+        history: Any = (
+            getattr(records, "HISTORY", None) if records is not None else None
+        )
+        if history is None:
+            return []
+        return list(history) if isinstance(history, list) else [history]
 
     def _init_hosts(self) -> None:
         """Get OpenNebula hosts"""
@@ -883,14 +905,23 @@ class oneManager(BaseManager):
             self.one_hosts = self.get_hosts()
         for vm_id in self.vm_ids:
             vm_e: Any = self._vm_info(vm_id)
-            try:
-                sys_ds_id = int(vm_e.HISTORY_RECORDS.HISTORY[-1].DS_ID)
-            except Exception as error:
+            if not self._vm_history(vm_e):
+                if int(vm_e.STATE) in VM_NEVER_DEPLOYED_STATES:
+                    self.dbg(
+                        1,
+                        f"VM {vm_id} '{vm_e.NAME}'"
+                        f" {vm_e.STATE}:{vm_e.LCM_STATE} never deployed"
+                        " (no HISTORY_RECORDS) - skipping",
+                    )
+                    continue
                 self.err(
                     f"VM {vm_id} '{vm_e.NAME}' {vm_e.STATE}:{vm_e.LCM_STATE}"
-                    + f" Error:{error} //HISTORY_RECORDS"
+                    " has no HISTORY_RECORDS but is not in a pre-deployment"
+                    " state. The VM record in the OpenNebula database is"
+                    " broken - fix or remove it (onedb) and re-run."
                 )
-                raise error
+                raise ValueError(f"VM {vm_id}: empty HISTORY_RECORDS")
+            sys_ds_id = int(vm_e.HISTORY_RECORDS.HISTORY[-1].DS_ID)
             links = self._host_symlinks(vm_e)
             self.dbg(
                 3,
