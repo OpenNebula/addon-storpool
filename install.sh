@@ -57,6 +57,46 @@ function boolTrue()
    esac
 }
 
+function patch_merged()
+{
+    local _patch="$1" _file="" _line=""
+    local -A _added=()
+    while read -r _line; do
+        case "${_line}" in
+            ---*|@@*)
+                ;;
+            +++*)
+                _file="${_line#+++ }"
+                _file="${_file%%$'\t'*}"
+                [[ -f "${_file}" ]] || return 1
+                ;;
+            +*)
+                _line="${_line#+}"
+                [[ -z "${_line//[[:space:]]/}" ]] && continue
+                _added["${_line}"]=1
+                grep -qxF -- "${_line}" "${_file}" || return 1
+                ;;
+            *)
+                ;;
+        esac
+    done < "${_patch}"
+    while read -r _line; do
+        case "${_line}" in
+            ---*)
+                ;;
+            -*)
+                _line="${_line#-}"
+                [[ -z "${_line//[[:space:]]/}" ]] && continue
+                [[ -n "${_added["${_line}"]:-}" ]] && continue
+                grep -qxF -- "${_line}" "${_file}" && return 1
+                ;;
+            *)
+                ;;
+        esac
+    done < "${_patch}"
+    return 0
+}
+
 function do_patch()
 {
     local _patch="$1" _backup="$2"
@@ -83,6 +123,10 @@ function do_patch()
             export DO_PATCH patch_err
             return 1
         fi
+        if patch_merged "${_patch}"; then
+            echo "   *** Patch file ${_patch##*/} already merged"
+            return 0
+        fi
         patch_err="${_patch}"
         DO_PATCH="failed"
         export patch_err DO_PATCH
@@ -98,7 +142,10 @@ function patch_ok()
     if patch --dry-run --reverse --forward --strip=0 --input="${_patch}" >/dev/null 2>&1; then
         return 0
     fi
-    patch --dry-run --forward --strip=0 --input="${_patch}" >/dev/null 2>&1
+    if patch --dry-run --forward --strip=0 --input="${_patch}" >/dev/null 2>&1; then
+        return 0
+    fi
+    patch_merged "${_patch}"
 }
 
 oneVersion(){
