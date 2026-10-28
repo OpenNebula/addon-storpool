@@ -21,6 +21,8 @@ else
         misc/reserved.sh
         misc/storpool_probe.sh
         misc/tagVolumes.sh
+        misc/kvresolve.sh
+        misc/vmdisk_restore.sh
         tm/storpool/*
         datastore/storpool/*
         vmm/kvm/deploy-tweaks
