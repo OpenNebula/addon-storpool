@@ -118,8 +118,13 @@ if [[ "${TYPE}" == "CDROM" ]]; then
     fi
     SP_VOL="${CDROM_VOL}"
 else
-    storpoolVolumeFromSnapshot "${SP_UID}" "${SP_VOL}"
-    storpoolSnapshotDelete "${SRC_UID}" "1"
+    if storpoolVolumeFromSnapshot "${SP_UID}" "${SP_VOL}"; then
+        storpoolSnapshotDelete "${SRC_UID}" "1"
+    else
+        _ret=$?
+        splog "[E] ${SP_VOL} not created from snapshot ${SRC_UID} (${_ret})"
+        exit "${_ret}"
+    fi
 fi
 VOL_UID="${SP_UID}"
 
