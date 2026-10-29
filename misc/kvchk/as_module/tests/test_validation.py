@@ -1676,6 +1676,59 @@ class TestImageRootSnapshotQc:
         assert update["action"][0] == "VolumeFreeze"
         assert "tags" not in update["data"]
 
+    def _persistent_cdrom_root(self):
+        """The record _init_ds_images builds for an in-use persistent
+        CDROM: still a snapshot, no vm_id."""
+        root = self._root("tier0")
+        root["disktype"] = DiskType.PERSISTENT
+        root["vms"] = 2
+        root["vmlist"] = [171, 172]
+        return root
+
+    def test_persistent_cdrom_root_has_no_vm_tags(self, processor):
+        """nvm, diskid and type on the golden CDROM snapshot are cleared.
+        qc stays. The object is not turned into a volume."""
+        root = self._persistent_cdrom_root()
+        tags = processor._build_tags(root)
+        assert tags == {
+            "virt": "one",
+            "nloc": "one",
+            "img": "one-img-645",
+            "qc": "tier0",
+        }
+        sp = self._sp_root({
+            "virt": "one", "nloc": "one", "qc": "tier0",
+            "img": "one-img-645", "nvm": "171", "diskid": "0",
+            "type": "PERS",
+        })
+        update = processor._build_sp_update(sp, root)
+        assert update["data"]["tags"] == {
+            "nvm": "", "diskid": "", "type": "",
+        }
+        assert "VolumeFreeze" not in update["action"]
+
+    def test_persistent_cdrom_root_volume_is_frozen_without_vm_tags(
+        self, processor
+    ):
+        """A golden CDROM that was left as a volume is frozen back, and
+        the freeze payload drops the VM tags."""
+        sp = {
+            "globalId": "c.b.645", "name": "~c.b.645", "snapshot": False,
+            "tags": {
+                "virt": "one", "nloc": "one", "qc": "tier0",
+                "img": "one-img-645", "nvm": "171", "diskid": "0",
+                "type": "CDROM",
+            },
+            "sp_api_http_host": None, "attached": None,
+        }
+        update = processor._build_sp_update(
+            sp, self._persistent_cdrom_root()
+        )
+        assert update["action"][0] == "VolumeFreeze"
+        assert update["data"]["tags"] == {
+            "nvm": "", "diskid": "", "type": "",
+        }
+
 
 class TestConfiguredTagNames:
     """VM_TAG / LOC_TAG / LOC_TAG_VAL from addon-storpoolrc: kvchk must
