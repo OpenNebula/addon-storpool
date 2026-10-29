@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional, Tuple, Callable
 import re
 import time
 import argparse
+from storpool.spapi import ApiError  # type: ignore
 from ..managers.base_manager import BaseManager
 from ..managers.ssh_manager import SshManager
 from ..managers.one_manager import (
@@ -139,19 +140,37 @@ class DataProcessing(BaseManager):
         if problems:
             raise ClusterConfigError(problems)
 
+    def _record_uids(self, sp_entry: Dict[str, Any]) -> set:
+        """All the globalIds a record is known by - a KV entry may
+        reference it through any of them. VolumeRevert changes the
+        canonical globalId of a volume on every revert and keeps the
+        original one as preservedGlobalId; a snapshot taken from such a
+        volume inherits the preservedGlobalId field. Only _kv_globalid
+        is the handle StorPool resolves."""
+        uids: set = {sp_entry["globalId"]}
+        preserved: str = sp_entry.get("preservedGlobalId") or ""
+        if preserved:
+            uids.add(preserved)
+        return uids
+
     def _kv_globalid(self, sp_entry: Dict[str, Any]) -> str:
         """The globalId the KV store (and the disk.N symlinks) should
-        reference. VolumeRevert changes the canonical globalId on every
-        revert while keeping the original one resolvable forever as
-        preservedGlobalId - so the preserved one is the stable handle."""
-        return sp_entry.get("preservedGlobalId") or sp_entry["globalId"]
+        reference: the preserved (creation) one of a volume, the stable
+        handle across VolumeRevert, and the canonical one of a
+        snapshot - the only one it answers to."""
+        preserved: str = sp_entry.get("preservedGlobalId") or ""
+        if preserved and not sp_entry["snapshot"]:
+            return preserved
+        return sp_entry["globalId"]
 
     def _sp_by_uid(self, kv_uid: str) -> Optional[Dict[str, Any]]:
-        """Look up a StorPool record by KV uid ('~globalId').
-        sp.data is keyed by name, so volumes still under their legacy
-        name are found via the globalId index. Reverted volumes are
-        also found by their preserved (original) globalId - the one
-        the KV store keeps."""
+        """Look up a StorPool record by the uid StorPool resolves for
+        it ('~globalId'). sp.data is keyed by name, so volumes still
+        under their legacy name are found via the globalId index, and
+        reverted volumes also by their preserved (original) globalId.
+        The preserved id a snapshot inherits is not indexed: every
+        snapshot of the same lineage carries it, StorPool resolves none
+        of them by it, and the tags (img, snap) name the right one."""
         if kv_uid in self.sp.data:
             return self.sp.data[kv_uid]
         if self._uid_index is None:
@@ -160,9 +179,15 @@ class DataProcessing(BaseManager):
                 self._uid_index[sp_entry["globalId"]] = sp_entry
             for sp_entry in self.sp.data.values():
                 preserved: str = sp_entry.get("preservedGlobalId") or ""
-                if preserved:
+                if preserved and not sp_entry["snapshot"]:
                     self._uid_index.setdefault(preserved, sp_entry)
         return self._uid_index.get(kv_uid.lstrip("~"))
+
+    def _queue_action(self, name: str, action: str) -> None:
+        """Append an action to an update record once"""
+        actions: List[str] = self.update_data[name]["action"]
+        if action not in actions:
+            actions.append(action)
 
     def _resolve_one_record(self, name: str) -> Optional[Dict[str, Any]]:
         """Find an OpenNebula record by current or legacy name"""
@@ -291,8 +316,7 @@ class DataProcessing(BaseManager):
             entry["data"]["spname"] = spname
         if "uid" not in entry["data"]:
             entry["data"]["uid"] = self._kv_globalid(sp_entry)
-        if "kv" not in entry["action"]:
-            entry["action"].append("kv")
+        self._queue_action(spname, "kv")
         self.dbg(2, f"queued KV repair {spname} ->"
                     f" ~{self._kv_globalid(sp_entry)}")
 
@@ -382,6 +406,19 @@ class DataProcessing(BaseManager):
                             "  # verify before removing")
                 self.dbg(0, f"# etcdctl del /byUid/{uid}"
                             "  # verify before removing")
+            elif uid != f"~{self._kv_globalid(sp_uid_entry)}":
+                # the pair keeps the revert-unstable canonical id of
+                # a reverted volume
+                kind: str = (
+                    "snapshot" if sp_uid_entry["snapshot"] else "volume"
+                )
+                self.err(
+                    f"[kv] byName[{name}] = {uid} is not the stable id"
+                    f" of {kind} {sp_uid_entry['name']} - rebind to"
+                    f" ~{self._kv_globalid(sp_uid_entry)}",
+                    "Issue",
+                )
+                self._update_kv_data(name, self._kv_globalid(sp_uid_entry))
             elif (
                 sp_uid_entry["name"][0] == "~"
                 and name in self.sp.data
@@ -448,7 +485,7 @@ class DataProcessing(BaseManager):
             self.update_data[name]["data"]["uid"] = uid
         self.update_data[name]["data"]["byName"] = name
         self.update_data[name]["data"]["byUid"] = f"~{uid}"
-        self.update_data[name]["action"].append("kv")
+        self._queue_action(name, "kv")
 
     def analyze_kv_by_uid(self) -> None:
         """Analyze KV byUid entries"""
@@ -998,7 +1035,7 @@ class DataProcessing(BaseManager):
                         },
                         "action": [],
                     }
-                self.update_data[spname]["action"].append("kv")
+                self._queue_action(spname, "kv")
             if (
                 sp_entry["snapshot"] is False
                 and "host" in one_data
@@ -1063,10 +1100,8 @@ class DataProcessing(BaseManager):
             return ("reachable", None)
         if sp_name[0] != "~" and self._resolve_npers_base_image(sp_name):
             return ("reachable", None)
-        preserved: str = sp_entry.get("preservedGlobalId") or ""
         in_kv: bool = (
-            sp_entry["globalId"] in kv_uids
-            or bool(preserved and preserved in kv_uids)
+            any(uid in kv_uids for uid in self._record_uids(sp_entry))
             or sp_name in self.etcd.data["byName"]
         )
         # not reachable - is the record ours at all?
@@ -1247,10 +1282,7 @@ class DataProcessing(BaseManager):
     def _kv_registered(self, spname: str, sp_entry: Dict[str, Any]) -> bool:
         """Check that KV binds one of the record's globalIds (the
         preserved one survives VolumeRevert) to the OpenNebula name"""
-        kv_uids: set = {f"~{sp_entry['globalId']}"}
-        preserved: str = sp_entry.get("preservedGlobalId") or ""
-        if preserved:
-            kv_uids.add(f"~{preserved}")
+        kv_uids: set = {f"~{uid}" for uid in self._record_uids(sp_entry)}
         if self.etcd.data["byName"].get(spname) in kv_uids:
             return True
         return any(
@@ -1265,10 +1297,7 @@ class DataProcessing(BaseManager):
         kv_uid: Optional[str] = self.etcd.data["byName"].get(spname)
         if not kv_uid:
             return False
-        kv_uids: set = {f"~{sp_entry['globalId']}"}
-        preserved: str = sp_entry.get("preservedGlobalId") or ""
-        if preserved:
-            kv_uids.add(f"~{preserved}")
+        kv_uids: set = {f"~{uid}" for uid in self._record_uids(sp_entry)}
         return (
             kv_uid in kv_uids
             and self.etcd.data["byUid"].get(kv_uid) == spname
@@ -1439,10 +1468,7 @@ class DataProcessing(BaseManager):
         ]
         leftover_uids: set = set()
         for entry in leftovers:
-            leftover_uids.add(entry["globalId"])
-            preserved: str = entry.get("preservedGlobalId") or ""
-            if preserved:
-                leftover_uids.add(preserved)
+            leftover_uids.update(self._record_uids(entry))
         queued: Optional[Dict[str, Any]] = self.update_data.get(spname)
         if (
             queued
@@ -2008,6 +2034,9 @@ class DataProcessing(BaseManager):
                         sp_record
                     )
                 response["action"].insert(0, "VolumeFreeze")
+                # the freeze gives the record a new globalId - the KV
+                # pair must follow it in the same run
+                response["action"].append("kv")
                 # needed even when already renamed with proper tags
                 to_globalid = True
             else:
@@ -2044,12 +2073,20 @@ class DataProcessing(BaseManager):
                 continue
             self.dbg(1, f">>> WALKING [{record}] {name} {data['action']} {data['data']=}")  # noqa: E501
             for action in data["action"]:
-                if action in actions:
-                    self.dbg(6, f"+++ BEGIN '{action}' {name=}")
-                    actions[action](data["data"], action)
-                    self.dbg(6, f"+++ END '{action}' {name=}")
-                else:
+                if action not in actions:
                     self.err(f"!!! Unknown action: {action} for {name}", "!!!")
+                    continue
+                self.dbg(6, f"+++ BEGIN '{action}' {name=}")
+                try:
+                    actions[action](data["data"], action)
+                except ApiError as err:
+                    self.err(
+                        f"{name} {action} FAILED: {err.name} {err.desc}"
+                        f" - the remaining {data['action']} skipped",
+                        "FAILED",
+                    )
+                    break
+                self.dbg(6, f"+++ END '{action}' {name=}")
             self.dbg(5, f">>> DONE [{record}] {name}")
             self.dbg(6, f"{'= '*20}")
             record += 1

@@ -2,6 +2,7 @@
 record validation."""
 import pytest
 from unittest.mock import Mock, patch
+from storpool.spapi import ApiError  # type: ignore[import-untyped]
 from storpool_kvchk.processors.data_processing import DataProcessing  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.managers.etcd_manager import etcdManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[import-untyped] # noqa: E501
@@ -1143,6 +1144,36 @@ class TestBlockedActions:
         entry = processor.update_data["one-img-200"]
         assert "VolumeFreeze" in entry["action"]
 
+    def test_freeze_rebinds_kv_in_the_same_run(self, processor):
+        """The freeze replaces the volume by a snapshot with a new
+        globalId - the record ends with a kv action so the byName
+        pair follows it before the addon needs it again."""
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _sp_vol(
+                "~n9wb.b.qr1d",
+                "n9wb.b.qr1d",
+                tags={"virt": "one", "nloc": "one", "img": "one-img-200",
+                      "nvm": "2045", "type": "PERS"},
+            )
+        }
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-img-200"]
+        assert entry["action"][0] == "VolumeFreeze"
+        assert entry["action"].count("kv") == 1
+        assert entry["action"].index("kv") > entry["action"].index("Update")
+        assert entry["data"]["uid"] == "n9wb.b.qr1d"
+
 
 _IMG_TAGS = {"virt": "one", "nloc": "one", "img": "one-img-200"}
 
@@ -1519,8 +1550,9 @@ class TestPreservedGlobalId:
         self, processor, capsys
     ):
         """The KV-registered record of a duplicate claim is recognized
-        by its preserved id - the reverted live volume is not reported
-        as a leftover."""
+        by the id the KV keeps, the inherited preserved one here - it
+        is not reported as a leftover, and the live handle is its
+        canonical id (the only one a snapshot answers to)."""
         processor.one.ds_images = {
             "one-img-200": _ds_image(
                 image_id=200, spname="one-img-200", legacy="one-img-200"
@@ -1545,7 +1577,7 @@ class TestPreservedGlobalId:
 
         out = capsys.readouterr().out
         assert "[CRITICAL]" not in out
-        assert "KV keeps ~fir.b.jm" in out
+        assert "KV keeps ~fir.b.xx" in out
         assert "leftover snapshot ~n9wb.b.qfgh" in out
         assert "~fir.b.jm delete" not in out
 
@@ -1573,6 +1605,255 @@ class TestPreservedGlobalId:
         entry = processor.update_data["one-sys-26-1"]
         assert entry["data"]["uid"] == "~fir.b.jm"
         assert "kv" in entry["action"]
+
+
+class TestFrozenRevertedSnapshot:
+    """A snapshot made from a reverted volume (the freeze of an image
+    or a saved disk) inherits the preservedGlobalId field, but
+    StorPool resolves a snapshot only by its own globalId (verified
+    with VolumeSnapshot/SnapshotInfo/SnapshotUpdate on 21.0)."""
+
+    def _frozen_snap(self, name="~fir.b.kz", gid="fir.b.kz",
+                     preserved="fir.b.jm", **overrides):
+        data = _sp_vol(name, gid, preservedGlobalId=preserved,
+                       snapshot=True, **overrides)
+        data.setdefault("tags", {})
+        return data
+
+    def test_kv_globalid_is_the_canonical_one(self, processor):
+        snap = self._frozen_snap()
+        assert processor._kv_globalid(snap) == "fir.b.kz"
+
+    def test_record_uids_keep_the_inherited_id_as_identity(
+        self, processor
+    ):
+        """A KV entry may still reference the snapshot through the
+        volume id it was frozen from - that identifies the record, it
+        is just not its handle, so the uid lookup does not resolve it."""
+        snap = self._frozen_snap()
+        assert processor._record_uids(snap) == {"fir.b.kz", "fir.b.jm"}
+        processor.sp.data = {"~fir.b.kz": snap}
+        assert processor._sp_by_uid("~fir.b.kz") is snap
+        assert processor._sp_by_uid("~fir.b.jm") is None
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-img-200"},
+        }
+        assert processor._kv_registered("one-img-200", snap) is True
+
+    def test_canonical_kv_is_consistent_and_not_rebound(
+        self, processor, capsys
+    ):
+        """The KV pair written by the freeze (the canonical snapshot
+        id) is consistent - no 'revert-unstable id' rebind to the
+        preserved id StorPool would reject."""
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.sp.data = {"~fir.b.kz": self._frozen_snap()}
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~fir.b.kz"},
+            "byUid": {"~fir.b.kz": "one-img-200"},
+        }
+
+        processor.analyze_storpool()
+        processor.analyze_kv_by_name()
+        processor.analyze_kv_by_uid()
+
+        out = capsys.readouterr().out
+        assert "revert-unstable id" not in out
+        assert "[Issue]" not in out
+        queued = processor.update_data.get("one-img-200")
+        assert not queued or "kv" not in queued["action"]
+
+    def test_kv_pair_on_inherited_id_is_dead_repaired_by_tags(
+        self, processor, capsys
+    ):
+        """A consistent KV pair keeping the volume id the snapshot was
+        frozen from is dead for StorPool: reported as not in StorPool,
+        and the tagged snapshot queues the repair to its canonical id."""
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.sp.data = {
+            "~fir.b.kz": self._frozen_snap(tags=dict(_IMG_TAGS))
+        }
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-img-200"},
+        }
+
+        processor.analyze_storpool()
+        processor.analyze_kv_by_name()
+
+        out = capsys.readouterr().out
+        assert "UID not in StorPool!" in out
+        assert "rebind" not in out
+        entry = processor.update_data["one-img-200"]
+        assert entry["data"]["uid"] == "fir.b.kz"
+        assert entry["action"] == ["kv"]
+
+    def test_shared_inherited_id_never_picks_a_sibling(self, processor):
+        """Every snapshot of a reverted volume inherits the same
+        preserved id. With the image KV bound to that dead id, the
+        earlier disk snapshot listed first must not become the image:
+        the uid lookup refuses the inherited id and the tags decide."""
+        image = _ds_image(
+            image_id=200, spname="one-img-200", legacy="one-img-200"
+        )
+        image["snapshots"] = {
+            "one-img-200-snap0": {
+                "id": 0, "spname": "one-img-200-snap0",
+                "legacy": "one-img-200-snap0", "img": "one-img-200",
+                "snap": "snap0", "snapshot": True, "vms": 0,
+                "virt": "one", "nloc": "one",
+            }
+        }
+        processor.one.ds_images = {"one-img-200": image}
+        snap0 = self._frozen_snap(
+            name="~fir.b.ab", gid="fir.b.ab",
+            tags=dict(_IMG_TAGS, snap="snap0"),
+        )
+        root = self._frozen_snap(tags=dict(_IMG_TAGS))
+        processor.sp.data = {"~fir.b.ab": snap0, "~fir.b.kz": root}
+        processor.etcd.data = {
+            "byName": {
+                "one-img-200": "~fir.b.jm",
+                "one-img-200-snap0": "~fir.b.ab",
+            },
+            "byUid": {
+                "~fir.b.jm": "one-img-200",
+                "~fir.b.ab": "one-img-200-snap0",
+            },
+        }
+
+        processor.analyze_storpool()
+        processor.analyze_kv_by_name()
+        processor.analyze_kv_by_uid()
+
+        entry = processor.update_data["one-img-200"]
+        assert entry["data"]["uid"] == "fir.b.kz"
+        assert entry["data"].get("byUid") in (None, "~fir.b.kz")
+        for name, rec in processor.update_data.items():
+            assert not (
+                name == "one-img-200"
+                and rec["data"].get("byUid") == "~fir.b.ab"
+            )
+
+    def test_update_kv_data_queues_kv_once(self, processor):
+        processor._update_kv_data("one-img-200", "fir.b.kz")
+        processor._update_kv_data("one-img-200", "fir.b.kz")
+        processor._queue_kv_repair(
+            "one-img-200", _sp_vol("~fir.b.kz", "fir.b.kz")
+        )
+        assert processor.update_data["one-img-200"]["action"] == ["kv"]
+
+    def test_tagged_snapshot_not_in_byuid_repair_uses_canonical(
+        self, processor
+    ):
+        """The KV repair queued for a tagged snapshot missing from byUid
+        binds the canonical id, never the inherited one."""
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.sp.data = {
+            "~fir.b.kz": self._frozen_snap(tags=dict(_IMG_TAGS))
+        }
+        processor.etcd.data = {"byName": {}, "byUid": {}}
+
+        processor.analyze_storpool()
+
+        entry = processor.update_data["one-img-200"]
+        assert entry["data"]["uid"] == "fir.b.kz"
+        assert "kv" in entry["action"]
+
+    def test_volume_pair_on_canonical_id_rebound_to_preserved(
+        self, processor, capsys
+    ):
+        """The same check on a reverted volume: a consistent pair on
+        the revert-unstable canonical id is rebound to the preserved."""
+        vol = _sp_vol("~fir.b.jm", "fir.b.xx", preservedGlobalId="fir.b.jm")
+        processor.sp.data = {"~fir.b.jm": vol}
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.xx"},
+            "byUid": {"~fir.b.xx": "one-sys-26-1"},
+        }
+
+        processor.analyze_kv_by_name()
+
+        out = capsys.readouterr().out
+        assert "not the stable id of volume ~fir.b.jm" in out
+        entry = processor.update_data["one-sys-26-1"]
+        assert entry["data"]["byUid"] == "~fir.b.jm"
+
+
+class TestProcessUpdatesApiError:
+    """A StorPool API error fails one update record, not the run"""
+
+    def _records(self):
+        return {
+            "one-img-200": {
+                "action": ["VolumeFreeze", "Update", "kv"],
+                "data": {
+                    "uid": "fir.b.jm",
+                    "spname": "one-img-200",
+                    "snapshot": False,
+                    "sp_api_http_host": "localhost",
+                },
+            },
+            "one-img-201": {
+                "action": ["Update", "kv"],
+                "data": {
+                    "uid": "fir.b.kz",
+                    "spname": "one-img-201",
+                    "snapshot": True,
+                    "sp_api_http_host": "localhost",
+                },
+            },
+        }
+
+    def test_failed_record_skipped_the_rest_runs(self, processor, capsys):
+        processor.args.execute = True
+        processor.update_data = self._records()
+        processor.sp.volumefreeze = Mock(
+            side_effect=ApiError(404, {"error": {
+                "name": "objectDoesNotExist",
+                "descr": "volume '~fir.b.jm' does not exist",
+            }})
+        )
+        processor.sp.action = Mock()
+        processor.etcd.action = Mock()
+
+        processor.process_updates()
+
+        processor.sp.volumefreeze.assert_called_once()
+        processor.sp.action.assert_called_once_with(
+            processor.update_data["one-img-201"]["data"], "Update"
+        )
+        processor.etcd.action.assert_called_once_with(
+            processor.update_data["one-img-201"]["data"], "kv"
+        )
+        out = capsys.readouterr().out
+        assert "[FAILED]" in out
+        assert "one-img-200 VolumeFreeze FAILED: objectDoesNotExist" in out
+
+    def test_other_errors_still_abort(self, processor):
+        processor.args.execute = True
+        processor.update_data = self._records()
+        processor.sp.volumefreeze = Mock(side_effect=RuntimeError("bug"))
+        processor.sp.action = Mock()
+        processor.etcd.action = Mock()
+
+        with pytest.raises(RuntimeError):
+            processor.process_updates()
+
+        processor.sp.action.assert_not_called()
 
 
 class TestBuildTagsQosclass:
