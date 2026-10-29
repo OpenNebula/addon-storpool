@@ -127,6 +127,13 @@ function alterVcPolicy()
         DS_SP_API_HTTP_HOST["${VM_DS_ID}"]="${SP_API_HTTP_HOST}"
         DS_SP_API_HTTP_PORT["${VM_DS_ID}"]="${SP_API_HTTP_PORT}"
         DS_SP_AUTH_TOKEN["${VM_DS_ID}"]="${SP_AUTH_TOKEN}"
+        # volatile and context volumes exist only when the addon driver
+        # created them, which is when the system datastore is StorPool
+        system_ds_tm="${DS_TM_MAD}"
+        system_ds_storpool=0
+        if [[ "${system_ds_tm:0:8}" == "storpool" ]]; then
+            system_ds_storpool=1
+        fi
     else
         if boolTrue "DDEBUG_alterVcPolicy"; then
             splog "[DD][alterVcPolicy] VM ${vmId} VM_DS_ID is empty. Return 0"
@@ -152,10 +159,26 @@ function alterVcPolicy()
     declare -gA uidsDiskid_a # uidsDiskid_a[SP_UID]=oneName
     declare -gA volUidName_a # volUidName_a[SP_UID]=oneName
     declare -gA volUids_a  # volUids_a[oneName]=SP_UID
+    unset diskType_a
+    declare -A diskType_a  # diskType_a[oneName]=DISK_TYPE
+    for entry in ${vmDisksTypeMap}; do
+        diskType_a["${entry%%:*}"]="${entry#*:}"  # diskType_a[oneName]=DISK_TYPE
+    done
     # vmDisksMap: 'oneName:DISK_ID ...'
     for disk in ${vmDisksMap}; do
         oneName="${disk%:*}"
         disk_id="${disk#*:}"
+        disk_type="${diskType_a[${oneName}]}"
+        case "${disk_type^^}" in
+            VOL*|CNTXT)
+                if [[ ${system_ds_storpool} -eq 0 ]]; then
+                    if boolTrue "DDEBUG_alterVcPolicy"; then
+                        splog "[DD] VM ${vmId} disk ${disk_id} ${oneName} (${disk_type}) skipped, system DS ${VM_DS_ID} TM_MAD='${system_ds_tm}' is not StorPool"
+                    fi
+                    continue
+                fi
+                ;;
+        esac
         diskNames_a["disk${disk_id}"]="${oneName}"
         kvGetUid "${oneName}" && _kvret=0 || _kvret=$?
         if [[ ${_kvret} -eq 0 ]]; then
@@ -171,12 +194,6 @@ function alterVcPolicy()
         fi
     done
     export diskNames_a uidsDiskid_a volUids_a volUidName_a
-
-    unset diskType_a
-    declare -A diskType_a  # diskType_a[oneName]=DISK_TYPE
-    for entry in ${vmDisksTypeMap}; do
-        diskType_a["${entry%%:*}"]="${entry#*:}"  # diskType_a[oneName]=DISK_TYPE
-    done
 
     unset volumesQc_a
     declare -A volumesQc_a  # volumesQc_a[oneName]=QosClassName
