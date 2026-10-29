@@ -259,6 +259,7 @@ class spManager(BaseManager):
         tags["img"] = in_data["spname"]
         payload: Dict[str, Any] = {"name": "", "tags": tags}
         spname = in_data["spname"]
+        volume = f"~{old_globalid}"
         sp_api_http_host = in_data["sp_api_http_host"]
         api = self.api_host[sp_api_http_host]
         if self.args.execute:
@@ -266,8 +267,9 @@ class spManager(BaseManager):
                 self.dbg(
                     0,
                     f"[[dry-run]] {sp_api_http_host} snapshotCreate "
-                    f"{in_data=} {payload=}",
+                    f"{volume} ({spname}) {in_data=} {payload=}",
                 )
+                in_data["old_uid"] = old_globalid
                 in_data["uid"] = "new.globalid"
                 in_data["snapshot"] = True
                 self.dbg(
@@ -275,22 +277,27 @@ class spManager(BaseManager):
                     f"[[dry-run]] UPDATED {old_globalid=} to {in_data['uid']}"
                     f", {in_data['snapshot']=} {spname=}"
                 )
-                self.dbg(0, f"[[dry-run]] volumeDelete {spname=}")
+                self.dbg(0, f"[[dry-run]] volumeDelete {volume} {spname=}")
                 return
         else:
             self.dbg(0, f"[[to-execute]] {in_data=} {payload=}")
             return
-        response = api.snapshotCreate(  # noqa
-            spname,
-            payload,
-        )
+        try:
+            response = api.snapshotCreate(volume, payload)  # noqa
+        except ApiError as err:
+            self.err(
+                f"{sp_api_http_host} snapshotCreate({volume}) {spname=}"
+                f" {err.name} {err.desc} {err.json}"
+            )
+            raise
         self.dbg(
             1,
-            f"{sp_api_http_host} snapshotCreate({spname}) "
-            f"{payload=} {response.ok=}",
+            f"{sp_api_http_host} snapshotCreate({volume}) {spname=}"
+            f" {payload=} {response.ok=}",
         )
         if response.ok:
             snapshot_globalid: str = response.snapshotGlobalId
+            in_data["old_uid"] = old_globalid
             in_data["uid"] = snapshot_globalid
             in_data["snapshot"] = True
             self.dbg(
@@ -298,17 +305,25 @@ class spManager(BaseManager):
                 f"{sp_api_http_host} UPDATED {spname=} old {old_globalid} "
                 f"to {snapshot_globalid} and {in_data['snapshot']=}",
             )
-            response = api.volumeDelete(spname)  # noqa
+            try:
+                response = api.volumeDelete(volume)  # noqa
+            except ApiError as err:
+                self.err(
+                    f"{sp_api_http_host} volumeDelete({volume}) {spname=}"
+                    f" {err.name} {err.desc} {err.json}"
+                )
+                raise
             self.dbg(
                 1,
-                f"{sp_api_http_host} volumeDelete({spname}) {response.ok=}"
+                f"{sp_api_http_host} volumeDelete({volume}) {spname=}"
+                f" {response.ok=}"
             )
         else:
             self.err(
-                f"{sp_api_http_host} snapshotCreate({spname}) {payload=}"
-                f"{response.err=}",
+                f"{sp_api_http_host} snapshotCreate({volume}) {spname=}"
+                f" {payload=} {response.err=}",
             )
-            raise Exception(f"{sp_api_http_host} snapshotCreate({spname}) {payload=} {response.ok=}")  # noqa: E501
+            raise Exception(f"{sp_api_http_host} snapshotCreate({volume}) {spname=} {payload=} {response.ok=}")  # noqa: E501
 
     def _get_request_data(
         self, action: str, action_data: Dict[str, Any]

@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import Mock, patch
+from storpool.spapi import ApiError  # type: ignore[import-untyped]
 from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.models.exceptions import UnknownApiCall  # type: ignore[import-untyped] # noqa: E501
 
@@ -336,8 +337,9 @@ class TestStorPoolManager:
         # Execute volumefreeze
         sp_manager.volumefreeze(in_data, "freeze")
 
-        # Verify snapshot creation was called; the volume name is added as
-        # an `img` tag on the new snapshot.
+        # The volume is addressed by its globalId, the way the other
+        # actions do: the StorPool name is ~globalId once migrated, the
+        # OpenNebula name survives only as the `img` tag of the snapshot.
         expected_payload = {
             "name": "",
             "tags": {
@@ -347,18 +349,85 @@ class TestStorPoolManager:
             }
         }
         sp_manager._mock_api.snapshotCreate.assert_called_once_with(
-            "test-volume",
+            "~vol-123-global-id",
             expected_payload
         )
 
         # Verify volume deletion was called
         sp_manager._mock_api.volumeDelete.assert_called_once_with(
-            "test-volume"
+            "~vol-123-global-id"
         )
 
         # Verify in_data was updated correctly
         assert in_data["snapshot"] is True
         assert in_data["uid"] == "new-snap-789-global-id"
+        assert in_data["old_uid"] == "vol-123-global-id"
+
+    def test_volumefreeze_reverted_volume_by_preserved_id(self, sp_manager):
+        """A reverted volume is queued with its preserved (creation)
+        globalId - StorPool resolves it for the volume, and the new
+        snapshot is then tracked by its own globalId."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager._mock_api.volumeDelete.reset_mock()
+
+        in_data = {
+            "uid": "vol-000-preserved-id",
+            "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {},
+            "tags": {}
+        }
+
+        sp_manager.volumefreeze(in_data, "freeze")
+
+        sp_manager._mock_api.snapshotCreate.assert_called_once_with(
+            "~vol-000-preserved-id",
+            {"name": "", "tags": {"img": "test-volume"}},
+        )
+        sp_manager._mock_api.volumeDelete.assert_called_once_with(
+            "~vol-000-preserved-id"
+        )
+        assert in_data["uid"] == "new-snap-789-global-id"
+        assert in_data["snapshot"] is True
+        assert in_data["old_uid"] == "vol-000-preserved-id"
+
+    def test_volumefreeze_missing_volume_reported_and_raised(
+        self, sp_manager, capsys
+    ):
+        """A volume gone from StorPool is reported and the ApiError
+        propagates - the volume is not deleted and the record keeps
+        its uid."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager._mock_api.volumeDelete.reset_mock()
+        sp_manager._mock_api.snapshotCreate.side_effect = ApiError(
+            404, {"error": {
+                "name": "objectDoesNotExist",
+                "descr": "volume '~vol-123-global-id' does not exist",
+            }}
+        )
+
+        in_data = {
+            "uid": "vol-123-global-id",
+            "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {},
+            "tags": {}
+        }
+
+        try:
+            with pytest.raises(ApiError):
+                sp_manager.volumefreeze(in_data, "freeze")
+        finally:
+            sp_manager._mock_api.snapshotCreate.side_effect = None
+
+        sp_manager._mock_api.volumeDelete.assert_not_called()
+        assert in_data["uid"] == "vol-123-global-id"
+        assert "old_uid" not in in_data
+        out = capsys.readouterr().out
+        assert "objectDoesNotExist" in out
+        assert "snapshotCreate(~vol-123-global-id)" in out
 
     def test_volumefreeze_dry_run(self, sp_manager):
         """Test volumefreeze in dry run mode"""

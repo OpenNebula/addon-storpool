@@ -236,6 +236,52 @@ class TestetcdManagerWriteKvData:
         calls = mock_etcd.put.call_args_list
         assert calls[0][0] == ("/byName/test-volume", "~test.uid.456")
         assert calls[1][0] == ("/byUid/~test.uid.456", "test-volume")
+        mock_etcd.delete.assert_not_called()
+
+    @patch('etcd3.client')
+    def test_write_kv_data_drops_the_previous_byuid(
+        self, mock_etcd_client, etcd_manager_with_mock_data
+    ):
+        """After a freeze the record carries the uid the volume had:
+        its byUid entry is removed once the pair points at the
+        snapshot."""
+        manager = etcd_manager_with_mock_data
+        manager.args.execute = True
+        manager.args.dry_run = False
+
+        mock_etcd = Mock()
+        mock_etcd_client.return_value = mock_etcd
+        mock_etcd.put.return_value = (True, 1)
+
+        manager.write_kv_data({
+            "spname": "test-volume",
+            "uid": "snap.uid.789",
+            "old_uid": "test.uid.456",
+        })
+
+        calls = mock_etcd.put.call_args_list
+        assert calls[0][0] == ("/byName/test-volume", "~snap.uid.789")
+        assert calls[1][0] == ("/byUid/~snap.uid.789", "test-volume")
+        mock_etcd.delete.assert_called_once_with("/byUid/~test.uid.456")
+
+    @patch('etcd3.client')
+    def test_write_kv_data_same_old_uid_not_deleted(
+        self, mock_etcd_client, etcd_manager_with_mock_data
+    ):
+        manager = etcd_manager_with_mock_data
+        manager.args.execute = True
+        manager.args.dry_run = False
+        mock_etcd = Mock()
+        mock_etcd_client.return_value = mock_etcd
+        mock_etcd.put.return_value = (True, 1)
+
+        manager.write_kv_data({
+            "spname": "test-volume",
+            "uid": "~test.uid.456",
+            "old_uid": "test.uid.456",
+        })
+
+        mock_etcd.delete.assert_not_called()
 
     @patch('etcd3.client')
     def test_write_kv_data_dry_run_mode(

@@ -81,6 +81,8 @@ class etcdManager(BaseManager):
         action_data: {
             "spname": "ans-sys-26-1",
             "uid": "~fir.b.jm",
+            "old_uid": "fir.b.jj",  # optional: the uid the record had
+                                    # before a freeze, its byUid goes
         }
         """
         try:
@@ -92,6 +94,10 @@ class etcdManager(BaseManager):
                 kv_val = action_data['uid']
             else:
                 kv_val = f"~{action_data['uid']}"
+            new_uid: str = kv_val
+            old_uid: str = action_data.get("old_uid") or ""
+            if old_uid:
+                old_uid = f"~{old_uid.lstrip('~')}"
             res: Tuple[bool, int] = (False, 0)
             if self.args.execute:
                 self.dbg(2, f"{action_data=}")
@@ -113,6 +119,15 @@ class etcdManager(BaseManager):
                         2,
                         f"data {kv_key} {kv_val} {res_str}",
                     )
+            if old_uid and old_uid != new_uid and self.args.execute:
+                # the previous uid of a frozen volume: its byUid entry
+                # is stale once the name points at the snapshot
+                kv_key = f"/byUid/{old_uid}"
+                if self.args.dry_run:
+                    self.dbg(0, f"[dry-run] etcd.delete({kv_key})")
+                else:
+                    res_del: Any = etcd.delete(kv_key)
+                    self.dbg(2, f"data delete {kv_key} {res_del}")
         except Exception as error:
             self.err(f"write_data Error! {action_data=} {error=}")
             raise error
