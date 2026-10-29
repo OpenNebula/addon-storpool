@@ -50,6 +50,23 @@ def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     return bool(tm_mad) and str(tm_mad).startswith("storpool")
 
 
+def image_root_is_live_volume(
+    imagetype: ImageType,
+    disktype: DiskType,
+    vms: int,
+) -> bool:
+    """True when one-img-N is the attached VM disk.
+
+    A persistent OS or datablock image in use is that volume, and it
+    carries nvm. A CDROM is cloned to one-img-N-<vm>-<disk> by
+    tm/storpool/ln and tm/storpool/clone whether or not PERSISTENT is
+    set, so the datastore image stays a snapshot with virt, nloc, img
+    and qc only."""
+    if imagetype == ImageType.CDROM:
+        return False
+    return disktype == DiskType.PERSISTENT and vms > 0
+
+
 def parse_vm_qosclass(
     line: Optional[str],
 ) -> Tuple[Optional[str], Dict[int, str]]:
@@ -526,10 +543,13 @@ class oneManager(BaseManager):
                 order=IMAGE_QOSCLASS_ORDER,
             )
             img_dict["vms"] = len(img_dict["vmlist"])
-            if img_dict["disktype"] == DiskType.PERSISTENT:
-                if img_dict["vms"] > 0:
-                    img_dict["snapshot"] = False
-                    img_dict["vm_id"] = img_dict["vmlist"][0]
+            if image_root_is_live_volume(
+                img_dict["imagetype"],
+                img_dict["disktype"],
+                img_dict["vms"],
+            ):
+                img_dict["snapshot"] = False
+                img_dict["vm_id"] = img_dict["vmlist"][0]
             img_dict["snapshots"] = {}
             snapshots_e: Any = getattr(img_e, "SNAPSHOTS", None)
             snap_list: Any = (
@@ -556,12 +576,11 @@ class oneManager(BaseManager):
                     "nloc": self.args.loc_tag_val,
                     "ZDBG": "_get_ds_images",
                 }
-                # fmt: off
-                if (
-                    img_dict["disktype"] == DiskType.PERSISTENT
-                    and img_dict["vms"] > 0
+                if image_root_is_live_volume(
+                    img_dict["imagetype"],
+                    img_dict["disktype"],
+                    img_dict["vms"],
                 ):
-                    # fmt: on
                     snap_entry["vms"] = img_dict["vms"]
                 else:
                     snap_entry["vms"] = 0
