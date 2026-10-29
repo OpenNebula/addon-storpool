@@ -1,7 +1,7 @@
 """StorPool Manager."""
 
 from __future__ import annotations
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import copy
 import pprint
@@ -19,6 +19,14 @@ class spManager(BaseManager):
     data: Dict[str, Any] = {}
     api_dsid: dict[int, Api] = {}
     api_host: dict[str, Api] = {}
+    # the datastore -> API host mapping behind api_dsid
+    host_dsid: dict[int, str] = {}
+    # ClustersList/LocationsList per API host (raw API dicts)
+    clusters: Dict[str, List[Dict[str, Any]]] = {}
+    locations: Dict[str, List[Dict[str, Any]]] = {}
+    # SP_CLUSTER_ID of the frontend's storpool.conf, the cluster
+    # behind the default API host
+    local_cluster_id: str = ""
 
     def __init__(
         self,
@@ -26,7 +34,14 @@ class spManager(BaseManager):
         datastore_config: dict[int, dict[str, str]] = {},
     ):
         super().__init__(args)
+        self.data = {}
+        self.api_dsid = {}
+        self.api_host = {}
+        self.host_dsid = {}
+        self.clusters = {}
+        self.locations = {}
         spconfig = SPConfig()
+        self.local_cluster_id = str(spconfig.get("SP_CLUSTER_ID") or "")
         for ds_id, ds_config in datastore_config.items():
             sp_api_http_host = (
                 ds_config.get("SP_API_HTTP_HOST")
@@ -49,6 +64,7 @@ class spManager(BaseManager):
                 )
 
             self.api_dsid[ds_id] = self.api_host[sp_api_http_host]
+            self.host_dsid[ds_id] = sp_api_http_host
         self.dbg(8, f"{self.api_host=}")
         self.dbg(8, f"{self.api_dsid=}")
         self._load_data()
@@ -59,10 +75,66 @@ class spManager(BaseManager):
         The lists are fetched with returnRawAPIData=True because the
         typed bindings drop any JSON field their spec does not declare
         (e.g. preservedGlobalId)."""
+        self._clusters()
         self._attachments()
         self._volumes()
         self._snapshots()
         self.dbg(2, pprint.pformat(self.data))
+
+    def _clusters(self) -> None:
+        """Get the StorPool clusters and locations known to each API"""
+        for sp_api_http_host, api in self.api_host.items():
+            try:
+                clusters = api.clustersList(returnRawAPIData=True)  # noqa
+                locations = api.locationsList(returnRawAPIData=True)  # noqa
+            except Exception as error:
+                self.err(f"{sp_api_http_host} Error! {error}")
+                raise error
+            self.clusters[sp_api_http_host] = list(clusters.get("clusters", []))  # noqa: E501
+            self.locations[sp_api_http_host] = list(locations.get("locations", []))  # noqa: E501
+            self.dbg(4, f"{sp_api_http_host} clusters {self.clusters[sp_api_http_host]}")  # noqa: E501
+            self.dbg(4, f"{sp_api_http_host} locations {self.locations[sp_api_http_host]}")  # noqa: E501
+
+    def cluster_registered(
+        self, sp_api_http_host: str, cluster_id: str
+    ) -> Optional[str]:
+        """Check a '<locationId>.<clusterId>' cluster id against the
+        locations and clusters registered in the API at
+        sp_api_http_host (storpool location list / cluster list).
+        Return None when both are registered, the reason otherwise."""
+        location_id, dot, short_id = cluster_id.rpartition(".")
+        if not dot or not location_id or not short_id:
+            return f"'{cluster_id}' is not a <location>.<cluster> id"
+        locations = self.locations.get(sp_api_http_host, [])
+        location = next(
+            (loc for loc in locations if loc.get("id") == location_id),
+            None,
+        )
+        if location is None:
+            return (
+                f"location '{location_id}' of cluster '{cluster_id}'"
+                f" is not a StorPool location"
+                f" (known: {[loc.get('id') for loc in locations]})"
+            )
+        clusters = self.clusters.get(sp_api_http_host, [])
+        cluster = next(
+            (
+                cl for cl in clusters
+                if cl.get("id") == short_id
+                and cl.get("location") == location.get("name")
+            ),
+            None,
+        )
+        if cluster is None:
+            known = [
+                f"{cl.get('location')}/{cl.get('id')}" for cl in clusters
+            ]
+            return (
+                f"cluster '{cluster_id}' is not a StorPool cluster"
+                f" in location '{location_id}' ({location.get('name')})"
+                f" (known location/cluster: {known})"
+            )
+        return None
 
     def _attachments(self) -> None:
         """Get StorPool attachments"""
