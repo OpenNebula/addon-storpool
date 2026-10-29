@@ -12,6 +12,9 @@ from ..version import __version__
 # Map the reporting method to the issue category (the file name
 # suffix). Reports from methods not listed here land in 'errors'.
 CALLER_CATEGORIES: Dict[str, str] = {
+    # datastore cluster ids vs StorPool clusters/locations
+    "analyze_clusters": "clusters",
+    "main": "clusters",
     # KV (etcd) byName/byUid consistency
     "analyze_kv_by_name": "kv",
     "_kv_check_one_record": "kv",

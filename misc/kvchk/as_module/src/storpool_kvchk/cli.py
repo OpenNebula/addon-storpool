@@ -14,6 +14,7 @@ from .managers.storpool_manager import spManager
 from .managers.etcd_manager import etcdManager
 from .processors.data_processing import DataProcessing
 from .utils.report_writer import ReportWriter
+from .models.exceptions import ClusterConfigError
 
 
 def parse_addon_storpoolrc() -> Dict[str, str]:
@@ -161,8 +162,8 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
         action="store_true",
         default=True,
         help="log the reported issues to YYYYmmdd-HHMM-<category>.txt"
-             " files in the current folder (kv, vm-disks, images,"
-             " volumes, hanging, foreign, duplicates, symlinks,"
+             " files in the current folder (clusters, kv, vm-disks,"
+             " images, volumes, hanging, foreign, duplicates, symlinks,"
              " updates, errors), the default",
     )
     parser.add_argument(
@@ -240,6 +241,10 @@ def main() -> int:
             arguments, etcd_manager, sp_manager, one_manager, ssh_manager
         )
 
+        # the StorPool cluster configuration gate - nothing else runs
+        # (and the upgrade around this check stops) when it fails
+        data_processing.analyze_clusters()
+
         data_processing.analyze_kv_by_name()
         data_processing.analyze_kv_by_uid()
 
@@ -257,6 +262,9 @@ def main() -> int:
         data_processing.process_updates()
 
         return 0
+    except ClusterConfigError as error:
+        BaseManager(arguments).err(f"{error}. Stopping.")
+        return 2
     except Exception:
         print(f"Error: {traceback.format_exc()}", file=sys.stderr)
         return 1

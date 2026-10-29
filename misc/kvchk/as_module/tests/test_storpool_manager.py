@@ -32,7 +32,8 @@ def mock_storpool_modules():
     config_dict = {
         'SP_API_HTTP_HOST': 'localhost',
         'SP_API_HTTP_PORT': '81',
-        'SP_AUTH_TOKEN': 'test-token-12345'
+        'SP_AUTH_TOKEN': 'test-token-12345',
+        'SP_CLUSTER_ID': 'fir.b',
     }
 
     mock_config = Mock()
@@ -85,6 +86,15 @@ def mock_storpool_modules():
     mock_api.snapshotsList.return_value = [mock_snapshot]
     mock_api.attachmentsList.return_value = [mock_attachment]
     mock_api.templatesList.return_value = []
+    mock_api.clustersList.return_value = {"clusters": [
+        {"id": "b", "location": "devA1", "name": "devA1-cl1"},
+        {"id": "n", "location": "devA1", "name": "devA1-cl2"},
+        {"id": "b", "location": "devA3", "name": "devA3-cl1"},
+    ]}
+    mock_api.locationsList.return_value = {"locations": [
+        {"id": "fir", "name": "devA1"},
+        {"id": "njyf", "name": "devA3"},
+    ]}
 
     # Mock successful API responses
     mock_success_response = Mock()
@@ -458,3 +468,57 @@ class TestStorPoolManager:
         assert config.get("SP_API_HTTP_HOST") == "localhost"
         assert config.get("NONEXISTENT_KEY") is None
         assert config.get("NONEXISTENT_KEY", "default") == "default"
+
+
+class TestClusterRegistration:
+    """ClustersList/LocationsList are loaded per API host and a
+    datastore's '<location>.<cluster>' id is checked against them"""
+
+    def test_clusters_loaded_per_host(self, sp_manager):
+        assert sp_manager.host_dsid == {0: TEST_HOST}
+        assert sp_manager.local_cluster_id == "fir.b"
+        assert [c["id"] for c in sp_manager.clusters[TEST_HOST]] == [
+            "b", "n", "b"
+        ]
+        assert [loc["id"] for loc in sp_manager.locations[TEST_HOST]] == [
+            "fir", "njyf"
+        ]
+        sp_manager._mock_api.clustersList.assert_called_once_with(
+            returnRawAPIData=True
+        )
+        sp_manager._mock_api.locationsList.assert_called_once_with(
+            returnRawAPIData=True
+        )
+
+    @pytest.mark.parametrize("cluster_id", ["fir.b", "fir.n", "njyf.b"])
+    def test_registered(self, sp_manager, cluster_id):
+        assert sp_manager.cluster_registered(TEST_HOST, cluster_id) is None
+
+    def test_unknown_location(self, sp_manager):
+        reason = sp_manager.cluster_registered(TEST_HOST, "xyz.b")
+        assert "location 'xyz'" in reason
+        assert "'fir', 'njyf'" in reason
+
+    def test_unknown_cluster_in_location(self, sp_manager):
+        # 'n' exists only in devA1 (fir), not in devA3 (njyf)
+        reason = sp_manager.cluster_registered(TEST_HOST, "njyf.n")
+        assert "cluster 'njyf.n'" in reason
+        assert "devA3" in reason
+
+    @pytest.mark.parametrize("cluster_id", ["b", "fir.", ".b", ""])
+    def test_malformed_id(self, sp_manager, cluster_id):
+        reason = sp_manager.cluster_registered(TEST_HOST, cluster_id)
+        assert "not a <location>.<cluster> id" in reason
+
+    def test_unknown_host_has_no_registrations(self, sp_manager):
+        reason = sp_manager.cluster_registered("10.0.0.9", "fir.b")
+        assert "location 'fir'" in reason
+        assert "known: []" in reason
+
+    def test_clusters_list_error_propagates(self, mock_args,
+                                            mock_storpool_modules):
+        mock_storpool_modules['api'].clustersList.side_effect = (
+            Exception("api down")
+        )
+        with pytest.raises(Exception, match="api down"):
+            spManager(mock_args, DS_CONFIG)

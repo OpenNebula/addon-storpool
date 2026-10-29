@@ -53,3 +53,18 @@ class SshManagerError(Exception):
         if self.cmd:
             err_msg += f" {self.cmd=}"
         return err_msg
+
+
+class ClusterConfigError(Exception):
+    """Raised when a datastore refers to a StorPool cluster or location
+    that is not registered in the StorPool API it uses"""
+
+    def __init__(self, problems: int):
+        self.problems: int = problems
+
+    def __str__(self) -> str:
+        return (
+            f"StorPool cluster configuration is not as expected:"
+            f" {self.problems} datastore(s) refer to an unknown"
+            f" StorPool cluster/location"
+        )

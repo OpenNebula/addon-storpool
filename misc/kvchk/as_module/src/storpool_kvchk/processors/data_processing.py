@@ -9,7 +9,9 @@ from ..managers.ssh_manager import SshManager
 from ..managers.one_manager import oneManager, is_storpool_tm_mad
 from ..managers.storpool_manager import spManager
 from ..managers.etcd_manager import etcdManager
-from ..models.exceptions import KvByNameError, KvByUidError
+from ..models.exceptions import (
+    KvByNameError, KvByUidError, ClusterConfigError
+)
 from ..models.enums import DiskType, ImageType
 
 # VM states where the VM files (and the disk.N symlinks) are
@@ -79,6 +81,59 @@ class DataProcessing(BaseManager):
                     return vdata["snapshots"][entry_name]
         self.dbg(6, f"{entry_name} not found in one.vm_disks or one.ds_images (or snapshots)")  # noqa: E501
         return None
+
+    def _datastore_cluster_id(self, ds_entry: Dict[str, Any]) -> str:
+        """The StorPool cluster a datastore uses, resolved the way
+        datastore/storpool/monitor_helper-sync does: SP_REMOTE_LOCATION,
+        then SP_CLUSTER_ID, then the frontend's own SP_CLUSTER_ID when
+        the datastore has no SP_API_HTTP_HOST of its own."""
+        cluster_id: str = str(
+            ds_entry.get("SP_REMOTE_LOCATION")
+            or ds_entry.get("SP_CLUSTER_ID")
+            or ""
+        )
+        if not cluster_id and not ds_entry.get("SP_API_HTTP_HOST"):
+            cluster_id = self.sp.local_cluster_id
+        return cluster_id
+
+    def analyze_clusters(self) -> None:
+        """Every StorPool datastore must refer to a cluster that is
+        registered as a StorPool cluster, in a registered StorPool
+        location, in the API the datastore talks to. A mismatch
+        raises ClusterConfigError - the configuration is not as
+        expected and the run (and any upgrade around it) must stop."""
+        self.dbg(1, "analyze_clusters")
+        problems: int = 0
+        for ds_id, ds_entry in sorted(self.one.one_datastores.items()):
+            if not is_storpool_tm_mad(ds_entry.get("tm_mad")):
+                continue
+            ds_name: str = ds_entry.get("name", "")
+            sp_api_http_host: str = self.sp.host_dsid.get(ds_id, "")
+            cluster_id: str = self._datastore_cluster_id(ds_entry)
+            if not cluster_id:
+                self.dbg(
+                    1,
+                    f"datastore {ds_id} ({ds_name}) has no cluster id"
+                    f" (SP_CLUSTER_ID/SP_REMOTE_LOCATION), skipping",
+                )
+                continue
+            reason: Optional[str] = self.sp.cluster_registered(
+                sp_api_http_host, cluster_id
+            )
+            if reason is None:
+                self.dbg(
+                    1,
+                    f"datastore {ds_id} ({ds_name}) cluster {cluster_id}"
+                    f" registered in API {sp_api_http_host}",
+                )
+                continue
+            problems += 1
+            self.err(
+                f"datastore {ds_id} ({ds_name}) API {sp_api_http_host}:"
+                f" {reason}"
+            )
+        if problems:
+            raise ClusterConfigError(problems)
 
     def _kv_globalid(self, sp_entry: Dict[str, Any]) -> str:
         """The globalId the KV store (and the disk.N symlinks) should
