@@ -916,6 +916,61 @@ class TestoneManager:
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')
+    def test_init_ds_images_persistent_cdrom_stays_snapshot(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
+    ):
+        """A CDROM root stays a snapshot with no VM id, persistent or not.
+
+        tm/ln and tm/clone attach one-img-N-<vm>-<disk>. nvm, diskid and
+        type belong on that clone. A persistent OS image in use is still
+        the volume itself."""
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+
+        def image(image_id, imagetype, persistent, vm_ids):
+            img = Mock()
+            img.ID = image_id
+            img.TYPE = imagetype
+            img.PERSISTENT = persistent
+            img.STATE = 2
+            img.NAME = f"image-{image_id}"
+            img.DATASTORE_ID = 1
+            img.VMS.get_ID.return_value = vm_ids
+            img.TEMPLATE.get.return_value = None
+            snap = Mock()
+            snap.ID = 1
+            snap.SIZE = 1024
+            img.SNAPSHOTS.SNAPSHOT = [snap]
+            return img
+
+        imagepool_mock = Mock()
+        imagepool_mock.get_IMAGE.return_value = [
+            image(10, ImageType.CDROM, DiskType.PERSISTENT, [171, 172]),
+            image(11, ImageType.CDROM, DiskType.NONPERSISTENT, [173]),
+            image(12, ImageType.OS, DiskType.PERSISTENT, [174]),
+        ]
+        mock_pyone_api.imagepool.info.return_value = imagepool_mock
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        persistent_cdrom = manager.ds_images["one-img-10"]
+        assert persistent_cdrom["snapshot"] is True
+        assert persistent_cdrom["vms"] == 2
+        assert "vm_id" not in persistent_cdrom
+        assert persistent_cdrom["snapshots"]["one-img-10-snap1"]["vms"] == 0
+
+        nonpersistent_cdrom = manager.ds_images["one-img-11"]
+        assert nonpersistent_cdrom["snapshot"] is True
+        assert "vm_id" not in nonpersistent_cdrom
+
+        persistent_os = manager.ds_images["one-img-12"]
+        assert persistent_os["snapshot"] is False
+        assert persistent_os["vm_id"] == 174
+        assert persistent_os["snapshots"]["one-img-12-snap1"]["vms"] == 1
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
     def test_init_ds_images_skips_non_storpool_datastore(
         self, mock_run, mock_pyone, mock_args, mock_ssh_manager, mock_pyone_api
     ):

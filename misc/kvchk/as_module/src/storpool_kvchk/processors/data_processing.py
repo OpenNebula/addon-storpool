@@ -6,7 +6,11 @@ import time
 import argparse
 from ..managers.base_manager import BaseManager
 from ..managers.ssh_manager import SshManager
-from ..managers.one_manager import oneManager, is_storpool_tm_mad
+from ..managers.one_manager import (
+    image_root_is_live_volume,
+    is_storpool_tm_mad,
+    oneManager,
+)
 from ..managers.storpool_manager import spManager
 from ..managers.etcd_manager import etcdManager
 from ..models.exceptions import (
@@ -706,25 +710,36 @@ class DataProcessing(BaseManager):
                         " SPsnapshot:"
                         f"{sp_rec['snapshot']}"
                     )
-                    if data["disktype"] == DiskType.PERSISTENT:
-                        if data["vms"] > 0:
-                            msg += " _but_ VM list " + repr(data["vmlist"])
-                        elif sp_rec["snapshot"] is not True:
-                            msg += " no VMs but volume! [CONVERT TO SNAPSHOT?]"
+                    if image_root_is_live_volume(
+                        data["imagetype"],
+                        data["disktype"],
+                        data["vms"],
+                    ):
+                        msg += " _but_ VM list " + repr(data["vmlist"])
                     elif data["imagetype"] == ImageType.CDROM:
+                        # persistent or not, the root stays a snapshot
                         if data["vms"] > 0:
                             msg += " VM list " + repr(data["vmlist"])
                         if sp_rec["snapshot"] is not True:
                             msg += " is SPvolume! [CONVERT TO SNAPSHOT?]"
+                    elif data["disktype"] == DiskType.PERSISTENT:
+                        if sp_rec["snapshot"] is not True:
+                            msg += " no VMs but volume! [CONVERT TO SNAPSHOT?]"
                 else:
                     err = True
                     msg += " UID not in StorPool!"
             else:
                 err = True
                 is_snapshot: bool = True
-                if data["disktype"] == DiskType.PERSISTENT:
-                    if "id" not in data and data["vms"] > 0:
-                        is_snapshot = False
+                if (
+                    "id" not in data
+                    and image_root_is_live_volume(
+                        data["imagetype"],
+                        data["disktype"],
+                        data["vms"],
+                    )
+                ):
+                    is_snapshot = False
                 if name in self.sp.data:
                     msg += " <TO_MIGRATE>"
                     if self.sp.data[name]["snapshot"] != is_snapshot:
