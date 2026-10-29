@@ -106,6 +106,15 @@ class spManager(BaseManager):
         if not dot or not location_id or not short_id:
             return f"'{cluster_id}' is not a <location>.<cluster> id"
         locations = self.locations.get(sp_api_http_host, [])
+        clusters = self.clusters.get(sp_api_http_host, [])
+        if not locations or not clusters:
+            return (
+                f"API {sp_api_http_host} has no StorPool"
+                f" {'locations' if not locations else 'clusters'}"
+                f" registered; every site must register its own location"
+                f" and cluster (storpool location add / cluster add)"
+                f" before cluster '{cluster_id}' can be verified"
+            )
         location = next(
             (loc for loc in locations if loc.get("id") == location_id),
             None,
@@ -116,7 +125,6 @@ class spManager(BaseManager):
                 f" is not a StorPool location"
                 f" (known: {[loc.get('id') for loc in locations]})"
             )
-        clusters = self.clusters.get(sp_api_http_host, [])
         cluster = next(
             (
                 cl for cl in clusters

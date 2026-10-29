@@ -512,8 +512,19 @@ class TestClusterRegistration:
 
     def test_unknown_host_has_no_registrations(self, sp_manager):
         reason = sp_manager.cluster_registered("10.0.0.9", "fir.b")
-        assert "location 'fir'" in reason
-        assert "known: []" in reason
+        assert "API 10.0.0.9 has no StorPool locations registered" in reason
+        assert "storpool location add / cluster add" in reason
+
+    def test_empty_registry_is_a_failure(self, sp_manager):
+        # a site that never registered its own location and cluster
+        # (no multicluster setup) does not pass the gate either
+        sp_manager.locations[TEST_HOST] = []
+        reason = sp_manager.cluster_registered(TEST_HOST, "fir.b")
+        assert "no StorPool locations registered" in reason
+        sp_manager.locations[TEST_HOST] = [{"id": "fir", "name": "devA1"}]
+        sp_manager.clusters[TEST_HOST] = []
+        reason = sp_manager.cluster_registered(TEST_HOST, "fir.b")
+        assert "no StorPool clusters registered" in reason
 
     def test_clusters_list_error_propagates(self, mock_args,
                                             mock_storpool_modules):
