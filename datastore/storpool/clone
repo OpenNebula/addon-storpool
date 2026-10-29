@@ -165,39 +165,63 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
         SRC_CMD="dd if=/dev/storpool-byid/${PARENT_UID#*~} bs=1M status=none | ${DST_CMD}"
         splog "${SRC_SP_CLONE_GW} ${SRC_CMD} ..."
         if [[ -n "${SRC_SP_CLONE_GW}" ]]; then
-            ${SSH:-ssh} "${SRC_SP_CLONE_GW}" "eval ${SRC_CMD}"
-            splog "${SSH:-ssh} ${SRC_SP_CLONE_GW} 'eval ${SRC_CMD}' ($?)"
+            ${SSH:-ssh} "${SRC_SP_CLONE_GW}" "set -o pipefail; eval ${SRC_CMD}"
+            _copy_ret=$?
         else
+            set -o pipefail
             eval "${SRC_CMD}"
-            splog "${SRC_CMD} ($?)"
+            _copy_ret=$?
+            set +o pipefail
+        fi
+        splog "copy ${PARENT_UID} -> ${DST_VOL_UID} (${_copy_ret})"
+
+        detach_clone_source()
+        {
+            if [[ -n "${SRC_SP_API_HTTP_HOST}" ]]; then
+                export SP_API_HTTP_HOST="${SRC_SP_API_HTTP_HOST}"
+            else
+                unset SP_API_HTTP_HOST
+            fi
+            if [[ -n "${SRC_SP_API_HTTP_PORT}" ]]; then
+                export SP_API_HTTP_PORT="${SRC_SP_API_HTTP_PORT}"
+            else
+                unset SP_API_HTTP_PORT
+            fi
+            if [[ -n "${SRC_SP_AUTH_TOKEN}" ]]; then
+                export SP_AUTH_TOKEN="${SRC_SP_AUTH_TOKEN}"
+            else
+                unset SP_AUTH_TOKEN
+            fi
+            CLONE_GW="${SRC_SP_CLONE_GW}"
+            export CLONE_GW
+            storpoolDetach "${PARENT_UID}" "force" "${SRC_SP_CLONE_GW}" "all" "" "snapshot"
+        }
+
+        if [[ ${_copy_ret} -ne 0 ]]; then
+            errmsg="Error: copy of ${PARENT_UID} to ${DST_VOL_UID} failed (${_copy_ret}); partial volume not frozen"
+            splog "${errmsg}"
+            log "${errmsg}"
+            storpoolDetach "${DST_VOL_UID}" "" "${DST_SP_CLONE_GW}"
+            DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${DST_VOL_UID}" "force"
+            detach_clone_source
+            exit "${_copy_ret}"
         fi
 
         # detach DST_VOL
         storpoolDetach "${DST_VOL_UID}" "" "${DST_SP_CLONE_GW}"
 
-        storpoolVolumeFreeze "${DST_VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
-
-        if [[ -n "${SRC_SP_API_HTTP_HOST}" ]]; then
-            export SP_API_HTTP_HOST="${SRC_SP_API_HTTP_HOST}"
-        else
-            unset SP_API_HTTP_HOST
-        fi
-        if [[ -n "${SRC_SP_API_HTTP_PORT}" ]]; then
-            export SP_API_HTTP_PORT="${SRC_SP_API_HTTP_PORT}"
-        else
-            unset SP_API_HTTP_PORT
-        fi
-        if [[ -n "${SRC_SP_AUTH_TOKEN}" ]]; then
-            export SP_AUTH_TOKEN="${SRC_SP_AUTH_TOKEN}"
-        else
-            unset SP_AUTH_TOKEN
+        _SOFT_FAIL=1 storpoolVolumeFreeze "${DST_VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+        _ret=$?
+        if [[ ${_ret} -ne 0 ]]; then
+            errmsg="Error: ${DST_VOL_UID} (${SP_VOL}) copied but not frozen (${_ret})"
+            splog "${errmsg}"
+            log "${errmsg}"
+            DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${DST_VOL_UID}" "force"
+            detach_clone_source
+            exit "${_ret}"
         fi
 
-        CLONE_GW="${SRC_SP_CLONE_GW}"
-        export CLONE_GW
-
-        # detach SRC_VOL
-        storpoolDetach "${PARENT_UID}" "force" "${SRC_SP_CLONE_GW}" "all" "" "snapshot"
+        detach_clone_source
 
         splog "DS ${SRC_DS_ID} --> ${DATASTORE_ID}, ${PARENT_UID} -> ${DST_VOL_UID}"
         exit 0
@@ -210,10 +234,26 @@ fi
 storpoolVolumeCheck "${SP_VOL}" byName
 
 storpoolVolumeFromSnapshot "${PARENT_UID}" "${SP_VOL}"
+_ret=$?
+if [[ ${_ret} -ne 0 ]]; then
+    errmsg="Error: ${SP_VOL} not created from ${PARENT_UID} (${_ret})"
+    splog "${errmsg}"
+    log "${errmsg}"
+    exit "${_ret}"
+fi
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
-storpoolVolumeFreeze "${SP_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+_VOL_UID="${SP_UID}"
+_SOFT_FAIL=1 storpoolVolumeFreeze "${_VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+_ret=$?
+if [[ ${_ret} -ne 0 ]]; then
+    errmsg="Error: ${_VOL_UID} (${SP_VOL}) not frozen (${_ret})"
+    splog "${errmsg}"
+    log "${errmsg}"
+    DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_VOL_UID}" "force"
+    exit "${_ret}"
+fi
 
 splog "END ${SP_DST}"

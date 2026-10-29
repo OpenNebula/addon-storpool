@@ -205,5 +205,10 @@ SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
 
 storpoolVolumeFreeze "${VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+_ret=$?
+if [[ ${_ret} -ne 0 ]]; then
+    splog "[E] ${VOL_UID} (${SP_VOL}) not frozen (${_ret})"
+    exit "${_ret}"
+fi
 
 splog "END ${SP_DST} ${VOL_UID}"

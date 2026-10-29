@@ -602,7 +602,7 @@ function kvGetFamily()
 {
     local _kvName="$1" _keysAndVals="$2"
     local _key="" _val="" kvfh=""
-    local _re="^/byName/${_kvName//./\\.}(-(snap[0-9]+|${VMSNAPSHOT_TAG:-ONESNAP}-.+|TEMP-[A-Za-z0-9]+|[0-9]{9,}|(ing-)?tmRestore[A-Za-z0-9]+))?$"
+    local _re="^/byName/${_kvName//./\\.}(-(snap[0-9]+|${VMSNAPSHOT_TAG:-ONESNAP}-.+|TEMP-[A-Za-z0-9]+|repl-[A-Za-z0-9]+|[0-9]{9,}|(ing-)?tmRestore[A-Za-z0-9]+))?$"
     while read -r -u "${kvfh}" _key; do
         read -r -u "${kvfh}" _val || break
         [[ "${_key}" =~ ${_re} ]] || continue
@@ -1812,6 +1812,7 @@ function storpoolDelete()
                 return "${_ret}"
             fi
         fi
+        local _drop_kv=0
         if [[ -n "${_DELAY_DELETE}" ]] && [[ -z "${_snapshot}" ]]; then
             if delayDeleteValid "${_DELAY_DELETE}"; then
                 _dd_reason="$(storpoolDelayDeleteReason "${_DD_TAGS}")"
@@ -1821,6 +1822,9 @@ function storpoolDelete()
                 if [[ ${_ret} -eq 0 ]]; then
                     storpoolVolumeDelete "${_SP_UID}"
                     _ret=$?
+                    if [[ ${_ret} -eq 0 || ${_ret} -eq 2 ]]; then
+                        _drop_kv=1
+                    fi
                 else
                     exit "${_ret}"
                 fi
@@ -1828,14 +1832,25 @@ function storpoolDelete()
                 local newName
                 newName="${_SP_VOL:-${_SP_UID#\~}}_DELETE$(date +%s||true)"
                 splog "[E] Unsupported format in DELAY_DELETE='${_DELAY_DELETE}' (expected <n>[s|m|h|d]). Preserving ${_SP_UID} (${_SP_VOL}) as ${newName}"
-                kvDel "${_SP_VOL}"
                 if kvPut "${newName}" "${_SP_UID}"; then
-                    if storpoolVolumeFreeze "${_SP_UID}" "volume" "img" "${newName}"; then
+                    if _SOFT_FAIL=1 storpoolVolumeFreeze "${_SP_UID}" "volume" "img" "${newName}"; then
                         _ret=0
+                        _drop_kv=1
                         splog "[I] ${_SP_UID} preserved as snapshot ${newName} (${SP_UID})"
                     else
                         _ret=$?
-                        splog "[E] ${_SP_UID} renamed to ${newName} but not converted to snapshot (${_ret})"
+                        if storpoolExist "${_SP_UID}" && [[ "${X_FOUND_AS,,}" == "volume" ]]; then
+                            if boolTrue "_UID_ONLY" || [[ -z "${_SP_VOL}" ]]; then
+                                splog "[E] ${_SP_UID} not converted to snapshot (${_ret}); kept as ${newName}"
+                            else
+                                kvPut "${_SP_VOL}" "${_SP_UID}"
+                                kvDel "${newName}"
+                                splog "[E] ${_SP_UID} not converted to snapshot ${newName} (${_ret}); ${_SP_VOL} left in place"
+                            fi
+                        else
+                            kvDel "${newName}" "${_SP_UID}"
+                            splog "[E] ${_SP_UID} (${_SP_VOL}) not converted to snapshot ${newName} (${_ret}) and no longer exists"
+                        fi
                     fi
                 else
                     _ret=$?
@@ -1849,11 +1864,18 @@ function storpoolDelete()
                 storpoolVolumeDelete "${_SP_UID}"
             fi
             _ret=$?
+            if [[ ${_ret} -eq 0 || ${_ret} -eq 2 ]]; then
+                _drop_kv=1
+            fi
         fi
-        if boolTrue "_UID_ONLY"; then
-            kvDel "" "${_SP_UID}"
-        else
-            kvDel "${_SP_VOL}" "${_SP_UID}"
+        if [[ ${_drop_kv} -eq 1 ]]; then
+            if boolTrue "_UID_ONLY"; then
+                kvDel "" "${_SP_UID}"
+            else
+                kvDel "${_SP_VOL}" "${_SP_UID}"
+            fi
+        elif [[ ${_ret} -ne 0 ]]; then
+            splog "[E] ${_SP_UID} (${_SP_VOL}) kept in KV; delete failed (${_ret})"
         fi
     elif [[ ${_EXISTS} -eq 2 ]]; then
         splog "[W] volume ${_SP_UID} (${_SP_VOL}) not found"
@@ -1909,10 +1931,16 @@ function storpoolVolumeFreeze()
         if storpoolSnapshotCreate "${_TMP_NAME}" "${_VOL_UID}" "${V_TAG_KEYS}" "${V_TAG_VALS}"; then
             if ONLY_DELETE="${_ONLY_DELETE:+volume}" storpoolDelete "${_VOL_UID}"; then
                 if [[ "${_IMG_TAG}" == "${_SP_NAME}" ]]; then
-                    kvDel "${_TMP_NAME}"
-                    kvPut "${_SP_NAME}" "${SP_UID}"
-                    _RET=$?
-                    splog "[I] ${SP_UID} renamed ${_TMP_NAME} to ${_SP_NAME} in KV only (${_RET})"
+                    if kvPut "${_SP_NAME}" "${SP_UID}"; then
+                        if [[ "${_TMP_NAME}" != "${_SP_NAME}" ]]; then
+                            kvDel "${_TMP_NAME}"
+                        fi
+                        _RET=0
+                        splog "[I] ${SP_UID} renamed ${_TMP_NAME} to ${_SP_NAME} in KV only"
+                    else
+                        _RET=$?
+                        splog "[E] ${SP_UID} left as ${_TMP_NAME}; ${_SP_NAME} not updated (${_RET})"
+                    fi
                 else
                     DO_MULTICLUSTER=1 DO_REMOTE="" storpoolSnapshotRename "${SP_UID}" "${_TMP_NAME}" "${_SP_NAME}"
                     _RET=$?
@@ -1940,22 +1968,26 @@ function storpoolSnapshotRename()
         splog "[E] Empty new snapshot name (args:$*)"
         return "${_ret}"
     fi
-    kvDel "${_SP_SNAP}"
     kvPut "${_SP_NEW}" "${_SNAP_UID}"
     _ret=$?
-    if [[ ${_ret} -eq 0 ]]; then
-        _JSON+="\"tags\":{\"img\":\"${_SP_NEW}\""
-        if [[ -n "${_SP_TAGS_JSON}" ]]; then
-            _JSON+="${_SP_TAGS_JSON}"
-        fi
-        _JSON+="}"
-        if [[ -n "${_SP_TEMPLATE}" ]]; then
-            _JSON+=",\"template\":\"${_SP_TEMPLATE}\""
-        fi
-        storpoolRetry SnapshotUpdate "${_SNAP_UID}" "${_JSON}"
-        _ret=$?
-        splog "[I] ${_SNAP_UID} renamed ${_SP_SNAP} to ${_SP_NEW} (${_ret})"
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[E] ${_SNAP_UID} not renamed ${_SP_SNAP} -> ${_SP_NEW} (${_ret}); ${_SP_SNAP} left in place"
+        return "${_ret}"
     fi
+    if [[ "${_SP_SNAP}" != "${_SP_NEW}" ]]; then
+        kvDel "${_SP_SNAP}"
+    fi
+    _JSON+="\"tags\":{\"img\":\"${_SP_NEW}\""
+    if [[ -n "${_SP_TAGS_JSON}" ]]; then
+        _JSON+="${_SP_TAGS_JSON}"
+    fi
+    _JSON+="}"
+    if [[ -n "${_SP_TEMPLATE}" ]]; then
+        _JSON+=",\"template\":\"${_SP_TEMPLATE}\""
+    fi
+    storpoolRetry SnapshotUpdate "${_SNAP_UID}" "${_JSON}"
+    _ret=$?
+    splog "[I] ${_SNAP_UID} renamed ${_SP_SNAP} to ${_SP_NEW} (${_ret})"
     return "${_ret}"
 }
 
@@ -1963,22 +1995,30 @@ function storpoolVolumeRename()
 {
     local _VOL_UID="$1" _SP_VOL="$2" _SP_NEW="$3" _SP_TEMPLATE="$4" _SP_TAGS_JSON="$5"
     local _RET=1 _JSON=""
-    kvDel "${_SP_VOL}"
+    if [[ -z "${_SP_NEW}" ]]; then
+        splog "[E] Empty new volume name (args:$*)"
+        return "${_RET}"
+    fi
     kvPut "${_SP_NEW}" "${_VOL_UID}"
     _RET=$?
-    if [[ ${_RET} -eq 0 ]]; then
-        _JSON+="\"tags\":{\"img\":\"${_SP_NEW}\""
-        if [[ -n "${_SP_TAGS_JSON}" ]]; then
-            _JSON+="${_SP_TAGS_JSON}"
-        fi
-        _JSON+="}"
-        if [[ -n "${_SP_TEMPLATE}" ]]; then
-            _JSON+=",\"template\":\"${_SP_TEMPLATE}\""
-        fi
-        storpoolRetry VolumeUpdate "${_VOL_UID}" "${_JSON}"
-        _RET=$?
-        splog "[I] ${_VOL_UID} renamed ${_SP_VOL} to ${_SP_NEW} (${_RET})"
+    if [[ ${_RET} -ne 0 ]]; then
+        splog "[E] ${_VOL_UID} not renamed ${_SP_VOL} -> ${_SP_NEW} (${_RET}); ${_SP_VOL} left in place"
+        return "${_RET}"
     fi
+    if [[ "${_SP_VOL}" != "${_SP_NEW}" ]]; then
+        kvDel "${_SP_VOL}"
+    fi
+    _JSON+="\"tags\":{\"img\":\"${_SP_NEW}\""
+    if [[ -n "${_SP_TAGS_JSON}" ]]; then
+        _JSON+="${_SP_TAGS_JSON}"
+    fi
+    _JSON+="}"
+    if [[ -n "${_SP_TEMPLATE}" ]]; then
+        _JSON+=",\"template\":\"${_SP_TEMPLATE}\""
+    fi
+    storpoolRetry VolumeUpdate "${_VOL_UID}" "${_JSON}"
+    _RET=$?
+    splog "[I] ${_VOL_UID} renamed ${_SP_VOL} to ${_SP_NEW} (${_RET})"
     return "${_RET}"
 }
 
@@ -2202,22 +2242,44 @@ function storpoolSnapshotDelete()
 function storpoolSnapshotRevert()
 {
     local _SNAPSHOT_UID="$1" _SP_VOL="$2" _IS_SNAPSHOT="$3" _SP_TEMPLATE="$4"
-    local _VOL_UID=""
-    _VOL_UID=$(kvGet byName "${_SP_VOL}")
-    local ret=$?
-    if storpoolVolumeFromSnapshot "${_SNAPSHOT_UID}" "${_SP_VOL}" "${_SP_TEMPLATE}"; then
-        ret=$?
-        if [[ -n "${_IS_SNAPSHOT}" ]]; then
-            storpoolSnapshotDelete "${_VOL_UID}" "UID_only"
-            storpoolVolumeFreeze "${SP_UID}" "volume"
-        else
-            storpoolDelete "${_VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${_SP_VOL}\",\"reason\":\"snap_revert\"" "1"  # TBD: tags
-        fi
-    else
-        ret=$?
+    local _VOL_UID="" _NEW_UID="" ret=1
+    _VOL_UID="$(kvGet byName "${_SP_VOL}")"
+    _SOFT_FAIL=1 storpoolVolumeFromSnapshot "${_SNAPSHOT_UID}" "${_SP_VOL}" "${_SP_TEMPLATE}"
+    ret=$?
+    if [[ ${ret} -ne 0 ]]; then
         splog "[E] storpoolSnapshotRevert($*) failed! (${ret})"
+        return "${ret}"
     fi
-    return "${ret}"
+    _NEW_UID="${SP_UID}"
+    if [[ -n "${_IS_SNAPSHOT}" ]]; then
+        _SOFT_FAIL=1 storpoolVolumeFreeze "${_NEW_UID}" "volume"
+        ret=$?
+        if [[ ${ret} -ne 0 ]]; then
+            splog "[E] storpoolSnapshotRevert($*) freeze of ${_NEW_UID} (${_SP_VOL}) failed (${ret}); previous ${_VOL_UID:-snapshot} kept"
+            ONLY_DELETE=volume _SOFT_FAIL=1 storpoolDelete "${_NEW_UID}" "force" "" "" "" "1" || \
+                splog "[E] storpoolSnapshotRevert($*) rollback did not delete ${_NEW_UID} ($?)"
+            if [[ -n "${_VOL_UID}" ]]; then
+                kvPut "${_SP_VOL}" "${_VOL_UID}"
+            fi
+            return "${ret}"
+        fi
+        if [[ -n "${_VOL_UID}" && "${_VOL_UID}" != "${_NEW_UID}" && "${_VOL_UID}" != "${SP_UID}" ]]; then
+            storpoolSnapshotDelete "${_VOL_UID}" "UID_only"
+            ret=$?
+            if [[ ${ret} -ne 0 ]]; then
+                splog "[E] storpoolSnapshotRevert($*) ${_SP_VOL} replaced; previous snapshot ${_VOL_UID} not deleted (${ret})"
+                return "${ret}"
+            fi
+        fi
+    elif [[ -n "${_VOL_UID}" && "${_VOL_UID}" != "${_NEW_UID}" ]]; then
+        storpoolDelete "${_VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${_SP_VOL}\",\"reason\":\"snap_revert\"" "1"  # TBD: tags
+        ret=$?
+        if [[ ${ret} -ne 0 ]]; then
+            splog "[E] storpoolSnapshotRevert($*) ${_NEW_UID} (${_SP_VOL}) is in place; ${_VOL_UID} not deleted (${ret})"
+            return "${ret}"
+        fi
+    fi
+    return 0
 }
 
 function storpoolSnapshotsDelete()
@@ -2362,10 +2424,16 @@ function storpoolVolumeFromSnapshot()
     _TAGS="$(tagsHelper "${_TAG_KEY}" "${_TAG_VAL}")"
     local _CMD="\"parent\":\"${_SNAPSHOT_UID}\",\"tags\":{${_TAGS}}"
     [[ -z "${_SP_TEMPLATE}" ]] || _CMD+=",\"template\":\"${_SP_TEMPLATE}\""
-    SP_UID=$(DO_MULTICLUSTER=1 storpoolRetry VolumeCreate "${_CMD}" 2>/dev/null)
+    SP_UID=$(DO_MULTICLUSTER=1 storpoolRetry VolumeCreate "${_CMD}")
     _RET=$?
     export SP_UID
     splog "[I] parent snapshot ${_SNAPSHOT_UID} -> created volume ${SP_UID} ${_SP_VOL} (${_RET})"
+    if [[ ${_RET} -eq 0 && ( -z "${SP_UID}" || "${SP_UID}" == "null" ) ]]; then
+        SP_UID=""
+        export SP_UID
+        _RET=1
+        splog "[E] VolumeCreate from ${_SNAPSHOT_UID} returned no volume id for ${_SP_VOL}"
+    fi
     if [[ -n "${SP_UID}" ]] && [[ ${_RET} -eq 0 ]]; then
         kvPut "${_SP_VOL}" "${SP_UID}" || _RET=$?
     fi

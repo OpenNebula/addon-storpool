@@ -49,18 +49,24 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
+    OLD_UID=""
     if storpoolVolumeExists "${SP_VOL}" byName; then
-        storpoolDelete "${SP_UID}" "force"
+        OLD_UID="${SP_UID}"
+        splog "[I] ${SP_VOL} exists as ${OLD_UID}; creating the replacement first"
     fi
 
     IFS='/' read -r -a DS_ID_A <<< "${FILE}"
     DS_ID="${DS_ID_A[-3]}"
     SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
     VM_MEMORY=$("${SPXML}" get /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY <<< "${DRV_MESSAGE}" | tr -d '\0')
-    storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*2))M" "${SP_TEMPLATE}" \
+    CREATE_VOL="${SP_VOL}"
+    if [[ -n "${OLD_UID}" ]]; then
+        CREATE_VOL="${SP_VOL}-repl-$(mktemp --dry-run XXXXXXXX)"
+    fi
+    storpoolVolumeCreate "${CREATE_VOL}" "$((VM_MEMORY*2))M" "${SP_TEMPLATE}" \
             "type;img;virt;${LOC_TAG};${VM_TAG}" \
             "CHECKPOINT;${SP_VOL};one;${LOC_TAG_VAL};${VM_ID}"
-    trapAdd "storpoolDelete \"${SP_UID}\" \"force\""
+    trapAdd "ONLY_DELETE=volume _SOFT_FAIL=1 storpoolDelete \"${SP_UID}\" \"force\" \"\" \"\" \"\" \"1\"; kvDel \"${CREATE_VOL}\""
 
     storpoolAttach "${SP_UID}" "${HVHOST}"
     SP_LINK="/dev/storpool-byid/${SP_UID#*~}"
@@ -69,6 +75,18 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     splog "ln -sf ${SP_LINK} ${FILE} (${ret})"
     if [[ ${ret} -ne 0 ]]; then
         exit "${ret}"
+    fi
+    if [[ -n "${OLD_UID}" ]]; then
+        _SOFT_FAIL=1 storpoolVolumeRename "${SP_UID}" "${CREATE_VOL}" "${SP_VOL}" "${SP_TEMPLATE}"
+        ret=$?
+        if [[ ${ret} -ne 0 ]]; then
+            rm -f "${FILE}"
+            kvPut "${SP_VOL}" "${OLD_UID}"
+            splog "[E] new checkpoint ${SP_UID} not adopted as ${SP_VOL} (${ret}); ${OLD_UID} kept"
+            exit "${ret}"
+        fi
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${OLD_UID}" "force" "" "" "" "1" || \
+            splog "[W] ${SP_VOL} is ${SP_UID}; previous checkpoint ${OLD_UID} not deleted ($?)"
     fi
     trapReset
 

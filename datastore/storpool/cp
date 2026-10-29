@@ -327,7 +327,14 @@ EOF
         else
             splog "${FORMAT} ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k ${SP_TEMP_LINK} ${SP_LINK}"
             ${QEMU_IMG:-qemu-img} convert -t none -T none -O raw -S 4k "${SP_TEMP_LINK}" "${SP_LINK}"
+            _conv_ret=$?
             sync
+            if [[ ${_conv_ret} -ne 0 ]]; then
+                errmsg="Error converting ${IMAGE_PATH} to ${SP_VOL} (${_conv_ret})"
+                splog "[E] ${errmsg}"
+                error_message "${errmsg}"
+                exit "${_conv_ret}"
+            fi
         fi
         tEnd=$(date +%s)
         splog "image converted to raw in $((tEnd-tStart)) seconds"
