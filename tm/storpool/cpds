@@ -91,6 +91,15 @@ if [[ "${SNAP_ID}" == "-1" ]]; then
     storpoolSnapshotCreate "${SP_VOL}" "${PARENT_ID}" \
             "img;${LOC_TAG};virt;${SP_QOSCLASS:+qc}" \
             "${SP_VOL};${LOC_TAG_VAL};one;${SP_QOSCLASS}"
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[E] snapshot ${SP_VOL} of ${PARENT_ID} not created (${_ret})"
+        if boolTrue "DISK_SAVEAS_FSFREEZE"; then
+            oneFsthaw "${SRC_HOST}" "${DEPLOY_ID}"
+            trapReset
+        fi
+        exit "${_ret}"
+    fi
 
     if boolTrue "DISK_SAVEAS_FSFREEZE"; then
         oneFsthaw "${SRC_HOST}" "${DEPLOY_ID}"
@@ -103,7 +112,18 @@ else
     storpoolVolumeFromSnapshot "${SNAP_UID}" "${SP_VOL}" "${SP_TEMPLATE}" \
             "img;${LOC_TAG};virt;${SP_QOSCLASS:+qc}" \
             "${SP_VOL};${LOC_TAG_VAL};one;${SP_QOSCLASS}"
-    storpoolVolumeFreeze "${SP_UID}" "volume"
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[E] ${SP_VOL} not created from snapshot ${SNAP_UID} (${_ret})"
+        exit "${_ret}"
+    fi
+    _VOL_UID="${SP_UID}"
+    storpoolVolumeFreeze "${_VOL_UID}" "volume"
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[E] ${_VOL_UID} (${SP_VOL}) not frozen (${_ret})"
+        exit "${_ret}"
+    fi
 fi
 
 splog "END ${VM_ID}"

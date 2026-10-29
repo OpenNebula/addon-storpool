@@ -66,6 +66,11 @@ kvGetUid "${SP_SNAP}" fatal
 SNAP_UID="${SP_UID}"
 
 storpoolSnapshotRevert "${SNAP_UID}" "${SP_VOL}" "IS_SNAPSHOT"
+_ret=$?
+if [[ ${_ret} -ne 0 ]]; then
+    splog "[E] flatten of ${SP_VOL} to ${SNAP_UID} failed (${_ret}); snapshots kept"
+    exit "${_ret}"
+fi
 
 SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
 debug_sp_qosclass
