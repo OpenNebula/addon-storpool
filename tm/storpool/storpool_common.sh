@@ -4284,7 +4284,7 @@ function storpoolVmVolumes()
 function forceDetachOther()
 {
     local VM_ID="$1" DST_HOST="$2" VOLUME="$3"
-    local _json="" volume_name=""
+    local _json="" volume_name="" _kvret=0
     local DO_MULTICLUSTER=1
     oneHostInfo "${DST_HOST}"
     local DO_REMOTE="~${HOST_SP_CLUSTER_ID:-${SP_CLUSTER_ID}}"
@@ -4309,7 +4309,15 @@ function forceDetachOther()
         return 1
     fi
     for volume_name in ${vmVolumes}; do
-        kvGetUid "${volume_name}" fatal
+        kvGetUid "${volume_name}"
+        _kvret=$?
+        if [[ ${_kvret} -eq 2 ]]; then
+            splog "[E] forceDetachOther: KV lookup failed for ${volume_name} (${_kvret})"
+            exit "${_kvret}"
+        elif [[ ${_kvret} -ne 0 ]]; then
+            splog "[W] forceDetachOther: no StorPool volume for ${volume_name}, skipped"
+            continue
+        fi
         [[ -z "${_json}" ]] || _json+=","
         _json+="{\"volume\":\"${SP_UID}\",\"rw\":[${HOST_SP_OURID}],\"detach\":\"all\",\"force\":true}"
     done
