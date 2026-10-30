@@ -170,7 +170,7 @@ function alterVcPolicy()
         disk_id="${disk#*:}"
         disk_type="${diskType_a[${oneName}]}"
         case "${disk_type^^}" in
-            VOL*|CNTXT)
+            VOL*|CNTXT|NVRAM|CHKPNT)
                 if [[ ${system_ds_storpool} -eq 0 ]]; then
                     if boolTrue "DDEBUG_alterVcPolicy"; then
                         splog "[DD] VM ${vmId} disk ${disk_id} ${oneName} (${disk_type}) skipped, system DS ${VM_DS_ID} TM_MAD='${system_ds_tm}' is not StorPool"
