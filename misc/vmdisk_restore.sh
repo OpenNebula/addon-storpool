@@ -377,7 +377,7 @@ elif [[ ${NEW_SIZE} -ne ${OLD_SIZE} ]]; then
 fi
 
 storpoolVolumeTag "${NEW_UID}" \
-    "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};diskid;type;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
+    "virt;${LOC_TAG:-nloc};${VM_TAG};diskid;type;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
     "one;${LOC_TAG_VAL};${VM_ID};${DISK_ID};${xTYPE};${VC_POLICY};${SP_QOSCLASS}"
 
 if [[ -n "${HAS_HOST}" ]]; then

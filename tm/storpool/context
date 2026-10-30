@@ -175,7 +175,7 @@ fi
 
 if boolTrue "TAG_CONTEXT_ISO"; then
     storpoolVolumeTag "${VOL_UID}" \
-        "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
+        "virt;${LOC_TAG:-nloc};${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
         "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};CNTXT;${DISK_ID}"
 
 fi

@@ -125,7 +125,7 @@ storpoolAttach "${VOL_UID}" "${DST_HOST}" "${mode}"
 trapAdd "storpoolDetach \"${VOL_UID}\" \"\" \"${DST_HOST}\""
 
 storpoolVolumeTag "${VOL_UID}" \
-        "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
+        "virt;${LOC_TAG:-nloc};${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type;diskid" \
         "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${xTYPE};${DISK_ID}"
 
 #-------------------------------------------------------------------------------

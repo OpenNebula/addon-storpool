@@ -229,6 +229,7 @@ if [[ -f "${sprcfile}" ]]; then
 else
     splog "File '${sprcfile}' NOT FOUND!"
 fi
+[[ -n "${VM_TAG}" ]] || VM_TAG="nvm"
 
 if [[ -f "/etc/storpool/addon-storpool.conf" ]]; then
     # shellcheck source=/dev/null
@@ -4591,7 +4592,7 @@ EOF
 
     storpoolDetach "${SP_UID}" "" "${_RHOST}" "all"
 
-    storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${_VM_ID};${VC_POLICY};${SP_QOSCLASS};SWTPM"
+    storpoolVolumeTag "${SP_UID}" "virt;${LOC_TAG:-nloc};${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type" "one;${LOC_TAG_VAL};${_VM_ID};${VC_POLICY};${SP_QOSCLASS};SWTPM"
 
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} END"

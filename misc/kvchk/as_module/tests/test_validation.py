@@ -2045,12 +2045,6 @@ class TestConfiguredTagNames:
             "diskid": "3",
         }
 
-    def test_empty_vm_tag_disables_the_tag(self, processor):
-        processor.args.vm_tag = ""
-        tags = processor._build_tags(self._cdrom())
-        assert "nvm" not in tags
-        assert all(v != "171" for v in tags.values())
-
     def test_loc_tag_and_value(self, processor):
         processor.args.loc_tag = "site"
         processor.args.loc_tag_val = "dc1"

@@ -95,11 +95,11 @@ while read -r -u "${vmfh}" -d' ' VM_ID; do
     for vol in ${vmVolumes}; do
         if [[ "${vol%iso}" == "${vol}" ]]; then
             storpoolVolumeTag "${vol}" \
-                "virt;${LOC_TAG:-nloc}:${VM_TAG:-nvm};diskid;type" \
-                "one;${LOC_TAG_VAL}:${VM_ID};${disks_a["${vol}"]};${disksType_a["${vol}"]}"
+                "virt;${LOC_TAG:-nloc};${VM_TAG};diskid;type" \
+                "one;${LOC_TAG_VAL};${VM_ID};${disks_a["${vol}"]};${disksType_a["${vol}"]}"
             while read -r -u 5 snap; do
                 storpoolSnapshotTag "${snap}" \
-                    "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};diskid;type" \
+                    "virt;${LOC_TAG:-nloc};${VM_TAG};diskid;type" \
                     "one;${LOC_TAG_VAL};${VM_ID};${disks_a["${vol}"]};${disksType_a["${vol}"]}"
             done 5< <( jq -r --arg n "${vol}-ONESNAP" '.data[]|select(.name|startswith($n))|.name' "${snapshotsJson}" || true)
         else
