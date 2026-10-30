@@ -984,8 +984,22 @@ function storpoolWrapper()
 {
     local method="$1"
     local res="" ret="" ok="" error_name="" error_descr="" cmd="${method}"
+    local DO_REMOTE="${DO_REMOTE}"
     TRANSIENT="false"
     if boolTrue "MULTICLUSTER"; then
+        if [[ -n "${DO_MULTICLUSTER}" ]] && [[ -n "${DO_REMOTE}" ]]; then
+            case "${method}" in
+                Volume|Snapshot|AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList|MgmtConfig)
+                    DO_REMOTE=""
+                    ;;
+                *)
+                    [[ -z "${DO_ALLCLUSTERS}" ]] || DO_REMOTE=""
+                    ;;
+            esac
+            if [[ -z "${DO_REMOTE}" ]] && boolTrue "DDDEBUG_SP_RUN_CMD"; then
+                splog "DO_REMOTE ignored for MultiCluster ${DO_ALLCLUSTERS:+AllClusters/}${method}"
+            fi
+        fi
         if [[ -n "${DO_MULTICLUSTER}" ]]; then
             cmd="MultiCluster"
             if [[ -n "${DO_ALLCLUSTERS}" ]]; then
