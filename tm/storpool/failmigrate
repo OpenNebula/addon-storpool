@@ -79,7 +79,7 @@ if [[ "${DS_TM_MAD:0:8}" == "storpool" ]]; then
         #-------------------------------------------------------------------------------
         # Cleanup $VM_PATH at DST_HOST
         #-------------------------------------------------------------------------------
-        ssh_exec_and_log "${DST_HOST}" "[ -d \"${VM_PATH}\" ] && rm -vrf \"${VM_PATH}\" >/tmp/failmigrate-rm-${VM_ID}.log 2>&1" \
+        ssh_exec_and_log "${DST_HOST}" "if [ -d \"${VM_PATH}\" ]; then rm -vrf \"${VM_PATH}\" >/tmp/failmigrate-rm-${VM_ID}.log 2>&1; fi" \
                      "Error Cleaning up ${DST_HOST}:${VM_PATH}"
 
     fi
