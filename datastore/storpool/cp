@@ -48,7 +48,6 @@ export LOG_PREFIX="ds"
 
 if boolTrue "DS_CP_REPORT_FORMAT"; then
     REPORT_FORMAT=raw
-    UPDATE_IMAGE_ON_IMPORT=0
 else
     REPORT_FORMAT=""
 fi
