@@ -226,6 +226,14 @@ With `NO_VOLUME_TEMPLATE=0` the previous behaviour applies: every volume is crea
 
 **Note:** The `SP_TEMPLATE_STATUS_MINUTES`, `SP_VOLUME_SPACE_MINUTES`, `SP_SNAPSHOT_SPACE_MINUTES` and the other `SP_*_MINUTES` variables from older releases are not used anymore. Replace them with the corresponding `SP_*_SECONDS` variables.
 
+The list of API calls is the `SP_API_CALLS` bash array, set before the configuration files are sourced, so it could be redefined in `monitor_helper-syncrc` to skip a call. For example, to skip the `SnapshotsSpace` call (the replacement of the empty `SP_SNAPSHOT_SPACE_RUN` from older releases):
+
+```bash
+SP_API_CALLS=(ClustersList VolumesSpace VolumeTemplatesStatus MgmtConfig)
+```
+
+The monitor probes report snapshot sizes as zero when the `SnapshotsSpace` JSON is missing, so the datastore usage will not include the snapshot space. The existing `json-SnapshotsSpace-*` files in `SP_FE_JSON_PATH` (and in `SP_JSON_PATH` on the hosts) are not removed and must be deleted by hand, otherwise the probes keep reporting the stale snapshot sizes. Setting `SP_SNAPSHOTSSPACE_SECONDS` to a large value is the preferred alternative when the goal is only to reduce the API calls.
+
 For the case when there is shared filesystem between the `one-fe` and the HV nodes there is no need to copy the JSON files. In this case, the `SP_JSON_PATH` variable must be altered to point to a shared folder, and you should set `MONITOR_SYNC_REMOTE=NO`. The configuration change can be completed in the `/var/lib/one/remotes/addon-storpoolrc` or `/var/lib/one/remotes/monitor_helper-syncrc` configuration files.
 
 **Note:** The shared filesystem must be mounted on same system path on all nodes as on the `one-fe`!
