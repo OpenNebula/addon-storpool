@@ -104,6 +104,23 @@ for disk in ${DISKS//:/ }; do
     D_ARR["${disk}"]="${disk}"
 done
 
+otherDisks=""
+for disk in ${vmOtherDisks}; do
+    if [[ -n "${D_ARR["${disk##*.}"]}" ]]; then
+        otherDisks+="${disk} "
+    fi
+done
+if [[ -n "${otherDisks}" ]]; then
+    if boolTrue "BACKUP_SKIP_OTHER_DISKS"; then
+        splog "[W] VM ${VM_ID} backup skips the non-StorPool disks (${otherDisks% })"
+    else
+        msg="Backup of a VM with non-StorPool disks is not supported! (${otherDisks% })"
+        splog "${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
+fi
+
 B_SUFFIX="ONEBACKUP-$(date +%s || true)"
 echo "${B_SUFFIX}" >"${B_LOCAL}/.snapshot_suffix"
 declare -a list_a
