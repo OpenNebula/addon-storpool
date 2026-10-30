@@ -3926,6 +3926,7 @@ function oneVmVolumes()
     vmDisksTypeMap=""  # oneName:DISK_TYPE
     persistentDisksQcMap=""  # oneName:PERSISTENT_IMAGE_QOSCLASS
     vmDisksReadOnlyMap=""  # oneName:READONLY
+    vmOtherDisks=""  # TM_MAD:disk.DISK_ID of the non-StorPool disks
     unset DISKS_QC_A VM_SP_QOSCLASS oneVmVolumesNotStorPool
     declare -gA DISKS_QC_A  # DISKS_QC_A[DISK_ID]=DISK_QOSCLASS
     for qosclass in "${SP_QOSCLASS_A[@]}"; do
@@ -3955,10 +3956,12 @@ function oneVmVolumes()
         DISK_ID="${DISK_ID_A[${idx}]}"
         SNAPSHOT_ID="${SNAPSHOT_ID_A[${idx}]}"
         if [[ "${TM_MAD:0:8}" != "storpool" ]]; then
-            if ! boolTrue "SYSTEM_COMPATIBLE_DS[${TM_MAD}]"; then
+            if boolTrue "SYSTEM_COMPATIBLE_DS[${TM_MAD}]"; then
+                vmOtherDisks+="${TM_MAD}:disk.${DISK_ID} "
+            else
                 export oneVmVolumesNotStorPool="${TM_MAD}:disk.${DISK_ID}"
-                continue
             fi
+            continue
         fi
         oneName="${ONE_PX}-img-${IMAGE_ID}"
         xTYPE="PERS"
@@ -4058,6 +4061,7 @@ function oneVmVolumes()
         _DBGMSG+="${BACKUP_MODE:+ BACKUP_MODE=${BACKUP_MODE}}"
         _DBGMSG+="${TPM_MODEL:+ TPM_MODEL=${TPM_MODEL}}"
         _DBGMSG+="${oneVmVolumesNotStorPool:+ oneVmVolumesNotStorPool=${oneVmVolumesNotStorPool}}"
+        _DBGMSG+="${vmOtherDisks:+ vmOtherDisks=${vmOtherDisks}}"
         splog "[D]${_DBGMSG}"
     fi
     if boolTrue "DDDEBUG_oneVmVolumes"; then
