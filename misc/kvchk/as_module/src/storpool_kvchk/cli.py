@@ -76,8 +76,8 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
         default=defaults.get("VM_TAG", os.getenv("VM_TAG", "nvm")),  # type: ignore[attr-defined] # noqa: E501
         type=str,
         help="VM_TAG from addon-storpoolrc - the StorPool tag holding"
-             " the VM ID on VM disks, empty string disables it"
-             " (default nvm)",
+             " the VM ID on VM disks, an empty value falls back to"
+             " the default (default nvm)",
     )
     parser.add_argument(
         "--loc-tag",
@@ -195,6 +195,9 @@ def parse_arguments(defaults: Dict[str, Any] = {}) -> argparse.Namespace:
     args.sp_checkpoint_bd = bool_true(args.sp_checkpoint_bd)
     args.tag_context_iso = bool_true(args.tag_context_iso)
     args.hanging_min_age = int(args.hanging_min_age)
+    # storpool_common.sh: [[ -n "${VM_TAG}" ]] || VM_TAG="nvm"
+    if not args.vm_tag:
+        args.vm_tag = "nvm"
     # storpool_common.sh: LOC_TAG_VAL="${LOC_TAG_VAL:-${ONE_PX}}"
     if not args.loc_tag_val or args.loc_tag_val == "${ONE_PX}":
         args.loc_tag_val = args.one_px

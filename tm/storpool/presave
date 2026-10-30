@@ -48,7 +48,7 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
     storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*1024*1024*2))" "${SP_TEMPLATE}" \
-            "virt;${LOC_TAG:-nloc};${VM_TAG:-nvm};${VC_POLICY:+vc-policy};type" \
+            "virt;${LOC_TAG:-nloc};${VM_TAG};${VC_POLICY:+vc-policy};type" \
             "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
     kvGetUid "${SP_VOL}" fatal
     trapAdd "storpoolDelete \"${SP_UID}\" \"force\""

@@ -181,7 +181,7 @@ def test_tag_names_from_rc(monkeypatch, tmp_path):
         "int", "ivm", "nloc", "int"
     )
     args = parse_arguments({"VM_TAG": ""})
-    assert args.vm_tag == ""
+    assert args.vm_tag == "nvm"
     monkeypatch.setattr(
         "sys.argv", ["storpool-kvchk", "--vm-tag", "vm", "--loc-tag-val", "x"]
     )

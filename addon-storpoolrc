@@ -84,8 +84,7 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 # alternatively create a file '~oneadmin/.one/one_endpoint' containig the endpoint details
 
 # Tag all VM disks with tag $VM_TAG=$VM_ID
-# Empty string will disable the tagging
-# The tag value is set to '${ONE_PX}:${VM_ID}'
+# An empty value falls back to the default
 # Default: nvm
 #
 #VM_TAG=nvm
