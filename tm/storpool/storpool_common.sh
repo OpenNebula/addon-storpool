@@ -3974,6 +3974,9 @@ function oneVmVolumes()
         TARGET="${TARGET_A[${idx}]}"
         DISK_ID="${DISK_ID_A[${idx}]}"
         SNAPSHOT_ID="${SNAPSHOT_ID_A[${idx}]}"
+        if [[ -z "${TM_MAD}" ]]; then
+            continue
+        fi
         if [[ "${TM_MAD:0:8}" != "storpool" ]]; then
             if boolTrue "SYSTEM_COMPATIBLE_DS[${TM_MAD}]"; then
                 vmOtherDisks+="${TM_MAD}:disk.${DISK_ID} "
