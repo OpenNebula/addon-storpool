@@ -76,6 +76,16 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         splog "${res} (exit 1)"
         exit 1
     fi
+    if [[ -n "${vmOtherDisks}" ]]; then
+        if boolTrue "VMSNAPSHOT_SKIP_OTHER_DISKS"; then
+            splog "[W] VM ${VM_ID} snapshot skips the non-StorPool disks (${vmOtherDisks% })"
+        else
+            res="VM Snapshot of a VM with non-StorPool disks is not supported! (${vmOtherDisks% })"
+            error_message "${res}"
+            splog "${res} (exit 1)"
+            exit 1
+        fi
+    fi
     if boolTrue "VMSNAPSHOT_ENABLE_LIMIT"; then
         if [[ -n "${VM_VMSNAPSHOT_LIMIT}" ]]; then
             VMSNAPSHOT_LIMIT="${VM_VMSNAPSHOT_LIMIT}"

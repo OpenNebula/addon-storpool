@@ -152,10 +152,15 @@ export ADDON_RELEASE="25.01.2"
 #
 export SP_API_TIMEOUT=300
 
+# image TM_MADs allowed next to the StorPool disks of a VM
 declare -A SYSTEM_COMPATIBLE_DS
 # shellcheck disable=SC2034
 SYSTEM_COMPATIBLE_DS["ceph"]=1
 export SYSTEM_COMPATIBLE_DS
+# VM snapshot of a VM with such disks: 0 refuse, 1 snapshot the StorPool disks only
+export VMSNAPSHOT_SKIP_OTHER_DISKS=0
+# VM backup of a VM with such disks: 0 refuse, 1 back up the StorPool disks only
+export BACKUP_SKIP_OTHER_DISKS=0
 # save the VM's vTPM data
 export ONE_TPM_SAVE=1
 
