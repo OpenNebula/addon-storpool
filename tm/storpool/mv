@@ -212,6 +212,20 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         fi
         SKIP_UNDEPLOY_SSH=0
     fi
+    OTHER_DISKS=""
+    for i in "${!DISK_ID_ARRAY[@]}"; do
+        tm_mad="${DISK_TM_MAD_ARRAY[i]}"
+        if [[ -n "${tm_mad}" && "${tm_mad:0:8}" != "storpool" ]]; then
+            OTHER_DISKS+="${tm_mad}:disk.${DISK_ID_ARRAY[i]} "
+        fi
+    done
+    if [[ -n "${OTHER_DISKS}" ]]; then
+        FORCE_VM_DIR_TRANSFER=1
+        if boolTrue "SKIP_UNDEPLOY_SSH" || boolTrue "SP_CHECKPOINT_BD"; then
+            splog "VM ${VM_ID} has non-StorPool disks (${OTHER_DISKS% }), the VM directory transfer is enforced"
+        fi
+        SKIP_UNDEPLOY_SSH=0
+    fi
     REMOTE_MONITOR=""
     if ! boolTrue "DS_SHARED"; then
         REMOTE_MONITOR="storpool"
