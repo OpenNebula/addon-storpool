@@ -4270,7 +4270,7 @@ function storpoolVmVolumes()
     local _vol="" _loctagval="" xfh=""
     vmVolumes=
     vmVolumeIds=
-    if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 storpoolRetry VolumesList; then
+    if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry VolumesList; then
         while read -r -u "${xfh}" name tag_img tag_vmsnaprevert loctagval; do
             [[ "${loctagval}" == "${LOC_TAG_VAL}" ]] || continue
             [[ -z "${tag_img%"${ONE_PX}"*}" ]] || continue
