@@ -179,7 +179,7 @@ else
         if [[ -n "${STAT_IMAGE_SIZE}" ]] && [[ ${STAT_IMAGE_SIZE} -gt 0 ]]; then
             if [[ "${QEMU_IMG_FORMAT}" != "raw" ]]; then
                 # use the actual file size
-                TEMP_SIZE="${STAT_IMAGE_SIZE}"
+                TEMP_SIZE="$(( (STAT_IMAGE_SIZE + 511) / 512 * 512 ))"
                 splog "[I] File ${IMAGE_PATH}, FORMAT:${QEMU_IMG_FORMAT} using actual file size: ${STAT_IMAGE_SIZE}"
             else
                 # Check is the imported file size is bigger than the virtual size
