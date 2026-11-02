@@ -1258,3 +1258,38 @@ class TestHostLeftovers:
         assert "orphan symlink on kvm2" in out
         assert "(VM 30 expected on host kvm1)" in out
         assert processor.update_data == {}
+
+
+class TestDatastoreLocation:
+    """The expected link paths follow oned's DATASTORE_LOCATION"""
+
+    def test_orphan_reported_at_location(self, processor, capsys):
+        processor.one.ds_location = "/opt/one/datastores"
+        processor.one.vm_ids = [26]
+        processor.one.vm_disks = {
+            "one-sys-26-1": _vm_disk(
+                link="/opt/one/datastores/0/26/disk.1",
+                target="/dev/storpool-byid/fir.b.jm",
+            )
+        }
+        processor.one.one_hosts = {
+            "kvm1": {
+                "links": {0: {
+                    26: {"disk.1": "/dev/storpool-byid/fir.b.jm"},
+                    99: {"disk.0": "/dev/storpool-byid/fir.b.zz"},
+                }}
+            },
+        }
+        processor.etcd.data = {
+            "byName": {"one-sys-26-1": "~fir.b.jm"},
+            "byUid": {"~fir.b.jm": "one-sys-26-1"},
+        }
+
+        processor.analyze_host_symlinks()
+
+        out = capsys.readouterr().out
+        assert "orphan symlink on kvm1" in out
+        assert "# ssh kvm1 rm -v /opt/one/datastores/0/99/disk.0" in out
+        assert "/var/lib/one/datastores" not in out
+        # the known link of VM 26 is not an orphan
+        assert "/opt/one/datastores/0/26/disk.1 ->" not in out

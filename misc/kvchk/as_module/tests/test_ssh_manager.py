@@ -52,8 +52,8 @@ class TestSshManagerGetSymlinks:
 
         # Verify the SSH command was called correctly
         expected_cmd = (
-            "ssh", "test-host", "find", "/var/lib/one/datastores",
-            "-type", "l", "-exec", "ls", "-l", "{}", r"\;"
+            "ssh", "test-host", "find", "-L", "/var/lib/one/datastores",
+            "-xtype", "l", "-exec", "ls", "-ld", "{}", "+"
         )
         mock_run.assert_called_once_with(
             expected_cmd, capture_output=True, check=True
@@ -190,10 +190,10 @@ class TestSshManagerGetLocalSymlinks:
 
         symlinks = ssh_manager.get_local_symlinks()
 
-        # runs find locally, without ssh and shell escaping
+        # runs find locally, without ssh
         expected_cmd = (
-            "find", "/var/lib/one/datastores",
-            "-type", "l", "-exec", "ls", "-l", "{}", ";"
+            "find", "-L", "/var/lib/one/datastores",
+            "-xtype", "l", "-exec", "ls", "-ld", "{}", "+"
         )
         mock_run.assert_called_once_with(
             expected_cmd, capture_output=True, check=True
@@ -594,3 +594,87 @@ class TestSshManagerEdgeCases:
             # Should handle special characters correctly
             called_cmd = mock_run.call_args[0][0]
             assert '/path/test-uid_123.vol/target' in called_cmd
+
+
+class TestSshManagerDatastoreLocation:
+    """The datastores path comes from oned (DATASTORE_LOCATION) and a
+    datastore directory can itself be a symlink to another path"""
+
+    LS = "lrwxrwxrwx 1 oneadmin oneadmin 29 Nov  2 11:16 "
+
+    @patch('subprocess.run')
+    def test_custom_location(self, mock_run, ssh_manager):
+        """Links are parsed relative to the given location; the
+        datastore directory symlink and links elsewhere are skipped"""
+        mock_run.return_value = Mock(returncode=0, stdout=(
+            f"{self.LS}/opt/one/datastores/0 -> /mnt/shared/ds0\n"
+            f"{self.LS}/opt/one/datastores/0/62/disk.0 ->"
+            " /dev/storpool-byid/fir.b.bc4t\n"
+            f"{self.LS}/opt/one/datastores/0/62/disk.1 ->"
+            " /dev/storpool-byid/fir.b.bc41\n"
+            f"{self.LS}/var/lib/one/datastores/0/7/disk.0 ->"
+            " /dev/storpool-byid/fir.b.zz\n"
+        ).encode())
+
+        symlinks = ssh_manager.get_symlinks("kvm2", "/opt/one/datastores")
+
+        assert mock_run.call_args[0][0] == (
+            "ssh", "kvm2", "find", "-L", "/opt/one/datastores",
+            "-xtype", "l", "-exec", "ls", "-ld", "{}", "+",
+        )
+        assert symlinks == {0: {62: {
+            "disk.0": "/dev/storpool-byid/fir.b.bc4t",
+            "disk.1": "/dev/storpool-byid/fir.b.bc41",
+        }}}
+        assert ssh_manager.ds_locations == {"/opt/one/datastores"}
+
+    def test_parse_trailing_slash_location(self, ssh_manager):
+        out = (f"{self.LS}/opt/one/datastores/1/5/disk.2 ->"
+               " /dev/storpool-byid/a.b.c\n")
+        assert ssh_manager._parse_symlinks(out, "/opt/one/datastores/") == {
+            1: {5: {"disk.2": "/dev/storpool-byid/a.b.c"}}
+        }
+
+    @patch('subprocess.run')
+    def test_local_custom_location(self, mock_run, ssh_manager):
+        mock_run.return_value = Mock(returncode=0, stdout=b"")
+
+        ssh_manager.get_local_symlinks("/opt/one/datastores")
+
+        assert mock_run.call_args[0][0] == (
+            "find", "-L", "/opt/one/datastores",
+            "-xtype", "l", "-exec", "ls", "-ld", "{}", "+",
+        )
+        assert ssh_manager.ds_locations == {"/opt/one/datastores"}
+
+    @patch('subprocess.run')
+    def test_find_error_reports_stderr(self, mock_run, ssh_manager):
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "find",
+            stderr=b"find: '/opt/one/datastores': Permission denied\n",
+        )
+
+        with pytest.raises(SshManagerError) as exc_info:
+            ssh_manager.get_symlinks("kvm1", "/opt/one/datastores")
+
+        assert "Permission denied" in str(exc_info.value)
+
+    @patch('subprocess.run')
+    def test_remove_symlink_under_scanned_location(
+        self, mock_run, ssh_manager
+    ):
+        """Only links under a scanned datastore location are removed"""
+        mock_run.return_value = Mock(returncode=0, stdout=b"", stderr=b"")
+        ssh_manager.get_local_symlinks("/opt/one/datastores")
+        ssh_manager.args.execute = True
+        ssh_manager.args.dry_run = False
+
+        link = "/opt/one/datastores/0/26/disk.1"
+        ssh_manager.remove_symlink({"unlink": {"link": link, "host": None}})
+        assert mock_run.call_args[0][0] == ("rm", "-v", link)
+
+        with pytest.raises(ValueError):
+            ssh_manager.remove_symlink({"unlink": {
+                "link": "/var/lib/one/datastores/0/26/disk.1",
+                "host": None,
+            }})

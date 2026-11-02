@@ -11,7 +11,7 @@ import argparse
 import pprint
 import subprocess
 import pyone  # type: ignore
-from .ssh_manager import SshManager
+from .ssh_manager import SshManager, DEFAULT_DS_LOCATION
 from ..models.enums import DiskType, ImageType
 from ..models.exceptions import SshManagerError
 from .base_manager import BaseManager
@@ -20,6 +20,8 @@ from .base_manager import BaseManager
 ONE_TOKEN = "oneadmin:oneadmin"
 ONE_AUTH_FILE = "/var/lib/one/.one/one_auth"
 ONE_API_URL = "http://localhost:2633/RPC2"
+# the effective oned configuration, dumped by oned at startup
+ONE_CONFIG_FILE = "/var/lib/one/config"
 
 # Host states where the datastores path is reachable over ssh and the
 # symlinks are worth collecting:
@@ -161,6 +163,9 @@ class oneManager(BaseManager):
     one_vms: Dict[int, Dict[str, Any]] = {}
     frontend: Dict[str, Any] = {}
     vm_ids: List[int] = []
+    # DATASTORE_LOCATION - the datastores path on the hosts and the
+    # frontend (oned.conf, global since OpenNebula 5.0)
+    ds_location: str = DEFAULT_DS_LOCATION
     # 'onevm list' columns per VM ID: name, stat (short state), host
     vm_list: Dict[int, Dict[str, str]] = {}
 
@@ -191,6 +196,7 @@ class oneManager(BaseManager):
         except Exception as err:
             print(f"Error initializing OpenNebula API! {err}")
             raise err
+        self._init_ds_location()
         self._init_datastores()
         self._init_hosts()
         self._init_frontend()
@@ -262,6 +268,50 @@ class oneManager(BaseManager):
             return []
         return list(history) if isinstance(history, list) else [history]
 
+    @staticmethod
+    def _ds_location_from_config() -> Optional[str]:
+        """DATASTORE_LOCATION from the oned config dump (frontend only)"""
+        config_file: str = ONE_CONFIG_FILE
+        one_location: Optional[str] = os.getenv("ONE_LOCATION")
+        if one_location:
+            config_file = os.path.join(one_location, "var", "config")
+        try:
+            with open(config_file, "r", encoding="utf-8") as cfg:
+                for line in cfg:
+                    key, sep, value = line.partition("=")
+                    if sep and key.strip() == "DATASTORE_LOCATION":
+                        value = value.strip().strip('"')
+                        if value:
+                            return value
+        except OSError:
+            pass
+        return None
+
+    def _init_ds_location(self) -> None:
+        """DATASTORE_LOCATION - where the datastores live on the hosts
+        and on the frontend. A global oned.conf setting since
+        OpenNebula 5.0 (per cluster before that), applied by oned to
+        every VM history record as <location>/<sys_ds_id>/<vm_id>. The
+        built-in default is VAR_LOCATION + 'datastores', literally
+        '/var/lib/one//datastores', hence the normpath. Read it over
+        the API (one.system.config, oneadmin only), then from the oned
+        config dump when running on the frontend."""
+        location: Optional[str] = None
+        try:
+            value: Any = self.api.system.config().DATASTORE_LOCATION
+            if isinstance(value, list):
+                value = value[0] if value else None
+            if isinstance(value, str) and value.strip():
+                location = value.strip()
+        except Exception as error:
+            self.dbg(1, f"one.system.config failed: {error}")
+        if location is None:
+            location = self._ds_location_from_config()
+        if location is None:
+            location = DEFAULT_DS_LOCATION
+        self.ds_location = os.path.normpath(location)
+        self.dbg(2, f"DATASTORE_LOCATION {self.ds_location}")
+
     def _init_hosts(self) -> None:
         """Get OpenNebula hosts"""
         self.dbg(6, "get_hosts")
@@ -275,7 +325,9 @@ class oneManager(BaseManager):
             host_r["vm_mad"] = str(host_e.VM_MAD)
             if host_r["state"] in HOST_SYMLINK_STATES:
                 try:
-                    host_r["links"] = self.ssh.get_symlinks(hostname)
+                    host_r["links"] = self.ssh.get_symlinks(
+                        hostname, self.ds_location
+                    )
                 except SshManagerError as error:
                     print(f"Error: {error=}; {hostname=}")
                 except Exception as error:
@@ -296,7 +348,9 @@ class oneManager(BaseManager):
             self.dbg(2, f"frontend {hostname} is a hypervisor host")
             return
         try:
-            self.frontend["links"] = self.ssh.get_local_symlinks()
+            self.frontend["links"] = self.ssh.get_local_symlinks(
+                self.ds_location
+            )
         except Exception as error:
             print(f"Error: {error=}; frontend {hostname=}")
         self.dbg(2, f"self.frontend = \n{pprint.pformat(self.frontend)}")
@@ -418,7 +472,7 @@ class oneManager(BaseManager):
             "snapshot": False,
             "sys_ds_id": int(vdata["sys_ds_id"]),
             "img_ds_id": img_ds_id,
-            "link": "/var/lib/one/datastores"
+            "link": f"{self.ds_location}"
             f"/{vdata['sys_ds_id']}/{vdata['vm_id']}"
             f"/disk.{vdata['disk_id']}",
             "ZDBG": "_prepare_vm_disk",
@@ -685,7 +739,7 @@ class oneManager(BaseManager):
                 "lcm_state": lcm_state,
                 "tm_mad": tm_mad,
                 # fmt: off
-                "link": (f"/var/lib/one/datastores/{sys_ds_id}/{vm_id}"
+                "link": (f"{self.ds_location}/{sys_ds_id}/{vm_id}"
                          f"/disk.{disk_id}"),
                 # fmt: on
             }

@@ -1,10 +1,14 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 import subprocess
 
 from .base_manager import BaseManager
 from ..models.exceptions import SshManagerError
+
+# oned's built-in DATASTORE_LOCATION; the effective value is read from
+# oned by oneManager and passed to get_symlinks()/get_local_symlinks()
+DEFAULT_DS_LOCATION = "/var/lib/one/datastores"
 
 
 class SshManager(BaseManager):
@@ -12,116 +16,112 @@ class SshManager(BaseManager):
 
     def __init__(self, args: Any):
         super().__init__(args)
+        # the datastore locations scanned for symlinks so far;
+        # remove_symlink() only touches links under one of them
+        self.ds_locations: Set[str] = set()
+
+    @staticmethod
+    def _find_cmd(ds_location: str) -> Tuple[str, ...]:
+        """find(1) arguments listing the symlinks under ds_location.
+        A datastore (or VM) directory could itself be a symlink, e.g.
+        to another filesystem: -L descends into those, -xtype l still
+        selects the symlinks themselves and ls -ld prints each link
+        with its target (find's %l is empty under -L)"""
+        return (
+            "find", "-L", ds_location, "-xtype", "l",
+            "-exec", "ls", "-ld", "{}", "+",
+        )
 
     def _parse_symlinks(
-        self, out: str
+        self, out: str, ds_location: str = DEFAULT_DS_LOCATION
     ) -> Dict[int, Dict[int, Dict[str, str]]]:
         """Parse 'ls -l' output lines into the per-datastore/VM
         symlink map"""
         symlinks: Dict[int, Dict[int, Dict[str, str]]] = {}
+        root: str = ds_location.rstrip("/") + "/"
         for line in out.splitlines():
-            words: List[str] = line.split()
-            if "->" in words:
-                dpath: List[str] = words[-3].split("/")
-                # only /var/lib/one/datastores/<ds_id>/<vm_id>/... links
-                # are tracked; a datastore or VM directory could itself
-                # be a symlink (e.g. to a shared/NFS mount) - skip those
-                if (
-                    len(dpath) < 8
-                    or not dpath[5].isdigit()
-                    or not dpath[6].isdigit()
-                ):
-                    self.dbg(1, f"skipping non-VM symlink {words[-3]}")
-                    continue
-                ds_id: int = int(dpath[5])
-                vm_id: int = int(dpath[6])
-                if ds_id not in symlinks:
-                    symlinks[ds_id] = {}
-                if vm_id not in symlinks[ds_id]:
-                    symlinks[ds_id][vm_id] = {}
-                symlinks[ds_id][vm_id][dpath[-1]] = words[-1]
+            if " -> " not in line:
+                continue
+            left, target = line.rsplit(" -> ", 1)
+            words: List[str] = left.split()
+            if not words:
+                continue
+            link: str = words[-1]
+            # only <ds_location>/<ds_id>/<vm_id>/... links are tracked;
+            # a datastore or VM directory symlink is skipped
+            dpath: List[str] = link[len(root):].split("/")
+            if (
+                not link.startswith(root)
+                or len(dpath) < 3
+                or not dpath[0].isdigit()
+                or not dpath[1].isdigit()
+            ):
+                self.dbg(1, f"skipping non-VM symlink {link}")
+                continue
+            ds_id: int = int(dpath[0])
+            vm_id: int = int(dpath[1])
+            if ds_id not in symlinks:
+                symlinks[ds_id] = {}
+            if vm_id not in symlinks[ds_id]:
+                symlinks[ds_id][vm_id] = {}
+            symlinks[ds_id][vm_id][dpath[-1]] = target.strip()
         return symlinks
 
-    def get_symlinks(self, host: str) -> Dict[int, Dict[int, Dict[str, str]]]:
-        """ssh to a host end get the symlinks in the path"""
+    def _run_find(
+        self, cmd: Tuple[str, ...], where: str, ds_location: str
+    ) -> Dict[int, Dict[int, Dict[str, str]]]:
+        """Run the find command and parse its output"""
+        self.ds_locations.add(ds_location)
         symlinks: Dict[int, Dict[int, Dict[str, str]]] = {}
-        ssh_cmd = (
-            "ssh",
-            host,
-            "find",
-            "/var/lib/one/datastores",
-            "-type",
-            "l",
-            "-exec",
-            "ls",
-            "-l",
-            "{}",
-            r"\;",
-        )
         if self.args.dummy_etcd > 1:
-            self.dbg(0, f"[dummy] {ssh_cmd}")
-        else:
-            try:
-                res: subprocess.CompletedProcess[bytes] = subprocess.run(
-                    ssh_cmd, capture_output=True, check=True
+            self.dbg(0, f"[dummy] {cmd}")
+            return symlinks
+        try:
+            res: subprocess.CompletedProcess[bytes] = subprocess.run(
+                cmd, capture_output=True, check=True
+            )
+            if res.returncode == 0:
+                symlinks = self._parse_symlinks(
+                    res.stdout.decode("utf-8"), ds_location
                 )
-                if res.returncode == 0:
-                    symlinks = self._parse_symlinks(
-                        res.stdout.decode("utf-8")
-                    )
-            except subprocess.CalledProcessError as error:
-                raise SshManagerError(
-                    f"subprocess.CalledProcessError {error=}",
-                    host,
-                    str(ssh_cmd),
-                )
-            except Exception as error:
-                raise SshManagerError(
-                    f"Unknown error {error=}",
-                    host,
-                    str(ssh_cmd),
-                )
+        except subprocess.CalledProcessError as error:
+            stderr: Any = error.stderr
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            raise SshManagerError(
+                f"subprocess.CalledProcessError {error=}"
+                f" {str(stderr or '').strip()}",
+                where,
+                str(cmd),
+            )
+        except Exception as error:
+            raise SshManagerError(
+                f"Unknown error {error=}",
+                where,
+                str(cmd),
+            )
+        return symlinks
+
+    def get_symlinks(
+        self, host: str, ds_location: str = DEFAULT_DS_LOCATION
+    ) -> Dict[int, Dict[int, Dict[str, str]]]:
+        """ssh to a host end get the symlinks in the datastores path"""
+        ssh_cmd: Tuple[str, ...] = ("ssh", host) + self._find_cmd(ds_location)
+        symlinks: Dict[int, Dict[int, Dict[str, str]]] = self._run_find(
+            ssh_cmd, host, ds_location
+        )
         self.dbg(2, f"ssh_getsymlinks {ssh_cmd}: {symlinks}")
         return symlinks
 
-    def get_local_symlinks(self) -> Dict[int, Dict[int, Dict[str, str]]]:
+    def get_local_symlinks(
+        self, ds_location: str = DEFAULT_DS_LOCATION
+    ) -> Dict[int, Dict[int, Dict[str, str]]]:
         """Get the symlinks in the datastores path on the frontend,
         where the files of the STOPPED/UNDEPLOYED VMs are expected"""
-        symlinks: Dict[int, Dict[int, Dict[str, str]]] = {}
-        find_cmd = (
-            "find",
-            "/var/lib/one/datastores",
-            "-type",
-            "l",
-            "-exec",
-            "ls",
-            "-l",
-            "{}",
-            ";",
+        find_cmd: Tuple[str, ...] = self._find_cmd(ds_location)
+        symlinks: Dict[int, Dict[int, Dict[str, str]]] = self._run_find(
+            find_cmd, "localhost", ds_location
         )
-        if self.args.dummy_etcd > 1:
-            self.dbg(0, f"[dummy] {find_cmd}")
-        else:
-            try:
-                res: subprocess.CompletedProcess[bytes] = subprocess.run(
-                    find_cmd, capture_output=True, check=True
-                )
-                if res.returncode == 0:
-                    symlinks = self._parse_symlinks(
-                        res.stdout.decode("utf-8")
-                    )
-            except subprocess.CalledProcessError as error:
-                raise SshManagerError(
-                    f"subprocess.CalledProcessError {error=}",
-                    "localhost",
-                    str(find_cmd),
-                )
-            except Exception as error:
-                raise SshManagerError(
-                    f"Unknown error {error=}",
-                    "localhost",
-                    str(find_cmd),
-                )
         self.dbg(2, f"get_local_symlinks {find_cmd}: {symlinks}")
         return symlinks
 
@@ -212,7 +212,8 @@ class SshManager(BaseManager):
             )
         link: str = action_data["unlink"]["link"]
         host: Optional[str] = action_data["unlink"].get("host")
-        if not link.startswith("/var/lib/one/datastores/"):
+        roots: Set[str] = self.ds_locations or {DEFAULT_DS_LOCATION}
+        if not any(link.startswith(root.rstrip("/") + "/") for root in roots):
             raise ValueError(
                 "refusing to remove a symlink outside the datastores"
                 f" path: {link}"

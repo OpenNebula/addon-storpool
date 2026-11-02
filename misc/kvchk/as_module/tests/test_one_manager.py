@@ -2245,3 +2245,116 @@ class TestTmMadResolution:
         manager.args = mock_args
         manager.one_datastores = {}
         assert manager._disk_tm_mad({"DISK_ID": 0}, 7) == ""
+
+
+class TestDatastoreLocation:
+    """DATASTORE_LOCATION from oned - the datastores path on the hosts
+    and on the frontend"""
+
+    def _manager(self, mock_args, ds_location_value):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.api = Mock()
+        if isinstance(ds_location_value, Exception):
+            manager.api.system.config.side_effect = ds_location_value
+        else:
+            manager.api.system.config.return_value = Mock(
+                DATASTORE_LOCATION=ds_location_value
+            )
+        return manager
+
+    def test_default_is_normalized(self, mock_args):
+        """oned's built-in default is VAR_LOCATION + 'datastores',
+        with the double slash"""
+        manager = self._manager(mock_args, ["/var/lib/one//datastores"])
+        manager._init_ds_location()
+        assert manager.ds_location == "/var/lib/one/datastores"
+
+    def test_custom_location(self, mock_args):
+        manager = self._manager(mock_args, ["/opt/one/datastores/"])
+        manager._init_ds_location()
+        assert manager.ds_location == "/opt/one/datastores"
+
+    def test_api_failure_reads_config_dump(
+        self, mock_args, tmp_path, monkeypatch
+    ):
+        cfg = tmp_path / "config"
+        cfg.write_text(
+            "LOG=[SYSTEM=file]\n"
+            "DATASTORE_LOCATION=/srv/one//datastores\n"
+            "PORT=2633\n"
+        )
+        monkeypatch.setattr(
+            "storpool_kvchk.managers.one_manager.ONE_CONFIG_FILE", str(cfg)
+        )
+        monkeypatch.delenv("ONE_LOCATION", raising=False)
+        manager = self._manager(mock_args, Exception("not oneadmin"))
+        manager._init_ds_location()
+        assert manager.ds_location == "/srv/one/datastores"
+
+    def test_api_failure_without_config_dump(
+        self, mock_args, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "storpool_kvchk.managers.one_manager.ONE_CONFIG_FILE",
+            str(tmp_path / "missing"),
+        )
+        monkeypatch.delenv("ONE_LOCATION", raising=False)
+        manager = self._manager(mock_args, Exception("not oneadmin"))
+        manager._init_ds_location()
+        assert manager.ds_location == "/var/lib/one/datastores"
+
+    def test_non_string_api_value_is_ignored(
+        self, mock_args, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "storpool_kvchk.managers.one_manager.ONE_CONFIG_FILE",
+            str(tmp_path / "missing"),
+        )
+        monkeypatch.delenv("ONE_LOCATION", raising=False)
+        manager = self._manager(mock_args, Mock())
+        manager._init_ds_location()
+        assert manager.ds_location == "/var/lib/one/datastores"
+
+    def test_disk_link_follows_location(self, mock_args):
+        manager = oneManager.__new__(oneManager)
+        manager.args = mock_args
+        manager.one_datastores = {}
+        manager.ds_images = {}
+        manager.ds_location = "/opt/one/datastores"
+
+        result = manager._prepare_vm_disk({
+            "one_px": "one",
+            "vm_id": 123,
+            "disk_id": 0,
+            "image_id": 1,
+            "clone": "YES",
+            "type": "BLOCK",
+            "fs": "",
+            "sys_ds_id": 0,
+            "img_ds_id": 1,
+            "qosclass": None,
+            "vc-policy": None,
+        })
+
+        assert result["link"] == "/opt/one/datastores/0/123/disk.0"
+
+    @patch('storpool_kvchk.managers.one_manager.pyone')
+    @patch('subprocess.run')
+    def test_hosts_scanned_at_location(
+        self, mock_run, mock_pyone, mock_args, mock_ssh_manager,
+        mock_pyone_api,
+    ):
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"123\n"
+        mock_pyone_api.system.config.return_value = Mock(
+            DATASTORE_LOCATION=["/opt/one//datastores"]
+        )
+        mock_pyone.OneServer.return_value = mock_pyone_api
+
+        manager = oneManager(mock_args, mock_ssh_manager)
+
+        assert manager.ds_location == "/opt/one/datastores"
+        mock_ssh_manager.get_symlinks.assert_called_once_with(
+            "test-host", "/opt/one/datastores"
+        )

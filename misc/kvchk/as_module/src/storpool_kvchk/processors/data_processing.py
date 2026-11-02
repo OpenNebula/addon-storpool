@@ -1854,7 +1854,7 @@ class DataProcessing(BaseManager):
                         placement.get(vm_id)
                     )
                     for disk_name, target in disks.items():
-                        link: str = (f"/var/lib/one/datastores"
+                        link: str = (f"{self.one.ds_location}"
                                      f"/{ds_id}/{vm_id}/{disk_name}")
                         if f"{hostname}:{link}" in known_links:
                             continue
