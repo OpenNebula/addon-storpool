@@ -55,6 +55,18 @@ class SshManagerError(Exception):
         return err_msg
 
 
+class FreezeConflict(Exception):
+    """Raised when a VolumeFreeze can not tell which StorPool record
+    carries the OpenNebula identity it was queued for"""
+
+    def __init__(self, spname: str, reason: str):
+        self.spname: str = spname
+        self.reason: str = reason
+
+    def __str__(self) -> str:
+        return f"VolumeFreeze of {self.spname} refused: {self.reason}"
+
+
 class ClusterConfigError(Exception):
     """Raised when a datastore refers to a StorPool cluster or location
     that is not registered in the StorPool API it uses"""

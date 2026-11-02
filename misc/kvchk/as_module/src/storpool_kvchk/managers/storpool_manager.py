@@ -4,13 +4,55 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import copy
+import time
 import pprint
 import argparse
 from storpool.spapi import Api, ApiError  # type: ignore
 from storpool.spconfig import SPConfig  # type: ignore
 
-from ..models.exceptions import UnknownApiCall
+from ..models.exceptions import FreezeConflict, UnknownApiCall
 from .base_manager import BaseManager
+
+
+def sp_internal(name: str, entry: Dict[str, Any]) -> bool:
+    """Records StorPool creates and removes by itself"""
+    return bool(
+        name.startswith("*")
+        or entry.get("deleted")
+        or entry.get("transient")
+        or entry.get("autoName")
+        or entry.get("targetDeleteDate")
+    )
+
+
+def record_facts(entry: Dict[str, Any]) -> str:
+    """One-line facts about a StorPool record"""
+    kind: str = "snapshot" if entry["snapshot"] else "volume"
+    msg: str = f"{kind} {entry['name']}"
+    if entry["name"] != f"~{entry['globalId']}":
+        msg += f" (globalId {entry['globalId']}"
+        preserved: str = entry.get("preservedGlobalId") or ""
+        if preserved:
+            msg += f", preserved {preserved}"
+        msg += ")"
+    if entry.get("size"):
+        msg += f" size {entry['size']}"
+    created: Optional[float] = entry.get("creationTimestamp")
+    if created:
+        msg += " created " + time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(created)
+        )
+    if entry.get("onVolume"):
+        msg += f" onVolume {entry['onVolume']}"
+    if entry.get("parentName"):
+        msg += f" parent {entry['parentName']}"
+    attached: List[Any] = (entry.get("attached") or {}).get("client") or []
+    if attached:
+        msg += f" attached to {attached}"
+    tags: Dict[str, str] = entry.get("tags") or {}
+    if tags:
+        msg += " tags " + ",".join(f"{k}={v}" for k, v in sorted(tags.items()))
+    return msg
 
 
 class spManager(BaseManager):
@@ -244,6 +286,65 @@ class spManager(BaseManager):
                     )
                 self.dbg(4, f"{self.data[name]}")
 
+    def identity_records(
+        self, spname: str, legacy: str, uid: str
+    ) -> List[Dict[str, Any]]:
+        """All the StorPool records carrying one OpenNebula identity:
+        named spname/legacy, resolvable by uid (the canonical globalId,
+        or the preserved one of a volume) or tagged img=spname without
+        a snap tag by this OpenNebula instance"""
+        loc_tag: str = str(getattr(self.args, "loc_tag", "") or "")
+        loc_tag_val: str = str(getattr(self.args, "loc_tag_val", "") or "")
+        records: List[Dict[str, Any]] = []
+        for name, entry in self.data.items():
+            if sp_internal(name, entry):
+                continue
+            uids: set = {entry["globalId"]}
+            if not entry["snapshot"] and entry.get("preservedGlobalId"):
+                uids.add(entry["preservedGlobalId"])
+            tags: Dict[str, str] = entry.get("tags") or {}
+            tagged: bool = (
+                tags.get("virt") == "one"
+                and tags.get("img") == spname
+                and not tags.get("snap")
+                and (
+                    not loc_tag
+                    or not tags.get(loc_tag)
+                    or tags[loc_tag] == loc_tag_val
+                )
+            )
+            if name in (spname, legacy) or uid in uids or tagged:
+                records.append(entry)
+        return records
+
+    def _freeze_target(self, in_data: Dict[str, Any]) -> Dict[str, Any]:
+        """The single StorPool record carrying the identity a
+        VolumeFreeze was queued for - a volume to freeze, or the
+        snapshot an earlier freeze already replaced the volume with.
+        Anything else is ambiguous - FreezeConflict"""
+        spname: str = in_data["spname"]
+        uid: str = in_data["uid"]
+        sp_api_http_host: str = in_data["sp_api_http_host"]
+        records: List[Dict[str, Any]] = self.identity_records(
+            spname, in_data.get("legacy") or "", uid
+        )
+        if len(records) == 1:
+            return records[0]
+        reason: str = (
+            f"{len(records)} StorPool records carry the identity"
+            f" of {spname} (queued uid ~{uid})"
+            if records
+            else f"no StorPool record carries the identity of"
+            f" {spname} (queued uid ~{uid})"
+        )
+        self.err(f"{sp_api_http_host} {reason}", "CRITICAL")
+        for entry in records:
+            self.err(
+                f"{sp_api_http_host} {spname} <= {record_facts(entry)}",
+                "CRITICAL",
+            )
+        raise FreezeConflict(spname, reason)
+
     def volumefreeze(
         self,
         in_data: Dict[str, Any],
@@ -251,16 +352,41 @@ class spManager(BaseManager):
     ) -> None:
         """Freeze the volume"""
         del action
-        in_data["snapshot"] = True
         old_globalid = in_data["uid"]
+        spname = in_data["spname"]
+        sp_api_http_host = in_data["sp_api_http_host"]
+        target: Dict[str, Any] = self._freeze_target(in_data)
+        if target["snapshot"]:
+            self.err(
+                f"{sp_api_http_host} {spname} is already frozen:"
+                f" volume ~{old_globalid} is gone and"
+                f" {record_facts(target)} carries the identity"
+                " - the KV pair follows it",
+                "Issue",
+            )
+            in_data["old_uid"] = old_globalid
+            in_data["uid"] = target["globalId"]
+            in_data["snapshot"] = True
+            return
+        volume = f"~{old_globalid}"
+        if old_globalid not in (
+            target["globalId"], target.get("preservedGlobalId")
+        ):
+            self.err(
+                f"{sp_api_http_host} {spname} queued with uid"
+                f" ~{old_globalid} but the identity is carried by"
+                f" {record_facts(target)} - freezing that volume",
+                "Issue",
+            )
+            volume = (
+                f"~{target.get('preservedGlobalId') or target['globalId']}"
+            )
+        in_data["snapshot"] = True
         tags: Dict[str, str] = in_data["sptags"].copy()
         if "tags" in in_data:
             tags.update(in_data["tags"])
-        tags["img"] = in_data["spname"]
+        tags["img"] = spname
         payload: Dict[str, Any] = {"name": "", "tags": tags}
-        spname = in_data["spname"]
-        volume = f"~{old_globalid}"
-        sp_api_http_host = in_data["sp_api_http_host"]
         api = self.api_host[sp_api_http_host]
         if self.args.execute:
             if self.args.dry_run:
