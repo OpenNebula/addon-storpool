@@ -12,10 +12,14 @@ from ..managers.one_manager import (
     is_storpool_tm_mad,
     oneManager,
 )
-from ..managers.storpool_manager import spManager
+from ..managers.storpool_manager import (
+    record_facts,
+    sp_internal,
+    spManager,
+)
 from ..managers.etcd_manager import etcdManager
 from ..models.exceptions import (
-    KvByNameError, KvByUidError, ClusterConfigError
+    KvByNameError, KvByUidError, ClusterConfigError, FreezeConflict
 )
 from ..models.enums import DiskType, ImageType
 
@@ -1237,13 +1241,7 @@ class DataProcessing(BaseManager):
 
     def _sp_internal(self, sp_name: str, sp_entry: Dict[str, Any]) -> bool:
         """Records StorPool creates and removes by itself"""
-        return bool(
-            sp_name.startswith("*")
-            or sp_entry.get("deleted")
-            or sp_entry.get("transient")
-            or sp_entry.get("autoName")
-            or sp_entry.get("targetDeleteDate")
-        )
+        return sp_internal(sp_name, sp_entry)
 
     def _claimed_one_record(
         self, sp_name: str, sp_entry: Dict[str, Any]
@@ -1333,24 +1331,7 @@ class DataProcessing(BaseManager):
 
     def _duplicate_details(self, sp_entry: Dict[str, Any]) -> str:
         """One-line facts about a duplicate StorPool record"""
-        kind: str = "snapshot" if sp_entry["snapshot"] else "volume"
-        msg: str = f"{kind} {sp_entry['name']}"
-        if sp_entry["name"] != f"~{sp_entry['globalId']}":
-            msg += f" (globalId {sp_entry['globalId']}"
-            preserved: str = sp_entry.get("preservedGlobalId") or ""
-            if preserved:
-                msg += f", preserved {preserved}"
-            msg += ")"
-        if sp_entry.get("size"):
-            msg += f" size {sp_entry['size']}"
-        created: Optional[float] = sp_entry.get("creationTimestamp")
-        if created:
-            msg += " created " + time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(created)
-            )
-        if sp_entry.get("parentName"):
-            msg += f" parent {sp_entry['parentName']}"
-        return msg
+        return record_facts(sp_entry)
 
     def _block_queued_update(self, spname: str, reason: str) -> None:
         """Keep process_updates() away from an ambiguous record"""
@@ -1470,6 +1451,17 @@ class DataProcessing(BaseManager):
         for entry in leftovers:
             leftover_uids.update(self._record_uids(entry))
         queued: Optional[Dict[str, Any]] = self.update_data.get(spname)
+        if queued and "VolumeFreeze" in queued["action"]:
+            # a freeze replaces the volume by a snapshot - with
+            # several records of one identity it can not tell which
+            # one it should freeze, and would add one more
+            reason = (
+                f"{len(entries)} StorPool records claim OpenNebula"
+                f" {spname} - the VolumeFreeze of ~{live_uid} needs"
+                " a single record"
+            )
+            self.err(reason, "Issue")
+            self._block_queued_update(spname, reason)
         if (
             queued
             and queued["data"].get("uid") in leftover_uids
@@ -2084,6 +2076,13 @@ class DataProcessing(BaseManager):
                         f"{name} {action} FAILED: {err.name} {err.desc}"
                         f" - the remaining {data['action']} skipped",
                         "FAILED",
+                    )
+                    break
+                except FreezeConflict as err:
+                    self.err(
+                        f"{name} {err} - the remaining {data['action']}"
+                        " skipped",
+                        "BLOCKED",
                     )
                     break
                 self.dbg(6, f"+++ END '{action}' {name=}")

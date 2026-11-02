@@ -9,6 +9,7 @@ from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[i
 from storpool_kvchk.managers.one_manager import oneManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.managers.ssh_manager import SshManager  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.models.enums import DiskType, ImageType  # type: ignore[import-untyped] # noqa: E501
+from storpool_kvchk.models.exceptions import FreezeConflict  # type: ignore[import-untyped] # noqa: E501
 
 
 @pytest.fixture
@@ -1400,6 +1401,73 @@ class TestDuplicateClaims:
         out = capsys.readouterr().out
         assert "replaced with n9wb.b.qr1d" in out
 
+    def test_queued_freeze_blocked_by_duplicates(self, processor, capsys):
+        """A VolumeFreeze queued for an identity several StorPool
+        records claim (the volume and the snapshot of an interrupted
+        earlier freeze) is blocked - it can not tell which one to
+        freeze and would add one more record."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _sp_vol(
+                "~n9wb.b.qr1d", "n9wb.b.qr1d",
+                tags=dict(_IMG_TAGS), creationTimestamp=1000,
+            ),
+            "~n9wb.b.qfgh": _dup_snap(
+                "n9wb.b.qfgh", 2000, onVolume="~n9wb.b.qr1d"
+            ),
+        }
+        processor.update_data = {
+            "one-img-200": {
+                "action": ["VolumeFreeze", "Update", "kv"],
+                "data": {
+                    "spname": "one-img-200",
+                    "uid": "n9wb.b.qr1d",
+                    "snapshot": False,
+                    "sp_api_http_host": "localhost",
+                },
+            }
+        }
+
+        processor.analyze_duplicates()
+
+        entry = processor.update_data["one-img-200"]
+        assert "needs a single record" in entry["data"]["blocked"]
+        assert entry["data"]["uid"] == "n9wb.b.qr1d"
+        out = capsys.readouterr().out
+        assert "2 StorPool records claim OpenNebula one-img-200" in out
+        assert "leftover snapshot ~n9wb.b.qfgh" in out
+        assert "onVolume ~n9wb.b.qr1d" in out
+
+    def test_queued_freeze_of_a_single_record_not_blocked(
+        self, processor, capsys
+    ):
+        """One record claiming the identity: the queued freeze runs."""
+        self._image(processor)
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _sp_vol(
+                "~n9wb.b.qr1d", "n9wb.b.qr1d", tags=dict(_IMG_TAGS)
+            ),
+        }
+        processor.update_data = {
+            "one-img-200": {
+                "action": ["VolumeFreeze", "Update", "kv"],
+                "data": {"spname": "one-img-200", "uid": "n9wb.b.qr1d"},
+            }
+        }
+
+        processor.analyze_duplicates()
+
+        assert "blocked" not in processor.update_data["one-img-200"]["data"]
+        assert "[Issue]" not in capsys.readouterr().out
+
     def test_single_record_not_reported(self, processor, capsys):
         """One record claiming the OpenNebula record is the normal
         state - nothing to report."""
@@ -1842,6 +1910,32 @@ class TestProcessUpdatesApiError:
         assert "[FAILED]" in out
         assert "one-img-200 VolumeFreeze FAILED: objectDoesNotExist" in out
 
+    def test_freeze_conflict_blocks_the_record_the_rest_runs(
+        self, processor, capsys
+    ):
+        processor.args.execute = True
+        processor.update_data = self._records()
+        processor.sp.volumefreeze = Mock(
+            side_effect=FreezeConflict(
+                "one-img-200",
+                "2 StorPool records carry the identity of one-img-200",
+            )
+        )
+        processor.sp.action = Mock()
+        processor.etcd.action = Mock()
+
+        processor.process_updates()
+
+        processor.sp.action.assert_called_once_with(
+            processor.update_data["one-img-201"]["data"], "Update"
+        )
+        processor.etcd.action.assert_called_once_with(
+            processor.update_data["one-img-201"]["data"], "kv"
+        )
+        out = capsys.readouterr().out
+        assert "[BLOCKED]" in out
+        assert "VolumeFreeze of one-img-200 refused" in out
+
     def test_other_errors_still_abort(self, processor):
         processor.args.execute = True
         processor.update_data = self._records()
@@ -2070,3 +2164,106 @@ class TestConfiguredTagNames:
         assert processor._resolve_one_by_tags(sp) is disk
         processor.args.vm_tag = ""
         assert processor._resolve_one_by_tags(sp) is None
+
+
+class TestCdromRootVolume:
+    """The sto-img-5179 case: a non-persistent CDROM image whose root
+    is a leftover StorPool volume carrying VM tags, anonymous already
+    (~globalId) - the freeze addresses it by globalId, drops the VM
+    tags and the KV pair follows the new snapshot."""
+
+    def _setup(self, processor):
+        processor.one.ds_images = {
+            "one-img-5179": _ds_image(
+                image_id=5179,
+                spname="one-img-5179",
+                legacy="one-img-5179",
+                img="one-img-5179",
+                virt="one",
+                nloc="one",
+                qosclass="tier4",
+                imagetype=ImageType.CDROM,
+                disktype=DiskType.NONPERSISTENT,
+            )
+        }
+        processor.etcd.data = {
+            "byName": {"one-img-5179": "~nuyn.b.fch2"},
+            "byUid": {"~nuyn.b.fch2": "one-img-5179"},
+        }
+        processor.sp.data = {
+            "~nuyn.b.fch2": _sp_vol(
+                "~nuyn.b.fch2",
+                "nuyn.b.fch2",
+                tags={"virt": "one", "nloc": "one", "img": "one-img-5179",
+                      "qc": "tier4", "type": "PERS", "nvm": "2045"},
+            )
+        }
+        response = Mock(ok=True, snapshotGlobalId="nuyn.b.new1")
+        api = Mock()
+        api.snapshotCreate.return_value = response
+        api.volumeDelete.return_value = response
+        api.snapshotUpdate.return_value = response
+        processor.sp.api_host = {"localhost": api}
+        processor.etcd.write_kv_data = Mock()
+        return api
+
+    def test_freeze_by_globalid_drops_vm_tags_and_rebinds_kv(
+        self, processor
+    ):
+        processor.args.execute = True
+        processor.args.default_qosclass = "tier4"
+        api = self._setup(processor)
+
+        processor.analyze_storpool()
+        processor.analyze_duplicates()
+        entry = processor.update_data["one-img-5179"]
+        assert entry["action"] == ["VolumeFreeze", "Update", "kv"]
+        assert entry["data"]["tags"] == {"type": "", "nvm": ""}
+        processor.process_updates()
+
+        api.snapshotCreate.assert_called_once_with(
+            "~nuyn.b.fch2",
+            {"name": "", "tags": {"virt": "one", "nloc": "one",
+                                  "img": "one-img-5179", "qc": "tier4",
+                                  "type": "", "nvm": ""}},
+        )
+        api.volumeDelete.assert_called_once_with("~nuyn.b.fch2")
+        api.snapshotUpdate.assert_called_once()
+        assert api.snapshotUpdate.call_args[0][0] == "~nuyn.b.new1"
+        processor.etcd.write_kv_data.assert_called_once()
+        kv_data = processor.etcd.write_kv_data.call_args[0][0]
+        assert kv_data["spname"] == "one-img-5179"
+        assert kv_data["uid"] == "nuyn.b.new1"
+        assert kv_data["old_uid"] == "nuyn.b.fch2"
+
+    def test_interrupted_freeze_leaves_both_records_untouched(
+        self, processor, capsys
+    ):
+        """The snapshot of an earlier freeze exists next to the
+        volume: the freeze is blocked, nothing is created or deleted."""
+        processor.args.execute = True
+        processor.args.default_qosclass = "tier4"
+        api = self._setup(processor)
+        processor.sp.data["~nuyn.b.snp1"] = _sp_vol(
+            "~nuyn.b.snp1",
+            "nuyn.b.snp1",
+            snapshot=True,
+            onVolume="~nuyn.b.fch2",
+            tags={"virt": "one", "nloc": "one", "img": "one-img-5179",
+                  "qc": "tier4"},
+        )
+
+        processor.analyze_storpool()
+        processor.analyze_duplicates()
+        processor.process_updates()
+
+        api.snapshotCreate.assert_not_called()
+        api.volumeDelete.assert_not_called()
+        processor.etcd.write_kv_data.assert_not_called()
+        out = capsys.readouterr().out
+        assert "[BLOCKED]" in out
+        assert (
+            "one-img-5179 ['VolumeFreeze', 'Update', 'kv'] NOT executed:"
+            " 2 StorPool records claim OpenNebula one-img-5179" in out
+        )
+        assert "leftover snapshot ~nuyn.b.snp1" in out

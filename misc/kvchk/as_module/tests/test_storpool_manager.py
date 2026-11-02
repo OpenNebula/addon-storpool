@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch
 from storpool.spapi import ApiError  # type: ignore[import-untyped]
 from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[import-untyped] # noqa: E501
-from storpool_kvchk.models.exceptions import UnknownApiCall  # type: ignore[import-untyped] # noqa: E501
+from storpool_kvchk.models.exceptions import FreezeConflict, UnknownApiCall  # type: ignore[import-untyped] # noqa: E501
 
 
 # StorPool is now multisite aware: the manager keeps a per-host Api in
@@ -132,6 +132,8 @@ def mock_args():
     args.verbose = 0
     args.dry_run = False
     args.execute = False
+    args.loc_tag = "nloc"
+    args.loc_tag_val = "one"
     return args
 
 
@@ -456,6 +458,178 @@ class TestStorPoolManager:
         # Verify in_data was updated for dry run
         assert in_data["snapshot"] is True
         assert in_data["uid"] == "new.globalid"
+
+    def _identity_record(self, gid, snapshot=False, **tags):
+        return {
+            "globalId": gid,
+            "name": f"~{gid}",
+            "tags": {"virt": "one", "nloc": "one", **tags},
+            "snapshot": snapshot,
+            "sp_api_http_host": TEST_HOST,
+        }
+
+    def test_identity_records(self, sp_manager):
+        """The records of one identity: by name, by uid (a snapshot
+        only by its canonical id) or by the img tag of this instance
+        without a snap tag; StorPool-internal ones never count."""
+        sp_manager.data = {
+            "test-volume": sp_manager.data["test-volume"],
+            "~fir.b.a": self._identity_record("fir.b.a", img="test-volume"),
+            "~fir.b.b": self._identity_record(
+                "fir.b.b", img="test-volume", nloc="other"
+            ),
+            "~fir.b.c": self._identity_record(
+                "fir.b.c", True, img="test-volume", snap="0"
+            ),
+            "~fir.b.d": dict(
+                self._identity_record("fir.b.d", True, img="test-volume"),
+                deleted=True,
+            ),
+            "~fir.b.e": self._identity_record(
+                "fir.b.e", True, img="test-volume"
+            ),
+            "~fir.b.f": dict(
+                self._identity_record("fir.b.f", True, img="other", snap="1"),
+                preservedGlobalId="vol-000-preserved-id",
+            ),
+        }
+
+        records = sp_manager.identity_records(
+            "test-volume", "", "vol-000-preserved-id"
+        )
+
+        assert sorted(r["name"] for r in records) == [
+            "test-volume", "~fir.b.a", "~fir.b.e"
+        ]
+
+    def test_volumefreeze_adopts_the_snapshot_of_an_earlier_freeze(
+        self, sp_manager, capsys
+    ):
+        """The volume is gone and a single anonymous snapshot carries
+        the identity (an earlier freeze stopped before the KV rebind):
+        nothing to create or delete, the record follows the snapshot."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager._mock_api.volumeDelete.reset_mock()
+        sp_manager.data = {
+            "~snap-frozen-id": self._identity_record(
+                "snap-frozen-id", True, img="test-volume"
+            ),
+        }
+        in_data = {
+            "uid": "vol-gone-id",
+            "spname": "test-volume",
+            "legacy": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {},
+            "tags": {},
+        }
+
+        sp_manager.volumefreeze(in_data, "freeze")
+
+        sp_manager._mock_api.snapshotCreate.assert_not_called()
+        sp_manager._mock_api.volumeDelete.assert_not_called()
+        assert in_data["uid"] == "snap-frozen-id"
+        assert in_data["old_uid"] == "vol-gone-id"
+        assert in_data["snapshot"] is True
+        out = capsys.readouterr().out
+        assert "test-volume is already frozen" in out
+        assert "snapshot ~snap-frozen-id" in out
+
+    def test_volumefreeze_freezes_the_volume_carrying_the_identity(
+        self, sp_manager, capsys
+    ):
+        """Queued with a uid StorPool no longer has, while a single
+        volume under another id carries the identity by tags (the
+        renamed CDROM root of the sto-img-5179 case) - that volume
+        is frozen and the KV pair leaves the queued uid."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager._mock_api.volumeDelete.reset_mock()
+        sp_manager.data = {
+            "~nuyn.b.fch2": self._identity_record(
+                "nuyn.b.fch2", img="test-volume", type="PERS", nvm="2045"
+            ),
+        }
+        in_data = {
+            "uid": "vol-gone-id",
+            "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {"virt": "one", "nloc": "one", "img": "test-volume",
+                       "type": "PERS", "nvm": "2045"},
+            "tags": {"type": "", "nvm": ""},
+        }
+
+        sp_manager.volumefreeze(in_data, "freeze")
+
+        sp_manager._mock_api.snapshotCreate.assert_called_once_with(
+            "~nuyn.b.fch2",
+            {"name": "", "tags": {"virt": "one", "nloc": "one",
+                                  "img": "test-volume", "type": "",
+                                  "nvm": ""}},
+        )
+        sp_manager._mock_api.volumeDelete.assert_called_once_with(
+            "~nuyn.b.fch2"
+        )
+        assert in_data["old_uid"] == "vol-gone-id"
+        assert in_data["uid"] == "new-snap-789-global-id"
+        out = capsys.readouterr().out
+        assert "queued with uid ~vol-gone-id" in out
+        assert "freezing that volume" in out
+
+    def test_volumefreeze_refuses_several_records(self, sp_manager, capsys):
+        """The volume and an anonymous snapshot of an interrupted
+        earlier freeze both carry the identity - the authoritative
+        one can not be told, nothing is touched."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager._mock_api.volumeDelete.reset_mock()
+        sp_manager.data["~snap-frozen-id"] = dict(
+            self._identity_record("snap-frozen-id", True, img="test-volume"),
+            onVolume="test-volume",
+        )
+        in_data = {
+            "uid": "vol-123-global-id",
+            "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {},
+            "tags": {},
+        }
+
+        with pytest.raises(FreezeConflict):
+            sp_manager.volumefreeze(in_data, "freeze")
+
+        sp_manager._mock_api.snapshotCreate.assert_not_called()
+        sp_manager._mock_api.volumeDelete.assert_not_called()
+        assert in_data["uid"] == "vol-123-global-id"
+        assert "snapshot" not in in_data
+        out = capsys.readouterr().out
+        assert "[CRITICAL]" in out
+        assert "2 StorPool records carry the identity of test-volume" in out
+        assert "volume test-volume (globalId vol-123-global-id" in out
+        assert "snapshot ~snap-frozen-id" in out
+        assert "onVolume test-volume" in out
+
+    def test_volumefreeze_refuses_without_a_record(self, sp_manager, capsys):
+        """Nothing in StorPool carries the identity - the queued uid
+        is stale, nothing is touched."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager.data = {}
+        in_data = {
+            "uid": "vol-gone-id",
+            "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {},
+            "tags": {},
+        }
+
+        with pytest.raises(FreezeConflict):
+            sp_manager.volumefreeze(in_data, "freeze")
+
+        sp_manager._mock_api.snapshotCreate.assert_not_called()
+        out = capsys.readouterr().out
+        assert "no StorPool record carries the identity of test-volume" in out
 
     def test_api_error_handling(self, sp_manager, mock_api_error):
         """Test API error handling in action methods"""
