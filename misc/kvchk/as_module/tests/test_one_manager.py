@@ -10,8 +10,9 @@ from storpool_kvchk.managers.one_manager import (
     IMAGE_QOSCLASS_ORDER,
     ONE_POOL_INFO_ALL,
 )
-OpenNebulaManager = oneManager
 from storpool_kvchk.models.enums import DiskType, ImageType
+
+OpenNebulaManager = oneManager
 
 
 @pytest.fixture
@@ -568,8 +569,8 @@ class TestoneManager:
         ]
         vm_mock.TEMPLATE.get.return_value = None
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
-            "T_OS_NVRAM": "/var/lib/libvirt/qemu/nvram/x.fd:template=OVMF_VARS.fd",
-            "T_OS_LOADER": "/var/tmp/one/OVMF/OVMF_CODE.fd:readonly=yes type=pflash",
+            "T_OS_NVRAM": "/var/lib/libvirt/qemu/nvram/x.fd:template=OVMF_VARS.fd",  # noqa: E501
+            "T_OS_LOADER": "/var/tmp/one/OVMF/OVMF_CODE.fd:readonly=yes type=pflash",  # noqa: E501
             "SP_QOSCLASS": None,
             "VC_POLICY": None
         }.get(key, default)
@@ -627,7 +628,9 @@ class TestoneManager:
             "CONTEXT": {"DISK_ID": 1},
         }.get(key)
         vm_mock.USER_TEMPLATE.get.side_effect = lambda key, default=None: {
-            "T_OS_NVRAM": "storpool:template=OVMF_VARS.fd", "SP_QOSCLASS": None, "VC_POLICY": None,
+            "T_OS_NVRAM": "storpool:template=OVMF_VARS.fd",
+            "SP_QOSCLASS": None,
+            "VC_POLICY": None,
         }.get(key, default)
 
         vm_disks = manager._process_vm_system_disks(
@@ -1104,7 +1107,6 @@ class TestoneManager:
         mock_disk_snaps.assert_called()
         mock_process_disks.assert_called()
         mock_system_disks.assert_called()
-
 
     @patch('storpool_kvchk.managers.one_manager.pyone')
     @patch('subprocess.run')

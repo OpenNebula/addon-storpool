@@ -247,7 +247,6 @@ class TestStorPoolCorruption:
         assert "one-img-456" in out
         assert "<TO_MIGRATE>" in out
 
-
     def test_image_in_error_state_without_volume(self, corrupted_setup,
                                                  capsys):
         """An image whose datablock creation failed (state ERROR) has no
