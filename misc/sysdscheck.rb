@@ -26,7 +26,8 @@
 #    RAFT_LEADER_IP=ip_of_the_raft_leader
 #          - run on the leader front-end
 #
-# ONE_DS_HOME - SYSTEMs DS home (default: /var/lib/one/datastores/)
+# ONE_DS_HOME - SYSTEMs DS home (default: oned's DATASTORE_LOCATION,
+#               /var/lib/one/datastores when it is not available)
 #
 # DO_CLEANUP - To remove detecded anomalies set DO_CELANUP="DO CLEANUP"
 #
@@ -157,7 +158,17 @@ else
 fi
 EOF
 
+# DATASTORE_LOCATION is global in oned.conf (OpenNebula 5.0+) and its
+# built-in default is '/var/lib/one//datastores' - normalize the path
 one_ds_home = '/var/lib/one/datastores'
+begin
+    conf = OpenNebula::System.new(client).get_configuration
+    if !OpenNebula.is_error?(conf) && conf['DATASTORE_LOCATION']
+        one_ds_home = File.expand_path(conf['DATASTORE_LOCATION'])
+    end
+rescue StandardError => e
+    $log.warn "DATASTORE_LOCATION from oned: #{e}"
+end
 one_ds_home = ENV["ONE_DS_HOME"] if ENV["ONE_DS_HOME"]
 
 cmd.gsub! 'ONE_DS_HOME', one_ds_home
