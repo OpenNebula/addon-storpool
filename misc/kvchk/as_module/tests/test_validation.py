@@ -338,7 +338,6 @@ class TestKvByUid:
         entry = processor.update_data["one-sys-26-1"]
         assert entry["data"]["uid"] == "~fir.b.jm"
 
-
     def test_fix_uid_mismatch_byname_snapshot_of_byuid_volume(
         self, processor, capsys
     ):
