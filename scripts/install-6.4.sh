@@ -79,6 +79,14 @@ echo "*** Installing spxml.py ..."
 cp "${CP_ARGS[@]}" "datastore/spxml.py" "${ONE_VAR:-/var/lib/one}/remotes/datastore/spxml.py"
 chmod a+x "${ONE_VAR:-/var/lib/one}/remotes/datastore/spxml.py"
 
+# OneBEX exporter for interactive backups
+ONEBEX_EXPORTERS="${ONE_VAR:-/var/lib/one}/remotes/onebex/exporters"
+if [[ -d "${ONEBEX_EXPORTERS}" ]]; then
+    echo "*** Installing OneBEX storpool exporter to ${ONEBEX_EXPORTERS} ..."
+    cp "${CP_ARGS[@]}" "onebex/exporters/storpool.rb" "${ONEBEX_EXPORTERS}/storpool.rb"
+    chmod a+r "${ONEBEX_EXPORTERS}/storpool.rb"
+fi
+
 # volumecare hook files
 echo "*** Installing volumecare hook files..."
 volumecarePath="${ONE_VAR:-/var/lib/one}/remotes/hooks/volumecare"
