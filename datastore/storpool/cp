@@ -97,6 +97,10 @@ http://*|https://*|ssh://*|s3://*|rbd://*|vcenter://*)
 rsync://*|restic://*)
     log "Downloading backup ${IMAGE_PATH} to the image repository"
     ;;
+onebex://*)
+    log "Restoring interactive backup ${IMAGE_PATH} to the image repository"
+    ONEBEX_RESTORE=1
+    ;;
 *)
     IS_RESTRICTED="$(check_restricted "${IMAGE_PATH}" || true)"
     if [[ ${IS_RESTRICTED:-1} -eq 1 ]]; then
@@ -174,7 +178,7 @@ else
     TEMP_SIZE="${CREATE_SIZE}"
     if [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
         TEMP_SIZE=$((1*1024*1024))
-    else
+    elif [[ -z "${ONEBEX_RESTORE}" ]]; then
         qemu_img_info "${IMAGE_PATH}"
         if [[ -n "${STAT_IMAGE_SIZE}" ]] && [[ ${STAT_IMAGE_SIZE} -gt 0 ]]; then
             if [[ "${QEMU_IMG_FORMAT}" != "raw" ]]; then
@@ -230,7 +234,27 @@ else
 
     COPY_CMD="${DRIVER_PATH}/../downloader.sh ${DOWNLOADER_ARGS}"
 
-    if [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
+    if [[ -n "${ONEBEX_RESTORE}" ]]; then
+        localFile="/var/tmp/${SP_TEMP_VOL}"
+        trapAdd "rm -f \"${localFile}\""
+        splog "[I] receiving ${IMAGE_PATH} into ${localFile} on the front-end"
+        DOWNLOADER_ARGS="$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}" "${IMAGE_PATH}" "${localFile}")"
+        COPY_CMD="${DRIVER_PATH}/../downloader.sh ${DOWNLOADER_ARGS}"
+        splog "COPY_CMD='${COPY_CMD}'"
+        multiline_exec_and_log "${COPY_CMD}" \
+                     "Error receiving ${IMAGE_PATH} to ${localFile}"
+        FILE_SIZE="$(stat -c %s "${localFile}" 2>/dev/null || echo 0)"
+        FILE_SIZE=$(((FILE_SIZE+1048575)/1048576))
+        VIRT_SIZE="$(fs_size "${localFile}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}")"
+        splog "[I] ${localFile} received: ${FILE_SIZE}M on disk, virtual size ${VIRT_SIZE:-?}M, image SIZE=${SIZE}M"
+        if [[ ${FILE_SIZE} -gt ${SIZE} ]]; then
+            storpoolVolumeResize "${TEMP_VOL_UID}" "$((FILE_SIZE*1024*1024))"
+        fi
+        if [[ ${VIRT_SIZE:-0} -gt ${SIZE} ]]; then
+            CREATE_SIZE="$((VIRT_SIZE*1024*1024))"
+        fi
+        CLEANUP="${localFile}"
+    elif [[ -z "${SIZE}" ]] || [[ ${SIZE} -eq 0 ]]; then
         localFile="/var/tmp/${SP_TEMP_VOL}"
         splog "image SIZE=${SIZE} downloading on fe to get the size"
         DOWNLOADER_ARGS="$(set_downloader_args "${MD5}" "${SHA1}" "${NO_DECOMPRESS}" "${LIMIT_TRANSFER_BW}" "${IMAGE_PATH}" "${localFile}")"
