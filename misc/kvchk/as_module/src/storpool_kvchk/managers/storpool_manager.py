@@ -25,6 +25,15 @@ def sp_internal(name: str, entry: Dict[str, Any]) -> bool:
     )
 
 
+def sp_backup_snapshot(entry: Dict[str, Any]) -> bool:
+    """A snapshot the addon prebackup holds for a backup: tagged bak
+    with the img of the live disk and no snap tag"""
+    if not entry.get("snapshot"):
+        return False
+    tags: Dict[str, str] = entry.get("tags") or {}
+    return bool(tags.get("bak")) and not tags.get("snap")
+
+
 def record_facts(entry: Dict[str, Any]) -> str:
     """One-line facts about a StorPool record"""
     kind: str = "snapshot" if entry["snapshot"] else "volume"
@@ -328,9 +337,22 @@ class spManager(BaseManager):
         records: List[Dict[str, Any]] = self.identity_records(
             spname, in_data.get("legacy") or "", uid
         )
+        backups: List[str] = [
+            f"~{entry['globalId']}"
+            f" (bak={(entry.get('tags') or {}).get('bak')})"
+            for entry in records
+            if sp_backup_snapshot(entry)
+        ]
+        if backups:
+            reason: str = (
+                f"backup snapshot {', '.join(backups)} present"
+                " - left as is, re-run kvchk when the backup completes"
+            )
+            self.err(f"{sp_api_http_host} {spname} {reason}", "NOTE")
+            raise FreezeConflict(spname, reason)
         if len(records) == 1:
             return records[0]
-        reason: str = (
+        reason = (
             f"{len(records)} StorPool records carry the identity"
             f" of {spname} (queued uid ~{uid})"
             if records

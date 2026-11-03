@@ -610,6 +610,41 @@ class TestStorPoolManager:
         assert "snapshot ~snap-frozen-id" in out
         assert "onVolume test-volume" in out
 
+    def test_volumefreeze_left_during_a_backup(self, sp_manager, capsys):
+        """A bak-tagged backup snapshot carries the img of the live
+        disk for the whole backup - the freeze is left for a run after
+        the backup completes, with a note and no conflict."""
+        sp_manager.args.execute = True
+        sp_manager._mock_api.snapshotCreate.reset_mock()
+        sp_manager._mock_api.volumeDelete.reset_mock()
+        sp_manager.data["~bak-snap-id"] = self._identity_record(
+            "bak-snap-id", True, img="test-volume",
+            bak="ONEBACKUP-1700000000",
+        )
+        in_data = {
+            "uid": "vol-123-global-id",
+            "spname": "test-volume",
+            "sp_api_http_host": TEST_HOST,
+            "sptags": {},
+            "tags": {},
+        }
+
+        with pytest.raises(FreezeConflict) as excinfo:
+            sp_manager.volumefreeze(in_data, "freeze")
+
+        sp_manager._mock_api.snapshotCreate.assert_not_called()
+        sp_manager._mock_api.volumeDelete.assert_not_called()
+        assert in_data["uid"] == "vol-123-global-id"
+        assert "snapshot" not in in_data
+        assert "re-run kvchk when the backup completes" in str(excinfo.value)
+        out = capsys.readouterr().out
+        assert "[NOTE]" in out
+        assert "[CRITICAL]" not in out
+        assert (
+            "test-volume backup snapshot ~bak-snap-id"
+            " (bak=ONEBACKUP-1700000000) present - left as is" in out
+        )
+
     def test_volumefreeze_refuses_without_a_record(self, sp_manager, capsys):
         """Nothing in StorPool carries the identity - the queued uid
         is stale, nothing is touched."""

@@ -2267,3 +2267,57 @@ class TestCdromRootVolume:
             " 2 StorPool records claim OpenNebula one-img-5179" in out
         )
         assert "leftover snapshot ~nuyn.b.snp1" in out
+
+
+class TestBackupSnapshot:
+    """The anonymous (~globalId) snapshot prebackup takes for a backup
+    is tagged bak with the img of the live disk and no snap tag. It
+    belongs to a backup in progress
+    (the whole transfer for an interactive one) and postbackup removes
+    it - never the live disk, nor its duplicate, nor hanging."""
+
+    def _image(self, processor):
+        processor.one.ds_images = {
+            "one-img-200": _ds_image(
+                image_id=200, spname="one-img-200", legacy="one-img-200"
+            )
+        }
+        processor.etcd.data = {
+            "byName": {"one-img-200": "~n9wb.b.qr1d"},
+            "byUid": {"~n9wb.b.qr1d": "one-img-200"},
+        }
+
+    def _bak(self):
+        return _sp_vol(
+            "~n9wb.b.bak1",
+            "n9wb.b.bak1",
+            snapshot=True,
+            tags=dict(_IMG_TAGS, nvm="7", bak="ONEBACKUP-1700000000"),
+            creationTimestamp=1000,
+            parentName="~n9wb.b.qr1d",
+        )
+
+    def test_not_resolved_to_the_live_disk(self, processor):
+        self._image(processor)
+        bak = self._bak()
+        assert processor._backup_snapshot(bak)
+        assert processor._resolve_one_by_tags(bak) is None
+        assert processor._classify_sp_record(bak["name"], bak, set()) == (
+            "internal", None
+        )
+        live = _dup_snap("n9wb.b.qr1d", 1000)
+        assert not processor._backup_snapshot(live)
+        assert processor._resolve_one_by_tags(live)["spname"] == "one-img-200"
+
+    def test_not_a_duplicate_claim(self, processor, capsys):
+        self._image(processor)
+        processor.sp.data = {
+            "~n9wb.b.qr1d": _dup_snap("n9wb.b.qr1d", 1000),
+            "~n9wb.b.bak1": self._bak(),
+        }
+
+        processor.analyze_duplicates()
+
+        out = capsys.readouterr().out
+        assert "claim OpenNebula one-img-200" not in out
+        assert "leftover" not in out

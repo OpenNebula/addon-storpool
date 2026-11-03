@@ -14,6 +14,7 @@ from ..managers.one_manager import (
 )
 from ..managers.storpool_manager import (
     record_facts,
+    sp_backup_snapshot,
     sp_internal,
     spManager,
 )
@@ -212,12 +213,21 @@ class DataProcessing(BaseManager):
             return False
         return True
 
+    def _backup_snapshot(self, sp_entry: Dict[str, Any]) -> bool:
+        """A snapshot the addon prebackup holds for a backup in progress:
+        tagged bak with the img of the live disk and no snap tag. The
+        postbackup removes it, so it is never the live disk, nor its
+        duplicate, nor a hanging record"""
+        return sp_backup_snapshot(sp_entry)
+
     def _resolve_one_by_tags(
         self, sp_entry: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Resolve the OpenNebula record for a StorPool record
         using its tags"""
         if not self._sp_tags_this_instance(sp_entry):
+            return None
+        if self._backup_snapshot(sp_entry):
             return None
         tags: Dict[str, str] = sp_entry.get("tags") or {}
         img: Optional[str] = tags.get("img")
@@ -1093,6 +1103,11 @@ class DataProcessing(BaseManager):
                         f" (reason={tags.get('reason')})"
                         " - expires by itself, skipping")
             return ("internal", None)
+        if self._backup_snapshot(sp_entry):
+            tags = sp_entry.get("tags") or {}
+            self.dbg(2, f"{sp_name} backup snapshot (bak={tags.get('bak')})"
+                        " - removed by postbackup, skipping")
+            return ("internal", None)
         # reachable from an OpenNebula record?
         if sp_name[0] == "~":
             kv_name: Optional[str] = self.etcd.data["byUid"].get(sp_name)
@@ -1318,6 +1333,8 @@ class DataProcessing(BaseManager):
         claims: Dict[str, List[Dict[str, Any]]] = {}
         for sp_name, sp_entry in self.sp.data.items():
             if self._sp_internal(sp_name, sp_entry):
+                continue
+            if self._backup_snapshot(sp_entry):
                 continue
             one_rec: Optional[Dict[str, Any]] = self._claimed_one_record(
                 sp_name, sp_entry
