@@ -72,6 +72,7 @@ Optional:
 * Replace the "VM snapshot" interface scripts to do atomic disk snapshots on StorPool with option to set a limit on the number of snapshots per VM (see limitations).
 * Replace the <devices/video> element in the domain XML.
 * Support for [UEFI Normal/Secure boot](docs/uefi_boot.md) with persistent UEFI NVRAM stored on StorPool backed block device.
+* Interactive backups through OneBEX for third-party backup applications (Veeam): the StorPool exporter serves the backup snapshot straight from the hypervisor, full backups only (see the limitations).
 * Support CDROM hotplug.
 * Use CPU tune parameters instead/or in addition/ of CPU shares.
 
@@ -81,7 +82,7 @@ Optional:
 * OpenNebula temporarily keeps the VM checkpoint file on the Host and then (optionally) transfers it to the storage. A workaround was added on the base of OpenNebula/one#3272.
 * When SYSTEM datastore integration is enabled, the reported free/used/total space of the Datastore is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space).
 * VM snapshotting is not possible because it is handled internally by libvirt, which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
-* Only FULL opennebula backups are supported.
+* Only FULL OpenNebula backups are supported. This includes the interactive (OneBEX/Veeam) backups, which need an OpenNebula release where `TM_MAD_CONF` accepts `INTERACTIVE_BACKUP` (after 7.4.1). An interactive backup is served from the VM host (`LAST_BRIDGE` is ignored), refuses VMs with non-StorPool disks, and does not include the vTPM state, so a restored VM comes back without its TPM.
 * Persistent Images with SHAREABLE attribute are not supported.
 * Persistent Images with IMMUTABLE attribute are not supported.
 * Tested only with KVM hypervisor and Alma Linux 8/Ubuntu 24.04. Should work on other Linux OS.

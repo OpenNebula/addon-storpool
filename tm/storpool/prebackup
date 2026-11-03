@@ -67,6 +67,21 @@ oneDatastoreInfo "${SYSDS_ID}"
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
 
+if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
+    if [[ "${BACKUP_MODE^^}" == "INCREMENT" ]]; then
+        msg="Interactive backup of VM ${VM_ID}: only full backups are supported on StorPool (MODE=${BACKUP_MODE})"
+        splog "${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
+    if [[ -z "${BACKUP_LAST_DATASTORE_ID}" ]]; then
+        msg="Interactive backup of VM ${VM_ID}: BACKUP_CONFIG/LAST_DATASTORE_ID is not set"
+        splog "${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
+fi
+
 SNAPSHOTS_LIST="${B_LOCAL}/.storpool_snapshots"
 
 if [[ -d "${B_LOCAL}" ]]; then
@@ -111,7 +126,7 @@ for disk in ${vmOtherDisks}; do
     fi
 done
 if [[ -n "${otherDisks}" ]]; then
-    if boolTrue "BACKUP_SKIP_OTHER_DISKS"; then
+    if [[ ${BACKUP_INTERACTIVE} -eq 0 ]] && boolTrue "BACKUP_SKIP_OTHER_DISKS"; then
         splog "[W] VM ${VM_ID} backup skips the non-StorPool disks (${otherDisks% })"
     else
         msg="Backup of a VM with non-StorPool disks is not supported! (${otherDisks% })"
@@ -169,7 +184,11 @@ done {xfh}< <(jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId) \(.snaps
 exec {xfh}<&-
 
 if [[ -n "${TPM_MODEL}" ]]; then
-    oneTpmBackup "${VM_ID}" "${VMDIR}" "${KVMHOST}" "${B_DISK_DIR}"
+    if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
+        splog "[W] VM ${VM_ID} vTPM state is not part of an interactive backup"
+    else
+        oneTpmBackup "${VM_ID}" "${VMDIR}" "${KVMHOST}" "${B_DISK_DIR}"
+    fi
 fi
 
 for bak in ${backups}; do
@@ -185,6 +204,9 @@ for bak in ${backups}; do
         splog "[E] Error: Can't attach ${sName} to ${KVMHOST}"
         exit 1
     fi
+    if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
+        continue
+    fi
     snapPath="/dev/storpool-byid/${sGlobalId}"
     dstFile="${B_DISK_DIR}/disk.${did}.0"
     RCMD=$(cat <<EOF
@@ -199,7 +221,17 @@ EOF
     DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
 done
 
+if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
+    oneBackupExports "${KVMHOST}" "${B_DIR}" "${SNAPSHOTS_LIST}" "${backups}" || exit $?
+fi
+
 oneBackupPublish "${KVMHOST}" || exit $?
 splog "[I] backup published to ${B_HOST}:${B_DIR}"
+
+if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
+    splog "[I] exporting VM ${VM_ID} disks through OneBEX on ${KVMHOST}, waiting for the backup application"
+    signalWait oneBackupOneBEX "${KVMHOST}" "${VM_ID}" "${BACKUP_LAST_DATASTORE_ID}" "${B_DIR}" || exit $?
+    splog "[I] OneBEX export of VM ${VM_ID} completed"
+fi
 
 splog "END ${VM_ID}"

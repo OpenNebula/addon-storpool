@@ -414,9 +414,21 @@ function signalWait()
 function oneBackupTarget()
 {
     local _host="$1" _vmdir="$2" _vmid="$3" _xml="$4"
-    local _bridge="" _base="" _conf=""
+    local _bridge="" _base="" _conf="" _interactive="" _mode=""
     B_LOCAL="${_vmdir}/backup"
     _bridge="$("${SPXML}" get /VM/BACKUPS/BACKUP_CONFIG/LAST_BRIDGE <"${_xml}" 2>/dev/null | tr -d '\0' || true)"
+    _interactive="$("${SPXML}" get /VM/BACKUPS/BACKUP_CONFIG/INTERACTIVE <"${_xml}" 2>/dev/null | tr -d '\0' || true)"
+    # shellcheck disable=SC2034
+    BACKUP_INTERACTIVE=0
+    if boolTrue "_interactive"; then
+        # shellcheck disable=SC2034
+        BACKUP_INTERACTIVE=1
+        _mode=" interactive"
+        if [[ -n "${_bridge}" ]]; then
+            splog "[W] interactive backup ignores LAST_BRIDGE=${_bridge}, the disks are exported from ${_host}"
+            _bridge=""
+        fi
+    fi
     B_HOST="${_bridge:-${_host}}"
     for _conf in \
         "${ONE_LOCATION:+${ONE_LOCATION}/var/remotes/etc/datastore/datastore.conf}" \
@@ -439,7 +451,7 @@ function oneBackupTarget()
     else
         B_DISK_DIR="${B_LOCAL}"
     fi
-    splog "[I] backup destination ${B_HOST}:${B_DIR} (disks on ${_host}:${B_DISK_DIR})"
+    splog "[I]${_mode} backup destination ${B_HOST}:${B_DIR} (disks on ${_host}:${B_DISK_DIR})"
 }
 
 function oneBackupRemoveDir()
@@ -464,6 +476,57 @@ function oneBackupPublish()
     fi
     signalWait "${RSYNC:-rsync}" -a "${B_LOCAL}/" "${B_HOST}:${B_DIR}/" || _rc=$?
     return "${_rc}"
+}
+
+# oneBackupExports KVMHOST B_DIR SNAPSHOTS_LIST "volume:snapshot:disk_id ..."
+# ${B_LOCAL}/interactive_exports.json for the OneBEX storpool exporter
+function oneBackupExports()
+{
+    local _host="$1" _dir="$2" _list="$3" _backups="$4"
+    local _bak="" _volume="" _snapshot="" _did="" _vName="" _sGlobalId="" _sName=""
+    local _dev="" _size="" _entries="" _exports="${B_LOCAL}/interactive_exports.json"
+    _entries="$(mktemp -t "exports-XXXXXXXX")"
+    trapAdd "rm -f \"${_entries}\""
+    for _bak in ${_backups}; do
+        IFS=: read -r _volume _snapshot _did <<< "${_bak}"
+        read -r _vName _sGlobalId _sName <<< "$(grep "${_volume} " "${_list}" || true)"
+        _dev="/dev/storpool-byid/${_sGlobalId}"
+        _size="$(${SSH:-ssh} "${_host}" "/usr/sbin/blockdev --getsize64 ${_dev}" 2>/dev/null | tr -d '[:space:]' || true)"
+        if [[ -z "${_size}" || -n "${_size//[[:digit:]]/}" ]]; then
+            splog "[E] Can't get the size of ${_dev} (${_sName}) on ${_host}: '${_size}'"
+            return 1
+        fi
+        _size=$(((_size + 1048575) / 1048576))
+        jq -n -c --arg id "${_did}" --arg src "${_dev}" --arg target "${_dir}/disk.${_did}.0" --argjson size "${_size}" \
+            '{($id): {source: $src, target: $target, exporter: "storpool", format: "raw", mode: "full", size: $size}}' \
+            >>"${_entries}" || return $?
+        splog "[I] disk.${_did} ${_sName} ${_dev} ${_size}M"
+    done
+    jq -s 'add' "${_entries}" >"${_exports}" || return $?
+    rm -f "${_entries}"
+    trapDel "rm -f \"${_entries}\""
+    splog "[I] $(jq -c 'length' "${_exports}") disk(s) in ${_exports}"
+}
+
+# oneBackupOneBEX KVMHOST VM_ID BACKUP_DS_ID B_DIR
+# starts OneBEX on the VM host and waits for the backup application
+function oneBackupOneBEX()
+{
+    local _host="$1" _vmid="$2" _dsid="$3" _dir="$4"
+    local _remotes="" _rcmd=""
+    _remotes="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+    _rcmd=$(cat <<EOF
+export LANG=C LC_ALL=C
+for d in ${_remotes:+"${_remotes}"} /var/lib/one-remotes /var/tmp/one; do
+    [[ -f "\$d/tm/lib/onebex.rb" ]] && { REMOTES="\$d"; break; }
+done
+[[ -n "\$REMOTES" ]] || { echo "tm/lib/onebex.rb not found in the remotes directory of \$(hostname)" >&2; exit 1; }
+exec ruby -I "\$REMOTES/tm/lib" -r onebex -e 'TransferManager::OneBEX.start(:vm_id => ARGV[0], :ds_id => ARGV[1], :backup_dir => ARGV[2])' "${_vmid}" "${_dsid}" "${_dir}"
+EOF
+)
+    splog "[I] OneBEX ${_host}::ruby -I <remotes>/tm/lib -r onebex ... ${_vmid} ${_dsid} ${_dir}"
+    ssh_forward ssh_exec_and_log "${_host}" "${_rcmd}" \
+        "Error exporting VM ${_vmid} disks through OneBEX on ${_host}"
 }
 
 function trapReset()
@@ -3882,6 +3945,7 @@ function oneVmVolumes()
         "/VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE"
         "/VM/BACKUPS/BACKUP_CONFIG/MODE"
         "/VM/TEMPLATE/TPM/MODEL"
+        "/VM/BACKUPS/BACKUP_CONFIG/LAST_DATASTORE_ID"
     )
     unset XPATH_ELEMENTS i
     while read -r -u "${xfh}" _element; do
@@ -3925,6 +3989,8 @@ function oneVmVolumes()
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
     TPM_MODEL="${XPATH_ELEMENTS[i++]}"
+    # shellcheck disable=SC2034
+    BACKUP_LAST_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     IFS=';' read -r -a DISK_ID_A <<< "${DISK_ID}"
     IFS=';' read -r -a CLONE_A <<< "${CLONE}"
     IFS=';' read -r -a SAVE_A <<< "${SAVE}"

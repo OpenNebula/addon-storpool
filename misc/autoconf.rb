@@ -135,6 +135,7 @@ default_config = {
                     "DRIVER" => "\"raw\"",
                     "ALLOW_ORPHANS" => "\"yes\"",
                     "TM_MAD_SYSTEM" => "\"\"",
+                    "INTERACTIVE_BACKUP" => "\"yes\"",
                 },
             },
             "vm_restricted_attr" => {

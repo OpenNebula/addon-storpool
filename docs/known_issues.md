@@ -5,3 +5,12 @@
 The driver does a sanity check that the to-be-cloned volume is not available. But the `tm/delete` action is not called by OpenNebula when a VM is in "UNDEPLOYED" state.
 
 Workaround: Re-run the delete-recreate request. It will pass because the VM is in `PROLOG_FAILURE` and OpenNebula will call the `tm/delete` script to do the cleanup before calling `tm/clone`.
+
+## Interactive (OneBEX) backups
+
+* Full backups only. StorPool has no changed-block interface, so every interactive backup reads the whole disk; `MODE=INCREMENT` is refused.
+* `BACKUP_SKIP_OTHER_DISKS` is not honoured: a VM with non-StorPool disks is refused, otherwise the backup application would record a partial VM.
+* The vTPM state is not exported, as with the upstream interactive drivers. A restored VM has no TPM state.
+* `LAST_BRIDGE` is ignored: the datastore driver, the cancel and the backup application all address the VM host.
+* The backup snapshot stays attached read-only to the hypervisor for the whole transfer and grows with the guest writes. The hypervisor serves the data on TCP 13014 without authentication, so the port must be firewalled to the backup proxies.
+* A restore through `onebex://` is staged in `/var/tmp` on the front-end (the raw upload and its qcow2 conversion) before the image is imported.

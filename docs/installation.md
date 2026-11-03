@@ -208,8 +208,10 @@ The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-sto
 4. Edit `/etc/one/oned.conf` and append `TM_MAD_CONF` definition for StorPool:
 
    ```
-   TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "" ]
+   TM_MAD_CONF = [ NAME = "storpool", LN_TARGET = "NONE", CLONE_TARGET = "SELF", SHARED = "yes", DS_MIGRATE = "yes", DRIVER = "raw", ALLOW_ORPHANS = "yes", TM_MAD_SYSTEM = "", INTERACTIVE_BACKUP = "yes" ]
    ```
+
+   `INTERACTIVE_BACKUP` enables the interactive (OneBEX) backups of StorPool disks on the OpenNebula releases that support it (after 7.4.1); older releases ignore the attribute. The OneBEX exporter `onebex/exporters/storpool.rb` is installed by `install.sh` when `/var/lib/one/remotes/onebex/exporters` exists and reaches the hypervisors with `onehost sync --force`. The backup application must reach TCP port 13014 on the hypervisors.
 
 5. Edit `/etc/one/oned.conf` and append `DS_MAD_CONF` definition for StorPool:
 
