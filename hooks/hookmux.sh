@@ -55,6 +55,13 @@ if [[ ! -t 0 ]]; then
   haveStdin=1
 fi
 
+
+if [[ -f "$(dirname "$0")/../addon-storpoolrc" ]]; then
+  # shellcheck source=addon-storpoolrc
+  source "$(dirname "$0")/../addon-storpoolrc"
+fi
+REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-/var/tmp/one}"
+
 if [[ -d "${hookdir}" ]]; then
   while read -r -u 4 hook; do
     if [[ "${hook%.remote}" == "${hook}" ]]; then
@@ -66,7 +73,7 @@ if [[ -d "${hookdir}" ]]; then
       fi
     else
       if [[ -n "${haveStdin}" ]]; then
-        hookRemote="${hook/\/var\/lib\/one\/remotes//var/tmp/one}"
+        hookRemote="${hook/\/var\/lib\/one\/remotes/${REMOTES_DIR}}"
         if [[ -z "${REMOTEHOST}" ]]; then
           REMOTEHOST="$(echo "${stdin}" | "$(dirname "$0")/../datastore/spxml.py" sub -b '//HISTORY[last()]/HOSTNAME/text()' || true)"
         fi

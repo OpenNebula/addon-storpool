@@ -21,9 +21,10 @@ PATH="/bin:/usr/bin:/sbin:/usr/sbin:${PATH}"
 cgroup="${1:-machine.slice}"
 cgpath="/sys/fs/cgroup"
 
-if [[ -f /var/tmp/one/addon-storpoolrc ]]; then
+# runs from the remotes directory on the host, next to addon-storpoolrc
+if [[ -f "$(dirname "$(readlink -f "$0")")/addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
-    source /var/tmp/one/addon-storpoolrc
+    source "$(dirname "$(readlink -f "$0")")/addon-storpoolrc"
 fi
 
 function count_cpus()

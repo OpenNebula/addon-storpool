@@ -158,7 +158,7 @@ if [[ -f "${SP_MONITOR_DS}" ]]; then
             if [[ -e "${dir}/.monitor" ]]; then
                 DRIVER=$(<"${dir}/.monitor")
                 # default tm DRIVER is ssh
-                SCRIPT_PATH="${REMOTES_DIR:-/var/tmp/one}/tm/${DRIVER:-ssh}/monitor_ds"
+                SCRIPT_PATH="${REMOTES_DIR:-${SCRIPTS_REMOTE_DIR:-/var/tmp/one}}/tm/${DRIVER:-ssh}/monitor_ds"
                 if [[ -e "${SCRIPT_PATH}" ]]; then
                     if boolTrue "DEBUG_IM_MONITOR_DS"; then
                         splog "[D] run ${SCRIPT_PATH} ${dir} (set DEBUG_TM_MONITOR_DS=1)"

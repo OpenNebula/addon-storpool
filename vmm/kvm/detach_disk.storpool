@@ -66,7 +66,7 @@ fi
 PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
 PERSISTENT_CDROM="${PERSISTENT_CDROM//[[:space:]]/}"
 
-REMOTE_VMM="${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm"
+REMOTE_VMM="${REMOTE_LOCATION:-${SCRIPTS_REMOTE_DIR:-/var/tmp/one}}/vmm/kvm"
 if [[ "${PERSISTENT_CDROM}" =~ ^[0-9]+$ ]] && [[ "$((10#${PERSISTENT_CDROM}))" -gt 0 ]]; then
     ${SSH:-ssh} "${KVMHOST}" "${REMOTE_VMM}/detach_disk.cdrom $* ${PERSISTENT_CDROM}"
     ret=$?

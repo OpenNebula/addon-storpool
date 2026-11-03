@@ -45,6 +45,9 @@ if [[ -f "${SCRIPT_PATH}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
     source "${SCRIPT_PATH}/../../addon-storpoolrc"
 fi
+# the remotes directory on the hosts, for the deploy and the tweaks (OVMF)
+REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-/var/tmp/one}"
+export REMOTES_DIR
 
 for var in ONE_PX NVRAM_TEMPLATE_PATH TMPDIR ERR_FILE; do
     [[ -z "${!var}" ]] || export "${var?}"
@@ -195,7 +198,7 @@ else
 fi
 
 splog "[I] Sending ${DEP_XML} to ${HOST} for ${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME} ..."
-DOMAIN_ID="$(${SSH:-ssh} "${HOST}" "\"${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm/deploy\" \"${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME}\"" < "${DEP_XML}" 2>>"${ERR_FILE}")"
+DOMAIN_ID="$(${SSH:-ssh} "${HOST}" "\"${REMOTES_DIR}/vmm/kvm/deploy\" \"${DATASTORE_LOCATION:-/var/lib/one/datastores}/${DS_ID}/${VM_ID}/${DEP_NAME}\"" < "${DEP_XML}" 2>>"${ERR_FILE}")"
 ret=$?
 splog "VM ${VM_ID} deploy on ${HOST} DOMAIN_ID=${DOMAIN_ID} (${ret})"
 

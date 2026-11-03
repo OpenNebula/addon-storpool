@@ -190,3 +190,9 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #DEBUG_oneHostInfo=1
 #DEBUG_oneDatastoreInfo=1
 #DEBUG_oneVmVolumes=1
+
+# The remotes directory on the hypervisors. Up to OpenNebula 7.4 it is the
+# SCRIPTS_REMOTE_DIR of oned.conf (default /var/tmp/one) and nothing is needed
+# here; OpenNebula 7.5 syncs the remotes to the fixed /var/lib/one-remotes and
+# scripts/install-7.5.sh sets it here
+#SCRIPTS_REMOTE_DIR=/var/lib/one-remotes

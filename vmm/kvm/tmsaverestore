@@ -61,9 +61,10 @@ if [[ -f "${PRE_SCRIPT}" ]] && [[ -x "${PRE_SCRIPT}" ]]; then
 fi
 
 # execute vmm/save on remote host
-splog "${SSH:-ssh} ${HVHOST} /var/tmp/one/vmm/${VMM_MAD}/${ACTION} $*"
+REMOTES_DIR="$(oneRemotesDir)"
+splog "${SSH:-ssh} ${HVHOST} ${REMOTES_DIR}/vmm/${VMM_MAD}/${ACTION} $*"
 echo "${DRV_ACTION}" | \
-       "${SSH:-ssh}" "${HVHOST}" "/var/tmp/one/vmm/${VMM_MAD}/${ACTION}" "$@" || exit $?
+       "${SSH:-ssh}" "${HVHOST}" "${REMOTES_DIR}/vmm/${VMM_MAD}/${ACTION}" "$@" || exit $?
 
 # execute tm/postsave if exist
 if [[ -f "${POST_SCRIPT}" ]] && [[ -x "${POST_SCRIPT}" ]]; then

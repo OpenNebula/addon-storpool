@@ -238,4 +238,4 @@ echo "*** Please sync hosts (onehost sync --force)"
 
 echo "*** Please restart the opennebula service"
 
-echo "*** Please update RESERVED_CPU and RESERVED_MEM with the values from '/var/tmp/one/reserved.sh' run on each host"
+echo "*** Please update RESERVED_CPU and RESERVED_MEM with the values from '${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/reserved.sh' run on each host"

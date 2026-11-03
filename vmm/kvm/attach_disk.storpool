@@ -80,9 +80,9 @@ if [[ "${PERSISTENT_CDROM}" =~ ^[0-9]+$ ]] && [[ "$((10#${PERSISTENT_CDROM}))" -
         case "${DEV_PREFIX,,}" in
             hd|sd|[a-z])
                 set -o pipefail
-                ${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom" "$@"
+                ${SSH:-ssh} "${KVMHOST}" "${REMOTE_LOCATION:-${SCRIPTS_REMOTE_DIR:-/var/tmp/one}}/vmm/kvm/attach_disk.cdrom" "$@"
                 ret=$?
-                splog "(${ret}) ${SSH:-ssh} ${KVMHOST} ${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
+                splog "(${ret}) ${SSH:-ssh} ${KVMHOST} ${REMOTE_LOCATION:-${SCRIPTS_REMOTE_DIR:-/var/tmp/one}}/vmm/kvm/attach_disk.cdrom $1 $2 $3 $4 <DRV_ACTION>"
                 exit "${ret}"
                 ;;
             *)
@@ -114,4 +114,4 @@ if [[ "${TM_MAD:0:8}" == "storpool" ]]; then
     fi
 fi
 
-${SSH:-ssh} "${KVMHOST}" "\"${REMOTE_LOCATION:-/var/tmp/one}/vmm/kvm/attach_disk\" \"$1\" \"$2\" \"$3\" \"$4\" \"${DRV_ACTION}\""
+${SSH:-ssh} "${KVMHOST}" "\"${REMOTE_LOCATION:-${SCRIPTS_REMOTE_DIR:-/var/tmp/one}}/vmm/kvm/attach_disk\" \"$1\" \"$2\" \"$3\" \"$4\" \"${DRV_ACTION}\""

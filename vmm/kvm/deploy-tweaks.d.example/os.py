@@ -297,7 +297,7 @@ if nvram_file is not None:
         if len(nvram_attr["template"].split("/")) == 1:
             template_path: str = os.getenv(  # type: ignore[attr-defined] # noqa: E501
                 "NVRAM_TEMPLATE_PATH",
-                "/var/tmp/one/OVMF",
+                f"{os.getenv('REMOTES_DIR', '/var/tmp/one')}/OVMF",
             )
             tmp: str = f"{template_path}/{nvram_attr['template']}"
             nvram_attr["template"] = tmp

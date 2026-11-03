@@ -54,7 +54,7 @@ else
     TMCOMMON="/var/lib/one/remotes/tm/tm_common.sh"
 fi
 
-for srcfile in "${TMCOMMON}" "/var/tmp/one/tm/tm_common.sh"; do
+for srcfile in "${TMCOMMON}" "/var/lib/one-remotes/tm/tm_common.sh" "/var/tmp/one/tm/tm_common.sh"; do
     if [[ -f "${srcfile}" ]]; then
         # shellcheck source=/dev/null
         source "${srcfile}"
@@ -514,17 +514,14 @@ function oneBackupOneBEX()
 {
     local _host="$1" _vmid="$2" _dsid="$3" _dir="$4"
     local _remotes="" _rcmd=""
-    _remotes="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+    _remotes="$(oneRemotesDir)"
     _rcmd=$(cat <<EOF
 export LANG=C LC_ALL=C
-for d in ${_remotes:+"${_remotes}"} /var/lib/one-remotes /var/tmp/one; do
-    [[ -f "\$d/tm/lib/onebex.rb" ]] && { REMOTES="\$d"; break; }
-done
-[[ -n "\$REMOTES" ]] || { echo "tm/lib/onebex.rb not found in the remotes directory of \$(hostname)" >&2; exit 1; }
-exec ruby -I "\$REMOTES/tm/lib" -r onebex -e 'TransferManager::OneBEX.start(:vm_id => ARGV[0], :ds_id => ARGV[1], :backup_dir => ARGV[2])' "${_vmid}" "${_dsid}" "${_dir}"
+[[ -f "${_remotes}/tm/lib/onebex.rb" ]] || { echo "${_remotes}/tm/lib/onebex.rb not found on \$(hostname)" >&2; exit 1; }
+exec ruby -I "${_remotes}/tm/lib" -r onebex -e 'TransferManager::OneBEX.start(:vm_id => ARGV[0], :ds_id => ARGV[1], :backup_dir => ARGV[2])' "${_vmid}" "${_dsid}" "${_dir}"
 EOF
 )
-    splog "[I] OneBEX ${_host}::ruby -I <remotes>/tm/lib -r onebex ... ${_vmid} ${_dsid} ${_dir}"
+    splog "[I] OneBEX ${_host}::ruby -I ${_remotes}/tm/lib -r onebex ... ${_vmid} ${_dsid} ${_dir}"
     ssh_forward ssh_exec_and_log "${_host}" "${_rcmd}" \
         "Error exporting VM ${_vmid} disks through OneBEX on ${_host}"
 }
@@ -2589,16 +2586,42 @@ EOF
                  "Error creating symlink from ${_src} to ${_dst//[[:space:]]/,} on host ${_host}"
 }
 
+# The remotes directory on the hosts: SCRIPTS_REMOTE_DIR from addon-storpoolrc
+# (set by scripts/install-7.5.sh to the fixed /var/lib/one-remotes of OpenNebula
+# 7.5) or from oned.conf (up to 7.4), else the old default
+function oneRemotesDir()
+{
+    if [[ -z "${ONE_REMOTES_DIR}" ]]; then
+        ONE_REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+        ONE_REMOTES_DIR="${ONE_REMOTES_DIR:-/var/tmp/one}"
+    fi
+    echo "${ONE_REMOTES_DIR}"
+}
+
+# shell lines for a command run on a host: REMOTES_DIR and the kvm kvmrc sourced
+function oneRemotesKvmrc()
+{
+    local _dir=""
+    _dir="$(oneRemotesDir)"
+    cat <<EOF
+    REMOTES_DIR="${_dir}"
+    if [[ -f "${_dir}/etc/vmm/kvm/kvmrc" ]]; then
+        source "${_dir}/etc/vmm/kvm/kvmrc"
+    else
+        source "${_dir}/vmm/kvm/kvmrc"
+    fi
+EOF
+}
+
 function oneFsfreeze()
 {
     local _host="$1" _domain="$2"
-    local _SCRIPTS_REMOTE_DIR="" _remote_cmd=""
-    _SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+    local _remote_cmd=""
 
     _remote_cmd=$(cat <<EOF
     #_FSFREEZE
     if [[ -n "${_domain}" ]]; then
-        [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
         tmplog="\$(mktemp --tmpdir oneFsfreeze-XXXXXXXX)"
         if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsfreeze "${_domain}" >"\${tmplog}" 2>&1; then
             splog "domfsfreeze ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
@@ -2618,13 +2641,12 @@ EOF
 function oneFsthaw()
 {
     local _host="$1" _domain="$2"
-    local _SCRIPTS_REMOTE_DIR="" _remote_cmd=""
-    _SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+    local _remote_cmd=""
 
     _remote_cmd=$(cat <<EOF
     #_FSTHAW
     if [[ -n "${_domain}" ]]; then
-        [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
         tmplog="\$(mktemp --tmpdir oneFsthaw-XXXXXXXX)"
         if virsh --connect \${LIBVIRT_URI:-qemu:///system} domfsthaw "${_domain}" >"\${tmplog}" 2>&1; then
             splog "domfsthaw ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
@@ -2650,13 +2672,12 @@ EOF
 function oneDomSuspend()
 {
     local _host="$1" _domain="$2"
-    local _SCRIPTS_REMOTE_DIR="" _remote_cmd=""
-    _SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+    local _remote_cmd=""
 
     _remote_cmd=$(cat <<EOF
     #_SUSPEND
     if [[ -n "${_domain}" ]]; then
-        [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
         tmplog="\$(mktemp --tmpdir oneDomSuspend-XXXXXXXX)"
         if virsh --connect \${LIBVIRT_URI:-qemu:///system} suspend "${_domain}" >"\${tmplog}" 2>&1; then
             splog "suspend ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
@@ -2678,13 +2699,12 @@ EOF
 function oneDomResume()
 {
     local _host="$1" _domain="$2"
-    local _SCRIPTS_REMOTE_DIR="" _remote_cmd=""
-    _SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+    local _remote_cmd=""
 
     _remote_cmd=$(cat <<EOF
     #_RESUME
     if [[ -n "${_domain}" ]]; then
-        [[ -f "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" ]] && source "${_SCRIPTS_REMOTE_DIR}/etc/vmm/kvm/kvmrc" || source "${_SCRIPTS_REMOTE_DIR}/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
         tmplog="\$(mktemp --tmpdir oneDomResume-XXXXXXXX)"
         if virsh --connect \${LIBVIRT_URI:-qemu:///system} resume "${_domain}" >"\${tmplog}" 2>&1; then
             splog "resume ${_domain} \${tmplog}:\$(tr '\\n' ' ' < "\${tmplog}")"
@@ -4706,14 +4726,16 @@ function oneTpmBackup()
 
     _remote_cmd=$(cat <<EOF
     #
-    source /var/tmp/one/etc/vmm/kvm/kvmrc
-    SPXML="/var/tmp/one/datastore/spxml.py"
+$(oneRemotesKvmrc)
+    SPXML="\${REMOTES_DIR}/datastore/spxml.py"
+    VTPM_SETUP="/usr/libexec/one/vtpm_setup"
+    [[ -x "\${VTPM_SETUP}" ]] || VTPM_SETUP="\${REMOTES_DIR}/vtpm_setup"
     domxml="\$(virsh --connect "\${LIBVIRT_URI:-qemu:///system}" dumpxml "one-${_VM_ID}")"
     if echo "\${domxml}" | "\${SPXML}" sub '/domain/devices/tpm/backend[@type="emulator"]' > /dev/null 2>&1; then
         DOM_UUID="\$(echo "\${domxml}" | "\${SPXML}" get '/domain/uuid' | tr -d '\\0')"
         if sudo -l | grep -q vtpm_setup; then
             splog "VM ${_VM_ID} Backing up vTPM data to ${_VM_PATH} DOM_UUID=\${DOM_UUID}"
-            sudo /var/tmp/one/vtpm_setup backup "\${DOM_UUID}" "${_VM_PATH}"
+            sudo "\${VTPM_SETUP}" backup "\${DOM_UUID}" "${_VM_PATH}"
             if [[ -n "${_B_DIR}" ]]; then
                 mkdir -p "${_B_DIR}"
                 tar zcvf "${_B_DIR}/disk.tpm.0" -C "${_VM_PATH}" tpm

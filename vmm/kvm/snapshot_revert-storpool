@@ -115,7 +115,7 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
     export vmVolumes_a
 
     rCMD=$(cat <<EOF
-    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
 	# A second attempt covers a monitor holding the state-change lock, and a
 	# destroy that killed QEMU but still returned an error.
 	vret=1
@@ -149,7 +149,7 @@ EOF
         restartDomainDirname="/var/lib/one/datastores/${VM_DS_ID}/${VM_ID}"
         restartDomain="${restartDomainDirname}/$(mktemp -u restart-XXXXXX).domain"
         rCMD=$(cat <<EOF
-    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
     mkdir -p "${restartDomainDirname}"
     if grep -q "</domain>" "${restartDomain}" 2>/dev/null; then
         logger -t vmm_sp_snapshot_revert_r "VM ${VM_ID} restart XML ${restartDomain} already present, skipping dumpxml"
@@ -203,7 +203,7 @@ EOF
         splog "[W] VM ${VM_ID} host:${VMHOST} DOMAIN_ID:${DOMAIN} domain XML dump failed, the domain will not be restarted"
         RESTART_DOMAIN=0
         rCMD=$(cat <<EOF
-    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
 	vret=1
 	for _try in 1 2; do
 		vret=0
@@ -349,7 +349,7 @@ EOF
     if boolTrue "RESTART_DOMAIN"; then
         # the ssh exit status must be the one of virsh create, not of the logger call after it
         rCMD=$(cat <<EOF
-    [[ -f "/var/tmp/one/etc/vmm/kvm/kvmrc" ]] && source "/var/tmp/one/etc/vmm/kvm/kvmrc" || source "/var/tmp/one/vmm/kvm/kvmrc"
+$(oneRemotesKvmrc)
     virsh --connect "\$LIBVIRT_URI" create "${restartDomain}" >"/tmp/sprevert-${VM_ID}-create.log" 2>&1
     cret=\$?
     while read -r out; do
