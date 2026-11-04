@@ -108,7 +108,7 @@ module OneBEX
                 offset = range[:start].to_i
                 length = range[:length].to_i
 
-                raise "Invalid read range: #{range}" if length <= 0
+                raise "Invalid read range: #{range}" if length <= 0 || offset < 0
 
                 if offset + length > xfr[:size]
                     raise "Read range #{range} beyond the end of #{xfr[:transfer_id]}"
