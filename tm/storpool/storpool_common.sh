@@ -3965,7 +3965,6 @@ function oneVmVolumes()
         "/VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE"
         "/VM/BACKUPS/BACKUP_CONFIG/MODE"
         "/VM/TEMPLATE/TPM/MODEL"
-        "/VM/BACKUPS/BACKUP_CONFIG/LAST_DATASTORE_ID"
     )
     unset XPATH_ELEMENTS i
     while read -r -u "${xfh}" _element; do
@@ -4009,8 +4008,6 @@ function oneVmVolumes()
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
     TPM_MODEL="${XPATH_ELEMENTS[i++]}"
-    # shellcheck disable=SC2034
-    BACKUP_LAST_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     IFS=';' read -r -a DISK_ID_A <<< "${DISK_ID}"
     IFS=';' read -r -a CLONE_A <<< "${CLONE}"
     IFS=';' read -r -a SAVE_A <<< "${SAVE}"

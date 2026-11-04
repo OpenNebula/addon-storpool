@@ -74,12 +74,6 @@ if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
         error_message "${msg}"
         exit 1
     fi
-    if [[ -z "${BACKUP_LAST_DATASTORE_ID}" ]]; then
-        msg="Interactive backup of VM ${VM_ID}: BACKUP_CONFIG/LAST_DATASTORE_ID is not set"
-        splog "${msg}"
-        error_message "${msg}"
-        exit 1
-    fi
 fi
 
 SNAPSHOTS_LIST="${B_LOCAL}/.storpool_snapshots"
@@ -230,7 +224,7 @@ splog "[I] backup published to ${B_HOST}:${B_DIR}"
 
 if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
     splog "[I] exporting VM ${VM_ID} disks through OneBEX on ${KVMHOST}, waiting for the backup application"
-    signalWait oneBackupOneBEX "${KVMHOST}" "${VM_ID}" "${BACKUP_LAST_DATASTORE_ID}" "${B_DIR}" || exit $?
+    signalWait oneBackupOneBEX "${KVMHOST}" "${VM_ID}" "${SYSDS_ID}" "${B_DIR}" || exit $?
     splog "[I] OneBEX export of VM ${VM_ID} completed"
 fi
 
