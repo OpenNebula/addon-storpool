@@ -13,4 +13,5 @@ Workaround: Re-run the delete-recreate request. It will pass because the VM is i
 * The vTPM state is not exported, as with the upstream interactive drivers. A restored VM has no TPM state.
 * `LAST_BRIDGE` is ignored: the datastore driver, the cancel and the backup application all address the VM host.
 * The backup snapshot stays attached read-only to the hypervisor for the whole transfer and grows with the guest writes. The hypervisor serves the data on TCP 13014 without authentication, so the port must be firewalled to the backup proxies.
+* A backup snapshot that postbackup failed to detach or delete stays on the cluster and keeps growing. `kvchk` reports it as hanging once the VM has left the BACKUP state and the snapshot is older than `--hanging-min-age` (3600 s by default); it is never re-pointed at the live disk.
 * A restore through `onebex://` is staged in `/var/tmp` on the front-end (the raw upload and its qcow2 conversion) before the image is imported.

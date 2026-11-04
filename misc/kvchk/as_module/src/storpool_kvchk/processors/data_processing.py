@@ -38,6 +38,10 @@ VM_ON_FRONTEND_STATES = (4, 9)
 IMAGE_NOT_CREATED_STATES = (4, 5)
 
 
+# LCM_STATE BACKUP and BACKUP_POWEROFF (include/VirtualMachine.h)
+LCM_BACKUP_STATES: Tuple[int, int] = (69, 70)
+
+
 class DataProcessing(BaseManager):
     """Analyzes data and relationships between
     OpenNebula and Etcd, and StorPool."""
@@ -214,11 +218,33 @@ class DataProcessing(BaseManager):
         return True
 
     def _backup_snapshot(self, sp_entry: Dict[str, Any]) -> bool:
-        """A snapshot the addon prebackup holds for a backup in progress:
-        tagged bak with the img of the live disk and no snap tag. The
-        postbackup removes it, so it is never the live disk, nor its
-        duplicate, nor a hanging record"""
+        """A snapshot the addon prebackup holds for a backup: tagged bak
+        with the img of the live disk and no snap tag. It is never the
+        live disk nor its duplicate; postbackup removes it, so one that
+        outlives the backup is hanging (_backup_snapshot_stale)"""
         return sp_backup_snapshot(sp_entry)
+
+    def _backup_snapshot_stale(
+        self, sp_entry: Dict[str, Any]
+    ) -> Optional[str]:
+        """Why a backup snapshot is left behind: its VM is gone or no
+        longer in a backup state. None while the backup can still be
+        in progress (VM in BACKUP/BACKUP_POWEROFF, or listed but not
+        inspectable)"""
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        vm_tag: str = str(tags.get(self.args.vm_tag) or "")
+        if not vm_tag.isnumeric():
+            return f"no VM id in the '{self.args.vm_tag}' tag"
+        vm_id: int = int(vm_tag)
+        vm_rec: Optional[Dict[str, Any]] = self.one.one_vms.get(vm_id)
+        if vm_rec is None:
+            if vm_id in self.one.vm_list:
+                return None
+            return f"VM {vm_id} is gone"
+        lcm_state: int = int(vm_rec.get("lcm_state", -1))
+        if lcm_state in LCM_BACKUP_STATES:
+            return None
+        return f"VM {vm_id} is not in BACKUP (lcm_state={lcm_state})"
 
     def _resolve_one_by_tags(
         self, sp_entry: Dict[str, Any]
@@ -1105,9 +1131,16 @@ class DataProcessing(BaseManager):
             return ("internal", None)
         if self._backup_snapshot(sp_entry):
             tags = sp_entry.get("tags") or {}
-            self.dbg(2, f"{sp_name} backup snapshot (bak={tags.get('bak')})"
-                        " - removed by postbackup, skipping")
-            return ("internal", None)
+            if not self._sp_tags_this_instance(sp_entry):
+                return ("foreign", None)
+            stale: Optional[str] = self._backup_snapshot_stale(sp_entry)
+            if stale is None:
+                self.dbg(2, f"{sp_name} backup snapshot"
+                            f" (bak={tags.get('bak')}) - backup in"
+                            " progress, skipping")
+                return ("internal", None)
+            return ("hanging", f"backup snapshot (bak={tags.get('bak')})"
+                               f" left behind, {stale}")
         # reachable from an OpenNebula record?
         if sp_name[0] == "~":
             kv_name: Optional[str] = self.etcd.data["byUid"].get(sp_name)

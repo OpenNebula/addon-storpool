@@ -2286,6 +2286,10 @@ class TestBackupSnapshot:
             "byName": {"one-img-200": "~n9wb.b.qr1d"},
             "byUid": {"~n9wb.b.qr1d": "one-img-200"},
         }
+        processor.one.vm_list = {7: {"name": "vm7", "stat": "back",
+                                     "host": "kvm1"}}
+        processor.one.one_vms = {7: {"vm_id": 7, "state": 3,
+                                     "lcm_state": 69}}
 
     def _bak(self):
         return _sp_vol(
@@ -2321,3 +2325,55 @@ class TestBackupSnapshot:
         out = capsys.readouterr().out
         assert "claim OpenNebula one-img-200" not in out
         assert "leftover" not in out
+
+    def test_left_behind_when_the_vm_is_not_in_backup(self, processor):
+        self._image(processor)
+        bak = self._bak()
+        processor.one.one_vms[7]["lcm_state"] = 3
+        category, reason = processor._classify_sp_record(
+            bak["name"], bak, set()
+        )
+        assert category == "hanging"
+        assert "VM 7 is not in BACKUP (lcm_state=3)" in reason
+        processor.one.one_vms[7]["lcm_state"] = 70
+        assert processor._classify_sp_record(bak["name"], bak, set()) == (
+            "internal", None
+        )
+        # listed but not inspectable: the backup may still be running
+        processor.one.one_vms = {}
+        assert processor._classify_sp_record(bak["name"], bak, set()) == (
+            "internal", None
+        )
+        processor.one.vm_list = {}
+        category, reason = processor._classify_sp_record(
+            bak["name"], bak, set()
+        )
+        assert category == "hanging"
+        assert "VM 7 is gone" in reason
+        # a stale one is still never resolved to the live disk
+        assert processor._resolve_one_by_tags(bak) is None
+
+    def test_other_instance_backup_snapshot_is_foreign(self, processor):
+        self._image(processor)
+        bak = self._bak()
+        bak["tags"]["nloc"] = "other"
+        processor.one.one_vms = {}
+        processor.one.vm_list = {}
+        assert processor._classify_sp_record(bak["name"], bak, set()) == (
+            "foreign", None
+        )
+
+    def test_reported_hanging_once_old_enough(self, processor, capsys):
+        self._image(processor)
+        processor.one.one_vms[7]["lcm_state"] = 3
+        processor.sp.data = {
+            "~n9wb.b.bak1": self._bak(),
+        }
+        processor.args.hanging_min_age = 0
+        processor.args.report_foreign = False
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "hanging snapshot ~n9wb.b.bak1 " in out
+        assert "left behind, VM 7 is not in BACKUP (lcm_state=3)" in out
