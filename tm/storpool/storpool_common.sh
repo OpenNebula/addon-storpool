@@ -491,7 +491,7 @@ function oneBackupExports()
         IFS=: read -r _volume _snapshot _did <<< "${_bak}"
         read -r _vName _sGlobalId _sName <<< "$(grep "${_volume} " "${_list}" || true)"
         _dev="/dev/storpool-byid/${_sGlobalId}"
-        _size="$(${SSH:-ssh} "${_host}" "/usr/sbin/blockdev --getsize64 ${_dev}" 2>/dev/null | tr -d '[:space:]' || true)"
+        _size="$(ssh_forward ssh_monitor_and_log "${_host}" "/usr/sbin/blockdev --getsize64 ${_dev}" "blockdev --getsize64 ${_dev} on ${_host}" | tr -d '[:space:]' || true)"
         if [[ -z "${_size}" || -n "${_size//[[:digit:]]/}" ]]; then
             splog "[E] Can't get the size of ${_dev} (${_sName}) on ${_host}: '${_size}'"
             return 1
