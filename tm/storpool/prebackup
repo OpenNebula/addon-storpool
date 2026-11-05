@@ -80,17 +80,23 @@ SNAPSHOTS_LIST="${B_LOCAL}/.storpool_snapshots"
 
 if [[ -d "${B_LOCAL}" ]]; then
     splog "[I] pre-clean ${B_LOCAL} ..."
-    if [[ -f "${SNAPSHOTS_LIST}" ]]; then
-        while read -r -u "${spfh}" volume sGlobalId sName; do
-            splog "[I] Removing snapshot ${sName}, volume ${volume}"
-            json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
-            DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
-            SKIP_KV_DATA=1 storpoolSnapshotDelete "${sName}"
-        done {spfh}< <(cat "${SNAPSHOTS_LIST}" || true)
-        exec {spfh}<&-
-    fi
     rm -rf "${B_LOCAL}"
     splog "[I] pre-clean completed ($?)"
+fi
+# oned runs one backup of a VM at a time: every backup snapshot of the VM is a leftover
+if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList >/dev/null; then
+    while read -r -u "${spfh}" sName sBak; do
+        splog "[I] Removing the leftover backup snapshot ${sName} (${sBak})"
+        json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
+        DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
+        SKIP_KV_DATA=1 storpoolSnapshotDelete "${sName}"
+    done {spfh}< <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${VM_ID}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
+        '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+         | select(.deleted==false and .tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bak // "")!="" and .tags.snap==null)
+         | "\(.name) \(.tags.bak)"' "${TMPDIR}/SnapshotsList.json" || true)
+    exec {spfh}<&-
+else
+    splog "[W] SnapshotsList failed ($?), leftover backup snapshots of VM ${VM_ID} are not cleaned"
 fi
 oneBackupRemoveDir "${KVMHOST}" "${B_DISK_DIR}"
 if [[ "${B_HOST}:${B_DIR}" != "${KVMHOST}:${B_DISK_DIR}" ]]; then
