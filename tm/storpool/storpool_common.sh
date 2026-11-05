@@ -484,15 +484,29 @@ function oneBackupExports()
 {
     local _host="$1" _dir="$2" _list="$3" _backups="$4"
     local _bak="" _volume="" _snapshot="" _did="" _vName="" _sGlobalId="" _sName=""
-    local _dev="" _size="" _entries="" _exports="${B_LOCAL}/interactive_exports.json"
-    _entries="$(mktemp -t "exports-XXXXXXXX")"
-    trapAdd "rm -f \"${_entries}\""
+    local _i="" _dev="" _size="" _entries="" _exports="${B_LOCAL}/interactive_exports.json"
+    local -a _devs=() _dids=() _names=() _sizes=()
     for _bak in ${_backups}; do
         IFS=: read -r _volume _snapshot _did <<< "${_bak}"
         read -r _vName _sGlobalId _sName <<< "$(grep "${_volume} " "${_list}" || true)"
-        _dev="/dev/storpool-byid/${_sGlobalId}"
-        _size="$(ssh_forward ssh_monitor_and_log "${_host}" "/usr/sbin/blockdev --getsize64 ${_dev}" "blockdev --getsize64 ${_dev} on ${_host}" | tr -d '[:space:]' || true)"
-        if [[ -z "${_size}" || -n "${_size//[[:digit:]]/}" ]]; then
+        _devs+=("/dev/storpool-byid/${_sGlobalId}")
+        _dids+=("${_did}")
+        _names+=("${_sName}")
+    done
+    if [[ ${#_devs[@]} -eq 0 ]]; then
+        splog "[E] No disks to export"
+        return 1
+    fi
+    read -r -a _sizes <<< "$(ssh_forward ssh_monitor_and_log "${_host}" "/usr/sbin/blockdev --getsize64 ${_devs[*]}" "blockdev --getsize64 ${_devs[*]} on ${_host}" | tr '\n' ' ' || true)"
+    if [[ ${#_sizes[@]} -ne ${#_devs[@]} ]]; then
+        splog "[E] Can't get the sizes of ${_devs[*]} on ${_host}: '${_sizes[*]}'"
+        return 1
+    fi
+    _entries="$(mktemp -t "exports-XXXXXXXX")"
+    trapAdd "rm -f \"${_entries}\""
+    for _i in "${!_devs[@]}"; do
+        _dev="${_devs[_i]}" _did="${_dids[_i]}" _sName="${_names[_i]}" _size="${_sizes[_i]}"
+        if [[ -n "${_size//[[:digit:]]/}" ]]; then
             splog "[E] Can't get the size of ${_dev} (${_sName}) on ${_host}: '${_size}'"
             return 1
         fi
