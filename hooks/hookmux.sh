@@ -60,6 +60,15 @@ if [[ -f "$(dirname "$0")/../addon-storpoolrc" ]]; then
   # shellcheck source=addon-storpoolrc
   source "$(dirname "$0")/../addon-storpoolrc"
 fi
+if [[ -z "${SCRIPTS_REMOTE_DIR}" ]]; then
+  IFS=. read -r ONE_MAJOR ONE_MINOR _ 2>/dev/null <"$(dirname "$0")/../VERSION" || true
+  if (( ${ONE_MAJOR:-0} * 100 + ${ONE_MINOR:-0} >= 705 )); then
+    SCRIPTS_REMOTE_DIR="/var/lib/one-remotes"
+  else
+    SCRIPTS_REMOTE_DIR="$(grep -E '^SCRIPTS_REMOTE_DIR=' /etc/one/oned.conf 2>/dev/null | tail -n 1 || true)"
+    SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR#*=}"
+  fi
+fi
 REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-/var/tmp/one}"
 
 if [[ -d "${hookdir}" ]]; then

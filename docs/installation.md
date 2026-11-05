@@ -244,7 +244,7 @@ The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-sto
    echo "RAFT_LEADER_IP=1.2.3.4" >> /var/lib/one/remotes/addon-storpoolrc
    ```
 
-9. The addon runs commands on the hypervisors from the remotes directory OpenNebula syncs there. Up to OpenNebula 7.4 that is `SCRIPTS_REMOTE_DIR` from `/etc/one/oned.conf` (default `/var/tmp/one`): when it is not the default, define `SCRIPTS_REMOTE_DIR` in `addon-storpoolrc` as well. OpenNebula 7.5 syncs the remotes to the fixed `/var/lib/one-remotes` (OpenNebula/one#7899, the attribute is gone) and `scripts/install-7.5.sh` sets `SCRIPTS_REMOTE_DIR` in `addon-storpoolrc` accordingly.
+9. The addon runs commands on the hypervisors from the remotes directory OpenNebula syncs there: `/var/lib/one-remotes` since OpenNebula 7.5 (OpenNebula/one#7899, the attribute is gone) and `SCRIPTS_REMOTE_DIR` from `/etc/one/oned.conf` (default `/var/tmp/one`) up to 7.4. The addon resolves it from the OpenNebula version on the front-end; `SCRIPTS_REMOTE_DIR` in `addon-storpoolrc` overrides it and `scripts/install-7.5.sh` sets it there.
 
 
 ## Post-installation steps

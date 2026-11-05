@@ -46,6 +46,12 @@ if [[ -f "${SCRIPT_PATH}/../../addon-storpoolrc" ]]; then
     source "${SCRIPT_PATH}/../../addon-storpoolrc"
 fi
 # the remotes directory on the hosts, for the deploy and the tweaks (OVMF)
+if [[ -z "${SCRIPTS_REMOTE_DIR}" ]]; then
+    IFS=. read -r ONE_MAJOR ONE_MINOR _ 2>/dev/null <"${SCRIPT_PATH}/../../VERSION" || true
+    if (( ${ONE_MAJOR:-0} * 100 + ${ONE_MINOR:-0} >= 705 )); then
+        SCRIPTS_REMOTE_DIR="/var/lib/one-remotes"
+    fi
+fi
 REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-/var/tmp/one}"
 export REMOTES_DIR
 

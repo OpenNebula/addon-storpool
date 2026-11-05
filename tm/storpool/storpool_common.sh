@@ -215,7 +215,9 @@ function get_one_version()
             ONE_EDITION="CE${ONE_VERSION_ARR[3]}"
         fi
         ONE_VERSION_INT=$((ONE_VERSION_ARR[0]*10000 + ONE_VERSION_ARR[1]*100 + ONE_VERSION_ARR[2]))
-        splog "${ONE_VERSION} ${ONE_EDITION} ${ONE_VERSION_INT}"
+        if boolTrue "DEBUG_COMMON"; then
+            splog "[D] ${ONE_VERSION} ${ONE_EDITION} ${ONE_VERSION_INT}"
+        fi
     fi
 }
 
@@ -2600,13 +2602,23 @@ EOF
                  "Error creating symlink from ${_src} to ${_dst//[[:space:]]/,} on host ${_host}"
 }
 
-# The remotes directory on the hosts: SCRIPTS_REMOTE_DIR from addon-storpoolrc
+# The remotes directory on the hosts: SCRIPTS_REMOTE_DIR from addon-storpoolrc, else /var/lib/one-remotes since OpenNebula 7.5, else oned.conf
 # (set by scripts/install-7.5.sh to the fixed /var/lib/one-remotes of OpenNebula
 # 7.5) or from oned.conf (up to 7.4), else the old default
 function oneRemotesDir()
 {
     if [[ -z "${ONE_REMOTES_DIR}" ]]; then
-        ONE_REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")}"
+        ONE_REMOTES_DIR="${SCRIPTS_REMOTE_DIR:-}"
+        if [[ -z "${ONE_REMOTES_DIR}" ]]; then
+            if [[ -z "${ONE_VERSION_INT:-}" ]]; then
+                get_one_version
+            fi
+            if [[ ${ONE_VERSION_INT:-0} -ge 70500 ]]; then
+                ONE_REMOTES_DIR="/var/lib/one-remotes"
+            else
+                ONE_REMOTES_DIR="$(getFromConf "/etc/one/oned.conf" "SCRIPTS_REMOTE_DIR")"
+            fi
+        fi
         ONE_REMOTES_DIR="${ONE_REMOTES_DIR:-/var/tmp/one}"
     fi
     echo "${ONE_REMOTES_DIR}"

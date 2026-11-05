@@ -25,6 +25,15 @@ if [[ -f "${WORKDIR}/../../addon-storpoolrc" ]]; then
     # shellcheck source=addon-storpoolrc
     source "${WORKDIR}/../../addon-storpoolrc"
 fi
+if [[ -z "${SCRIPTS_REMOTE_DIR}" ]]; then
+    IFS=. read -r ONE_MAJOR ONE_MINOR _ 2>/dev/null <"${WORKDIR}/../../VERSION" || true
+    if (( ${ONE_MAJOR:-0} * 100 + ${ONE_MINOR:-0} >= 705 )); then
+        SCRIPTS_REMOTE_DIR="/var/lib/one-remotes"
+    else
+        SCRIPTS_REMOTE_DIR="$(grep -E '^SCRIPTS_REMOTE_DIR=' /etc/one/oned.conf 2>/dev/null | tail -n 1 || true)"
+        SCRIPTS_REMOTE_DIR="${SCRIPTS_REMOTE_DIR#*=}"
+    fi
+fi
 SPXML="${WORKDIR}/../../datastore/spxml.py"
 
 function splog()
@@ -66,7 +75,7 @@ fi
 PERSISTENT_CDROM="${T_PERSISTENT_CDROM_VM:-${T_PERSISTENT_CDROM}}"
 PERSISTENT_CDROM="${PERSISTENT_CDROM//[[:space:]]/}"
 
-REMOTE_VMM="${REMOTE_LOCATION:-${SCRIPTS_REMOTE_DIR:-/var/tmp/one}}/vmm/kvm"
+REMOTE_VMM="${SCRIPTS_REMOTE_DIR:-/var/tmp/one}/vmm/kvm"
 if [[ "${PERSISTENT_CDROM}" =~ ^[0-9]+$ ]] && [[ "$((10#${PERSISTENT_CDROM}))" -gt 0 ]]; then
     ${SSH:-ssh} "${KVMHOST}" "${REMOTE_VMM}/detach_disk.cdrom $* ${PERSISTENT_CDROM}"
     ret=$?
