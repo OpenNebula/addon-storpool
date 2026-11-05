@@ -2353,6 +2353,54 @@ class TestBackupSnapshot:
         # a stale one is still never resolved to the live disk
         assert processor._resolve_one_by_tags(bak) is None
 
+    def test_superseded_by_a_later_backup(self, processor):
+        self._image(processor)
+        old = self._bak()
+        new = _sp_vol(
+            "~n9wb.b.bak2",
+            "n9wb.b.bak2",
+            snapshot=True,
+            tags=dict(_IMG_TAGS, nvm="7", bak="ONEBACKUP-1700003600"),
+            creationTimestamp=4600,
+            parentName="~n9wb.b.qr1d",
+        )
+        processor.sp.data = {"~n9wb.b.bak1": old, "~n9wb.b.bak2": new}
+        # the VM is in BACKUP, but that backup is the newest one
+        category, reason = processor._classify_sp_record(
+            old["name"], old, set()
+        )
+        assert category == "hanging"
+        assert "VM 7 has a later backup snapshot (ONEBACKUP-1700003600)" \
+            in reason
+        assert processor._classify_sp_record(new["name"], new, set()) == (
+            "internal", None
+        )
+        # another VM, another instance or an unordered suffix: not later
+        for tags in ({"nvm": "8"}, {"nloc": "other"}, {"bak": "manual"}):
+            new["tags"] = dict(_IMG_TAGS, nvm="7", bak="ONEBACKUP-1700003600")
+            new["tags"].update(tags)
+            assert processor._classify_sp_record(
+                old["name"], old, set()
+            ) == ("internal", None), tags
+
+    def test_superseded_reported_hanging(self, processor, capsys):
+        self._image(processor)
+        old = self._bak()
+        new = self._bak()
+        new["name"] = "~n9wb.b.bak2"
+        new["globalId"] = "n9wb.b.bak2"
+        new["tags"] = dict(_IMG_TAGS, nvm="7", bak="ONEBACKUP-1700003600")
+        processor.sp.data = {"~n9wb.b.bak1": old, "~n9wb.b.bak2": new}
+        processor.args.hanging_min_age = 0
+        processor.args.report_foreign = False
+
+        processor.analyze_hanging()
+
+        out = capsys.readouterr().out
+        assert "hanging snapshot ~n9wb.b.bak1 " in out
+        assert "left behind, VM 7 has a later backup snapshot" in out
+        assert "~n9wb.b.bak2 " not in out
+
     def test_other_instance_backup_snapshot_is_foreign(self, processor):
         self._image(processor)
         bak = self._bak()

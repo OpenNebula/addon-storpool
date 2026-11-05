@@ -34,6 +34,14 @@ def sp_backup_snapshot(entry: Dict[str, Any]) -> bool:
     return bool(tags.get("bak")) and not tags.get("snap")
 
 
+def sp_backup_epoch(entry: Dict[str, Any]) -> Optional[int]:
+    """The epoch of the ONEBACKUP-<epoch> bak tag of a backup snapshot,
+    None when the tag cannot be ordered"""
+    tags: Dict[str, str] = entry.get("tags") or {}
+    epoch: str = str(tags.get("bak") or "").rpartition("-")[2]
+    return int(epoch) if epoch.isdigit() else None
+
+
 def record_facts(entry: Dict[str, Any]) -> str:
     """One-line facts about a StorPool record"""
     kind: str = "snapshot" if entry["snapshot"] else "volume"

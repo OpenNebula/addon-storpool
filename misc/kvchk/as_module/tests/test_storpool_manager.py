@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import Mock, patch
 from storpool.spapi import ApiError  # type: ignore[import-untyped]
 from storpool_kvchk.managers.storpool_manager import spManager  # type: ignore[import-untyped] # noqa: E501
+from storpool_kvchk.managers.storpool_manager import sp_backup_epoch  # type: ignore[import-untyped] # noqa: E501
 from storpool_kvchk.models.exceptions import FreezeConflict, UnknownApiCall  # type: ignore[import-untyped] # noqa: E501
 
 
@@ -811,3 +812,11 @@ class TestClusterRegistration:
         )
         with pytest.raises(Exception, match="api down"):
             spManager(mock_args, DS_CONFIG)
+
+
+def test_sp_backup_epoch():
+    assert sp_backup_epoch({"tags": {"bak": "ONEBACKUP-1700000000"}}) \
+        == 1700000000
+    assert sp_backup_epoch({"tags": {"bak": "manual"}}) is None
+    assert sp_backup_epoch({"tags": {}}) is None
+    assert sp_backup_epoch({}) is None

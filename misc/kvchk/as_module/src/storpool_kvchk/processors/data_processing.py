@@ -14,6 +14,7 @@ from ..managers.one_manager import (
 )
 from ..managers.storpool_manager import (
     record_facts,
+    sp_backup_epoch,
     sp_backup_snapshot,
     sp_internal,
     spManager,
@@ -224,18 +225,48 @@ class DataProcessing(BaseManager):
         outlives the backup is hanging (_backup_snapshot_stale)"""
         return sp_backup_snapshot(sp_entry)
 
+    def _newer_backup_snapshot(
+        self, sp_entry: Dict[str, Any]
+    ) -> Optional[str]:
+        """The bak tag of a later backup snapshot of the same VM in
+        this OpenNebula instance: oned runs one backup of a VM at a
+        time, so only the newest one can still be in progress"""
+        epoch: Optional[int] = sp_backup_epoch(sp_entry)
+        if epoch is None:
+            return None
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        vm_tag: str = str(tags.get(self.args.vm_tag) or "")
+        newer: Optional[str] = None
+        for other in self.sp.data.values():
+            if not sp_backup_snapshot(other):
+                continue
+            other_tags: Dict[str, str] = other.get("tags") or {}
+            if str(other_tags.get(self.args.vm_tag) or "") != vm_tag:
+                continue
+            if not self._sp_tags_this_instance(other):
+                continue
+            other_epoch: Optional[int] = sp_backup_epoch(other)
+            if other_epoch is not None and other_epoch > epoch:
+                epoch = other_epoch
+                newer = str(other_tags.get("bak"))
+        return newer
+
     def _backup_snapshot_stale(
         self, sp_entry: Dict[str, Any]
     ) -> Optional[str]:
-        """Why a backup snapshot is left behind: its VM is gone or no
-        longer in a backup state. None while the backup can still be
-        in progress (VM in BACKUP/BACKUP_POWEROFF, or listed but not
+        """Why a backup snapshot is left behind: a later backup of the
+        VM superseded it, its VM is gone or no longer in a backup state.
+        None while the backup can still be in progress (the newest one
+        of a VM in BACKUP/BACKUP_POWEROFF, or listed but not
         inspectable)"""
         tags: Dict[str, str] = sp_entry.get("tags") or {}
         vm_tag: str = str(tags.get(self.args.vm_tag) or "")
         if not vm_tag.isnumeric():
             return f"no VM id in the '{self.args.vm_tag}' tag"
         vm_id: int = int(vm_tag)
+        newer: Optional[str] = self._newer_backup_snapshot(sp_entry)
+        if newer is not None:
+            return f"VM {vm_id} has a later backup snapshot ({newer})"
         vm_rec: Optional[Dict[str, Any]] = self.one.one_vms.get(vm_id)
         if vm_rec is None:
             if vm_id in self.one.vm_list:
