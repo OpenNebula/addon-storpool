@@ -102,6 +102,13 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #NO_VOLUME_TEMPLATE=1
 
+# Index the snapshots of a StorPool backup datastore in the etcd KV store
+# (/bkName/<ONE_PX>-bak-<VM_ID>-<epoch>...). Set to 0 to discover them by
+# their tags only.
+# Default: 1
+#
+#BACKUP_KV_INDEX=1
+
 # Optional common arguments to OpenNebula shell tools
 #ONE_ARGS=
 

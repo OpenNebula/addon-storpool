@@ -163,6 +163,7 @@ export VMSNAPSHOT_SKIP_OTHER_DISKS=0
 export BACKUP_SKIP_OTHER_DISKS=0
 # save the VM's vTPM data
 export ONE_TPM_SAVE=1
+export BACKUP_KV_INDEX=1
 
 DRV_ACTION="${DRV_ACTION:-}"
 
@@ -1066,7 +1067,7 @@ function storpoolWrapper()
     if boolTrue "MULTICLUSTER"; then
         if [[ -n "${DO_MULTICLUSTER}" ]] && [[ -n "${DO_REMOTE}" ]]; then
             case "${method}" in
-                Volume|Snapshot|AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList|MgmtConfig)
+                Volume|Snapshot|AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList|MgmtConfig|SnapshotsRemoteList|ExportsList|LocationsList)
                     DO_REMOTE=""
                     ;;
                 *)
@@ -1102,7 +1103,7 @@ function storpoolWrapper()
     fi
     case "${method}" in
         # POST API {JSON}
-        VolumesReassignWait)
+        VolumesReassignWait|SnapshotUnexport|SnapshotsRemoteUnexport)
             shift
             res="$(storpoolApi "${cmd}" "{$1}" "${SP_API_TIMEOUT:-300}")"
             ret=$?
@@ -1163,7 +1164,7 @@ function storpoolWrapper()
             fi
             ;;
         # POST API {JSON} -> {JSON}
-        VolumesGroupSnapshot)
+        VolumesGroupSnapshot|VolumesGroupBackup|SnapshotFromRemote)
             export DATA_JSON="${TMPDIR}/${method}.json"
             shift
             res="$(storpoolApi "${cmd}" "{$1}" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
@@ -1326,7 +1327,7 @@ function storpoolWrapper()
             fi
             ;;
         # GET API -> {JSON} // ${TMPDIR}/${cmd}.json
-        AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList|MgmtConfig)
+        AttachmentsList|SnapshotsList|VolumesList|VolumeTemplatesStatus|SnapshotsSpace|VolumesSpace|VolumeTemplatesList|ClustersList|ServicesList|MgmtConfig|SnapshotsRemoteList|ExportsList|LocationsList)
             export DATA_JSON="${TMPDIR}/${method}.json"
             shift
             res="$(storpoolApi "${cmd}" "" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
@@ -3323,6 +3324,9 @@ function oneDatastoreInfo()
         "/DATASTORE/TEMPLATE/SP_QOSCLASS"
         "/DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE"
         "/DATASTORE/TEMPLATE/SP_DEFAULT_TEMPLATE"
+        "/DATASTORE/TEMPLATE/SP_BACKUP_LOCATION"
+        "/DATASTORE/TEMPLATE/SP_BACKUP_TIMEOUT"
+        "/DATASTORE/TEMPLATE/SP_BACKUP_REMOTE_DELETE"
     )
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
@@ -3377,6 +3381,9 @@ function oneDatastoreInfo()
     DS_SP_QOSCLASS="${XPATH_ELEMENTS[i++]}"
     REMOTE_BACKUP_DELETE="${XPATH_ELEMENTS[i++]}"
     SP_DEFAULT_TEMPLATE="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_LOCATION="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_TIMEOUT="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_REMOTE_DELETE="${XPATH_ELEMENTS[i++]}"
 
     if [[ -n "${SP_API_HTTP_HOST}" ]]; then
         export SP_API_HTTP_HOST
@@ -3407,6 +3414,7 @@ function oneDatastoreInfo()
     _DBGMSG+="${SP_PLACEALL:+SP_PLACEALL=${SP_PLACEALL} }${SP_PLACETAIL:+SP_PLACETAIL=${SP_PLACETAIL} }${SP_PLACEHEAD:+SP_PLACEHEAD=${SP_PLACEHEAD} }"
     _DBGMSG+="${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=${DS_SP_QOSCLASS} }"
     _DBGMSG+="${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=${REMOTE_BACKUP_DELETE} }"
+    _DBGMSG+="${SP_BACKUP_LOCATION:+SP_BACKUP_LOCATION=${SP_BACKUP_LOCATION} }${SP_BACKUP_TIMEOUT:+SP_BACKUP_TIMEOUT=${SP_BACKUP_TIMEOUT} }${SP_BACKUP_REMOTE_DELETE:+SP_BACKUP_REMOTE_DELETE=${SP_BACKUP_REMOTE_DELETE} }"
     _DBGMSG+="${DS_RSYNC_HOST:+DS_RSYNC_HOST=${DS_RSYNC_HOST} }${DS_RSYNC_USER:+DS_RSYNC_USER=${DS_RSYNC_USER} }"
     _DBGMSG+="${DS_RESTIC_SFTP_SERVER:+DS_RESTIC_SFTP_SERVER=${DS_RESTIC_SFTP_SERVER} }${DS_RESTIC_SFTP_USER:+DS_RESTIC_SFTP_USER=${DS_RESTIC_SFTP_USER} }"
     splog "[D][oneDatastoreInfo]${_DBGMSG}"
@@ -3623,6 +3631,9 @@ function oneDsDriverAction()
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/LIMIT_TRANSFER_BW"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/TYPE"
         "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/REMOTE_BACKUP_DELETE"
+        "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BACKUP_LOCATION"
+        "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BACKUP_TIMEOUT"
+        "/DS_DRIVER_ACTION_DATA/DATASTORE/TEMPLATE/SP_BACKUP_REMOTE_DELETE"
         "/DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/MD5"
         "/DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/SHA1"
         "/DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/DRIVER"
@@ -3696,6 +3707,9 @@ function oneDsDriverAction()
     LIMIT_TRANSFER_BW="${XPATH_ELEMENTS[i++]}"
     DS_TYPE="${XPATH_ELEMENTS[i++]}"
     REMOTE_BACKUP_DELETE="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_LOCATION="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_TIMEOUT="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_REMOTE_DELETE="${XPATH_ELEMENTS[i++]}"
     MD5="${XPATH_ELEMENTS[i++]}"
     SHA1="${XPATH_ELEMENTS[i++]}"
     DRIVER="${XPATH_ELEMENTS[i++]}"
@@ -3792,6 +3806,9 @@ ${SP_SYSTEM:+SP_SYSTEM=${SP_SYSTEM} }\
 ${TARGET_SNAPSHOT:+TARGET_SNAPSHOT=${TARGET_SNAPSHOT} }\
 ${SP_TEMPLATE_PROPAGATE:+SP_TEMPLATE_PROPAGATE=${SP_TEMPLATE_PROPAGATE} }\
 ${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=${REMOTE_BACKUP_DELETE} }\
+${SP_BACKUP_LOCATION:+SP_BACKUP_LOCATION=${SP_BACKUP_LOCATION} }\
+${SP_BACKUP_TIMEOUT:+SP_BACKUP_TIMEOUT=${SP_BACKUP_TIMEOUT} }\
+${SP_BACKUP_REMOTE_DELETE:+SP_BACKUP_REMOTE_DELETE=${SP_BACKUP_REMOTE_DELETE} }\
 ${MONITOR_VM_DISKS:+MONITOR_VM_DISKS=${MONITOR_VM_DISKS} }\
 ${IMAGE_SP_QOSCLASS:+IMAGE_SP_QOSCLASS=${IMAGE_SP_QOSCLASS} }\
 ${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=${DS_SP_QOSCLASS} }\
@@ -3991,6 +4008,8 @@ function oneVmVolumes()
         "/VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE"
         "/VM/BACKUPS/BACKUP_CONFIG/MODE"
         "/VM/TEMPLATE/TPM/MODEL"
+        "/VM/BACKUPS/BACKUP_CONFIG/LAST_DATASTORE_ID"
+        "/VM/BACKUPS/BACKUP_IDS/ID"
     )
     unset XPATH_ELEMENTS i
     while read -r -u "${xfh}" _element; do
@@ -4034,6 +4053,8 @@ function oneVmVolumes()
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
     TPM_MODEL="${XPATH_ELEMENTS[i++]}"
+    BACKUP_DS_ID="${XPATH_ELEMENTS[i++]}"
+    IFS=';' read -r -a BACKUP_IDS_A <<< "${XPATH_ELEMENTS[i++]}"
     IFS=';' read -r -a DISK_ID_A <<< "${DISK_ID}"
     IFS=';' read -r -a CLONE_A <<< "${CLONE}"
     IFS=';' read -r -a SAVE_A <<< "${SAVE}"
@@ -4191,6 +4212,7 @@ function oneVmVolumes()
         _DBGMSG+="${BACKUP_VOLATILE:+ BACKUP_VOLATILE=${BACKUP_VOLATILE}}"
         _DBGMSG+="${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=${BACKUP_FS_FREEZE}}"
         _DBGMSG+="${BACKUP_MODE:+ BACKUP_MODE=${BACKUP_MODE}}"
+        _DBGMSG+="${BACKUP_DS_ID:+ BACKUP_DS_ID=${BACKUP_DS_ID}}${BACKUP_IDS_A[*]:+ BACKUP_IDS=${BACKUP_IDS_A[*]}}"
         _DBGMSG+="${TPM_MODEL:+ TPM_MODEL=${TPM_MODEL}}"
         _DBGMSG+="${oneVmVolumesNotStorPool:+ oneVmVolumesNotStorPool=${oneVmVolumesNotStorPool}}"
         _DBGMSG+="${vmOtherDisks:+ vmOtherDisks=${vmOtherDisks}}"
@@ -4350,9 +4372,29 @@ function oneSnapshotLookup()
 {
     #VM:51-DISK:0-VMSNAP:0
     local _input="$1"
-    local volumeName="" _entry=""
+    local volumeName="" _entry="" _remote=""
     declare -A _snap_a  # snap_a[KEY]=VALUE
     declare -a _arr_a  # arr_a[KEY]=VALUE
+    SNAPSHOT_NAME=""
+    REMOTE_LOCATION=""
+    REMOTE_ID=""
+    # SPREMOTE:<location>:~<remoteId>
+    if [[ "${_input}" == *SPREMOTE:* ]]; then
+        _remote="${_input#*SPREMOTE:}"
+        REMOTE_LOCATION="${_remote%:*}"
+        REMOTE_ID="${_remote##*:}"
+        if [[ -z "${REMOTE_LOCATION}" ]] || [[ "${REMOTE_ID}" != "~"* ]] || [[ "${_remote}" != *:* ]]; then
+            splog "[E][oneSnapshotLookup] (${_input}): bad SPREMOTE form, expected SPREMOTE:<location>:~<remoteId>"
+            REMOTE_LOCATION=""
+            REMOTE_ID=""
+            return 1
+        fi
+        export REMOTE_LOCATION REMOTE_ID
+        if boolTrue "DEBUG_oneSnapshotLookup"; then
+            splog "[D][oneSnapshotLookup] (${_input}): REMOTE_LOCATION:${REMOTE_LOCATION} REMOTE_ID:${REMOTE_ID}"
+        fi
+        return 0
+    fi
     read -r -a _arr_a <<< "${_input//-/ }"
     for _entry in "${_arr_a[@]}"; do
        _snap_a["${_entry%%:*}"]="${_entry#*:}"
@@ -4779,6 +4821,518 @@ EOF
     if boolTrue "DEBUG_tpm"; then
         splog "[D] VM ${_VM_ID} END ${_RHOST}:${_B_DIR}/disk.tpm.0"
     fi
+}
+
+# oneBackupDsInfo BACKUP_DS_ID: driver, base path and SP_BACKUP_* attributes of a backup datastore
+function oneBackupDsInfo()
+{
+    local _ds_id="$1"
+    local _tmpXML="${TMPDIR:-/tmp}/oneBackupDsInfo-${_ds_id}.XML" _element="" xfh=""
+    BACKUP_DS_MAD=""
+    BACKUP_DS_BASE_PATH=""
+    SP_BACKUP_LOCATION=""
+    SP_BACKUP_TIMEOUT=""
+    SP_BACKUP_REMOTE_DELETE=""
+    [[ -n "${_ds_id}" ]] || return 1
+    oneCallXml onedatastore show "${_ds_id}" "${_tmpXML}" || return $?
+    sed -i '/\/>$/d' "${_tmpXML}"
+    unset i XPATH_ELEMENTS
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
+        XPATH_ELEMENTS[i++]="${_element}"
+    done {xfh}< <("${SPXML}" get <"${_tmpXML}" \
+        "/DATASTORE/DS_MAD" \
+        "/DATASTORE/BASE_PATH" \
+        "/DATASTORE/TEMPLATE/SP_BACKUP_LOCATION" \
+        "/DATASTORE/TEMPLATE/SP_BACKUP_TIMEOUT" \
+        "/DATASTORE/TEMPLATE/SP_BACKUP_REMOTE_DELETE" || true)
+    exec {xfh}<&-
+    unset i
+    BACKUP_DS_MAD="${XPATH_ELEMENTS[i++]}"
+    BACKUP_DS_BASE_PATH="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_LOCATION="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_TIMEOUT="${XPATH_ELEMENTS[i++]}"
+    SP_BACKUP_REMOTE_DELETE="${XPATH_ELEMENTS[i++]}"
+    export BACKUP_DS_MAD BACKUP_DS_BASE_PATH SP_BACKUP_LOCATION SP_BACKUP_TIMEOUT SP_BACKUP_REMOTE_DELETE
+    if boolTrue "DEBUG_BACKUP"; then
+        splog "[D] oneBackupDsInfo(${_ds_id}) DS_MAD=${BACKUP_DS_MAD} BASE_PATH=${BACKUP_DS_BASE_PATH} SP_BACKUP_LOCATION=${SP_BACKUP_LOCATION} SP_BACKUP_TIMEOUT=${SP_BACKUP_TIMEOUT} SP_BACKUP_REMOTE_DELETE=${SP_BACKUP_REMOTE_DELETE}"
+    fi
+}
+
+# local or remote, from SP_BACKUP_LOCATION
+function oneBackupModeName()
+{
+    if [[ -n "${SP_BACKUP_LOCATION}" ]]; then
+        echo "remote"
+    else
+        echo "local"
+    fi
+}
+
+# oneBackupSourceBuild LOCATION VM_ID EPOCH "did=id ..." -> the backup image SOURCE
+function oneBackupSourceBuild()
+{
+    local _loc="$1" _vm="$2" _epoch="$3" _entries="$4"
+    local _e="" _list=""
+    for _e in ${_entries}; do
+        _list+="${_list:+,}${_e}"
+    done
+    echo "${_loc}:${_vm}:${_epoch}:${_list}"
+}
+
+# oneBackupSourceParse SOURCE [quiet] -> BS_LOCATION BS_VM_ID BS_EPOCH BS_DISK_IDS BS_IDS_A[did]=id
+function oneBackupSourceParse()
+{
+    local _src="$1" _quiet="$2"
+    local _rest="" _e=""
+    unset BS_IDS_A
+    declare -g -A BS_IDS_A
+    BS_LOCATION=""
+    BS_VM_ID=""
+    BS_EPOCH=""
+    BS_DISK_IDS=""
+    IFS=':' read -r BS_LOCATION BS_VM_ID BS_EPOCH _rest <<< "${_src}"
+    if [[ -z "${BS_LOCATION}" || -z "${BS_VM_ID}" || -z "${BS_EPOCH}" || -z "${_rest}" ]] \
+        || [[ -n "${BS_EPOCH//[[:digit:]]/}" ]] || [[ -n "${BS_VM_ID//[[:digit:]]/}" ]]; then
+        [[ -n "${_quiet}" ]] || splog "[E] not a StorPool backup SOURCE: '${_src}'"
+        return 1
+    fi
+    for _e in ${_rest//,/ }; do
+        if [[ "${_e}" != *=* ]] || [[ -z "${_e%%=*}" ]] || [[ -z "${_e#*=}" ]]; then
+            [[ -n "${_quiet}" ]] || splog "[E] bad entry '${_e}' in backup SOURCE '${_src}'"
+            return 1
+        fi
+        # shellcheck disable=SC2034
+        BS_IDS_A["${_e%%=*}"]="${_e#*=}"
+        case "${_e%%=*}" in
+            nvram|svc) ;;
+            *) BS_DISK_IDS+="${_e%%=*} " ;;
+        esac
+    done
+    BS_DISK_IDS="${BS_DISK_IDS% }"
+    export BS_LOCATION BS_VM_ID BS_EPOCH BS_DISK_IDS
+    return 0
+}
+
+# oneBackupRegistered VM_ID -> lines "epoch image_id SOURCE" of the VM's StorPool backup images (BACKUP_IDS_A from oneVmVolumes)
+function oneBackupRegistered()
+{
+    local _vm="$1" _img="" _src="" _tmpXML=""
+    for _img in "${BACKUP_IDS_A[@]}"; do
+        [[ -n "${_img}" ]] || continue
+        _tmpXML="${TMPDIR:-/tmp}/oneBackupRegistered-${_img}.XML"
+        oneCallXml oneimage show "${_img}" "${_tmpXML}" >/dev/null || continue
+        _src="$("${SPXML}" get /IMAGE/SOURCE <"${_tmpXML}" 2>/dev/null | tr -d '\0' || true)"
+        oneBackupSourceParse "${_src}" quiet || continue
+        [[ "${BS_VM_ID}" == "${_vm}" ]] || continue
+        echo "${BS_EPOCH} ${_img} ${_src}"
+    done
+}
+
+function oneBackupKvKey()
+{
+    echo "/bkName/${ONE_PX}-bak-$1-$2${3:+-$3}"
+}
+
+# oneBackupKvPut VM_ID EPOCH MODE SVC_UID "did=~id ..."
+function oneBackupKvPut()
+{
+    local _vm="$1" _epoch="$2" _mode="$3" _svc="${4:--}" _entries="$5"
+    local _e="" _ret=0 _key=""
+    boolTrue "BACKUP_KV_INDEX" || return 0
+    for _e in ${_entries}; do
+        _key="$(oneBackupKvKey "${_vm}" "${_epoch}" "${_e%%=*}")"
+        ETCDCTL_API=3 etcdctl put -- "${_key}" "${_e#*=}" >/dev/null || _ret=$?
+    done
+    _key="$(oneBackupKvKey "${_vm}" "${_epoch}")"
+    ETCDCTL_API=3 etcdctl put -- "${_key}" "mode=${_mode} svc=${_svc}" >/dev/null || _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[W] KV backup index of VM ${_vm} epoch ${_epoch} not written (${_ret})"
+    elif boolTrue "DEBUG_BACKUP"; then
+        splog "[D] KV backup index of VM ${_vm} epoch ${_epoch}: mode=${_mode} svc=${_svc} ${_entries}"
+    fi
+    return "${_ret}"
+}
+
+# oneBackupKvDel VM_ID EPOCH: the epoch record and its per-disk records
+function oneBackupKvDel()
+{
+    local _vm="$1" _epoch="$2" _ret=0 _n=""
+    boolTrue "BACKUP_KV_INDEX" || return 0
+    _n="$(ETCDCTL_API=3 etcdctl del --prefix -- "$(oneBackupKvKey "${_vm}" "${_epoch}")")" || _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[W] KV backup index of VM ${_vm} epoch ${_epoch} not removed (${_ret})"
+    elif boolTrue "DEBUG_BACKUP"; then
+        splog "[D] KV backup index of VM ${_vm} epoch ${_epoch} removed (${_n} keys)"
+    fi
+    return "${_ret}"
+}
+
+# oneBackupKvFamily VM_ID -> lines "epoch did ~id" and "epoch - mode=<m> svc=<uid|->"
+function oneBackupKvFamily()
+{
+    local _vm="$1" _key="" _val="" _rest="" _epoch="" _did="" kvfh=""
+    boolTrue "BACKUP_KV_INDEX" || return 0
+    while read -r -u "${kvfh}" _key && read -r -u "${kvfh}" _val; do
+        _rest="${_key#"/bkName/${ONE_PX}-bak-${_vm}-"}"
+        _epoch="${_rest%%-*}"
+        [[ -n "${_epoch}" && -z "${_epoch//[[:digit:]]/}" ]] || continue
+        if [[ "${_rest}" == *-* ]]; then
+            _did="${_rest#*-}"
+        else
+            _did="-"
+        fi
+        echo "${_epoch} ${_did} ${_val}"
+    done {kvfh}< <(kvGet bkName "${ONE_PX}-bak-${_vm}-" startswith KeysAndVals 2>/dev/null || true)
+    exec {kvfh}<&-
+}
+
+# storpoolLocalClusterId -> the cluster id of this StorPool cluster (fir.b)
+function storpoolLocalClusterId()
+{
+    local _id="${SP_CLUSTER_ID}"
+    if [[ -z "${_id}" ]] && [[ -x /usr/sbin/storpool_confshow ]]; then
+        _id="$(/usr/sbin/storpool_confshow -e SP_CLUSTER_ID 2>/dev/null || true)"
+        _id="${_id#SP_CLUSTER_ID=}"
+    fi
+    if [[ -z "${_id}" ]]; then
+        if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ServicesList >/dev/null; then
+            _id="$(jq -r '.data.clusterId // empty' "${TMPDIR}/ServicesList.json" 2>/dev/null || true)"
+        fi
+    fi
+    echo "${_id}"
+}
+
+# storpoolBackupTargetKind LOCATION -> local (empty), cluster (of this location) or remote
+function storpoolBackupTargetKind()
+{
+    local _loc="$1" _own="" _cluster_loc=""
+    if [[ -z "${_loc}" ]]; then
+        echo "local"
+        return 0
+    fi
+    if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ClustersList >/dev/null; then
+        _cluster_loc="$(jq -r --arg n "${_loc}" '[.data.clusters[]|select(.name==$n)|.location]|first // empty' "${TMPDIR}/ClustersList.json" 2>/dev/null || true)"
+        if [[ -n "${_cluster_loc}" ]]; then
+            _own="$(storpoolLocalClusterId)"
+            _own="$(jq -r --arg id "${_own%%.*}" '[.data.clusters[]|select(.id==$id)|.location]|first // empty' "${TMPDIR}/ClustersList.json" 2>/dev/null || true)"
+            if [[ -n "${_own}" ]] && [[ "${_cluster_loc}" == "${_own}" ]]; then
+                echo "cluster"
+            else
+                echo "remote"
+            fi
+            return 0
+        fi
+    fi
+    if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry LocationsList >/dev/null \
+        && jq -e --arg n "${_loc}" '[.data.locations[]|select(.name==$n)]|length>0' "${TMPDIR}/LocationsList.json" >/dev/null 2>&1; then
+        echo "remote"
+        return 0
+    fi
+    splog "[E] SP_BACKUP_LOCATION='${_loc}' is neither a cluster nor a location known to this StorPool cluster"
+    echo "unknown"
+    return 1
+}
+
+# storpoolRemoteCopies "remoteId ..." -> lines "remoteId location size createdFromGlobalId bkp" from a fresh SnapshotsRemoteList
+function storpoolRemoteCopies()
+{
+    local _ids="$1" _id=""
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null || return $?
+    for _id in ${_ids}; do
+        jq -r --arg g "${_id#\~}" '.data.snapshots[]|select(.remoteId==$g)|"\(.remoteId) \(.location) \(.size|tostring) \(.createdFromGlobalId // "-") \(.tags.bkp // "-")"' \
+            "${TMPDIR}/SnapshotsRemoteList.json" 2>/dev/null | head -n 1 || true
+    done
+}
+
+# storpoolBackupWait "transient ids" TIMEOUT: the exports of a VolumesGroupBackup are done
+function storpoolBackupWait()
+{
+    local _ids="$1" _timeout="${2:-0}"
+    local _start=0 _now=0 _left="" _id="" _missing="" _listed=0
+    _start="$(date +%s || true)"
+    while true; do
+        _left=""
+        _missing=""
+        if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ExportsList >/dev/null; then
+            for _id in ${_ids}; do
+                _id="${_id#\~}"
+                if jq -e --arg g "${_id}" '[.data.exports[]|select(.globalId==$g)]|length>0' "${TMPDIR}/ExportsList.json" >/dev/null 2>&1; then
+                    _left+="${_id} "
+                    continue
+                fi
+                DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_id}" >/dev/null
+                [[ $? -eq 2 ]] || _left+="${_id} "
+            done
+            if [[ -z "${_left}" ]]; then
+                _listed=0
+                while read -r _id _; do
+                    [[ -n "${_id}" ]] || continue
+                    _listed=$((_listed + 1))
+                done < <(storpoolRemoteCopies "${_ids}")
+                if [[ ${_listed} -eq $(wc -w <<< "${_ids}") ]]; then
+                    return 0
+                fi
+                _missing="$((_listed)) of $(wc -w <<< "${_ids}") copies listed"
+            fi
+        fi
+        _now="$(date +%s || true)"
+        if [[ ${_timeout} -gt 0 ]] && [[ $((_now - _start)) -ge ${_timeout} ]]; then
+            splog "[E] backup transfer wait timed out after ${_timeout}s (exporting: ${_left:-none}${_missing:+; ${_missing}})"
+            return 1
+        fi
+        if boolTrue "DEBUG_BACKUP"; then
+            splog "[D] waiting for the backup transfer (exporting: ${_left:-none}${_missing:+; ${_missing}}) $((_now - _start))s"
+        fi
+        sleep "${BACKUP_WAIT_SLEEP:-3}"
+    done
+}
+
+# oneBackupInflight VM_ID MODE "disk ids" [TIMEOUT]: the backup in progress of the VM
+#   BI_EPOCH BI_FROM(kv|tags) BI_SVC_UID(~id|-) BI_IDS_A[did]=bare id (local snapshot, or remoteId in remote mode)
+function oneBackupInflight()
+{
+    local _vm="$1" _mode="$2" _disks="$3" _timeout="${4:-0}"
+    local _epoch="" _did="" _val="" _img="" _gid="" _src="" _loc="" _best="" _map="" _registered=" "
+    local _start=0 _now=0 _unmatched="" _matched=0 _svc="" _n=0
+    unset BI_IDS_A
+    declare -g -A BI_IDS_A
+    BI_EPOCH=""
+    BI_FROM=""
+    BI_SVC_UID="-"
+    export BI_EPOCH BI_FROM BI_SVC_UID
+    while read -r _epoch _img _src; do
+        [[ -n "${_epoch}" ]] || continue
+        _registered+="${_epoch} "
+    done < <(oneBackupRegistered "${_vm}")
+    if boolTrue "BACKUP_KV_INDEX"; then
+        local -A _kv_epochs=()
+        while read -r _epoch _did _val; do
+            [[ -n "${_epoch}" ]] || continue
+            [[ "${_registered}" == *" ${_epoch} "* ]] && continue
+            _kv_epochs["${_epoch}"]=1
+        done < <(oneBackupKvFamily "${_vm}")
+        if [[ ${#_kv_epochs[*]} -gt 0 ]]; then
+            _best="$(printf '%s\n' "${!_kv_epochs[@]}" | sort -n | tail -n 1)"
+            if [[ ${#_kv_epochs[*]} -gt 1 ]]; then
+                splog "[W] VM ${_vm} has ${#_kv_epochs[*]} unregistered backup epochs in the KV (${!_kv_epochs[*]}), using ${_best}"
+            fi
+            while read -r _epoch _did _val; do
+                [[ "${_epoch}" == "${_best}" ]] || continue
+                if [[ "${_did}" == "-" ]]; then
+                    _val="${_val#*svc=}"
+                    BI_SVC_UID="${_val%% *}"
+                else
+                    BI_IDS_A["${_did}"]="${_val#\~}"
+                fi
+            done < <(oneBackupKvFamily "${_vm}")
+            BI_EPOCH="${_best}"
+            BI_FROM="kv"
+        fi
+    fi
+    if [[ -n "${BI_EPOCH}" ]]; then
+        if boolTrue "DEBUG_BACKUP"; then
+            splog "[D] VM ${_vm} backup in progress from the KV: epoch ${BI_EPOCH} svc ${BI_SVC_UID} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
+        fi
+        return 0
+    fi
+    BI_FROM="tags"
+    local -A _tag_epochs=()
+    if [[ "${_mode}" == "local" ]]; then
+        DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null || return 1
+        while read -r _epoch _gid _did _img; do
+            [[ -n "${_epoch}" ]] || continue
+            [[ "${_registered}" == *" ${_epoch} "* ]] && continue
+            _tag_epochs["${_epoch}"]=1
+        done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
+            '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+             | select(.deleted==false and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
+             | "\(.tags.bkp) \(.globalId) \(.tags.diskid // "-") \(.tags.img // "-")"' "${TMPDIR}/SnapshotsList.json" || true)
+        [[ ${#_tag_epochs[*]} -gt 0 ]] || return 1
+        _best="$(printf '%s\n' "${!_tag_epochs[@]}" | sort -n | tail -n 1)"
+        if [[ ${#_tag_epochs[*]} -gt 1 ]]; then
+            splog "[W] VM ${_vm} has ${#_tag_epochs[*]} unregistered backup epochs tagged (${!_tag_epochs[*]}), using ${_best}"
+        fi
+        while read -r _epoch _gid _did _img; do
+            [[ "${_epoch}" == "${_best}" ]] || continue
+            if [[ "${_did}" == "-" ]]; then
+                case "${_img}" in
+                    "${ONE_PX}-sys-${_vm}-NVRAM") _did="nvram" ;;
+                    "${ONE_PX}-sys-${_vm}-SVC-"*) _did="svc" ;;
+                    *) splog "[W] VM ${_vm} backup snapshot ${_gid} (${_img}) has no diskid tag, skipped"; continue ;;
+                esac
+            fi
+            BI_IDS_A["${_did}"]="${_gid}"
+        done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
+            '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+             | select(.deleted==false and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
+             | "\(.tags.bkp) \(.globalId) \(.tags.diskid // "-") \(.tags.img // "-")"' "${TMPDIR}/SnapshotsList.json" || true)
+        BI_EPOCH="${_best}"
+        if boolTrue "DEBUG_BACKUP"; then
+            splog "[D] VM ${_vm} backup in progress by tags: epoch ${BI_EPOCH} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
+        fi
+        return 0
+    fi
+    local -A _want=()
+    for _map in ${vmDisksMap}; do
+        _did="${_map#*:}"
+        _img="${_map%:*}"
+        [[ -n "${_did}" ]] || continue
+        [[ " ${_disks//:/ } " == *" ${_did} "* ]] || continue
+        kvGetUid "${_img}" || continue
+        _want["${SP_UID#\~}"]="${_did}"
+    done
+    if [[ -n "${T_OS_NVRAM}" ]] && kvGetUid "${ONE_PX}-sys-${_vm}-NVRAM"; then
+        _want["${SP_UID#\~}"]="nvram"
+    fi
+    _start="$(date +%s || true)"
+    while true; do
+        _tag_epochs=()
+        if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
+            while read -r _epoch _gid _src _loc; do
+                [[ -n "${_epoch}" ]] || continue
+                [[ "${_registered}" == *" ${_epoch} "* ]] && continue
+                _tag_epochs["${_epoch}"]=1
+            done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
+                '.data.snapshots[]
+                 | select((.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
+                 | "\(.tags.bkp) \(.remoteId) \(.createdFromGlobalId // "-") \(.location)"' "${TMPDIR}/SnapshotsRemoteList.json" || true)
+        fi
+        if [[ ${#_tag_epochs[*]} -gt 0 ]]; then
+            _best="$(printf '%s\n' "${!_tag_epochs[@]}" | sort -n | tail -n 1)"
+            unset BI_IDS_A
+            declare -g -A BI_IDS_A
+            _unmatched=""
+            _matched=0
+            while read -r _epoch _gid _src _loc; do
+                [[ "${_epoch}" == "${_best}" ]] || continue
+                if [[ -n "${_want[${_src}]+found}" ]]; then
+                    BI_IDS_A["${_want[${_src}]}"]="${_gid}"
+                    _matched=$((_matched + 1))
+                else
+                    _unmatched+="${_gid} "
+                fi
+            done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
+                '.data.snapshots[]
+                 | select((.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
+                 | "\(.tags.bkp) \(.remoteId) \(.createdFromGlobalId // "-") \(.location)"' "${TMPDIR}/SnapshotsRemoteList.json" || true)
+            _n="$(wc -w <<< "${_unmatched}")"
+            if [[ ${_n} -gt 1 ]]; then
+                splog "[E] VM ${_vm} backup epoch ${_best}: ${_n} remote copies match no disk or NVRAM volume (${_unmatched})"
+                return 1
+            fi
+            if [[ ${_matched} -eq ${#_want[*]} ]] && [[ ${_n} -eq 1 ]]; then
+                BI_IDS_A["svc"]="${_unmatched% }"
+                BI_EPOCH="${_best}"
+                if [[ ${#_tag_epochs[*]} -gt 1 ]]; then
+                    splog "[W] VM ${_vm} has ${#_tag_epochs[*]} unregistered backup epochs listed remotely (${!_tag_epochs[*]}), using ${_best}"
+                fi
+                if boolTrue "DEBUG_BACKUP"; then
+                    splog "[D] VM ${_vm} backup in progress by remote tags: epoch ${BI_EPOCH} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
+                fi
+                return 0
+            fi
+        fi
+        _now="$(date +%s || true)"
+        if [[ ${_timeout} -gt 0 ]] && [[ $((_now - _start)) -ge ${_timeout} ]]; then
+            splog "[E] VM ${_vm} backup in progress not found remotely within ${_timeout}s (epoch ${_best:-none}, ${_matched} of ${#_want[*]} disks matched, unmatched: ${_unmatched:-none})"
+            return 1
+        fi
+        sleep "${BACKUP_WAIT_SLEEP:-3}"
+    done
+}
+
+# spBackupPullTemplate [CANDIDATE] -> the candidate, else the MgmtConfig default template; empty is fatal
+function spBackupPullTemplate()
+{
+    local _candidate="$1" _name="" _json=""
+    if [[ -n "${_candidate}" ]]; then
+        echo "${_candidate}"
+        return 0
+    fi
+    for _json in "/var/cache/addon-storpool-monitor/json-MgmtConfig-${SP_API_HTTP_HOST:-0.0.0.0}-${SP_CLUSTER_ID}" \
+                 "/var/cache/addon-storpool-monitor/json-MgmtConfig-${SP_API_HTTP_HOST:-0.0.0.0}"; do
+        _name="$(spDefaultTemplateName "${_json}" "${SP_CLUSTER_ID}")"
+        [[ -z "${_name}" ]] || break
+    done
+    if [[ -z "${_name}" ]] && DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry MgmtConfig >/dev/null; then
+        _name="$(spDefaultTemplateName "${TMPDIR}/MgmtConfig.json" "")"
+    fi
+    if [[ -z "${_name}" ]]; then
+        splog "[E] no template for the pull: no template was given and MgmtConfig has no default template"
+        error_message "no template for the StorPool snapshot pull"
+        exit 1
+    fi
+    echo "${_name}"
+}
+
+# storpoolSnapshotPullRemote NAME REMOTE_ID LOCATION TEMPLATE "tagkeys" "tagvals": SnapshotFromRemote, then wait until recovered; SP_UID is set
+function storpoolSnapshotPullRemote()
+{
+    local _name="$1" _rid="${2#\~}" _loc="$3" _template="$4" _tag_key="$5" _tag_val="$6"
+    local _json="" _tags="" _state="" _ret=1 _gid=""
+    SP_UID=""
+    _tags="$(tagsHelper "${_tag_key}" "${_tag_val}")"
+    _json="\"remoteId\":\"${_rid}\",\"remoteLocation\":\"${_loc}\",\"name\":\"${_name}\",\"template\":\"${_template}\"${_tags:+,\"tags\":{${_tags}}}"
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 storpoolRetry SnapshotFromRemote "${_json}" >/dev/null
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[E] SnapshotFromRemote ${_rid} from ${_loc} as ${_name} failed (${_ret})"
+        return "${_ret}"
+    fi
+    _gid="$(jq -r '.data.globalId // empty' "${TMPDIR}/SnapshotFromRemote.json" 2>/dev/null || true)"
+    while true; do
+        if DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry Snapshot "${_name}" >/dev/null; then
+            _state="$(jq -r '.data[0].recoveringFromRemote' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
+            if [[ "${_state}" == "false" ]]; then
+                _gid="$(jq -r '.data[0].globalId' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
+                break
+            fi
+        fi
+        if boolTrue "DEBUG_BACKUP"; then
+            splog "[D] pull of ${_rid} from ${_loc} as ${_name}: recoveringFromRemote=${_state}"
+        fi
+        sleep "${BACKUP_WAIT_SLEEP:-3}"
+    done
+    SP_UID="~${_gid:-${_rid}}"
+    export SP_UID
+    splog "[I] pulled ${_rid} from ${_loc} as ${_name} (${SP_UID}) on template ${_template}"
+    return 0
+}
+
+# oneBackupNvramPath VM_XML VMDIR -> the UEFI vars file of the VM on its host (empty when none or a StorPool NVRAM volume)
+function oneBackupNvramPath()
+{
+    local _xml="$1" _vmdir="$2"
+    local _t_os_nvram="" _firmware="" _vm_name="" _vm_id="" _file="" _kv="" _template="" _element="" xfh=""
+    unset i XPATH_ELEMENTS
+    while IFS='' read -r -u "${xfh}" -d '' _element; do
+        XPATH_ELEMENTS[i++]="${_element}"
+    done {xfh}< <("${SPXML}" get <"${_xml}" "/VM/USER_TEMPLATE/T_OS_NVRAM" "/VM/TEMPLATE/OS/FIRMWARE" "/VM/NAME" "/VM/ID" || true)
+    exec {xfh}<&-
+    unset i
+    _t_os_nvram="${XPATH_ELEMENTS[i++]}"
+    _firmware="${XPATH_ELEMENTS[i++]}"
+    _vm_name="${XPATH_ELEMENTS[i++]}"
+    _vm_id="${XPATH_ELEMENTS[i++]}"
+    if [[ -n "${_t_os_nvram}" ]]; then
+        _file="${_t_os_nvram%%:*}"
+        _file="${_file//[[:space:]]/}"
+        [[ "${_file}" != "storpool" ]] || return 0
+        if [[ -z "${_file}" ]]; then
+            for _kv in ${_t_os_nvram#*:}; do
+                [[ "${_kv%%=*}" == "template" ]] && _template="${_kv#*=}"
+            done
+            _file="${_template}"
+        fi
+        [[ -n "${_file}" ]] || return 0
+        echo "${_vmdir}/${_file##*/}"
+        return 0
+    fi
+    case "${_firmware}" in
+        /*) echo "${_vmdir}/${_vm_name}_VARS.fd" ;;
+        UEFI|uefi) echo "/var/lib/libvirt/qemu/nvram/one-${_vm_id}_VARS.fd" ;;
+        *) ;;
+    esac
 }
 
 if boolTrue "STORPOOL_COMMON_FUNC_EXEC" ; then
