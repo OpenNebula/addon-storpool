@@ -4719,7 +4719,7 @@ function tpmSave()
         if boolTrue "DEBUG_tpm"; then
             splog "[D] Creating StorPool volume ${_SP_VOL}"
         fi
-        storpoolVolumeCreate "${_SP_VOL}" "4M"
+        storpoolVolumeCreate "${_SP_VOL}" 4194304
     else
         if boolTrue "DEBUG_tpm"; then
             splog "[D] StorPool volume ${SP_UID} ${_SP_VOL} already exists"
