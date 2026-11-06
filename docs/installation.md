@@ -268,6 +268,7 @@ The global configuration of addon-storpool is in `/var/lib/one/remotes/addon-sto
    ```
 
 Follow the addon configuration steps in [OpenNebula configuration](one_configuration.md) to configure the driver.
+To keep OpenNebula backups as StorPool snapshots, add a [StorPool backup datastore](backup_datastore.md).
 
 ## Upgrade
 

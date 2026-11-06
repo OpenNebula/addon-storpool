@@ -73,6 +73,7 @@ Optional:
 * Replace the <devices/video> element in the domain XML.
 * Support for [UEFI Normal/Secure boot](docs/uefi_boot.md) with persistent UEFI NVRAM stored on StorPool backed block device.
 * [Interactive backups](docs/interactive_backup.md) through OneBEX for third-party backup applications (Veeam), a Technology Preview: the StorPool exporter serves the backup snapshot straight from the hypervisor, full backups only.
+* [StorPool backup datastore](docs/backup_datastore.md): OpenNebula backups kept as StorPool snapshots, on the cluster or sent to another StorPool cluster/location, with the vTPM state and the UEFI NVRAM; restores are clones of the snapshots.
 * Support CDROM hotplug.
 * Use CPU tune parameters instead/or in addition/ of CPU shares.
 
@@ -84,6 +85,7 @@ Optional:
 * VM snapshotting is not possible because it is handled internally by libvirt, which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
 * Only FULL OpenNebula backups are supported.
 * The interactive (OneBEX/Veeam) backups are a Technology Preview that needs an OpenNebula change not in a release yet (see [Interactive backups](docs/interactive_backup.md#limitations)).
+* The StorPool backup datastore refuses VMs with non-StorPool disks, needs `DATASTORE_CAPACITY_CHECK=NO`, and a remote site deletes the copies of removed backups only with `minimumDeleteDelay` set on its bridge entry (see [the limitations](docs/backup_datastore.md#limitations)).
 * Persistent Images with SHAREABLE attribute are not supported.
 * Persistent Images with IMMUTABLE attribute are not supported.
 * Tested only with KVM hypervisor and Alma Linux 8/Ubuntu 24.04. Should work on other Linux OS.
@@ -99,3 +101,4 @@ Optional:
 * [Tips](docs/tips.md)
 * [Known issues](docs/known_issues.md)
 * [Interactive backups (OneBEX)](docs/interactive_backup.md)
+* [StorPool backup datastore](docs/backup_datastore.md)
