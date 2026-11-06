@@ -16,6 +16,8 @@ from ..managers.storpool_manager import (
     record_facts,
     sp_backup_epoch,
     sp_backup_snapshot,
+    sp_kept_backup_snapshot,
+    sp_service_volume,
     sp_internal,
     spManager,
 )
@@ -218,6 +220,69 @@ class DataProcessing(BaseManager):
             return False
         return True
 
+    def _kept_backups(self) -> Tuple[set, Dict[int, set]]:
+        """The (epoch, id) pairs every StorPool backup image SOURCE
+        carries, and the epochs per VM"""
+        pairs: set = set()
+        epochs: Dict[int, set] = {}
+        for manifest in self.one.backup_images.values():
+            epoch: int = int(manifest["epoch"])
+            vm_id: int = int(manifest["vm_id"])
+            epochs.setdefault(vm_id, set()).add(epoch)
+            for sp_id in manifest["ids"].values():
+                pairs.add((epoch, str(sp_id).lstrip("~")))
+        return pairs, epochs
+
+    def _vm_in_backup(self, vm_tag: str) -> Optional[str]:
+        """None while the VM of a backup record is in BACKUP or
+        BACKUP_POWEROFF (or listed but not inspectable), else why
+        the record cannot belong to a backup in progress"""
+        if not vm_tag.isnumeric():
+            return f"no VM id in the '{self.args.vm_tag}' tag"
+        vm_id: int = int(vm_tag)
+        vm_rec: Optional[Dict[str, Any]] = self.one.one_vms.get(vm_id)
+        if vm_rec is None:
+            if vm_id in self.one.vm_list:
+                return None
+            return f"VM {vm_id} is gone"
+        lcm_state: int = int(vm_rec.get("lcm_state", -1))
+        if lcm_state in LCM_BACKUP_STATES:
+            return None
+        return f"VM {vm_id} is not in BACKUP (lcm_state={lcm_state})"
+
+    def _kept_backup_stale(
+        self, sp_entry: Dict[str, Any]
+    ) -> Optional[str]:
+        """Why a bkp snapshot is left behind: no backup image SOURCE
+        carries its epoch and id, and its VM is not in a backup state.
+        None when a backup image keeps it or the backup is in progress"""
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        epoch: str = str(tags.get("bkp") or "")
+        if not epoch.isnumeric():
+            return f"bkp tag '{epoch}' is not an epoch"
+        pairs, _ = self._kept_backups()
+        if (int(epoch), str(sp_entry.get("globalId"))) in pairs:
+            return None
+        why: Optional[str] = self._vm_in_backup(
+            str(tags.get(self.args.vm_tag) or "")
+        )
+        if why is None:
+            return None
+        return f"in no backup image SOURCE, {why}"
+
+    def _service_volume_stale(
+        self, sp_entry: Dict[str, Any]
+    ) -> Optional[str]:
+        """A service volume outlives its backup only when prebackup
+        died before deleting it"""
+        tags: Dict[str, str] = sp_entry.get("tags") or {}
+        why: Optional[str] = self._vm_in_backup(
+            str(tags.get(self.args.vm_tag) or "")
+        )
+        if why is None:
+            return None
+        return f"service volume of a backup left behind, {why}"
+
     def _backup_snapshot(self, sp_entry: Dict[str, Any]) -> bool:
         """A snapshot the addon prebackup holds for a backup: tagged bak
         with the img of the live disk and no snap tag. It is never the
@@ -284,7 +349,7 @@ class DataProcessing(BaseManager):
         using its tags"""
         if not self._sp_tags_this_instance(sp_entry):
             return None
-        if self._backup_snapshot(sp_entry):
+        if self._backup_snapshot(sp_entry) or sp_kept_backup_snapshot(sp_entry):
             return None
         tags: Dict[str, str] = sp_entry.get("tags") or {}
         img: Optional[str] = tags.get("img")
@@ -1150,6 +1215,21 @@ class DataProcessing(BaseManager):
         if sp_name.startswith("*") or sp_entry.get("deleted"):
             self.dbg(4, f"{sp_name} {kind} pending deletion - skipping")
             return ("internal", None)
+        # a kept backup snapshot, or the transient export of a backup
+        # whose postbackup could not drop it (transient + autoName)
+        if sp_kept_backup_snapshot(sp_entry):
+            tags: Dict[str, str] = sp_entry.get("tags") or {}
+            if not self._sp_tags_this_instance(sp_entry):
+                return ("foreign", None)
+            kept: Optional[str] = self._kept_backup_stale(sp_entry)
+            if kept is None:
+                self.dbg(4, f"{sp_name} backup snapshot"
+                            f" (bkp={tags.get('bkp')}) kept by a backup"
+                            " image or in progress")
+                return ("reachable", None)
+            what: str = "backup transient" if sp_entry.get("transient") \
+                else "backup snapshot"
+            return ("hanging", f"{what} (bkp={tags.get('bkp')}) {kept}")
         if sp_entry.get("transient") or sp_entry.get("autoName"):
             self.dbg(4, f"{sp_name} transient/anonymous {kind}"
                         " - skipping")
@@ -1160,6 +1240,16 @@ class DataProcessing(BaseManager):
                         f" (reason={tags.get('reason')})"
                         " - expires by itself, skipping")
             return ("internal", None)
+        if sp_service_volume(sp_entry):
+            tags = sp_entry.get("tags") or {}
+            if not self._sp_tags_this_instance(sp_entry):
+                return ("foreign", None)
+            svc: Optional[str] = self._service_volume_stale(sp_entry)
+            if svc is None:
+                self.dbg(2, f"{sp_name} service volume of a backup"
+                            " in progress, skipping")
+                return ("internal", None)
+            return ("hanging", svc)
         if self._backup_snapshot(sp_entry):
             tags = sp_entry.get("tags") or {}
             if not self._sp_tags_this_instance(sp_entry):
@@ -1244,10 +1334,95 @@ class DataProcessing(BaseManager):
                 "NOTE",
             )
             return
+        if sp_kept_backup_snapshot(sp_entry):
+            self.dbg(0, f"# API SnapshotUnexport {sp_name} all force;"
+                        f" VolumesReassignWait detach all force;"
+                        f" SnapshotDelete {sp_name}"
+                        f"  # API: {sp_entry.get('sp_api_http_host')},"
+                        " verify before removing")
+            return
         self.dbg(0, f"# storpool -M -B {kind} {sp_name}"
                     f" delete {sp_name}"
                     f"  # API: {sp_entry.get('sp_api_http_host')},"
                     " verify before removing")
+
+    def analyze_backup_kv(self) -> None:
+        """The /bkName/ records of the StorPool backup datastores:
+        <px>-bak-<vm>-<epoch>[-<did>] -> ~<id>, or the epoch record
+        mode=... svc=.... A family is reachable when a backup image
+        SOURCE carries its epoch (its ids must match), in progress
+        while the VM is in a backup state, stale otherwise"""
+        self.dbg(1, "processing backup KV records ...")
+        prefix: str = f"{self.args.one_px}-bak-"
+        pattern = re.compile(
+            rf"^{re.escape(prefix)}(?P<vm_id>\d+)-(?P<epoch>\d+)"
+            r"(?:-(?P<did>.+))?$"
+        )
+        families: Dict[Tuple[int, int], Dict[str, str]] = {}
+        for key, value in self.etcd.data.get("bkName", {}).items():
+            match = pattern.match(key)
+            if not match:
+                self.err(f"backup KV record /bkName/{key} does not match"
+                         f" {prefix}<vm>-<epoch>[-<did>]", "Issue")
+                continue
+            family: Tuple[int, int] = (
+                int(match.group("vm_id")), int(match.group("epoch"))
+            )
+            families.setdefault(family, {})[match.group("did") or ""] = value
+        sources: Dict[Tuple[int, int], Dict[str, str]] = {}
+        for manifest in self.one.backup_images.values():
+            sources[(int(manifest["vm_id"]), int(manifest["epoch"]))] = (
+                manifest["ids"]
+            )
+        for (vm_id, epoch), records in sorted(families.items()):
+            key_prefix: str = f"/bkName/{prefix}{vm_id}-{epoch}"
+            ids: Optional[Dict[str, str]] = sources.get((vm_id, epoch))
+            if ids is not None:
+                for did, value in records.items():
+                    if not did:
+                        continue
+                    if did not in ids:
+                        self.err(f"backup KV record {key_prefix}-{did}"
+                                 f" = {value} has no entry in the backup"
+                                 f" image SOURCE of VM {vm_id} epoch"
+                                 f" {epoch}", "Issue")
+                    elif value.lstrip("~") != ids[did]:
+                        self.err(f"backup KV record {key_prefix}-{did}"
+                                 f" = {value} differs from the backup"
+                                 f" image SOURCE ({did}={ids[did]})",
+                                 "Issue")
+                self.dbg(3, f"{key_prefix} kept by a backup image")
+                continue
+            why: Optional[str] = self._vm_in_backup(str(vm_id))
+            if why is None:
+                self.dbg(2, f"{key_prefix} backup in progress, skipping")
+                continue
+            epoch_rec: Dict[str, str] = dict(
+                kv.partition("=")[::2] for kv in records.get("", "").split()
+            )
+            mode: str = epoch_rec.get("mode", "")
+            location: str = epoch_rec.get("loc", "-")
+            copies: str = " ".join(
+                f"{did}={value}" for did, value in sorted(records.items())
+                if did
+            )
+            if mode == "remote":
+                # the records are the only local pointer to the copies
+                self.err(f"stale backup KV records {key_prefix}* "
+                         f"({len(records)}): no backup image SOURCE carries"
+                         f" epoch {epoch}, {why}; the copies ({copies})"
+                         f" may remain on the target {location}", "Issue")
+                self.dbg(0, f"# remove the copies on {location} first"
+                            f" (SnapshotsRemoteList / RemoteCommand/<cluster>"
+                            f"/SnapshotsList by backupOfGlobalId), then:"
+                            f" ETCDCTL_API=3 etcdctl del --prefix"
+                            f" {key_prefix}")
+                continue
+            self.err(f"stale backup KV records {key_prefix}* "
+                     f"({len(records)}): no backup image SOURCE carries"
+                     f" epoch {epoch}, {why}", "Issue")
+            self.dbg(0, f"# ETCDCTL_API=3 etcdctl del --prefix"
+                        f" {key_prefix}")
 
     def _report_foreign(
         self, sp_name: str, sp_entry: Dict[str, Any]
@@ -1398,7 +1573,7 @@ class DataProcessing(BaseManager):
         for sp_name, sp_entry in self.sp.data.items():
             if self._sp_internal(sp_name, sp_entry):
                 continue
-            if self._backup_snapshot(sp_entry):
+            if self._backup_snapshot(sp_entry) or sp_kept_backup_snapshot(sp_entry):
                 continue
             one_rec: Optional[Dict[str, Any]] = self._claimed_one_record(
                 sp_name, sp_entry

@@ -52,6 +52,34 @@ def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
     return bool(tm_mad) and str(tm_mad).startswith("storpool")
 
 
+BACKUP_SOURCE_RE = re.compile(
+    r"^(?P<location>[^:\s]+):(?P<vm_id>\d+):(?P<epoch>\d+):(?P<entries>[^:\s]+)$"
+)
+
+
+def parse_backup_source(source: Optional[str]) -> Optional[Dict[str, Any]]:
+    """The manifest of a StorPool backup image SOURCE
+    (<location|local>:<vm_id>:<epoch>:<did>=<id>,...), None for any
+    other backup driver's SOURCE"""
+    if not isinstance(source, str):
+        return None
+    match = BACKUP_SOURCE_RE.match(source)
+    if not match:
+        return None
+    ids: Dict[str, str] = {}
+    for entry in match.group("entries").split(","):
+        key, sep, value = entry.partition("=")
+        if not sep or not key or not value:
+            return None
+        ids[key] = value.lstrip("~")
+    return {
+        "location": match.group("location"),
+        "vm_id": int(match.group("vm_id")),
+        "epoch": int(match.group("epoch")),
+        "ids": ids,
+    }
+
+
 def image_root_is_live_volume(
     imagetype: ImageType,
     disktype: DiskType,
@@ -161,6 +189,8 @@ class oneManager(BaseManager):
     one_hosts: Dict[str, Any] = {}
     one_datastores: Dict[int, Any] = {}
     one_vms: Dict[int, Dict[str, Any]] = {}
+    # BACKUP images of the StorPool backup datastores, by image id
+    backup_images: Dict[int, Dict[str, Any]] = {}
     frontend: Dict[str, Any] = {}
     vm_ids: List[int] = []
     # DATASTORE_LOCATION - the datastores path on the hosts and the
@@ -188,6 +218,7 @@ class oneManager(BaseManager):
         # place and would be shared between instances)
         self.vm_disks = {}
         self.one_vms = {}
+        self.backup_images = {}
         # Use ONE_TOKEN
         one_token: str = self.get_one_token()
         one_api_url: str = os.getenv("ONE_API_URL", ONE_API_URL)  # type: ignore[attr-defined] # noqa: E501
@@ -549,9 +580,13 @@ class oneManager(BaseManager):
         # by other users/groups. Clones still show up via onevm list
         # even when the base image would be invisible under filter -1.
         self.ds_images = {}
+        self.backup_images = {}
         oneimg: Any = self.api.imagepool.info(ONE_POOL_INFO_ALL, -1, -1)
         for img_e in oneimg.get_IMAGE():
             spname: str = f"{self.args.one_px}-img-{img_e.ID}"
+            if int(img_e.TYPE) == int(ImageType.BACKUP):
+                self._add_backup_image(img_e)
+                continue
             if int(img_e.TYPE) >= 6:
                 continue
             ds_id: int = int(img_e.DATASTORE_ID)
@@ -642,6 +677,28 @@ class oneManager(BaseManager):
             img_dict["snaplen"] = len(img_dict["snapshots"])
             self.ds_images[spname] = img_dict
         self.dbg(2, f"self.ds_images = \n{pprint.pformat(self.ds_images)}")
+
+    def _add_backup_image(self, img_e: Any) -> None:
+        """A BACKUP image of a StorPool backup datastore: its SOURCE is
+        the manifest of the kept snapshots (or remote copies)"""
+        manifest: Optional[Dict[str, Any]] = parse_backup_source(
+            getattr(img_e, "SOURCE", None)
+        )
+        if manifest is None:
+            self.dbg(
+                3,
+                f"IMG {img_e.ID} ({img_e.NAME}) BACKUP image of another"
+                " driver - skipping",
+            )
+            return
+        manifest.update({
+            "image_id": int(img_e.ID),
+            "name": img_e.NAME,
+            "datastore_id": int(img_e.DATASTORE_ID),
+            "state": int(img_e.STATE),
+        })
+        self.backup_images[int(img_e.ID)] = manifest
+        self.dbg(4, f"backup image {img_e.ID}: {manifest}")
 
     def _get_disk_symlink(
         self,

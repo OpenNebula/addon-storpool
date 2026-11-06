@@ -42,6 +42,24 @@ def sp_backup_epoch(entry: Dict[str, Any]) -> Optional[int]:
     return int(epoch) if epoch.isdigit() else None
 
 
+def sp_kept_backup_snapshot(entry: Dict[str, Any]) -> bool:
+    """A snapshot a StorPool backup datastore keeps: tagged bkp (the
+    backup epoch) and no snap tag"""
+    if not entry.get("snapshot"):
+        return False
+    tags: Dict[str, str] = entry.get("tags") or {}
+    return bool(tags.get("bkp")) and not tags.get("snap")
+
+
+def sp_service_volume(entry: Dict[str, Any]) -> bool:
+    """The transient service volume of a backup in progress
+    (<px>-sys-<vm>-SVC-<epoch>, type SVC)"""
+    if entry.get("snapshot"):
+        return False
+    tags: Dict[str, str] = entry.get("tags") or {}
+    return tags.get("type") == "SVC"
+
+
 def record_facts(entry: Dict[str, Any]) -> str:
     """One-line facts about a StorPool record"""
     kind: str = "snapshot" if entry["snapshot"] else "volume"

@@ -250,6 +250,7 @@ def main() -> int:
 
         data_processing.analyze_kv_by_name()
         data_processing.analyze_kv_by_uid()
+        data_processing.analyze_backup_kv()
 
         data_processing.analyze_vm_disks()
         data_processing.analyze_one_images()

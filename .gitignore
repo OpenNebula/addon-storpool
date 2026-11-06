@@ -3,3 +3,4 @@
 *.stderr
 *.stdout
 *__pycache__
+*.egg-info

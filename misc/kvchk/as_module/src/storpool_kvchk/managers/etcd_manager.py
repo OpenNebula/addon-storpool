@@ -12,7 +12,9 @@ from .base_manager import BaseManager
 class etcdManager(BaseManager):
     """Manages Key/Value operations in etcd"""
 
-    data: Dict[str, Dict[str, str]] = {"byName": {}, "byUid": {}}
+    data: Dict[str, Dict[str, str]] = {
+        "byName": {}, "byUid": {}, "bkName": {}
+    }
 
     def __init__(self, args: argparse.Namespace):
         super().__init__(args)
@@ -26,7 +28,7 @@ class etcdManager(BaseManager):
             # b'~fir.b.jm' b'/byName/ans-sys-26-1'
             # b'ans-img-48' b'/byUid/~fir.b.e7'
             key: str = metadata.key.decode("utf-8")
-            if not key.startswith("/by"):
+            if not (key.startswith("/by") or key.startswith("/bkName/")):
                 self.dbg(1, f"Skipping etcd key '{key}' <> '/by...'")
                 continue
             array: list[str] = key.split("/")
