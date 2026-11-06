@@ -19,6 +19,9 @@
 DRIVER_PATH="$(dirname "$0")"
 export LOG_PREFIX="ds"
 
+# run by the TM restore: a temp dir inherited from it would be removed on exit
+unset TMPDIR
+
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
 # shellcheck source=tm/storpool/storpool_common.sh

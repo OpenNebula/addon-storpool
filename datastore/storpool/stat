@@ -58,6 +58,7 @@ fi
 
 oneDsDriverAction
 
+SIZE_HINT="${SIZE}"
 SIZE=0
 
 #-------------------------------------------------------------------------------
@@ -94,7 +95,15 @@ esac
 
 if [[ ${SIZE} -eq 0 ]]; then
     oneSnapshotLookup "${IMAGE_PATH##*/}"
-    if [[ -n ${SNAPSHOT_NAME} ]]; then
+    if [[ -n "${REMOTE_ID}" ]]; then
+        read -r _rId _rLoc _rSize _ <<< "$(storpoolRemoteCopies "${REMOTE_ID}" || true)"
+        if [[ -n "${_rSize}" ]] && [[ -z "${_rSize//[[:digit:]]/}" ]] && [[ ${_rSize} -gt 0 ]]; then
+            SIZE=$(((_rSize + 1048575) / 1048576))
+            splog "[I] ${REMOTE_ID} on ${_rLoc:-${REMOTE_LOCATION}} SIZE:${SIZE}"
+        elif [[ -n "${SIZE_HINT:-}" ]]; then
+            SIZE="${SIZE_HINT}"
+        fi
+    elif [[ -n ${SNAPSHOT_NAME} ]]; then
         if kvGetUid "${SNAPSHOT_NAME}"; then
             ENTRY="${SP_UID}"
         else

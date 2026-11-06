@@ -87,7 +87,7 @@ set_up_datastore "${BASE_PATH:-/var/lib/one/datastores}" "${RESTRICTED_DIRS:-/et
 IMAGE_PATH="$(echo "${IMAGE_PATH}")" #TBD
 
 case "${IMAGE_PATH}" in
-*VMSNAP:*|*SPSNAPSHOT:*)
+*VMSNAP:*|*SPSNAPSHOT:*|*SPREMOTE:*)
     oneSnapshotLookup "${IMAGE_PATH##*/}"
     log "Using StorPool snapshot '${IMAGE_PATH}'"
     ;;
@@ -129,6 +129,30 @@ SP_TEMPLATE="$(spVolumeTemplateName "${DATASTORE_ID}")"
 
 storpoolVolumeCheck "${SP_VOL}" byName
 
+function cpPullDrop()
+{
+    [[ -n "${PULLED_UID}" ]] || return 0
+    DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${PULLED_UID}" "force" && PULLED_UID=""
+}
+
+PULLED_UID=""
+CLONE_TEMPLATE=""
+if [[ -n "${REMOTE_ID}" ]]; then
+    PULL_TEMPLATE="$(spBackupPullTemplate "${SP_TEMPLATE}")"
+    PULL_NAME="${SP_VOL}-pull-$(mktemp --dry-run XXXXXXXX)"
+    if ! storpoolSnapshotPullRemote "${PULL_NAME}" "${REMOTE_ID}" "${REMOTE_LOCATION}" "${PULL_TEMPLATE}"             "img;${LOC_TAG};virt" "${PULL_NAME};${LOC_TAG_VAL};one"; then
+        errmsg="Error pulling the backup ${REMOTE_ID} from ${REMOTE_LOCATION}"
+        log_error "${errmsg}"
+        error_message "${errmsg}"
+        splog "${errmsg}"
+        exit 255
+    fi
+    PULLED_UID="${SP_UID}"
+    SNAPSHOT_NAME="${PULLED_UID}"
+    CLONE_TEMPLATE="${SP_TEMPLATE}"
+    trapAdd "cpPullDrop"
+fi
+
 if [[ -n "${SNAPSHOT_NAME}" ]]; then
 
     if [[ ${IMAGE_GID:-65536} -ne 0 ]]; then
@@ -164,10 +188,14 @@ if [[ -n "${SNAPSHOT_NAME}" ]]; then
     fi
 
     SNAPSHOT_UID="${SP_UID}"
-    storpoolVolumeFromSnapshot "${SNAPSHOT_UID}" "${SP_VOL}"
+    storpoolVolumeFromSnapshot "${SNAPSHOT_UID}" "${SP_VOL}" "${CLONE_TEMPLATE}"
 
     VOL_UID="${SP_UID}"
     FORMAT="raw"
+    if [[ -n "${PULLED_UID}" ]]; then
+        trapDel "cpPullDrop"
+        cpPullDrop || splog "[W] pulled snapshot ${PULLED_UID} not deleted ($?)"
+    fi
 
     echo "${SP_DST} ${REPORT_FORMAT}"
 
