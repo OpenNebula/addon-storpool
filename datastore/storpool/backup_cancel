@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2025, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+DRIVER_PATH="$(dirname "$0")"
+export LOG_PREFIX="ds"
+
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+
+cat >/dev/null
+
+DEPLOY_ID="$2"
+splog "$1 ${DEPLOY_ID}"
+
+if [[ -z "${DEPLOY_ID}" ]]; then
+    msg="backup_cancel: no deploy id"
+    error_message "${msg}"
+    splog "${msg}"
+    exit 1
+fi
+
+# prebackup and the datastore backup action rename their comm to ruby
+PIDS="$(ps --no-headers -o pid,cmd -C ruby 2>/dev/null | awk -v re="(pre)?backup(_live)? .*${DEPLOY_ID} " '$0 ~ re {print $1}' | tr '\n' ' ' || true)"
+if [[ -z "${PIDS// /}" ]]; then
+    splog "[I] no backup process of ${DEPLOY_ID} to signal"
+else
+    splog "[I] TERM to the backup processes of ${DEPLOY_ID}: ${PIDS}"
+    # shellcheck disable=SC2086
+    kill -s TERM ${PIDS} || true
+fi
+
+splog "END"
+exit 0

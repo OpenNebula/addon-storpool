@@ -18,24 +18,133 @@
 
 DRIVER_PATH="$(dirname "$0")"
 export LOG_PREFIX="ds"
+umask 077
 
 # shellcheck source=/dev/null
 source "${DRIVER_PATH}/../../scripts_common.sh"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-splog "$0 $*"
+function failWith()
+{
+    splog "[E] $*"
+    error_message "$*"
+    exit 1
+}
 
-if boolTrue "DDDDEBUG_datastore_backup"; then
-    cat >"/tmp/${0##*/}-$3-$4-$5.input"
-else
-    cat >/dev/null
+if [[ -t 0 ]]; then
+    failWith "Interactive mode not supported"
 fi
 
-msg="${0##*/}: Operation not supported"
-error_message "${msg}"
-splog "${msg}"
+KVMHOST="${1%%:*}"
+VMDIR="${1#*:}"
+DISKS="$2"
+DEPLOY_ID="$3"
+VM_ID="$4"
+SYSDS_ID="$5"
+if [[ -n "$6" ]]; then
+    BJ_ID="$4"
+    VM_ID="$5"
+    SYSDS_ID="$6"
+fi
 
-splog "END"
+# backup-cancel delivers TERM to the ruby-named processes of this backup
+SP_EXIT_ON_SIGNAL=1
+if [[ -w /proc/self/comm ]]; then
+    printf '%s' ruby > /proc/self/comm || true
+fi
 
-exit 1
+splog "${VM_ID} ${KVMHOST} ${VMDIR} DISKS='${DISKS}' ${DEPLOY_ID}${BJ_ID:+ JOB_ID=${BJ_ID}} SYSDS_ID=${SYSDS_ID}"
+
+DRV_ACTION="$(base64 -w0)"
+export DRV_ACTION
+oneDsDriverAction
+
+VM_XML="${TMPDIR}/backup-vm-${VM_ID}.xml"
+"${SPXML}" sub -b "/DS_DRIVER_ACTION_DATA/VM" <<< "${DRV_ACTION}" >"${VM_XML}" || failWith "No VM element in the driver action of VM ${VM_ID}"
+
+oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
+
+SP_BACKUP_MODE="$(oneBackupModeName)"
+B_LOCAL="${VMDIR}/backup"
+
+if [[ ! -f "${B_LOCAL}/vm.xml" ]]; then
+    failWith "No ${B_LOCAL}/vm.xml, prebackup did not run the native path for VM ${VM_ID}"
+fi
+
+if ! oneBackupInflight "${VM_ID}" "${SP_BACKUP_MODE}" "${DISKS}" "${SP_BACKUP_TIMEOUT:-0}"; then
+    failWith "No ${SP_BACKUP_MODE} backup in progress found for VM ${VM_ID}"
+fi
+splog "[I] VM ${VM_ID} ${SP_BACKUP_MODE} backup epoch ${BI_EPOCH} (${BI_FROM}): ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
+
+for did in ${DISKS//:/ }; do
+    [[ -n "${did}" ]] || continue
+    [[ -n "${BI_IDS_A[${did}]:-}" ]] || failWith "VM ${VM_ID} backup epoch ${BI_EPOCH} has no snapshot of disk ${did}"
+done
+
+ID_LIST=""
+for did in "${!BI_IDS_A[@]}"; do
+    ID_LIST+="${BI_IDS_A[${did}]} "
+done
+
+if [[ "${SP_BACKUP_MODE}" == "remote" ]]; then
+    if ! signalWait storpoolBackupWait "${ID_LIST}" "${SP_BACKUP_TIMEOUT:-0}"; then
+        failWith "The transfer of VM ${VM_ID} backup epoch ${BI_EPOCH} to ${SP_BACKUP_LOCATION} did not complete"
+    fi
+    LOCATION=""
+    while read -r rId rLoc _; do
+        [[ -n "${rId}" ]] || continue
+        LOCATION="${rLoc}"
+        break
+    done < <(storpoolRemoteCopies "${ID_LIST}")
+    [[ -n "${LOCATION}" ]] || failWith "VM ${VM_ID} backup epoch ${BI_EPOCH}: no copy listed in SnapshotsRemoteList"
+else
+    for did in "${!BI_IDS_A[@]}"; do
+        if ! DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry Snapshot "~${BI_IDS_A[${did}]}" >/dev/null; then
+            failWith "VM ${VM_ID} backup epoch ${BI_EPOCH}: snapshot ~${BI_IDS_A[${did}]} of ${did} not found"
+        fi
+    done
+    LOCATION="local"
+fi
+
+if [[ "${BI_SVC_UID}" != "-" ]] && [[ -n "${BI_SVC_UID}" ]]; then
+    if storpoolVolumeExists "${BI_SVC_UID}"; then
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${BI_SVC_UID}" "force" || splog "[W] VM ${VM_ID} service volume ${BI_SVC_UID} not deleted ($?)"
+    fi
+else
+    for sUid in $(oneBackupSvcVolumes "${VM_ID}"); do
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${sUid}" "force" || splog "[W] VM ${VM_ID} service volume ${sUid} not deleted ($?)"
+    done
+fi
+
+B_PATH="${BASE_PATH}/${VM_ID}/${BI_EPOCH}"
+mkdir -p "${B_PATH}" || failWith "Error creating ${B_PATH}"
+if [[ -n "${BI_IDS_A[svc]:-}" ]]; then
+    cp -p "${B_LOCAL}/vm.xml" "${B_PATH}/" || splog "[W] VM ${VM_ID} ${B_LOCAL}/vm.xml not copied to ${B_PATH} ($?), the service snapshot keeps a copy"
+    if [[ -f "${B_LOCAL}/svc.tar" ]]; then
+        cp -p "${B_LOCAL}/svc.tar" "${B_PATH}/" || splog "[W] VM ${VM_ID} ${B_LOCAL}/svc.tar not copied to ${B_PATH} ($?), the service snapshot keeps a copy"
+    else
+        splog "[W] VM ${VM_ID} ${B_LOCAL}/svc.tar missing, the service snapshot keeps a copy"
+    fi
+else
+    cp -p "${B_LOCAL}/vm.xml" "${B_PATH}/" || failWith "Error copying ${B_LOCAL}/vm.xml to ${B_PATH}"
+fi
+
+ENTRIES=""
+for did in $(printf '%s\n' "${!BI_IDS_A[@]}" | sort -n); do
+    case "${did}" in
+        nvram|svc) continue ;;
+    esac
+    ENTRIES+="${did}=${BI_IDS_A[${did}]} "
+done
+[[ -z "${BI_IDS_A[nvram]:-}" ]] || ENTRIES+="nvram=${BI_IDS_A[nvram]} "
+[[ -z "${BI_IDS_A[svc]:-}" ]] || ENTRIES+="svc=${BI_IDS_A[svc]} "
+SOURCE="$(oneBackupSourceBuild "${LOCATION}" "${VM_ID}" "${BI_EPOCH}" "${ENTRIES}")"
+SIZE="$(oneBackupDiskSizeSum "${VM_XML}" "${DISKS}")"
+
+echo "${SOURCE} ${SIZE} raw"
+splog "[I] VM ${VM_ID} backup registered: ${SOURCE} ${SIZE}M raw (${B_PATH})"
+rm -rf "${B_LOCAL}"
+
+splog "END ${VM_ID}"
+exit 0

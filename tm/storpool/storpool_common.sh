@@ -5241,6 +5241,115 @@ function oneBackupInflight()
     done
 }
 
+# storpoolBackupSnapshotDrop GID: unexport, detach and delete a backup snapshot of this cluster, a missing one tolerated
+function storpoolBackupSnapshotDrop()
+{
+    local _gid="${1#\~}" _ret=0
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotUnexport \
+        "\"snapshot\":\"~${_gid}\",\"all\":true,\"force\":true" >/dev/null || true
+    DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry VolumesReassignWait \
+        "\"reassign\":[{\"snapshot\":\"~${_gid}\",\"detach\":\"all\",\"force\":true}]" >/dev/null || true
+    SKIP_KV_DATA=1 _SOFT_FAIL=1 storpoolSnapshotDelete "~${_gid}"
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_gid}" >/dev/null
+        [[ $? -eq 2 ]] && _ret=0
+    fi
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[E] backup snapshot ~${_gid} not deleted (${_ret})"
+    fi
+    return "${_ret}"
+}
+
+# storpoolBackupSnapshotGone GID: the snapshot is deleted (missing, or a deleted record kept as the parent of a child)
+function storpoolBackupSnapshotGone()
+{
+    local _gid="${1#\~}" _ret=0 _deleted=""
+    DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_gid}" >/dev/null
+    _ret=$?
+    [[ ${_ret} -ne 2 ]] || return 0
+    [[ ${_ret} -eq 0 ]] || return 1
+    _deleted="$(jq -r '.data[0].deleted' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
+    [[ "${_deleted}" == "true" ]]
+}
+
+# storpoolBackupCopyDrop REMOTE_ID LOCATION: remove the copy of a backup on its target, per the kind of SP_BACKUP_LOCATION
+function storpoolBackupCopyDrop()
+{
+    local _rid="${1#\~}" _loc="$2" _kind="" _copy="" _json="" _ret=0
+    _kind="$(storpoolBackupTargetKind "${SP_BACKUP_LOCATION}")"
+    case "${_kind}" in
+        cluster)
+            DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null || return $?
+            _copy="$(jq -r --arg g "${_rid}" '[.data[]|select(.backupOfGlobalId==$g)|.globalId]|first // empty' "${TMPDIR}/SnapshotsList.json" 2>/dev/null || true)"
+            if [[ -z "${_copy}" ]]; then
+                splog "[I] no copy of ~${_rid} on ${SP_BACKUP_LOCATION}"
+                return 0
+            fi
+            DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotUnexport \
+                "\"snapshot\":\"~${_copy}\",\"all\":true,\"force\":true" >/dev/null || true
+            DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotDelete "~${_copy}" >/dev/null
+            _ret=$?
+            DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_copy}" >/dev/null
+            if [[ $? -eq 2 ]]; then
+                splog "[I] copy ~${_copy} of ~${_rid} deleted on ${SP_BACKUP_LOCATION}"
+                return 0
+            fi
+            splog "[E] copy ~${_copy} of ~${_rid} still on ${SP_BACKUP_LOCATION} (${_ret})"
+            [[ ${_ret} -ne 0 ]] || _ret=1
+            ;;
+        remote)
+            _json="\"remoteSnapshots\":[{\"globalSnapshotId\":\"${_rid}\",\"location\":\"${_loc}\""
+            if [[ "${SP_BACKUP_REMOTE_DELETE^^}" != "NO" ]]; then
+                _json+=",\"deleteAfter\":${SP_BACKUP_DELETE_AFTER:-60}"
+            fi
+            _json+="}]"
+            DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteUnexport "${_json}" >/dev/null
+            _ret=$?
+            if [[ ${_ret} -eq 0 ]]; then
+                splog "[I] copy of ~${_rid} on ${_loc} unexported${SP_BACKUP_REMOTE_DELETE^^:+ (delete requested, honoured only with minimumDeleteDelay set on the remote bridge)}"
+            else
+                splog "[E] SnapshotsRemoteUnexport of ~${_rid} on ${_loc} failed (${_ret})"
+            fi
+            ;;
+        local)
+            splog "[E] no SP_BACKUP_LOCATION for the copy ~${_rid} on ${_loc}"
+            _ret=1
+            ;;
+        *)
+            _ret=1
+            ;;
+    esac
+    return "${_ret}"
+}
+
+# oneBackupSvcVolumes VM_ID -> the ~ids of the VM's service volumes (type=SVC)
+function oneBackupSvcVolumes()
+{
+    local _vm="$1"
+    DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry VolumesList >/dev/null || return $?
+    jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
+        '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+         | select(.tags.type=="SVC" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid) | .name' \
+        "${TMPDIR}/VolumesList.json" 2>/dev/null || true
+}
+
+# oneBackupDiskSizeSum VM_XML "disk ids" -> the sum of the disks' SIZE (MiB)
+function oneBackupDiskSizeSum()
+{
+    local _xml="$1" _disks="$2" _idline="" _sizeline="" _i="" _sum=0
+    local -a _ids_a=() _sizes_a=()
+    { read -r _idline; read -r _sizeline; } < <("${SPXML}" list "/VM/TEMPLATE/DISK/DISK_ID" "/VM/TEMPLATE/DISK/SIZE" <"${_xml}" || true)
+    IFS=';' read -r -a _ids_a <<< "${_idline}"
+    IFS=';' read -r -a _sizes_a <<< "${_sizeline}"
+    for _i in "${!_ids_a[@]}"; do
+        [[ " ${_disks//:/ } " == *" ${_ids_a[_i]} "* ]] || continue
+        [[ -n "${_sizes_a[_i]}" && -z "${_sizes_a[_i]//[[:digit:]]/}" ]] || continue
+        _sum=$((_sum + _sizes_a[_i]))
+    done
+    echo "${_sum}"
+}
+
 # spBackupPullTemplate [CANDIDATE] -> the candidate, else the MgmtConfig default template; empty is fatal
 function spBackupPullTemplate()
 {

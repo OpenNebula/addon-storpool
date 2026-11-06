@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2025, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+DRIVER_PATH="$(dirname "$0")"
+export LOG_PREFIX="ds"
+
+# shellcheck source=/dev/null
+source "${DRIVER_PATH}/../../scripts_common.sh"
+# shellcheck source=tm/storpool/storpool_common.sh
+source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
+
+INC_ID="-1"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -i) INC_ID="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+if [[ "${INC_ID}" != "-1" ]]; then
+    msg="ls: increments are not supported on a StorPool backup datastore (-i ${INC_ID})"
+    error_message "${msg}"
+    splog "${msg}"
+    exit 1
+fi
+
+DRV_ACTION="$(base64 -w0)"
+export DRV_ACTION
+oneDsDriverAction
+
+if ! oneBackupSourceParse "${SOURCE}"; then
+    msg="ls: not a StorPool backup SOURCE '${SOURCE}'"
+    error_message "${msg}"
+    splog "${msg}"
+    exit 1
+fi
+
+if [[ "${BS_LOCATION}" == "local" ]]; then
+    PREFIX="SPSNAPSHOT:~"
+else
+    PREFIX="SPREMOTE:${BS_LOCATION}:~"
+fi
+
+JSON=""
+for did in ${BS_DISK_IDS}; do
+    JSON+="${JSON:+,}\"${did}\":\"${PREFIX}${BS_IDS_A[${did}]}\""
+done
+[[ -z "${BS_IDS_A[nvram]:-}" ]] || JSON+="${JSON:+,}\"nvram\":\"${PREFIX}${BS_IDS_A[nvram]}\""
+[[ -z "${BS_IDS_A[svc]:-}" ]] || JSON+="${JSON:+,}\"svc\":\"${PREFIX}${BS_IDS_A[svc]}\""
+
+echo "{${JSON}}"
+splog "END {${JSON}}"
+exit 0

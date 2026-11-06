@@ -24,6 +24,106 @@ source "${DRIVER_PATH}/../../scripts_common.sh"
 #shellcheck source=tm/storpool/storpool_common.sh
 source "${ONE_LOCATION:-/var/lib/one/remotes}/tm/storpool/storpool_common.sh"
 
+function backupServiceVolumeDrop()
+{
+    [[ -n "${SVC_UID}" ]] || return 0
+    DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${SVC_UID}" "force"
+}
+
+function backupServiceVolume()
+{
+    local _hdr="" _cmd="" _tpm_cmd="" _tar_size="" _size=0 _msg=""
+    _hdr=$(cat <<EOF
+    #
+$(oneRemotesKvmrc)
+    VTPM_SETUP="/usr/libexec/one/vtpm_setup"
+    [[ -x "\${VTPM_SETUP}" ]] || VTPM_SETUP="\${REMOTES_DIR}/vtpm_setup"
+EOF
+)
+    splog "[I] VM ${VM_ID} service volume ${SVC_VOL}: vm.xml${TPM_MODEL:+ + vTPM state}${NVRAM_PATH:+ + NVRAM ${NVRAM_PATH}}"
+    ssh_forward ssh_exec_and_log "${KVMHOST}" "${REMOTE_HDR}
+    mkdir -p \"${B_DISK_DIR}\"${REMOTE_FTR}" "Error creating ${B_DISK_DIR} on ${KVMHOST}"
+    if ! signalWait "${RSYNC:-rsync}" -a "${B_LOCAL}/vm.xml" "${KVMHOST}:${B_DISK_DIR}/"; then
+        _msg="Error copying ${B_LOCAL}/vm.xml to ${KVMHOST}:${B_DISK_DIR}"
+        splog "[E] ${_msg}"
+        error_message "${_msg}"
+        exit 1
+    fi
+    if [[ -n "${TPM_MODEL}" ]] && [[ ${BACKUP_LIVE} -eq 1 ]]; then
+        _tpm_cmd=$(cat <<EOF
+    DOM_UUID="\$(virsh --connect "\${LIBVIRT_URI:-qemu:///system}" domuuid "one-${VM_ID}" | tr -d '\\n')"
+    if sudo -l | grep -q vtpm_setup; then
+        splog "VM ${VM_ID} Backing up vTPM data to ${VMDIR} DOM_UUID=\${DOM_UUID}"
+        sudo "\${VTPM_SETUP}" backup "\${DOM_UUID}" "${VMDIR}"
+    else
+        splog "VM ${VM_ID} No sudo privileges to backup vTPM data to ${VMDIR} DOM_UUID=\${DOM_UUID}"
+    fi
+EOF
+)
+    fi
+    _cmd=$(cat <<EOF
+${_hdr}
+${_tpm_cmd}
+    members="vm.xml"
+    rm -f "${B_DISK_DIR}/disk.tpm.0"
+    rm -rf "${B_DISK_DIR}/nvram"
+    if [[ -d "${VMDIR}/tpm" ]]; then
+        tar zcf "${B_DISK_DIR}/disk.tpm.0" -C "${VMDIR}" tpm
+        members+=" disk.tpm.0"
+        splog "VM ${VM_ID} vTPM state packed to ${B_DISK_DIR}/disk.tpm.0"
+    fi
+    if [[ -n "${NVRAM_PATH}" ]]; then
+        if [[ -f "${NVRAM_PATH}" ]]; then
+            mkdir -p "${B_DISK_DIR}/nvram"
+            cp -p "${NVRAM_PATH}" "${B_DISK_DIR}/nvram/"
+            printf '%s\\n' "${NVRAM_PATH}" >"${B_DISK_DIR}/nvram/path"
+            members+=" nvram"
+            splog "VM ${VM_ID} NVRAM ${NVRAM_PATH} packed"
+        else
+            splog "VM ${VM_ID} NVRAM ${NVRAM_PATH} not found, not in the backup"
+        fi
+    fi
+    tar cf "${B_DISK_DIR}/svc.tar" -C "${B_DISK_DIR}" \${members}
+    splog "VM ${VM_ID} service tar of \${members} in ${B_DISK_DIR}/svc.tar"
+EOF
+)
+    ssh_forward ssh_exec_and_log "${KVMHOST}" "${REMOTE_HDR}${_cmd}${REMOTE_FTR}" \
+        "Error building the service tar of VM ${VM_ID} on ${KVMHOST}"
+    _tar_size="$(ssh_forward ssh_monitor_and_log "${KVMHOST}" "stat -c %s \"${B_DISK_DIR}/svc.tar\"" "stat ${B_DISK_DIR}/svc.tar on ${KVMHOST}" | tr -d '[:space:]' || true)"
+    if [[ -z "${_tar_size}" ]] || [[ -n "${_tar_size//[[:digit:]]/}" ]]; then
+        _msg="Error reading the size of ${B_DISK_DIR}/svc.tar on ${KVMHOST} ('${_tar_size}')"
+        splog "[E] ${_msg}"
+        error_message "${_msg}"
+        exit 1
+    fi
+    _size=$(( (_tar_size + 16 * 1048576 + 1048575) / 1048576 * 1048576 ))
+    [[ ${_size} -ge $((32 * 1048576)) ]] || _size=$((32 * 1048576))
+    storpoolVolumeCreate "${SVC_VOL}" "${_size}" "$(spVolumeTemplateName "${SYSDS_ID}")" "type;${VM_TAG}" "SVC;${VM_ID}"
+    SVC_UID="${SP_UID}"
+    if [[ -z "${SVC_UID}" ]]; then
+        _msg="Error creating the service volume ${SVC_VOL} of VM ${VM_ID}"
+        splog "[E] ${_msg}"
+        error_message "${_msg}"
+        exit 1
+    fi
+    trapAdd "backupServiceVolumeDrop"
+    splog "[I] VM ${VM_ID} service volume ${SVC_UID} (${SVC_VOL}) ${_size} bytes for a ${_tar_size} bytes tar"
+    storpoolAttach "${SVC_UID}" "${KVMHOST}"
+    ssh_forward ssh_exec_and_log "${KVMHOST}" "${REMOTE_HDR}
+    dd if=\"${B_DISK_DIR}/svc.tar\" of=\"/dev/storpool-byid/${SVC_UID#*~}\" bs=1M conv=fdatasync status=none${REMOTE_FTR}" \
+        "Error writing ${B_DISK_DIR}/svc.tar to ${SVC_VOL} on ${KVMHOST}"
+    storpoolDetach "${SVC_UID}" "force" "" "all"
+    if ! signalWait "${RSYNC:-rsync}" -a "${KVMHOST}:${B_DISK_DIR}/svc.tar" "${B_LOCAL}/"; then
+        _msg="Error copying ${KVMHOST}:${B_DISK_DIR}/svc.tar to ${B_LOCAL}"
+        splog "[E] ${_msg}"
+        error_message "${_msg}"
+        exit 1
+    fi
+    ssh_forward ssh_exec_and_log "${KVMHOST}" "${REMOTE_HDR}
+    rm -f \"${B_DISK_DIR}/disk.tpm.0\"
+    rm -rf \"${B_DISK_DIR}/nvram\"${REMOTE_FTR}" "Error removing the service staging files of VM ${VM_ID} on ${KVMHOST}"
+}
+
 if [[ -t 0 ]]; then
     msg="Interactive mode not supported"
     splog "${msg}"
@@ -67,9 +167,26 @@ oneDatastoreInfo "${SYSDS_ID}"
 
 oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
 
-if [[ ${BACKUP_INTERACTIVE} -eq 1 ]]; then
+BACKUP_NATIVE=0
+SP_BACKUP_MODE=""
+if [[ -n "${BACKUP_DS_ID}" ]]; then
+    oneBackupDsInfo "${BACKUP_DS_ID}"
+    if [[ "${BACKUP_DS_MAD}" == "storpool" ]]; then
+        BACKUP_NATIVE=1
+        SP_BACKUP_MODE="$(oneBackupModeName)"
+        splog "[I] VM ${VM_ID} ${SP_BACKUP_MODE} backup to the StorPool backup datastore ${BACKUP_DS_ID}${SP_BACKUP_LOCATION:+ (${SP_BACKUP_LOCATION})}"
+    fi
+fi
+# oned runs this file as prebackup_live only while the guest is up.
+# A POWEROFF backup has no domain, so FS_FREEZE is not applied.
+BACKUP_LIVE=0
+if [[ "${0##*/}" == "prebackup_live" ]]; then
+    BACKUP_LIVE=1
+fi
+
+if [[ ${BACKUP_INTERACTIVE} -eq 1 ]] || [[ ${BACKUP_NATIVE} -eq 1 ]]; then
     if [[ "${BACKUP_MODE^^}" == "INCREMENT" ]]; then
-        msg="Interactive backup of VM ${VM_ID}: only full backups are supported on StorPool (MODE=${BACKUP_MODE})"
+        msg="Backup of VM ${VM_ID}: only full backups are supported on StorPool (MODE=${BACKUP_MODE})"
         splog "${msg}"
         error_message "${msg}"
         exit 1
@@ -83,21 +200,44 @@ if [[ -d "${B_LOCAL}" ]]; then
     rm -rf "${B_LOCAL}"
     splog "[I] pre-clean completed ($?)"
 fi
-# oned runs one backup of a VM at a time: every backup snapshot of the VM is a leftover
+# oned runs one backup of a VM at a time: every file-based backup snapshot (bak) of the VM
+# is a leftover, and so is a native one (bkp) whose epoch is in no backup image SOURCE
+REGISTERED_EPOCHS=" "
+while read -r rEpoch _; do
+    [[ -n "${rEpoch}" ]] || continue
+    REGISTERED_EPOCHS+="${rEpoch} "
+done < <(oneBackupRegistered "${VM_ID}")
 if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList >/dev/null; then
-    while read -r -u "${spfh}" sName sBak; do
+    while read -r -u "${spfh}" sName sBak sBkp sGid; do
+        if [[ "${sBkp}" != "-" ]]; then
+            [[ "${REGISTERED_EPOCHS}" != *" ${sBkp} "* ]] || continue
+            splog "[I] Removing the leftover backup snapshot ${sName} (~${sGid}, epoch ${sBkp})"
+            storpoolBackupSnapshotDrop "${sGid}"
+            oneBackupKvDel "${VM_ID}" "${sBkp}"
+            continue
+        fi
         splog "[I] Removing the leftover backup snapshot ${sName} (${sBak})"
         json="{\"snapshot\":\"${sName}\",\"detach\":\"all\",\"force\":true}"
         DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesReassignWait "\"reassign\":[${json}]"
         SKIP_KV_DATA=1 storpoolSnapshotDelete "${sName}"
     done {spfh}< <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${VM_ID}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
         '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
-         | select(.deleted==false and .tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bak // "")!="" and .tags.snap==null)
-         | "\(.name) \(.tags.bak)"' "${TMPDIR}/SnapshotsList.json" || true)
+         | select(.deleted==false and .tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and ((.tags.bak // "")!="" or (.tags.bkp // "")!="") and .tags.snap==null)
+         | "\(.name) \(.tags.bak // "-") \(.tags.bkp // "-") \(.globalId)"' "${TMPDIR}/SnapshotsList.json" || true)
     exec {spfh}<&-
 else
     splog "[W] SnapshotsList failed ($?), leftover backup snapshots of VM ${VM_ID} are not cleaned"
 fi
+declare -A kvEpochs
+while read -r kEpoch _; do
+    [[ -n "${kEpoch}" ]] || continue
+    [[ "${REGISTERED_EPOCHS}" != *" ${kEpoch} "* ]] || continue
+    kvEpochs["${kEpoch}"]=1
+done < <(oneBackupKvFamily "${VM_ID}")
+for kEpoch in "${!kvEpochs[@]}"; do
+    splog "[I] Removing the KV backup index of VM ${VM_ID} epoch ${kEpoch} (no backup image)"
+    oneBackupKvDel "${VM_ID}" "${kEpoch}"
+done
 oneBackupRemoveDir "${KVMHOST}" "${B_DISK_DIR}"
 if [[ "${B_HOST}:${B_DIR}" != "${KVMHOST}:${B_DISK_DIR}" ]]; then
     oneBackupRemoveDir "${B_HOST}" "${B_DIR}"
@@ -108,6 +248,11 @@ splog "mkdir -p ${B_LOCAL}"
 
 base64 -w 60 "${VM_XML}" >"${B_LOCAL}/vm.xml"
 splog "base64 ${VM_XML} to ${B_LOCAL}/vm.xml ($?)"
+
+NVRAM_PATH=""
+if [[ ${BACKUP_NATIVE} -eq 1 ]]; then
+    NVRAM_PATH="$(oneBackupNvramPath "${VM_XML}" "${VMDIR}")"
+fi
 
 rm -f "${VM_XML}"
 trapDel "rm -f \"${VM_XML}\""
@@ -126,7 +271,7 @@ for disk in ${vmOtherDisks}; do
     fi
 done
 if [[ -n "${otherDisks}" ]]; then
-    if [[ ${BACKUP_INTERACTIVE} -eq 0 ]] && boolTrue "BACKUP_SKIP_OTHER_DISKS"; then
+    if [[ ${BACKUP_INTERACTIVE} -eq 0 ]] && [[ ${BACKUP_NATIVE} -eq 0 ]] && boolTrue "BACKUP_SKIP_OTHER_DISKS"; then
         splog "[W] VM ${VM_ID} backup skips the non-StorPool disks (${otherDisks% })"
     else
         msg="Backup of a VM with non-StorPool disks is not supported! (${otherDisks% })"
@@ -137,6 +282,102 @@ if [[ -n "${otherDisks}" ]]; then
 fi
 
 B_SUFFIX="ONEBACKUP-$(date +%s || true)"
+if [[ ${BACKUP_NATIVE} -eq 1 ]]; then
+    B_EPOCH="${B_SUFFIX#ONEBACKUP-}"
+    SVC_VOL="${ONE_PX}-sys-${VM_ID}-SVC-${B_EPOCH}"
+    SVC_UID=""
+    # vm.xml is in the service tar for every StorPool backup. vTPM state and a
+    # file NVRAM are added when the VM has them.
+    backupServiceVolume
+    json_volumes=""
+    group_uids=""
+    declare -A didByUid
+    for map in ${vmDisksMap}; do
+        img="${map%:*}"
+        did="${map#*:}"
+        [[ -n "${did}" ]] || continue
+        [[ -n "${D_ARR["${did}"]}" ]] || continue
+        kvGetUid "${img}" fatal
+        tags=$(tagsHelper "${VM_TAG};${LOC_TAG};virt;img;diskid;bkp" "${VM_ID};${LOC_TAG_VAL};one;${img};${did};${B_EPOCH}")
+        json_volumes+="${json_volumes:+,}{\"volume\":\"${SP_UID}\",\"tags\":{${tags}},\"name\":\"\"}"
+        group_uids+="${group_uids:+,}\"${SP_UID}\""
+        didByUid["${SP_UID}"]="${did}"
+    done
+    if [[ -n "${T_OS_NVRAM}" ]]; then
+        img="${ONE_PX}-sys-${VM_ID}-NVRAM"
+        kvGetUid "${img}" fatal
+        tags=$(tagsHelper "${VM_TAG};${LOC_TAG};virt;img;diskid;bkp" "${VM_ID};${LOC_TAG_VAL};one;${img};nvram;${B_EPOCH}")
+        json_volumes+="${json_volumes:+,}{\"volume\":\"${SP_UID}\",\"tags\":{${tags}},\"name\":\"\"}"
+        group_uids+="${group_uids:+,}\"${SP_UID}\""
+        didByUid["${SP_UID}"]="nvram"
+    fi
+    if [[ -n "${SVC_UID}" ]]; then
+        tags=$(tagsHelper "${VM_TAG};${LOC_TAG};virt;img;diskid;bkp" "${VM_ID};${LOC_TAG_VAL};one;${SVC_VOL};svc;${B_EPOCH}")
+        json_volumes+="${json_volumes:+,}{\"volume\":\"${SVC_UID}\",\"tags\":{${tags}},\"name\":\"\"}"
+        group_uids+="${group_uids:+,}\"${SVC_UID}\""
+        didByUid["${SVC_UID}"]="svc"
+    fi
+    if [[ -z "${json_volumes}" ]]; then
+        msg="VM ${VM_ID} has no StorPool disk to back up (DISKS='${DISKS}')"
+        splog "[E] ${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
+    if [[ ${BACKUP_LIVE} -eq 1 ]]; then
+        oneBackupConsistencyBegin "${KVMHOST}" "${DEPLOY_ID}" "${BACKUP_FS_FREEZE-}"
+    fi
+    if [[ "${SP_BACKUP_MODE}" == "remote" ]]; then
+        tags=$(tagsHelper "bkp;${VM_TAG};${LOC_TAG};virt" "${B_EPOCH};${VM_ID};${LOC_TAG_VAL};one")
+        DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesGroupBackup \
+            "\"volumes\":[${group_uids}],\"location\":\"${SP_BACKUP_LOCATION}\",\"tags\":{${tags}}" >/dev/null
+        ret=$?
+        group_json="${TMPDIR}/VolumesGroupBackup.json"
+    else
+        DO_MULTICLUSTER=1 DO_REMOTE="" storpoolRetry VolumesGroupSnapshot "\"volumes\":[${json_volumes}]" >/dev/null
+        ret=$?
+        group_json="${TMPDIR}/VolumesGroupSnapshot.json"
+    fi
+    if [[ ${BACKUP_LIVE} -eq 1 ]]; then
+        oneBackupConsistencyEnd "${KVMHOST}" "${DEPLOY_ID}"
+    fi
+    if [[ ${ret} -ne 0 ]]; then
+        msg="Error creating the ${SP_BACKUP_MODE} backup snapshots of VM ${VM_ID} (${ret})"
+        splog "[E] ${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
+    entries=""
+    if [[ "${SP_BACKUP_MODE}" == "remote" ]]; then
+        while read -r -u "${xfh}" uid rid; do
+            [[ -n "${uid}" && -n "${didByUid[${uid}]:-}" ]] || continue
+            entries+="${didByUid[${uid}]}=~${rid} "
+        done {xfh}< <(jq -r '.data.backups|to_entries[]|"\(.key) \(.value.remoteId)"' "${group_json}" || true)
+    else
+        while read -r -u "${xfh}" uid gid; do
+            [[ -n "${uid}" && -n "${didByUid[${uid}]:-}" ]] || continue
+            entries+="${didByUid[${uid}]}=~${gid} "
+        done {xfh}< <(jq -r '.data.snapshots[]|"\(.volume) \(.snapshotGlobalId)"' "${group_json}" || true)
+    fi
+    exec {xfh}<&-
+    if [[ $(wc -w <<< "${entries}") -ne ${#didByUid[*]} ]]; then
+        msg="VM ${VM_ID} ${SP_BACKUP_MODE} backup epoch ${B_EPOCH}: ${#didByUid[*]} volumes sent, snapshots of '${entries}' returned"
+        splog "[E] ${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
+    oneBackupKvPut "${VM_ID}" "${B_EPOCH}" "${SP_BACKUP_MODE}" "${SVC_UID:--}" "${entries}"
+    splog "[I] VM ${VM_ID} ${SP_BACKUP_MODE} backup epoch ${B_EPOCH}${SP_BACKUP_LOCATION:+ to ${SP_BACKUP_LOCATION}}: ${entries}"
+    if [[ -n "${SVC_UID}" ]]; then
+        trapDel "backupServiceVolumeDrop"
+        if backupServiceVolumeDrop; then
+            SVC_UID=""
+        else
+            splog "[W] VM ${VM_ID} service volume ${SVC_UID} (${SVC_VOL}) not deleted ($?), the backup datastore action retries"
+        fi
+    fi
+    splog "END ${VM_ID} (StorPool backup datastore ${BACKUP_DS_ID})"
+    exit 0
+fi
 echo "${B_SUFFIX}" >"${B_LOCAL}/.snapshot_suffix"
 declare -a list_a
 backups=
@@ -160,12 +401,6 @@ for map in ${vmDisksMap}; do
     fi
 done
 json="\"volumes\":[${json_volumes}]"
-# oned runs this file as prebackup_live only while the guest is up.
-# A POWEROFF backup has no domain, so FS_FREEZE is not applied.
-BACKUP_LIVE=0
-if [[ "${0##*/}" == "prebackup_live" ]]; then
-    BACKUP_LIVE=1
-fi
 if [[ ${BACKUP_LIVE} -eq 1 ]]; then
     oneBackupConsistencyBegin "${KVMHOST}" "${DEPLOY_ID}" "${BACKUP_FS_FREEZE-}"
 fi

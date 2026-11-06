@@ -59,7 +59,51 @@ cat > "${VM_XML}"
 
 oneBackupTarget "${KVMHOST}" "${VMDIR}" "${VM_ID}" "${VM_XML}"
 
-if [[ -d "${B_LOCAL}" ]]; then
+oneVmVolumes "${VM_ID}" "" "${VM_XML}" "${DISKS}"
+
+BACKUP_NATIVE=0
+SP_BACKUP_MODE=""
+if [[ -n "${BACKUP_DS_ID}" ]]; then
+    oneBackupDsInfo "${BACKUP_DS_ID}"
+    if [[ "${BACKUP_DS_MAD}" == "storpool" ]]; then
+        BACKUP_NATIVE=1
+        SP_BACKUP_MODE="$(oneBackupModeName)"
+    fi
+fi
+
+if [[ ${BACKUP_NATIVE} -eq 1 ]]; then
+    if [[ -d "${B_LOCAL}" ]]; then
+        splog "[I] VM ${VM_ID} ${SP_BACKUP_MODE} backup not handed over, dropping the backup in progress"
+        if oneBackupInflight "${VM_ID}" "${SP_BACKUP_MODE}" "${DISKS}" "${BACKUP_DROP_WAIT:-30}"; then
+            for did in "${!BI_IDS_A[@]}"; do
+                sId="${BI_IDS_A[${did}]}"
+                if [[ "${SP_BACKUP_MODE}" == "remote" ]]; then
+                    splog "[I] VM ${VM_ID} epoch ${BI_EPOCH} ${did}: dropping the transient ~${sId} and its copy"
+                    storpoolBackupSnapshotDrop "${sId}"
+                    bLoc="$(storpoolRemoteCopies "${sId}" | awk '{print $2}' | head -n 1 || true)"
+                    storpoolBackupCopyDrop "${sId}" "${bLoc:-${SP_BACKUP_LOCATION}}"
+                else
+                    splog "[I] VM ${VM_ID} epoch ${BI_EPOCH} ${did}: dropping the snapshot ~${sId}"
+                    storpoolBackupSnapshotDrop "${sId}"
+                fi
+            done
+            if [[ "${BI_SVC_UID}" != "-" ]] && [[ -n "${BI_SVC_UID}" ]]; then
+                DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${BI_SVC_UID}" "force"
+            fi
+            oneBackupKvDel "${VM_ID}" "${BI_EPOCH}"
+        else
+            splog "[W] VM ${VM_ID} no backup in progress found to drop"
+        fi
+        for sUid in $(oneBackupSvcVolumes "${VM_ID}"); do
+            splog "[I] VM ${VM_ID} dropping the service volume ${sUid}"
+            DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${sUid}" "force"
+        done
+        rm -rf "${B_LOCAL}"
+        splog "[I] post-clean completed ($?)"
+    else
+        splog "[I] VM ${VM_ID} backup handed over, nothing to drop"
+    fi
+elif [[ -d "${B_LOCAL}" ]]; then
     splog "[I] post-clean ${B_LOCAL} ..."
     snapshots_list="${B_LOCAL}/.storpool_snapshots"
     if [[ -f ${snapshots_list} ]]; then

@@ -63,6 +63,14 @@ if [[ ${DRV_ACTION:0:6} == "system" ]]; then
 else
 	SP_TEMPLATE_STATUS_PATH="${SP_TEMPLATE_STATUS_PATH_IMAGE:-${SP_TEMPLATE_STATUS_PATH}}"
 	oneDsDriverAction
+	if [[ "${DATASTORE_TYPE}" == "3" ]]; then
+		# the snapshots of a backup datastore are charged on the templates of the image and system datastores
+		echo "USED_MB=0"
+		echo "TOTAL_MB=0"
+		echo "FREE_MB=0"
+		splog "[I] DS ${DS_ID} BACKUP_DS END (zeros)"
+		exit 0
+	fi
 	if [[ -n "${CLUSTERS_ID}" ]]; then
 		read -r -a CLUSTERS_ID_ARRAY <<< "${CLUSTERS_ID}"
 		CLUSTER_ID="${CLUSTERS_ID_ARRAY[0]}"
