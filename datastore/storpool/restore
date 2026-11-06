@@ -1,1 +1,192 @@
-backup
+#!/usr/bin/env ruby
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2025, StorPool (storpool.com)                               #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+ONE_LOCATION = ENV['ONE_LOCATION']
+
+if !ONE_LOCATION
+    RUBY_LIB_LOCATION = '/usr/lib/one/ruby'
+    GEMS_LOCATION     = '/usr/share/one/gems'
+    VAR_LOCATION      = '/var/lib/one'
+else
+    RUBY_LIB_LOCATION = ONE_LOCATION + '/lib/ruby'
+    GEMS_LOCATION     = ONE_LOCATION + '/share/gems'
+    VAR_LOCATION      = ONE_LOCATION + '/var'
+end
+
+SERVERADMIN_AUTH = VAR_LOCATION + '/.one/onegate_auth'
+
+# %%RUBYGEMS_SETUP_BEGIN%%
+require 'load_opennebula_paths'
+# %%RUBYGEMS_SETUP_END%%
+
+$LOAD_PATH << RUBY_LIB_LOCATION
+
+require 'base64'
+require 'opennebula'
+require 'opennebula/server_cipher_auth'
+require 'rexml/document'
+
+require_relative '../../tm/lib/backup'
+
+def fail_with(msg)
+    STDERR.puts msg
+    exit(-1)
+end
+
+# ------------------------------------------------------------------------------
+# The backup: SOURCE manifest, vm.xml and svc.tar of the manifest directory
+# ------------------------------------------------------------------------------
+daction64   = STDIN.read
+_request_id = ARGV[0]
+
+begin
+    action = Base64.decode64 daction64
+
+    image = TransferManager::BackupImage.new(action)
+
+    xml = REXML::Document.new(action).root
+
+    ds_id     = xml.elements['DATASTORE/ID'].text.to_i
+    base_path = xml.elements['DATASTORE/BASE_PATH'].text
+    source    = xml.elements['IMAGE/SOURCE'].text
+    username  = xml.elements['TEMPLATE/USERNAME'].text
+    dst_ds_id = xml.elements['DESTINATION_DS_ID'].text.to_i
+rescue StandardError => e
+    fail_with "Missing datastore or image attributes: #{e.message}"
+end
+
+m = source.match(/\A(?<loc>[^:\s]+):(?<vm>\d+):(?<epoch>\d+):(?<entries>[^:\s]+)\z/)
+fail_with "Not a StorPool backup SOURCE: #{source}" unless m
+
+ids = {}
+m[:entries].split(',').each do |e|
+    k, v = e.split('=', 2)
+    fail_with "Bad entry '#{e}' in the backup SOURCE #{source}" if k.nil? || k.empty? || v.nil? || v.empty?
+
+    ids[k] = v
+end
+
+prefix  = m[:loc] == 'local' ? 'SPSNAPSHOT:~' : "SPREMOTE:#{m[:loc]}:~"
+bdir    = "#{base_path}/#{m[:vm]}/#{m[:epoch]}"
+vm_path = "#{bdir}/vm.xml"
+svc_tar = "#{bdir}/svc.tar"
+
+unless File.file?(vm_path)
+    if ids['svc']
+        fail_with "#{vm_path} is missing: rebuild the directory from the service snapshot ~#{ids['svc']} " \
+                  'with misc/svc_extract.sh'
+    end
+
+    fail_with "#{vm_path} is missing and the backup #{source} has no service snapshot to rebuild it from"
+end
+
+if ids['svc'] && !File.file?(svc_tar)
+    fail_with "#{svc_tar} is missing: rebuild it from the service snapshot ~#{ids['svc']} with misc/svc_extract.sh"
+end
+
+vm_xml64 = File.read(vm_path)
+
+disk_ids = ids.keys.reject {|k| ['nvram', 'svc'].include?(k) }.sort_by(&:to_i)
+fail_with "The backup #{source} lists no disk" if disk_ids.empty?
+
+# ------------------------------------------------------------------------------
+# An OpenNebula client impersonating the target user; the destination must be a StorPool image datastore
+# ------------------------------------------------------------------------------
+ENV['ONE_CIPHER_AUTH'] = SERVERADMIN_AUTH
+
+sauth = OpenNebula::ServerCipherAuth.new_client
+token = sauth.login_token(Time.now.to_i + 120, username)
+
+one_client = OpenNebula::Client.new token
+
+dst_ds = OpenNebula::Datastore.new_with_id(dst_ds_id, one_client)
+rc     = dst_ds.info
+fail_with "Cannot read the destination datastore #{dst_ds_id}: #{rc.message}" if OpenNebula.is_error?(rc)
+
+ds_mad = dst_ds['DS_MAD']
+fail_with "The destination datastore #{dst_ds_id} uses #{ds_mad}, a StorPool image datastore is required" \
+    unless ds_mad == 'storpool'
+
+# ------------------------------------------------------------------------------
+# Image and VM templates
+# ------------------------------------------------------------------------------
+xml.define_singleton_method('[]') {|xpath| elements[xpath].text }
+
+restorer = TransferManager::BackupRestore.new(
+    :vm_xml64  => vm_xml64,
+    :backup_id => m[:epoch],
+    :bimage    => image,
+    :ds_id     => ds_id,
+    :txml      => xml,
+    :proto     => 'storpool'
+)
+
+br_disks = restorer.disk_images(disk_ids.map {|d| "disk.#{d}" })
+
+br_disks.each do |id, disk|
+    disk[:template].sub!(/^PATH = ".*"$/, %(PATH = "#{prefix}#{ids[id]}"))
+    disk[:template] << %(FORMAT = "raw"\n)
+end
+
+one_error       = ''
+restored_images = []
+
+br_disks.each do |_id, disk|
+    restored_image = OpenNebula::Image.new OpenNebula::Image.build_xml, one_client
+    rc             = restored_image.allocate disk[:template], dst_ds_id
+
+    if OpenNebula.is_error?(rc)
+        one_error = rc.message
+        break
+    end
+
+    disk[:image_id] = restored_image.id
+    restored_images << restored_image.id
+end
+
+if !one_error.empty?
+    message = "Error restoring disk image: #{one_error}"
+    message << " The following images were restored: #{restored_images.join(' ')}" unless restored_images.empty?
+    fail_with message
+end
+
+vm_template = restorer.vm_template br_disks
+
+tmpl_id = -1
+
+unless vm_template.nil?
+    if ids['svc']
+        tpm = IO.popen(['tar', '-xOf', svc_tar, 'disk.tpm.0'], :err => File::NULL, &:read)
+        vm_template << "TPM_STATE = \"#{Base64.strict_encode64(tpm)}\"\n" if $?.success? && !tpm.empty?
+    end
+
+    tmpl = OpenNebula::Template.new OpenNebula::Template.build_xml, one_client
+    rc   = tmpl.allocate vm_template
+
+    if OpenNebula.is_error?(rc)
+        message = "Error creating VM template: #{rc.message}"
+        message << " The following images were restored: #{restored_images.join(' ')}" unless restored_images.empty?
+        fail_with message
+    end
+
+    tmpl_id = tmpl.id
+end
+
+STDOUT.puts "#{tmpl_id} #{restored_images.join(' ')}"
+
+exit(0)

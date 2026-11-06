@@ -4944,11 +4944,11 @@ function oneBackupKvPut()
         ETCDCTL_API=3 etcdctl put -- "${_key}" "${_e#*=}" >/dev/null || _ret=$?
     done
     _key="$(oneBackupKvKey "${_vm}" "${_epoch}")"
-    ETCDCTL_API=3 etcdctl put -- "${_key}" "mode=${_mode} svc=${_svc}" >/dev/null || _ret=$?
+    ETCDCTL_API=3 etcdctl put -- "${_key}" "mode=${_mode} svc=${_svc} loc=${SP_BACKUP_LOCATION:--}" >/dev/null || _ret=$?
     if [[ ${_ret} -ne 0 ]]; then
         splog "[W] KV backup index of VM ${_vm} epoch ${_epoch} not written (${_ret})"
     elif boolTrue "DEBUG_BACKUP"; then
-        splog "[D] KV backup index of VM ${_vm} epoch ${_epoch}: mode=${_mode} svc=${_svc} ${_entries}"
+        splog "[D] KV backup index of VM ${_vm} epoch ${_epoch}: mode=${_mode} svc=${_svc} loc=${SP_BACKUP_LOCATION:--} ${_entries}"
     fi
     return "${_ret}"
 }
@@ -4967,7 +4967,20 @@ function oneBackupKvDel()
     return "${_ret}"
 }
 
-# oneBackupKvFamily VM_ID -> lines "epoch did ~id" and "epoch - mode=<m> svc=<uid|->"
+# oneBackupKvField "mode=<m> svc=<uid|-> loc=<location|->" KEY -> the value of KEY ("-" when absent)
+function oneBackupKvField()
+{
+    local _record="$1" _key="$2" _kv=""
+    for _kv in ${_record}; do
+        if [[ "${_kv%%=*}" == "${_key}" ]]; then
+            echo "${_kv#*=}"
+            return 0
+        fi
+    done
+    echo "-"
+}
+
+# oneBackupKvFamily VM_ID -> lines "epoch did ~id" and "epoch - mode=<m> svc=<uid|-> loc=<location|->"
 function oneBackupKvFamily()
 {
     local _vm="$1" _key="" _val="" _rest="" _epoch="" _did="" kvfh=""
@@ -5014,7 +5027,11 @@ function storpoolBackupTargetKind()
         _cluster_loc="$(jq -r --arg n "${_loc}" '[.data.clusters[]|select(.name==$n)|.location]|first // empty' "${TMPDIR}/ClustersList.json" 2>/dev/null || true)"
         if [[ -n "${_cluster_loc}" ]]; then
             _own="$(storpoolLocalClusterId)"
-            _own="$(jq -r --arg id "${_own%%.*}" '[.data.clusters[]|select(.id==$id)|.location]|first // empty' "${TMPDIR}/ClustersList.json" 2>/dev/null || true)"
+            if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry LocationsList >/dev/null; then
+                _own="$(jq -r --arg id "${_own%%.*}" '[.data.locations[]|select(.id==$id)|.name]|first // empty' "${TMPDIR}/LocationsList.json" 2>/dev/null || true)"
+            else
+                _own=""
+            fi
             if [[ -n "${_own}" ]] && [[ "${_cluster_loc}" == "${_own}" ]]; then
                 echo "cluster"
             else
@@ -5041,6 +5058,26 @@ function storpoolRemoteCopies()
     for _id in ${_ids}; do
         jq -r --arg g "${_id#\~}" '.data.snapshots[]|select(.remoteId==$g)|"\(.remoteId) \(.location) \(.size|tostring) \(.createdFromGlobalId // "-") \(.tags.bkp // "-")"' \
             "${TMPDIR}/SnapshotsRemoteList.json" 2>/dev/null | head -n 1 || true
+    done
+}
+
+# storpoolRemoteCopiesWait "remoteId ..." TIMEOUT: every copy is listed by SnapshotsRemoteList (a second or two after the group call)
+function storpoolRemoteCopiesWait()
+{
+    local _ids="$1" _timeout="${2:-30}" _start=0 _listed=0 _id=""
+    _start="$(date +%s || true)"
+    while true; do
+        _listed=0
+        while read -r _id _; do
+            [[ -n "${_id}" ]] || continue
+            _listed=$((_listed + 1))
+        done < <(storpoolRemoteCopies "${_ids}")
+        [[ ${_listed} -lt $(wc -w <<< "${_ids}") ]] || return 0
+        if [[ $(( $(date +%s || true) - _start )) -ge ${_timeout} ]]; then
+            splog "[W] ${_listed} of $(wc -w <<< "${_ids}") copies listed by SnapshotsRemoteList after ${_timeout}s"
+            return 1
+        fi
+        sleep "${BACKUP_WAIT_SLEEP:-3}"
     done
 }
 
@@ -5099,7 +5136,8 @@ function oneBackupInflight()
     BI_EPOCH=""
     BI_FROM=""
     BI_SVC_UID="-"
-    export BI_EPOCH BI_FROM BI_SVC_UID
+    BI_LOCATION=""
+    export BI_EPOCH BI_FROM BI_SVC_UID BI_LOCATION
     while read -r _epoch _img _src; do
         [[ -n "${_epoch}" ]] || continue
         _registered+="${_epoch} "
@@ -5119,8 +5157,9 @@ function oneBackupInflight()
             while read -r _epoch _did _val; do
                 [[ "${_epoch}" == "${_best}" ]] || continue
                 if [[ "${_did}" == "-" ]]; then
-                    _val="${_val#*svc=}"
-                    BI_SVC_UID="${_val%% *}"
+                    BI_LOCATION="$(oneBackupKvField "${_val}" loc)"
+                    [[ "${BI_LOCATION}" != "-" ]] || BI_LOCATION=""
+                    BI_SVC_UID="$(oneBackupKvField "${_val}" svc)"
                 else
                     BI_IDS_A["${_did}"]="${_val#\~}"
                 fi
@@ -5276,16 +5315,25 @@ function storpoolBackupSnapshotGone()
 # storpoolBackupCopyDrop REMOTE_ID LOCATION: remove the copy of a backup on its target, per the kind of SP_BACKUP_LOCATION
 function storpoolBackupCopyDrop()
 {
-    local _rid="${1#\~}" _loc="$2" _kind="" _copy="" _json="" _ret=0
+    local _rid="${1#\~}" _loc="$2" _kind="" _copy="" _json="" _ret=0 _start=0
     _kind="$(storpoolBackupTargetKind "${SP_BACKUP_LOCATION}")"
     case "${_kind}" in
         cluster)
-            DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null || return $?
-            _copy="$(jq -r --arg g "${_rid}" '[.data[]|select(.backupOfGlobalId==$g)|.globalId]|first // empty' "${TMPDIR}/SnapshotsList.json" 2>/dev/null || true)"
-            if [[ -z "${_copy}" ]]; then
-                splog "[I] no copy of ~${_rid} on ${SP_BACKUP_LOCATION}"
-                return 0
-            fi
+            _start="$(date +%s || true)"
+            while true; do
+                DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null || return $?
+                _copy="$(jq -r --arg g "${_rid}" '[.data[]|select(.backupOfGlobalId==$g)|.globalId]|first // empty' "${TMPDIR}/SnapshotsList.json" 2>/dev/null || true)"
+                [[ -z "${_copy}" ]] || break
+                if [[ -z "$(storpoolRemoteCopies "${_rid}")" ]]; then
+                    splog "[I] no copy of ~${_rid} on ${SP_BACKUP_LOCATION}"
+                    return 0
+                fi
+                if [[ $(( $(date +%s || true) - _start )) -ge ${BACKUP_DROP_WAIT:-30} ]]; then
+                    splog "[E] a copy of ~${_rid} is listed by SnapshotsRemoteList but none on ${SP_BACKUP_LOCATION} has backupOfGlobalId ${_rid}"
+                    return 1
+                fi
+                sleep "${BACKUP_WAIT_SLEEP:-3}"
+            done
             DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotUnexport \
                 "\"snapshot\":\"~${_copy}\",\"all\":true,\"force\":true" >/dev/null || true
             DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotDelete "~${_copy}" >/dev/null
@@ -5374,12 +5422,76 @@ function spBackupPullTemplate()
     echo "${_name}"
 }
 
+# A pulled snapshot (SnapshotFromRemote) is not visible to the MultiCluster API calls (probe item 21): plain calls only
+# storpoolPulledSnapshotInfo UID -> X_SIZE X_GLOBALID X_NAME X_TEMPLATENAME X_RECOVERING
+function storpoolPulledSnapshotInfo()
+{
+    local _uid="$1" _ret=1
+    unset X_NAME X_SIZE X_GLOBALID X_TEMPLATENAME X_RECOVERING
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry Snapshot "${_uid}" >/dev/null
+    _ret=$?
+    if [[ ${_ret} -eq 0 ]]; then
+        IFS=';' read -r X_SIZE X_GLOBALID X_NAME X_TEMPLATENAME X_RECOVERING <<< "$(jq -r \
+            '.data[]|"\(.size|tostring);\(.globalId);\(.name);\(.templateName);\(.recoveringFromRemote)"' "${TMPDIR}/Snapshot.json" || true)"
+        export X_SIZE X_GLOBALID X_NAME X_TEMPLATENAME X_RECOVERING
+    fi
+    return "${_ret}"
+}
+
+# storpoolVolumeFromPulledSnapshot SNAPSHOT_UID VOLUME TEMPLATE "tagkeys" "tagvals": a plain VolumeCreate with parent, registered in the KV
+function storpoolVolumeFromPulledSnapshot()
+{
+    local _snap="$1" _vol="$2" _template="$3"
+    local _tag_k="${4:-img;${LOC_TAG};virt}" _tag_v="${5:-${_vol};${LOC_TAG_VAL};one}"
+    local _tags="" _json="" _ret=1
+    _tags="$(tagsHelper "${_tag_k}" "${_tag_v}")"
+    _json="\"parent\":\"${_snap}\",\"tags\":{${_tags}}"
+    [[ -z "${_template}" ]] || _json+=",\"template\":\"${_template}\""
+    SP_UID="$(DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry VolumeCreate "${_json}")"
+    _ret=$?
+    export SP_UID
+    splog "[I] pulled snapshot ${_snap} -> created volume ${SP_UID} ${_vol} (${_ret})"
+    if [[ ${_ret} -eq 0 ]] && [[ -z "${SP_UID}" || "${SP_UID}" == "null" ]]; then
+        SP_UID=""
+        _ret=1
+    fi
+    if [[ ${_ret} -eq 0 ]]; then
+        kvPut "${_vol}" "${SP_UID}" || _ret=$?
+    fi
+    return "${_ret}"
+}
+
+# storpoolPulledSnapshotDrop UID: plain SnapshotDelete, a missing one tolerated
+function storpoolPulledSnapshotDrop()
+{
+    local _uid="$1" _ret=0
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotDelete "${_uid}" >/dev/null
+    _ret=$?
+    [[ ${_ret} -ne 2 ]] || _ret=0
+    if [[ ${_ret} -ne 0 ]]; then
+        splog "[W] pulled snapshot ${_uid} not deleted (${_ret})"
+    fi
+    return "${_ret}"
+}
+
 # storpoolSnapshotPullRemote NAME REMOTE_ID LOCATION TEMPLATE "tagkeys" "tagvals": SnapshotFromRemote, then wait until recovered; SP_UID is set
 function storpoolSnapshotPullRemote()
 {
     local _name="$1" _rid="${2#\~}" _loc="$3" _template="$4" _tag_key="$5" _tag_val="$6"
-    local _json="" _tags="" _state="" _ret=1 _gid=""
+    local _json="" _tags="" _state="" _ret=1 _gid="" _start=0 _local=""
     SP_UID=""
+    SP_PULL_REUSED=""
+    export SP_PULL_REUSED
+    if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
+        _local="$(jq -r --arg g "${_rid}" '[.data.snapshots[]|select(.remoteId==$g)|.localSnapshot // empty]|first // empty' "${TMPDIR}/SnapshotsRemoteList.json" 2>/dev/null || true)"
+        if [[ -n "${_local}" ]] && storpoolPulledSnapshotInfo "~${_rid}" && [[ "${X_RECOVERING}" == "false" ]]; then
+            SP_UID="~${_rid}"
+            SP_PULL_REUSED=1
+            export SP_UID
+            splog "[I] ${_rid} from ${_loc} is already pulled as ${X_NAME}, reusing it"
+            return 0
+        fi
+    fi
     _tags="$(tagsHelper "${_tag_key}" "${_tag_val}")"
     _json="\"remoteId\":\"${_rid}\",\"remoteLocation\":\"${_loc}\",\"name\":\"${_name}\",\"template\":\"${_template}\"${_tags:+,\"tags\":{${_tags}}}"
     DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 storpoolRetry SnapshotFromRemote "${_json}" >/dev/null
@@ -5389,20 +5501,24 @@ function storpoolSnapshotPullRemote()
         return "${_ret}"
     fi
     _gid="$(jq -r '.data.globalId // empty' "${TMPDIR}/SnapshotFromRemote.json" 2>/dev/null || true)"
+    _gid="${_gid:-${_rid}}"
+    _start="$(date +%s || true)"
     while true; do
-        if DO_MULTICLUSTER=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry Snapshot "${_name}" >/dev/null; then
+        _state=""
+        if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_gid}" >/dev/null; then
             _state="$(jq -r '.data[0].recoveringFromRemote' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
-            if [[ "${_state}" == "false" ]]; then
-                _gid="$(jq -r '.data[0].globalId' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
-                break
-            fi
+            [[ "${_state}" != "false" ]] || break
+            _start="$(date +%s || true)"
+        elif [[ $(( $(date +%s || true) - _start )) -ge ${BACKUP_PULL_GRACE:-120} ]]; then
+            splog "[E] pull of ${_rid} from ${_loc} as ${_name}: snapshot ~${_gid} not found for ${BACKUP_PULL_GRACE:-120}s after SnapshotFromRemote"
+            return 1
         fi
         if boolTrue "DEBUG_BACKUP"; then
-            splog "[D] pull of ${_rid} from ${_loc} as ${_name}: recoveringFromRemote=${_state}"
+            splog "[D] pull of ${_rid} from ${_loc} as ${_name} (~${_gid}): recoveringFromRemote=${_state:-not listed}"
         fi
         sleep "${BACKUP_WAIT_SLEEP:-3}"
     done
-    SP_UID="~${_gid:-${_rid}}"
+    SP_UID="~${_gid}"
     export SP_UID
     splog "[I] pulled ${_rid} from ${_loc} as ${_name} (${SP_UID}) on template ${_template}"
     return 0

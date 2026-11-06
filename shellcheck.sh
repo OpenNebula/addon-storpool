@@ -42,7 +42,7 @@ for _file in "${_candidates[@]}"; do
     [[ -f "${_file}" ]] || continue
     [[ "${_file}" == *.py ]] && continue
     _shebang="$(head -n 1 -- "${_file}" || true)"
-    [[ "${_shebang}" == *python* ]] && continue
+    [[ "${_shebang}" == *python* || "${_shebang}" == *ruby* ]] && continue
     _real="$(realpath -- "${_file}")"
     [[ -v "_seen[${_real}]" ]] && continue
     _seen["${_real}"]=1

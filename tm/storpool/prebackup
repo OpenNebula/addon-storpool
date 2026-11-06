@@ -201,19 +201,44 @@ if [[ -d "${B_LOCAL}" ]]; then
     splog "[I] pre-clean completed ($?)"
 fi
 # oned runs one backup of a VM at a time: every file-based backup snapshot (bak) of the VM
-# is a leftover, and so is a native one (bkp) whose epoch is in no backup image SOURCE
+# is a leftover, and so is a native one (bkp) whose epoch is in no backup image SOURCE.
+# A remote-mode leftover (a transient export, or copies on the target) is dropped only
+# when its KV family names the target; otherwise it is left for kvchk, since unexporting
+# the transient would let the copy complete with nothing pointing at it.
 REGISTERED_EPOCHS=" "
 while read -r rEpoch _; do
     [[ -n "${rEpoch}" ]] || continue
     REGISTERED_EPOCHS+="${rEpoch} "
 done < <(oneBackupRegistered "${VM_ID}")
+declare -A kvMode kvLoc kvIds kvDropFailed
+while read -r kEpoch kDid kVal; do
+    [[ -n "${kEpoch}" ]] || continue
+    [[ "${REGISTERED_EPOCHS}" != *" ${kEpoch} "* ]] || continue
+    if [[ "${kDid}" == "-" ]]; then
+        kvMode["${kEpoch}"]="$(oneBackupKvField "${kVal}" mode)"
+        kvLoc["${kEpoch}"]="$(oneBackupKvField "${kVal}" loc)"
+    else
+        kvIds["${kEpoch}"]+="${kVal#\~} "
+    fi
+done < <(oneBackupKvFamily "${VM_ID}")
 if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList >/dev/null; then
-    while read -r -u "${spfh}" sName sBak sBkp sGid; do
+    while read -r -u "${spfh}" sName sBak sBkp sGid sTransient; do
         if [[ "${sBkp}" != "-" ]]; then
             [[ "${REGISTERED_EPOCHS}" != *" ${sBkp} "* ]] || continue
+            if [[ "${sTransient}" == "true" ]]; then
+                sLoc="${kvLoc[${sBkp}]:--}"
+                if [[ "${sLoc}" == "-" ]]; then
+                    splog "[W] VM ${VM_ID} leftover backup export ${sName} (~${sGid}, epoch ${sBkp}) has no KV record of its target, kept for kvchk"
+                    continue
+                fi
+                splog "[I] Removing the leftover backup export ${sName} (~${sGid}, epoch ${sBkp}) and its copy on ${sLoc}"
+                sLocName="$(storpoolRemoteCopies "${sGid}" | awk '{print $2}' | head -n 1 || true)"
+                SP_BACKUP_LOCATION="${sLoc}" storpoolBackupCopyDrop "${sGid}" "${sLocName:-${sLoc}}" || kvDropFailed["${sBkp}"]=1
+                storpoolBackupSnapshotDrop "${sGid}" || kvDropFailed["${sBkp}"]=1
+                continue
+            fi
             splog "[I] Removing the leftover backup snapshot ${sName} (~${sGid}, epoch ${sBkp})"
-            storpoolBackupSnapshotDrop "${sGid}"
-            oneBackupKvDel "${VM_ID}" "${sBkp}"
+            storpoolBackupSnapshotDrop "${sGid}" || kvDropFailed["${sBkp}"]=1
             continue
         fi
         splog "[I] Removing the leftover backup snapshot ${sName} (${sBak})"
@@ -223,20 +248,37 @@ if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList >
     done {spfh}< <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${VM_ID}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
         '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
          | select(.deleted==false and .tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and ((.tags.bak // "")!="" or (.tags.bkp // "")!="") and .tags.snap==null)
-         | "\(.name) \(.tags.bak // "-") \(.tags.bkp // "-") \(.globalId)"' "${TMPDIR}/SnapshotsList.json" || true)
+         | "\(.name) \(.tags.bak // "-") \(.tags.bkp // "-") \(.globalId) \(.transient)"' "${TMPDIR}/SnapshotsList.json" || true)
     exec {spfh}<&-
 else
     splog "[W] SnapshotsList failed ($?), leftover backup snapshots of VM ${VM_ID} are not cleaned"
 fi
-declare -A kvEpochs
-while read -r kEpoch _; do
-    [[ -n "${kEpoch}" ]] || continue
-    [[ "${REGISTERED_EPOCHS}" != *" ${kEpoch} "* ]] || continue
-    kvEpochs["${kEpoch}"]=1
-done < <(oneBackupKvFamily "${VM_ID}")
-for kEpoch in "${!kvEpochs[@]}"; do
-    splog "[I] Removing the KV backup index of VM ${VM_ID} epoch ${kEpoch} (no backup image)"
-    oneBackupKvDel "${VM_ID}" "${kEpoch}"
+for kEpoch in "${!kvMode[@]}"; do
+    case "${kvMode[${kEpoch}]}" in
+        local)
+            ;;
+        remote)
+            kLoc="${kvLoc[${kEpoch}]:--}"
+            if [[ "${kLoc}" == "-" ]]; then
+                splog "[W] VM ${VM_ID} epoch ${kEpoch} has no backup image and no target in its KV records, kept for kvchk"
+                continue
+            fi
+            for kId in ${kvIds[${kEpoch}]:-}; do
+                kLocName="$(storpoolRemoteCopies "${kId}" | awk '{print $2}' | head -n 1 || true)"
+                SP_BACKUP_LOCATION="${kLoc}" storpoolBackupCopyDrop "${kId}" "${kLocName:-${kLoc}}" || kvDropFailed["${kEpoch}"]=1
+            done
+            ;;
+        *)
+            splog "[W] VM ${VM_ID} epoch ${kEpoch} KV record without a mode, kept for kvchk"
+            continue
+            ;;
+    esac
+    if [[ -n "${kvDropFailed[${kEpoch}]:-}" ]]; then
+        splog "[W] VM ${VM_ID} epoch ${kEpoch} has no backup image and not every leftover was dropped, its KV records are kept for kvchk"
+    else
+        splog "[I] Removing the KV backup index of VM ${VM_ID} epoch ${kEpoch} (no backup image)"
+        oneBackupKvDel "${VM_ID}" "${kEpoch}"
+    fi
 done
 oneBackupRemoveDir "${KVMHOST}" "${B_DISK_DIR}"
 if [[ "${B_HOST}:${B_DIR}" != "${KVMHOST}:${B_DISK_DIR}" ]]; then

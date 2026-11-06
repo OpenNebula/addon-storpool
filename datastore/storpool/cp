@@ -132,11 +132,16 @@ storpoolVolumeCheck "${SP_VOL}" byName
 function cpPullDrop()
 {
     [[ -n "${PULLED_UID}" ]] || return 0
-    DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${PULLED_UID}" "force" && PULLED_UID=""
+    storpoolPulledSnapshotDrop "${PULLED_UID}" && PULLED_UID=""
 }
 
 PULLED_UID=""
 CLONE_TEMPLATE=""
+FROM_BACKUP_DS="$("${SPXML}" get -b /DS_DRIVER_ACTION_DATA/IMAGE/TEMPLATE/FROM_BACKUP_DS <<< "${DRV_ACTION}" 2>/dev/null | tr -d '\0' || true)"
+if [[ -n "${FROM_BACKUP_DS}" ]] && [[ -n "${SNAPSHOT_NAME}${REMOTE_ID}" ]]; then
+    # a restore from a backup lands on the datastore's template, else the cluster default (decision 11)
+    CLONE_TEMPLATE="$(spBackupPullTemplate "${SP_TEMPLATE}")"
+fi
 if [[ -n "${REMOTE_ID}" ]]; then
     PULL_TEMPLATE="$(spBackupPullTemplate "${SP_TEMPLATE}")"
     PULL_NAME="${SP_VOL}-pull-$(mktemp --dry-run XXXXXXXX)"
@@ -147,10 +152,13 @@ if [[ -n "${REMOTE_ID}" ]]; then
         splog "${errmsg}"
         exit 255
     fi
-    PULLED_UID="${SP_UID}"
-    SNAPSHOT_NAME="${PULLED_UID}"
-    CLONE_TEMPLATE="${SP_TEMPLATE}"
-    trapAdd "cpPullDrop"
+    SNAPSHOT_NAME="${SP_UID}"
+    PULLED=1
+    CLONE_TEMPLATE="${PULL_TEMPLATE}"
+    if [[ -z "${SP_PULL_REUSED}" ]]; then
+        PULLED_UID="${SP_UID}"
+        trapAdd "cpPullDrop"
+    fi
 fi
 
 if [[ -n "${SNAPSHOT_NAME}" ]]; then
@@ -168,14 +176,22 @@ if [[ -n "${SNAPSHOT_NAME}" ]]; then
     msg="UID ${IMAGE_UID} with GID:${IMAGE_GID} imported ${SNAPSHOT_NAME} (VMUID:${VM_UID}) as ${SP_DST}"
     log "${msg}"
     splog "${msg}"
-    if kvGetUid "${SNAPSHOT_NAME}"; then
-        ENTRY="${SP_UID}"
-    else
+    if [[ -n "${PULLED:-}" ]]; then
         ENTRY="${SNAPSHOT_NAME}"
-        storpoolExist "${SNAPSHOT_NAME}" "Snapshot"
+        storpoolPulledSnapshotInfo "${ENTRY}"
+        _info_ret=$?
+    else
+        if kvGetUid "${SNAPSHOT_NAME}"; then
+            ENTRY="${SP_UID}"
+        else
+            ENTRY="${SNAPSHOT_NAME}"
+            storpoolExist "${SNAPSHOT_NAME}" "Snapshot"
+        fi
+        storpoolSnapshotInfo "${ENTRY}"
+        _info_ret=$?
     fi
-    if ! storpoolSnapshotInfo "${ENTRY}"; then
-        errmsg="Error: Can't get Storpool info for snapshot '${ENTRY}' ($?)"
+    if [[ ${_info_ret} -ne 0 ]]; then
+        errmsg="Error: Can't get Storpool info for snapshot '${ENTRY}' (${_info_ret})"
         log_error "${errmsg}"
         error_message "${errmsg}"
         splog "${errmsg}"
@@ -188,7 +204,11 @@ if [[ -n "${SNAPSHOT_NAME}" ]]; then
     fi
 
     SNAPSHOT_UID="${SP_UID}"
-    storpoolVolumeFromSnapshot "${SNAPSHOT_UID}" "${SP_VOL}" "${CLONE_TEMPLATE}"
+    if [[ -n "${PULLED:-}" ]]; then
+        storpoolVolumeFromPulledSnapshot "${SNAPSHOT_UID}" "${SP_VOL}" "${CLONE_TEMPLATE}"
+    else
+        storpoolVolumeFromSnapshot "${SNAPSHOT_UID}" "${SP_VOL}" "${CLONE_TEMPLATE}"
+    fi
 
     VOL_UID="${SP_UID}"
     FORMAT="raw"

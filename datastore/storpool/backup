@@ -108,7 +108,7 @@ else
 fi
 
 if [[ "${BI_SVC_UID}" != "-" ]] && [[ -n "${BI_SVC_UID}" ]]; then
-    if storpoolVolumeExists "${BI_SVC_UID}"; then
+    if [[ -n "$(kvGet byUid "${BI_SVC_UID}" 2>/dev/null || true)" ]]; then
         DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${BI_SVC_UID}" "force" || splog "[W] VM ${VM_ID} service volume ${BI_SVC_UID} not deleted ($?)"
     fi
 else

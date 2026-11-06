@@ -44,8 +44,12 @@ function restoreRollbackDelete()
     local _did="$1"
     local _ing="${disksIngressUid_a[${_did}]:-}"
     local _new="${disksNewUid_a[${_did}]:-}"
+    local _pull="${disksPulledUid_a[${_did}]:-}"
     if [[ -n "${_ing}" ]]; then
         DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_ing}" "force"
+    fi
+    if [[ -n "${_pull}" ]]; then
+        storpoolPulledSnapshotDrop "${_pull}"
     fi
     if [[ -n "${_new}" ]]; then
         DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${_new}" "force"
@@ -94,13 +98,18 @@ function restoreDropForgottenSnapshots()
 function restoreVolumeFromSnapshot()
 {
     local _did="$1" _url="$2"
-    local _vol="" _tmp_name="" _snap_uid="" _template="" _xtype="" _tag_k="" _tag_v="" _ret=0
+    local _vol="" _tmp_name="" _snap_uid="" _template="" _xtype="" _tag_k="" _tag_v="" _ret=0 _pulled=""
     if [[ "${_did}" == "nvram" ]]; then
         _vol="${ONE_PX}-sys-${VM_ID}-NVRAM"
         disksMap_a["${_did}"]="${_vol}"
         diskTypeMap_a["${_vol}"]="NVRAM"
     else
-        _vol="${disksMap_a[${_did}]}"
+        _vol="${disksMap_a[${_did}]:-}"
+    fi
+    if [[ -z "${_vol}" ]]; then
+        splog "[E] VM ${VM_ID} backup disk.${_did} is not a disk of the VM"
+        error_message "backup disk ${_did} is not a disk of VM ${VM_ID}"
+        exit 1
     fi
     _tmp_name="${_vol}-${_TMP_NAME}"
     kvGetUid "${_vol}" fatal
@@ -112,28 +121,34 @@ function restoreVolumeFromSnapshot()
     fi
     VOL_UID="${SP_UID}"
     if [[ "${_did}" == "nvram" ]]; then
-        _template="$(spVolumeTemplateName "${VM_DS_ID}")"
+        _template="$(spBackupPullTemplate "$(spVolumeTemplateName "${VM_DS_ID}")")"
     else
-        _template="${V_TEMPLATE_NAME}"
+        _template="$(spBackupPullTemplate "${V_TEMPLATE_NAME}")"
     fi
     if ! oneSnapshotLookup "${_url}"; then
         error_message "Can't resolve the backup URL ${_url} of disk ${_did}"
         exit 1
     fi
     if [[ -n "${REMOTE_ID}" ]]; then
-        _template="$(spBackupPullTemplate "${_template}")"
         if ! storpoolSnapshotPullRemote "${_vol}-pull-${_TMP_NAME}" "${REMOTE_ID}" "${REMOTE_LOCATION}" "${_template}" \
                 "img;${LOC_TAG};virt;${VM_TAG}" "${_vol}-pull-${_TMP_NAME};${LOC_TAG_VAL};one;${VM_ID}"; then
             error_message "Error pulling the backup ${REMOTE_ID} of disk ${_did} from ${REMOTE_LOCATION}"
             exit 1
         fi
         _snap_uid="${SP_UID}"
-        disksIngressUid_a["${_did}"]="${_snap_uid}"
-        trapAdd "restoreRollbackDelete '${_did}'"
+        _pulled=1
+        if [[ -z "${SP_PULL_REUSED}" ]]; then
+            disksPulledUid_a["${_did}"]="${_snap_uid}"
+            trapAdd "restoreRollbackDelete '${_did}'"
+        fi
+        storpoolPulledSnapshotInfo "${_snap_uid}"
+        _ret=$?
     else
         _snap_uid="${SNAPSHOT_NAME}"
+        storpoolSnapshotInfo "${_snap_uid}"
+        _ret=$?
     fi
-    if ! storpoolSnapshotInfo "${_snap_uid}"; then
+    if [[ ${_ret} -ne 0 ]]; then
         splog "[E] VM ${VM_ID} disk.${_did} backup snapshot ${_snap_uid} not found"
         error_message "backup snapshot ${_snap_uid} of disk ${_did} not found"
         exit 1
@@ -158,7 +173,11 @@ function restoreVolumeFromSnapshot()
         _tag_k="img;${LOC_TAG};virt;diskid;${VM_TAG};${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc};type"
         _tag_v="${_vol};${LOC_TAG_VAL};one;${_did};${VM_ID};${VC_POLICY};${SP_QOSCLASS};${_xtype}"
     fi
-    storpoolVolumeFromSnapshot "${_snap_uid}" "${_vol}" "${_template}" "${_tag_k}" "${_tag_v}"
+    if [[ -n "${_pulled}" ]]; then
+        storpoolVolumeFromPulledSnapshot "${_snap_uid}" "${_vol}" "${_template}" "${_tag_k}" "${_tag_v}"
+    else
+        storpoolVolumeFromSnapshot "${_snap_uid}" "${_vol}" "${_template}" "${_tag_k}" "${_tag_v}"
+    fi
     _ret=$?
     if [[ ${_ret} -ne 0 ]] || [[ -z "${SP_UID}" ]]; then
         error_message "Error creating ${_vol} from the backup snapshot ${_snap_uid}"
@@ -172,12 +191,8 @@ function restoreVolumeFromSnapshot()
     if [[ "${_did}" != "nvram" ]]; then
         oneSymlink "${DST_HOST}" "${SP_UID}" "${SYSTEM_DS_PATH}/disk.${_did}" || exit $?
     fi
-    if [[ -n "${disksIngressUid_a[${_did}]:-}" ]]; then
-        if DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${disksIngressUid_a[${_did}]}" "force"; then
-            unset "disksIngressUid_a[${_did}]"
-        else
-            splog "[W] VM ${VM_ID} pulled snapshot ${disksIngressUid_a[${_did}]} of disk.${_did} not deleted ($?)"
-        fi
+    if [[ -n "${disksPulledUid_a[${_did}]:-}" ]]; then
+        storpoolPulledSnapshotDrop "${disksPulledUid_a[${_did}]}" && unset "disksPulledUid_a[${_did}]"
     fi
     trapReset
     disksCommitted_a["${_did}"]=1
@@ -186,10 +201,11 @@ function restoreVolumeFromSnapshot()
 
 function restoreServiceScratchDrop()
 {
-    [[ -n "${SVC_SCRATCH_UID}" ]] || return 0
-    DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${SVC_SCRATCH_UID}" "force" && SVC_SCRATCH_UID=""
+    if [[ -n "${SVC_SCRATCH_UID}" ]]; then
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${SVC_SCRATCH_UID}" "force" && SVC_SCRATCH_UID=""
+    fi
     if [[ -n "${SVC_PULL_UID}" ]]; then
-        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${SVC_PULL_UID}" "force" && SVC_PULL_UID=""
+        storpoolPulledSnapshotDrop "${SVC_PULL_UID}" && SVC_PULL_UID=""
     fi
 }
 
@@ -214,27 +230,30 @@ function restoreServiceTar()
     tar -xf \"${_scratch}/svc.tar\" -C \"${_scratch}\"${REMOTE_FTR}" "Error extracting ${_scratch}/svc.tar on ${DST_HOST}"
     else
         splog "[I] VM ${VM_ID} no ${_tar} on the front-end, taking the service snapshot ${_url}"
-        _template="$(spVolumeTemplateName "${VM_DS_ID}")"
+        _template="$(spBackupPullTemplate "$(spVolumeTemplateName "${VM_DS_ID}")")"
         if ! oneSnapshotLookup "${_url}"; then
             error_message "Can't resolve the service URL ${_url}"
             exit 1
         fi
         if [[ -n "${REMOTE_ID}" ]]; then
-            _template="$(spBackupPullTemplate "${_template}")"
             if ! storpoolSnapshotPullRemote "${ONE_PX}-sys-${VM_ID}-SVC-pull-${_TMP_NAME}" "${REMOTE_ID}" "${REMOTE_LOCATION}" "${_template}" \
                     "img;${LOC_TAG};virt;${VM_TAG}" "${ONE_PX}-sys-${VM_ID}-SVC-pull-${_TMP_NAME};${LOC_TAG_VAL};one;${VM_ID}"; then
                 error_message "Error pulling the service snapshot ${REMOTE_ID} from ${REMOTE_LOCATION}"
                 exit 1
             fi
             _snap_uid="${SP_UID}"
-            SVC_PULL_UID="${_snap_uid}"
+            [[ -n "${SP_PULL_REUSED}" ]] || SVC_PULL_UID="${_snap_uid}"
+            trapAdd "restoreServiceScratchDrop"
+            storpoolVolumeFromPulledSnapshot "${_snap_uid}" "${ONE_PX}-sys-${VM_ID}-SVC-${_TMP_NAME}" "${_template}" \
+                "img;${LOC_TAG};virt;${VM_TAG};type" "${ONE_PX}-sys-${VM_ID}-SVC-${_TMP_NAME};${LOC_TAG_VAL};one;${VM_ID};SVC"
+            _ret=$?
         else
             _snap_uid="${SNAPSHOT_NAME}"
+            trapAdd "restoreServiceScratchDrop"
+            storpoolVolumeFromSnapshot "${_snap_uid}" "${ONE_PX}-sys-${VM_ID}-SVC-${_TMP_NAME}" "${_template}" \
+                "img;${LOC_TAG};virt;${VM_TAG};type" "${ONE_PX}-sys-${VM_ID}-SVC-${_TMP_NAME};${LOC_TAG_VAL};one;${VM_ID};SVC"
+            _ret=$?
         fi
-        trapAdd "restoreServiceScratchDrop"
-        storpoolVolumeFromSnapshot "${_snap_uid}" "${ONE_PX}-sys-${VM_ID}-SVC-${_TMP_NAME}" "${_template}" \
-            "img;${LOC_TAG};virt;${VM_TAG};type" "${ONE_PX}-sys-${VM_ID}-SVC-${_TMP_NAME};${LOC_TAG_VAL};one;${VM_ID};SVC"
-        _ret=$?
         if [[ ${_ret} -ne 0 ]] || [[ -z "${SP_UID}" ]]; then
             error_message "Error creating a scratch volume from the service snapshot ${_snap_uid}"
             exit "${_ret:-1}"
@@ -363,6 +382,7 @@ declare -A diskTypeMap_a  # diskTypeMap_a[oneName]=DISK_TYPE
 declare -A disksOldUid_a
 declare -A disksNewUid_a
 declare -A disksIngressUid_a  # disksIngressUid_a[did]=uid of the scratch volume
+declare -A disksPulledUid_a  # disksPulledUid_a[did]=uid of the snapshot pulled from the remote site
 declare -A disksCommitted_a
 
 while IFS=' ' read -r -u "${jqfh}" did url; do
@@ -387,7 +407,16 @@ _TMP_NAME=$(mktemp --dry-run tmRestoreXXXXXXXX)
 RET=0
 _selected=0
 trapAdd "restoreCommitCleanup"
-for did in ${!disksUrl_a[*]}; do
+# disks in order, then the NVRAM volume, the service tar last (the disks are committed before its files land)
+_order=""
+for did in $(printf '%s\n' "${!disksUrl_a[@]}" | grep -E '^[0-9]+$' | sort -n); do
+    _order+="${did} "
+done
+for did in $(printf '%s\n' "${!disksUrl_a[@]}" | grep -vE '^[0-9]+$' | grep -v '^svc$' | sort); do
+    _order+="${did} "
+done
+[[ -z "${disksUrl_a[svc]:-}" ]] || _order+="svc"
+for did in ${_order}; do
     if [[ ${DISK_ID} != "-1" ]] && [[ ${DISK_ID} != "${did}" ]]; then
         case "${did}" in
             nvram|svc) [[ "${DISK_ID}" == "0" ]] || continue ;;
