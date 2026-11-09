@@ -34,7 +34,7 @@ them the drivers read `storpool.conf` on the front-end, as for every datastore.
 | `SP_BACKUP_LOCATION` | empty: local mode. A StorPool location name (`devA3`), or a cluster name (`devA1-cl2`) when the location has more than one cluster, as `VolumeBackup` takes it. |
 | `SP_BACKUP_TIMEOUT` | seconds the `backup` action waits for the remote transfer; `0` (default) waits until it completes or the backup is cancelled. |
 | `SP_BACKUP_REMOTE_DELETE` | `YES` (default): deleting a backup asks the remote site to delete its copy (`SnapshotsRemoteUnexport` with `deleteAfter`). `NO`: the copy is only unexported. |
-| `DATASTORE_CAPACITY_CHECK=NO` | required: the `monitor` reports `USED_MB=0 TOTAL_MB=0 FREE_MB=0`, the snapshots are charged on the templates of the image and system datastores (`storpool template status` is the authoritative view). Per-user backup quotas work on the image `SIZE`. |
+| `DATASTORE_CAPACITY_CHECK=NO` | required: the snapshots are charged on the templates of the image and system datastores, the `monitor` figures (see *Sizes and monitoring*) are for display and never gate a backup. Per-user backup quotas work on the image `SIZE`. |
 
 Remote mode relies on the StorPool multi-site (or multi-cluster) link between
 the two clusters, which must be set up before the datastore is used. For the
@@ -108,9 +108,9 @@ The modes differ in OpenNebula's bookkeeping:
   `increment_flatten`, which deletes the backups of the oldest increments
   beyond `KEEP_LAST` (StorPool merges their blocks into the next kept
   snapshot) and reports the remaining chain, whose first increment becomes
-  the `FULL` one. Every increment reports the sum of the disks' sizes, as a
-  `FULL` backup does, so the image `SIZE` (and the datastore quota) grows by
-  the VM size per increment while StorPool keeps the changed blocks only.
+  the `FULL` one. The image `SIZE` is the sum of the increments' sizes: the
+  content of the first one plus the changed data of each later one (see
+  *Sizes and monitoring*).
 
 The rules of `MODE=INCREMENT` are OpenNebula's: a VM with VM snapshots cannot
 use it; an increment always goes to the datastore of its chain (`-d` of
@@ -121,6 +121,80 @@ in-place restore and the deletion of the chain image; a backup is refused
 while a flatten is running (`ACTIVE_FLATTEN`). `INCREMENT_MODE` (`CBT` or
 `SNAPSHOT`) has no meaning for StorPool disks. Interactive (OneBEX) backups
 stay `FULL` only.
+
+## Sizes and monitoring
+
+StorPool keeps every figure in two cluster-wide calls, `VolumesSpace` and
+`SnapshotsSpace`, that are too heavy to run on every backup of every VM. The
+drivers therefore read the copies that `monitor_helper-sync` keeps for the
+datastore monitors under `/var/cache/addon-storpool-monitor/` (one file per
+call and cluster, `json-VolumesSpace-<api host>-<cluster id>`); its systemd
+timer runs every 4 minutes and refreshes a call only when its file is older
+than `SP_VOLUMESSPACE_SECONDS` / `SP_SNAPSHOTSSPACE_SECONDS`, which default to
+`SP_DEFAULT_SECONDS` (1800 s) in `monitor_helper-syncrc`. The figures are
+therefore estimates that miss the writes since the last refresh.
+
+**API cost.** A `FULL` backup, a flatten and the monitor make no API call of
+their own. An increment makes one plain `VolumesSpace` call only when the
+cache file is older than the VM's previous backup, that is when backups come
+more often than the cache refreshes; the result is written back to the cache,
+so the other VMs of the same backup job reuse it. A disk on another cluster
+of the multi-cluster is read from that cluster's cache file (the cluster is
+the first two fields of the volume's globalId) and never triggers a call.
+
+**The SIZE of a backup** (`oneimage show`, the datastore quota):
+
+* A `FULL` backup, and increment 0 of a chain, is the logical content of the
+  backup set: the sum of `spaceUsed` of the disk volumes and of the NVRAM
+  volume, which counts the data of all their parents (the image the disk was
+  cloned from included) but not unwritten space, so it is at most the sum of
+  the virtual sizes. A disk missing from the cache counts its virtual size.
+* A later increment in local mode is the data written since the disks'
+  previous snapshot: the sum of `storedSize` of the same volumes, exactly
+  what the group snapshot takes over. The datastore `backup` action refreshes the cache with
+  one plain `VolumesSpace` call only when the file is older than the VM's
+  previous backup (so that the figure is relative to the right snapshot) or
+  when a volume is not listed, and writes the result back for the next
+  backups; a backup job of many VMs shares one refresh. A disk still missing
+  counts nothing.
+* In remote mode every backup, increment or not, is its full content: the
+  cluster keeps no snapshot of the previous backup (the exported transient
+  is gone once the copy lands), so the change since it cannot be measured
+  here. The copies on the target hold only that change, which is what the
+  monitor of a cluster target reports; a remote-mode flatten keeps the
+  base's recorded size.
+* The service volume (`vm.xml`, and the vTPM state and file NVRAM when the
+  VM has them) is created for every backup and never in the cache; it is
+  not counted.
+* `increment_flatten` sets the new base to the first dropped increment's
+  SIZE less its `storedSize`, plus the base's `storedSize` once the dropped
+  increments are merged into it (`storedSize` plus, for every dropped
+  increment, `storedSize` minus `spaceUsed`, from the cached
+  `SnapshotsSpace`), which is exact when one increment is dropped per backup
+  and an upper bound otherwise. When a figure is missing (the base is newer
+  than the cache) the base becomes the sum of the recorded sizes.
+* The sizes drift when a parent outside the chain is deleted later (an older
+  chain's image, the image the disk was cloned from): StorPool merges its
+  blocks into the oldest kept backup and OpenNebula is not told.
+
+**The datastore monitor** (`onedatastore show`, every
+`MONITORING_INTERVAL_DATASTORE`) reads the same cache:
+
+* `USED_MB`: the sum of `storedSize` of the kept backup snapshots of this
+  OpenNebula instance (`bkp` tag, `virt`/`nloc` tags, not deleted, not
+  transient) on the cluster: the local cluster in local mode, the target
+  cluster in remote mode when `SP_BACKUP_LOCATION` names a cluster of the
+  multi-cluster (the copies there, `backup:true`). A new backup shows up
+  after the next refresh of `SnapshotsSpace`. A remote location is not
+  visible, the datastore reports zeros.
+* `TOTAL_MB` and `FREE_MB`: `stored.capacity` and `stored.free` of the pool
+  the kept backups live in, from the cached `VolumeTemplatesStatus`: in
+  local mode the template `SP_DEFAULT_TEMPLATE` of the datastore, else the
+  cluster's `MgmtConfig` default template; on a cluster target that
+  cluster's `MgmtConfig` backup template (the one its copies get), else its
+  default, else any of its templates. The same pool figures the image
+  datastores show; `DATASTORE_CAPACITY_CHECK=NO` keeps them from gating a
+  backup.
 
 ## The etcd index
 
@@ -191,7 +265,8 @@ restored volume's, else the `MgmtConfig` default template of the cluster (a
 
 ## Limitations
 
-* An increment is charged the full size of the disks, not the changed blocks.
+* Sizes and monitor figures come from the `monitor_helper-sync` cache and
+  miss the writes since its last refresh; the service volume is not counted.
 * Non-StorPool disks are refused (`BACKUP_SKIP_OTHER_DISKS` is not honoured).
 * Remote mode sends every backup through the group transfer; a cancel removes
   the local side at once but a copy that was in flight may complete on the
