@@ -64,11 +64,47 @@ else
 	SP_TEMPLATE_STATUS_PATH="${SP_TEMPLATE_STATUS_PATH_IMAGE:-${SP_TEMPLATE_STATUS_PATH}}"
 	oneDsDriverAction
 	if [[ "${DATASTORE_TYPE}" == "3" ]]; then
-		# the snapshots of a backup datastore are charged on the templates of the image and system datastores
-		echo "USED_MB=0"
-		echo "TOTAL_MB=0"
-		echo "FREE_MB=0"
-		splog "[I] DS ${DS_ID} BACKUP_DS END (zeros)"
+		# the kept backups' stored bytes and the pool figures of their cluster, from the monitor_helper-sync cache
+		kind="local"
+		cluster="$(spCacheClusterId)"
+		if [[ -n "${SP_BACKUP_LOCATION}" ]]; then
+			cluster="$(spCacheClusterId "${SP_BACKUP_LOCATION}")"
+			kind="cluster"
+			[[ -n "${cluster}" ]] || kind="remote"
+		fi
+		used=0
+		capacity=0
+		free=0
+		tmpl=""
+		if [[ "${kind}" != "remote" ]]; then
+			copies="false"
+			[[ "${kind}" != "cluster" ]] || copies="true"
+			scope="${cluster}"
+			[[ "${kind}" != "local" ]] || scope=""
+			if spaceFile="$(spSpaceCacheFile SnapshotsSpace "${scope}" || spSpaceCacheFile SnapshotsSpace "${cluster}")"; then
+				used="$(spSpaceEntries "${spaceFile}" "${scope}" | jq -s --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" --argjson copies "${copies}" \
+					'[.[]|select(.tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and (.tags.bkp // "")!="" and (.deleted // false)==false and (.transient // false)==false and ((.backup // false)==$copies))|.storedSize // 0]|add // 0' 2>/dev/null || echo 0)"
+			else
+				splog "[W] DS ${DS_ID} no SnapshotsSpace cache for cluster ${cluster}"
+			fi
+			# the pool of the kept backups: the datastore's template locally, else the cluster's backup template (the copies' one), else its default, else any
+			mgmtJson="${SP_FE_JSON_PATH}/json-MgmtConfig-${SP_API_HTTP_HOST:-0.0.0.0}-${cluster}"
+			if [[ "${kind}" == "local" ]]; then
+				tmpl="${SP_DEFAULT_TEMPLATE}"
+			else
+				tmpl="$(jq -r '.data.backupTemplate.name // empty' "${mgmtJson}" 2>/dev/null || true)"
+			fi
+			[[ -n "${tmpl}" ]] || tmpl="$(spDefaultTemplateName "${mgmtJson}" "${cluster}")"
+			statusJson="${SP_FE_JSON_PATH}/json-VolumeTemplatesStatus-${SP_API_HTTP_HOST:-0.0.0.0}-${cluster}"
+			if [[ -f "${statusJson}" ]]; then
+				[[ -n "${tmpl}" ]] || tmpl="$(jq -r '[.data[]|.name]|first // empty' "${statusJson}" 2>/dev/null || true)"
+				read -r capacity free < <(jq -r --arg n "${tmpl}" '[.data[]|select(.name==$n)|"\(.stored.capacity // 0) \(.stored.free // 0)"]|first // "0 0"' "${statusJson}" 2>/dev/null || echo "0 0")
+			fi
+		fi
+		echo "USED_MB=$((used / 1048576))"
+		echo "TOTAL_MB=$((capacity / 1048576))"
+		echo "FREE_MB=$((free / 1048576))"
+		splog "[I] DS ${DS_ID} BACKUP_DS END (${kind}${cluster:+ ${cluster}}: kept backups $((used / 1048576))M, pool ${tmpl:-?} $((capacity / 1048576))M total $((free / 1048576))M free)"
 		exit 0
 	fi
 	if [[ -n "${CLUSTERS_ID}" ]]; then

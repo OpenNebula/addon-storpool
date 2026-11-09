@@ -40,10 +40,9 @@ if [[ "${DATASTORE_TYPE}" != "3" ]]; then
     failWith "${0##*/}: datastore ${DATASTORE_ID} is not a backup datastore"
 fi
 
-declare -a INC_IDS_A INC_SRC_A INC_SIZE_A
+declare -a INC_IDS_A INC_SRC_A
 read -r -a INC_IDS_A <<< "${BACKUP_INC_IDS}"
 read -r -a INC_SRC_A <<< "${BACKUP_INC_SOURCES}"
-read -r -a INC_SIZE_A <<< "${BACKUP_INC_SIZES}"
 if [[ ${#INC_IDS_A[*]} -eq 0 ]]; then
     failWith "${0##*/}: image ${ID} has no increments"
 fi
@@ -54,10 +53,9 @@ fi
 oneBackupFlattenPlan "${BACKUP_INC_IDS}" "${KEEP_LAST}"
 splog "[I] image ${ID} increments ${BACKUP_INC_IDS} KEEP_LAST=${KEEP_LAST}: drop '${BF_DROP_IDS}', base ${BF_BASE_ID}"
 
-declare -A srcById sizeById
+declare -A srcById
 for i in "${!INC_IDS_A[@]}"; do
     srcById["${INC_IDS_A[${i}]}"]="${INC_SRC_A[${i}]}"
-    sizeById["${INC_IDS_A[${i}]}"]="${INC_SIZE_A[${i}]:-0}"
 done
 
 RET=0
@@ -89,7 +87,18 @@ for i in "${!INC_IDS_A[@]}"; do
     fi
     CHAIN+="${CHAIN:+,}${incId}:${INC_SRC_A[${i}]}"
 done
-SIZE="${sizeById[${BF_BASE_ID}]:-0}"
+declare -a INC_SIZE_A
+read -r -a INC_SIZE_A <<< "${BACKUP_INC_SIZES}"
+SIZE=""
+if [[ -n "${SP_BACKUP_LOCATION}" ]]; then
+    for i in "${!INC_IDS_A[@]}"; do
+        [[ "${INC_IDS_A[${i}]}" == "${BF_BASE_ID}" ]] || continue
+        SIZE="${INC_SIZE_A[${i}]:-0}"
+    done
+fi
+if [[ -z "${SIZE}" ]]; then
+    SIZE="$(oneBackupFlattenSizeMb "${BACKUP_INC_IDS}" "${BACKUP_INC_SOURCES}" "${BACKUP_INC_SIZES}" "${BF_DROP_IDS}" "${BF_BASE_ID}" "$(spCacheClusterId)")"
+fi
 
 echo "${SIZE} ${CHAIN}"
 splog "END image ${ID}: increment(s) '${BF_DROP_IDS}' dropped, base ${BF_BASE_ID}: ${SIZE} ${CHAIN}"

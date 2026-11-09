@@ -133,10 +133,35 @@ done
 [[ -z "${BI_IDS_A[nvram]:-}" ]] || ENTRIES+="nvram=${BI_IDS_A[nvram]} "
 [[ -z "${BI_IDS_A[svc]:-}" ]] || ENTRIES+="svc=${BI_IDS_A[svc]} "
 SOURCE="$(oneBackupSourceBuild "${LOCATION}" "${VM_ID}" "${BI_EPOCH}" "${ENTRIES}")"
-SIZE="$(oneBackupDiskSizeSum "${VM_XML}" "${DISKS}")"
+
+VOLS=""
+for map in ${vmDisksMap}; do
+    img="${map%:*}"
+    did="${map#*:}"
+    [[ -n "${did}" ]] || continue
+    [[ " ${DISKS//:/ } " == *" ${did} "* ]] || continue
+    kvGetUid "${img}" || continue
+    VOLS+="${did}:${SP_UID} "
+done
+if [[ -n "${T_OS_NVRAM}" ]] && kvGetUid "${ONE_PX}-sys-${VM_ID}-NVRAM"; then
+    VOLS+="nvram:${SP_UID} "
+fi
+SIZE_KIND="full"
+PREV_EPOCH=0
+if [[ "${SP_BACKUP_MODE}" == "local" ]] && [[ "${BACKUP_MODE^^}" == "INCREMENT" ]] && [[ "${BACKUP_INCREMENTAL_ID:--1}" != "-1" ]]; then
+    SIZE_KIND="increment"
+    while read -r rEpoch _; do
+        [[ -n "${rEpoch}" ]] || continue
+        if [[ ${rEpoch} -lt ${BI_EPOCH} ]] && [[ ${rEpoch} -gt ${PREV_EPOCH} ]]; then
+            PREV_EPOCH="${rEpoch}"
+        fi
+    done < <(oneBackupRegistered "${VM_ID}")
+    [[ ${PREV_EPOCH} -eq 0 ]] || PREV_EPOCH=$((PREV_EPOCH + 1))
+fi
+SIZE="$(oneBackupSizeMb "${VM_XML}" "${VOLS}" "${SIZE_KIND}" "${PREV_EPOCH}")"
 
 echo "${SOURCE} ${SIZE} raw"
-splog "[I] VM ${VM_ID} backup registered: ${SOURCE} ${SIZE}M raw (${B_PATH})$(oneBackupIncrementNote)"
+splog "[I] VM ${VM_ID} backup registered: ${SOURCE} ${SIZE}M (${SIZE_KIND}) raw (${B_PATH})$(oneBackupIncrementNote)"
 rm -rf "${B_LOCAL}"
 
 splog "END ${VM_ID}"

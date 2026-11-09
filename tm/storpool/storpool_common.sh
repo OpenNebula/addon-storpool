@@ -5007,16 +5007,16 @@ function oneBackupImageSources()
 # oneBackupFlattenPlan "inc ids" KEEP_LAST: BF_DROP_IDS = the oldest increments beyond KEEP_LAST, BF_BASE_ID = the increment that becomes the FULL one
 function oneBackupFlattenPlan()
 {
-    local _ids="$1" _keep="${2:-0}"
+    local _ids="$1" _keep_last="${2:-0}"
     local -a _ids_a=()
     local _drop=0 _i=0
     BF_DROP_IDS=""
     BF_BASE_ID=""
     read -r -a _ids_a <<< "${_ids}"
     [[ ${#_ids_a[*]} -gt 0 ]] || return 1
-    [[ -n "${_keep}" && -z "${_keep//[[:digit:]]/}" ]] || _keep=0
-    if [[ ${_keep} -gt 0 ]] && [[ ${#_ids_a[*]} -gt ${_keep} ]]; then
-        _drop=$((${#_ids_a[*]} - _keep))
+    [[ -n "${_keep_last}" && -z "${_keep_last//[[:digit:]]/}" ]] || _keep_last=0
+    if [[ ${_keep_last} -gt 0 ]] && [[ ${#_ids_a[*]} -gt ${_keep_last} ]]; then
+        _drop=$((${#_ids_a[*]} - _keep_last))
     fi
     for ((_i = 0; _i < _drop; _i++)); do
         BF_DROP_IDS+="${_ids_a[${_i}]} "
@@ -5536,6 +5536,183 @@ function oneBackupSvcVolumes()
         '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
          | select(.tags.type=="SVC" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid) | .name' \
         "${TMPDIR}/VolumesList.json" 2>/dev/null || true
+}
+
+# shellcheck disable=SC2120
+# spCacheClusterId [CLUSTER_NAME] -> this API's StorPool cluster id (SP_CLUSTER_ID, else the cached ClustersList of monitor_helper-sync, else the API), or the id of a named cluster of the multi-cluster from the cached list
+function spCacheClusterId()
+{
+    local _name="$1" _f="" _id=""
+    if [[ -z "${_name}" ]] && [[ -n "${SP_CLUSTER_ID}" ]]; then
+        echo "${SP_CLUSTER_ID}"
+        return 0
+    fi
+    _f="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}/json-ClustersList-${SP_API_HTTP_HOST:-0.0.0.0}"
+    if [[ -f "${_f}" ]]; then
+        if [[ -z "${_name}" ]]; then
+            _id="$(jq -r '.clusterId // empty' "${_f}" 2>/dev/null || true)"
+        else
+            _id="$(jq -r --arg n "${_name}" '[.data.clusters[]?|select(.cluster==$n)|.clusterId]|first // empty' "${_f}" 2>/dev/null || true)"
+        fi
+    fi
+    if [[ -z "${_id}" ]] && [[ -z "${_name}" ]]; then
+        _id="$(storpoolLocalClusterId)"
+    fi
+    echo "${_id}"
+}
+
+# spSpaceCacheFile CALL CLUSTER_ID -> the per-cluster cache file of a VolumesSpace/SnapshotsSpace call written by monitor_helper-sync, or nothing
+function spSpaceCacheFile()
+{
+    local _f="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}/json-$1-${SP_API_HTTP_HOST:-0.0.0.0}${2:+-$2}"
+    [[ -f "${_f}" ]] || return 1
+    echo "${_f}"
+}
+
+# spSpaceEntries FILE [CLUSTER_ID] -> the entries of a cached space call, one JSON object per line, from the per-cluster or the all-clusters shape
+function spSpaceEntries()
+{
+    jq -c --arg c "${2:-}" 'if (.data|type)=="array" then .data[] else .data.clusters[]?|select($c=="" or .clusterId==$c)|.response.data[]? end' "$1" 2>/dev/null || true
+}
+
+# spSpaceFigure FILE CLUSTER_ID GLOBAL_ID FIELD -> the FIELD (storedSize, spaceUsed, size) of one volume or snapshot of a cached space call, nothing when absent
+function spSpaceFigure()
+{
+    local _file="$1" _cluster="$2" _gid="${3#\~}" _field="$4"
+    [[ -n "${_file}" ]] || return 1
+    spSpaceEntries "${_file}" "${_cluster}" | jq -r --arg g "${_gid}" --arg f "${_field}" 'select(.globalId==$g)|.[$f] // empty' 2>/dev/null | head -n 1 | grep -E '^[0-9]+$' || return 1
+}
+
+# spSpaceCacheFresh CALL CLUSTER_ID MIN_MTIME -> the per-cluster cache file of CALL, refreshed with one plain call when it is missing or older than MIN_MTIME (epoch seconds) and written back for the next backups; the call's own copy when it cannot be written back
+function spSpaceCacheFresh()
+{
+    local _call="$1" _cluster="$2" _min="${3:-0}"
+    local _dir="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}" _f="" _mtime=0 _tmp="" _age=""
+    _f="${_dir}/json-${_call}-${SP_API_HTTP_HOST:-0.0.0.0}${_cluster:+-${_cluster}}"
+    if [[ -f "${_f}" ]]; then
+        _mtime="$(stat --format %Y "${_f}" 2>/dev/null || echo 0)"
+        if [[ ${_mtime} -ge ${_min} ]]; then
+            echo "${_f}"
+            return 0
+        fi
+        _age="$(( $(date +%s) - _mtime ))s old"
+    fi
+    if ! DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry "${_call}" >/dev/null; then
+        [[ -f "${_f}" ]] || return 1
+        splog "[W] ${_call} not refreshed, using ${_f} (${_age})"
+        echo "${_f}"
+        return 0
+    fi
+    _tmp="${_f}.$$"
+    if [[ -n "${_cluster}" ]] && cp "${TMPDIR}/${_call}.json" "${_tmp}" 2>/dev/null && mv -f "${_tmp}" "${_f}" 2>/dev/null; then
+        splog "[I] ${_call} refreshed into ${_f}${_age:+ (was ${_age})}"
+        echo "${_f}"
+    else
+        rm -f "${_tmp}" 2>/dev/null
+        echo "${TMPDIR}/${_call}.json"
+    fi
+    return 0
+}
+
+# oneBackupSizeMb VM_XML "did:~gid ..." KIND PREV_EPOCH -> the SIZE (MiB) of a backup from the cached VolumesSpace: the volumes' logical content (spaceUsed) when KIND is full, the data since their previous snapshot (storedSize) when KIND is increment; the cache is refreshed once when older than PREV_EPOCH or when a volume is missing; a volume still missing counts its virtual SIZE (full) or nothing (increment)
+function oneBackupSizeMb()
+{
+    local _xml="$1" _vols="$2" _kind="$3" _prev="${4:-0}"
+    local _local="" _cluster="" _file="" _pair="" _did="" _gid="" _field="spaceUsed" _val="" _sum=0 _virt=0 _miss="" _retry=1
+    local -A _files=()
+    [[ "${_kind}" != "increment" ]] || _field="storedSize"
+    _local="$(spCacheClusterId)"
+    for _pair in ${_vols}; do
+        _did="${_pair%%:*}"
+        _gid="${_pair#*:}"
+        _gid="${_gid#\~}"
+        _cluster="${_gid%.*}"
+        [[ "${_cluster}" == *.* ]] || _cluster="${_local}"
+        if [[ -z "${_files[${_cluster}]+set}" ]]; then
+            if [[ "${_cluster}" == "${_local}" ]]; then
+                _files["${_cluster}"]="$(spSpaceCacheFresh VolumesSpace "${_cluster}" "${_prev}" || true)"
+            else
+                _files["${_cluster}"]="$(spSpaceCacheFile VolumesSpace "${_cluster}" || true)"
+            fi
+        fi
+        _file="${_files[${_cluster}]}"
+        _val="$(spSpaceFigure "${_file}" "${_cluster}" "${_gid}" "${_field}" || true)"
+        if [[ -z "${_val}" ]] && [[ ${_retry} -eq 1 ]] && [[ "${_cluster}" == "${_local}" ]]; then
+            _retry=0
+            _files["${_cluster}"]="$(spSpaceCacheFresh VolumesSpace "${_cluster}" "$(( $(date +%s) + 1 ))" || true)"
+            _file="${_files[${_cluster}]}"
+            _val="$(spSpaceFigure "${_file}" "${_cluster}" "${_gid}" "${_field}" || true)"
+        fi
+        if [[ -n "${_val}" ]]; then
+            _sum=$((_sum + _val))
+        else
+            _miss+="${_did} "
+            if [[ "${_kind}" != "increment" ]] && [[ -z "${_did//[[:digit:]]/}" ]]; then
+                _virt=$(( _virt + $(oneBackupDiskSizeSum "${_xml}" "${_did}") ))
+            fi
+        fi
+    done
+    if [[ -n "${_miss}" ]]; then
+        splog "[W] ${_miss% } not in the VolumesSpace cache, counted ${_virt}M (the virtual size of a FULL backup's disks, nothing for an increment)"
+    fi
+    echo $(( (_sum + 1048575) / 1048576 + _virt ))
+}
+
+# oneBackupFlattenSizeMb "inc ids" "inc SOURCEs" "inc SIZEs" "drop ids" BASE_ID CLUSTER_ID -> the SIZE (MiB) of the new base of a flatten: the first dropped increment's SIZE less its storedSize, plus the base's storedSize once the dropped increments are merged into it (storedSize + the sum over the dropped of storedSize - spaceUsed, per disk and NVRAM snapshot of the manifests, from the cached all-clusters SnapshotsSpace, else CLUSTER_ID's file); the sum of the recorded SIZEs when a figure is missing
+function oneBackupFlattenSizeMb()
+{
+    local _ids="$1" _sources="$2" _size_list="$3" _drop="$4" _base="$5" _cluster="$6"
+    local -a _ids_a=() _src_a=() _size_a=()
+    local -A _srcById=() _sizeById=()
+    local _i="" _id="" _key="" _file="" _first="" _sum=0 _stored_first=0 _stored_base=0 _s="" _u="" _ok=1 _mb=0
+    read -r -a _ids_a <<< "${_ids}"
+    read -r -a _src_a <<< "${_sources}"
+    read -r -a _size_a <<< "${_size_list}"
+    for _i in "${!_ids_a[@]}"; do
+        _srcById["${_ids_a[${_i}]}"]="${_src_a[${_i}]:-}"
+        _sizeById["${_ids_a[${_i}]}"]="${_size_a[${_i}]:-0}"
+    done
+    for _id in ${_drop}; do
+        _sum=$((_sum + ${_sizeById[${_id}]:-0}))
+    done
+    _sum=$((_sum + ${_sizeById[${_base}]:-0}))
+    _first="${_drop%% *}"
+    _file="$(spSpaceCacheFile SnapshotsSpace "" || spSpaceCacheFile SnapshotsSpace "${_cluster}" || true)"
+    _cluster=""
+    if [[ -z "${_drop}" ]] || [[ -z "${_file}" ]]; then
+        echo "${_sum}"
+        return 0
+    fi
+    if oneBackupSourceParse "${_srcById[${_base}]:-}" quiet; then
+        for _key in ${BS_DISK_IDS} nvram; do
+            [[ -n "${BS_IDS_A[${_key}]:-}" ]] || continue
+            _s="$(spSpaceFigure "${_file}" "${_cluster}" "${BS_IDS_A[${_key}]}" storedSize || true)"
+            [[ -n "${_s}" ]] || { _ok=0; break; }
+            _stored_base=$((_stored_base + _s))
+        done
+    else
+        _ok=0
+    fi
+    for _id in ${_drop}; do
+        [[ ${_ok} -eq 1 ]] || break
+        oneBackupSourceParse "${_srcById[${_id}]:-}" quiet || { _ok=0; break; }
+        for _key in ${BS_DISK_IDS} nvram; do
+            [[ -n "${BS_IDS_A[${_key}]:-}" ]] || continue
+            _s="$(spSpaceFigure "${_file}" "${_cluster}" "${BS_IDS_A[${_key}]}" storedSize || true)"
+            _u="$(spSpaceFigure "${_file}" "${_cluster}" "${BS_IDS_A[${_key}]}" spaceUsed || true)"
+            [[ -n "${_s}" && -n "${_u}" ]] || { _ok=0; break; }
+            _stored_base=$((_stored_base + _s - _u))
+            [[ "${_id}" != "${_first}" ]] || _stored_first=$((_stored_first + _s))
+        done
+    done
+    if [[ ${_ok} -ne 1 ]]; then
+        splog "[W] flatten: snapshot figures missing from the SnapshotsSpace cache, the base keeps the sum of the recorded sizes (${_sum}M)"
+        echo "${_sum}"
+        return 0
+    fi
+    _mb=$(( ${_sizeById[${_first}]:-0} - (_stored_first + 1048575) / 1048576 + (_stored_base + 1048575) / 1048576 ))
+    [[ ${_mb} -ge 0 ]] || _mb=0
+    echo "${_mb}"
 }
 
 # oneBackupDiskSizeSum VM_XML "disk ids" -> the sum of the disks' SIZE (MiB)
