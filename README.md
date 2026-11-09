@@ -73,7 +73,7 @@ Optional:
 * Replace the <devices/video> element in the domain XML.
 * Support for [UEFI Normal/Secure boot](docs/uefi_boot.md) with persistent UEFI NVRAM stored on StorPool backed block device.
 * [Interactive backups](docs/interactive_backup.md) through OneBEX for third-party backup applications (Veeam), a Technology Preview: the StorPool exporter serves the backup snapshot straight from the hypervisor, full backups only.
-* [StorPool backup datastore](docs/backup_datastore.md): OpenNebula backups kept as StorPool snapshots, on the cluster or sent to another StorPool cluster/location, with the vTPM state and the UEFI NVRAM; restores are clones of the snapshots.
+* [StorPool backup datastore](docs/backup_datastore.md): OpenNebula backups (FULL or INCREMENT) kept as StorPool snapshots, on the cluster or sent to another StorPool cluster/location, with the vTPM state and the UEFI NVRAM; restores are clones of the snapshots.
 * Support CDROM hotplug.
 * Use CPU tune parameters instead/or in addition/ of CPU shares.
 
@@ -83,7 +83,7 @@ Optional:
 * OpenNebula temporarily keeps the VM checkpoint file on the Host and then (optionally) transfers it to the storage. A workaround was added on the base of OpenNebula/one#3272.
 * When SYSTEM datastore integration is enabled, the reported free/used/total space of the Datastore is the space on StorPool. (On the host filesystem there are mostly symlinks and small files that do not require much disk space).
 * VM snapshotting is not possible because it is handled internally by libvirt, which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
-* Only FULL OpenNebula backups are supported.
+* Backups to a file-based backup datastore (rsync, restic) are FULL only; the StorPool backup datastore takes FULL and INCREMENT backups.
 * The interactive (OneBEX/Veeam) backups are a Technology Preview that needs an OpenNebula change not in a release yet (see [Interactive backups](docs/interactive_backup.md#limitations)).
 * The StorPool backup datastore refuses VMs with non-StorPool disks, needs `DATASTORE_CAPACITY_CHECK=NO`, and a remote site deletes the copies of removed backups only with `minimumDeleteDelay` set on its bridge entry (see [the limitations](docs/backup_datastore.md#limitations)).
 * Persistent Images with SHAREABLE attribute are not supported.

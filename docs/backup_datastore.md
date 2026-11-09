@@ -51,8 +51,8 @@ of the remote bridge in the StorPool knowledge base.
 
 ## What a backup is
 
-`onevm backup <vm> -d <backup ds>`, live or in POWEROFF, FULL mode only
-(`MODE=INCREMENT` is refused). The addon's `prebackup`:
+`onevm backup <vm> -d <backup ds>`, live or in POWEROFF, in `FULL` or
+`INCREMENT` mode (see below). The addon's `prebackup`:
 
 1. builds a *service volume* `<ONE_PX>-sys-<vm>-SVC-<epoch>`
    holding a tar with the backup's `vm.xml` and, when the VM has them, the
@@ -70,7 +70,7 @@ copies `vm.xml` and `svc.tar` under `<BASE_PATH>/<vm>/<epoch>/` and registers
 the image with `SOURCE`:
 
 ```
-<location|local>:<vm_id>:<epoch>:<disk_id>=<id>[,<disk_id>=<id>...][,nvram=<id>][,svc=<id>]
+<location|local>/<vm_id>/<epoch>/<disk_id>=<id>[/<disk_id>=<id>...][/nvram=<id>][/svc=<id>]
 ```
 
 `<id>` is the local snapshot's globalId (local mode) or the `remoteId` of the
@@ -78,13 +78,49 @@ copy on the target (remote mode, listed by `SnapshotsRemoteList` on the source
 cluster); `<location>` is the location name of the copy (`devA1` for a cluster
 `devA1-cl2`). The image `SIZE` is the sum of the disks' sizes, `FORMAT=raw`.
 
-`KEEP_LAST` works through the datastore `rm` action: local mode detaches and
-deletes the snapshots; a same-location cluster target gets the forwarded
-`SnapshotUnexport` + `SnapshotDelete` of each copy; a remote location gets
-`SnapshotsRemoteUnexport`. **A remote site deletes the copy only when its
-`remoteBridge` entry for the source cluster has `minimumDeleteDelay` set**;
-otherwise the copy stays on the remote cluster after the unexport and must be
-removed there (`kvchk` of the remote OpenNebula instance does not see it).
+`KEEP_LAST` works through the datastore `rm` action in `FULL` mode and through
+`increment_flatten` in `INCREMENT` mode, both removing whole backups: local
+mode detaches and deletes the snapshots; a same-location cluster target gets
+the forwarded `SnapshotUnexport` + `SnapshotDelete` of each copy; a remote
+location gets `SnapshotsRemoteUnexport`. **A remote site deletes the copy only
+when its `remoteBridge` entry for the source cluster has `minimumDeleteDelay`
+set**; otherwise the copy stays on the remote cluster after the unexport and
+must be removed there (`kvchk` of the remote OpenNebula instance does not see
+it).
+
+## FULL and INCREMENT
+
+A StorPool snapshot holds only the blocks changed since the previous one, and
+a restore clones whichever snapshot is asked for, so both OpenNebula backup
+modes take the same group snapshot and store and transfer the same data (the
+multi-site transfer deduplicates against the copies already on the target).
+The modes differ in OpenNebula's bookkeeping:
+
+* `MODE=FULL` (the default): one backup image per backup, `KEEP_LAST`
+  deletes the oldest images.
+* `MODE=INCREMENT`: one backup image per chain. The first backup creates the
+  image with increment 0, every later backup adds an increment to the same
+  image; `oneimage show` lists them under `BACKUP INCREMENTS`, each with its
+  own manifest as `SOURCE` (the image `SOURCE` is increment 0's). An
+  increment is a complete point in time: `onevm restore --increment N` and
+  `oneimage restore --increment N` clone that increment's snapshots, without
+  `--increment` the last one's. `KEEP_LAST` runs the datastore
+  `increment_flatten`, which deletes the backups of the oldest increments
+  beyond `KEEP_LAST` (StorPool merges their blocks into the next kept
+  snapshot) and reports the remaining chain, whose first increment becomes
+  the `FULL` one. Every increment reports the sum of the disks' sizes, as a
+  `FULL` backup does, so the image `SIZE` (and the datastore quota) grows by
+  the VM size per increment while StorPool keeps the changed blocks only.
+
+The rules of `MODE=INCREMENT` are OpenNebula's: a VM with VM snapshots cannot
+use it; an increment always goes to the datastore of its chain (`-d` of
+`onevm backup` is ignored unless `--reset`); the chain is reset, and the next
+backup starts a new image, by `onevm backup --reset`, a change of `MODE`,
+`DISK_IDS` or `BACKUP_VOLATILE`, the attach or detach of a backed-up disk, an
+in-place restore and the deletion of the chain image; a backup is refused
+while a flatten is running (`ACTIVE_FLATTEN`). `INCREMENT_MODE` (`CBT` or
+`SNAPSHOT`) has no meaning for StorPool disks. Interactive (OneBEX) backups
+stay `FULL` only.
 
 ## The etcd index
 
@@ -105,8 +141,9 @@ of the remote unexport, 60).
 
 ## Restores
 
-**In place** (`onevm restore <vm> <image> [--disk-id N]`, VM in POWEROFF): each
-disk gets a new volume created from the backup snapshot (`VolumeCreate` with
+**In place** (`onevm restore <vm> <image> [--disk-id N] [--increment N]`, VM in
+POWEROFF): each disk gets a new volume created from the backup snapshot
+(`VolumeCreate` with
 `parent`), swapped in as the file-based path does; the NVRAM volume the same
 way; the service tar is taken from the front-end copy (or from the service
 snapshot when that is gone) and its vTPM state is written to the SWTPM volume
@@ -115,7 +152,8 @@ snapshot is pulled first (`SnapshotFromRemote`, on the restored volume's
 template or the `MgmtConfig` default) and the pulled snapshot is deleted after
 the clone.
 
-**New images** (`oneimage restore <image> -d <storpool image ds>`): one image
+**New images** (`oneimage restore <image> -d <storpool image ds> [--increment N]`):
+one image
 per disk with `PATH=SPSNAPSHOT:~<id>` (local) or `SPREMOTE:<location>:~<id>`
 (remote, pulled by the image datastore `cp`) and a VM template; the vTPM state
 goes into the template as `TPM_STATE`, as upstream does. The destination must
@@ -153,7 +191,7 @@ restored volume's, else the `MgmtConfig` default template of the cluster (a
 
 ## Limitations
 
-* FULL backups only; `increment_flatten` refuses.
+* An increment is charged the full size of the disks, not the changed blocks.
 * Non-StorPool disks are refused (`BACKUP_SKIP_OTHER_DISKS` is not honoured).
 * Remote mode sends every backup through the group transfer; a cancel removes
   the local side at once but a copy that was in flight may complete on the
