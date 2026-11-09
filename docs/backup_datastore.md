@@ -131,16 +131,18 @@ datastore monitors under `/var/cache/addon-storpool-monitor/` (one file per
 call and cluster, `json-VolumesSpace-<api host>-<cluster id>`); its systemd
 timer runs every 4 minutes and refreshes a call only when its file is older
 than `SP_VOLUMESSPACE_SECONDS` / `SP_SNAPSHOTSSPACE_SECONDS`, which default to
-`SP_DEFAULT_SECONDS` (1800 s) in `monitor_helper-syncrc`. The figures are
-therefore estimates that miss the writes since the last refresh.
+`SP_DEFAULT_SECONDS` (1800 s) in `monitor_helper-syncrc`. A later local
+increment whose snapshots are already in the cached `SnapshotsSpace` uses
+those snapshots' `storedSize`. The other figures are estimates that miss the
+writes since the last refresh.
 
-**API cost.** A `FULL` backup, a flatten and the monitor make no API call of
-their own. An increment makes one plain `VolumesSpace` call only when the
-cache file is older than the VM's previous backup, that is when backups come
-more often than the cache refreshes; the result is written back to the cache,
-so the other VMs of the same backup job reuse it. A disk on another cluster
-of the multi-cluster is read from that cluster's cache file (the cluster is
-the first two fields of the volume's globalId) and never triggers a call.
+**API cost.** An increment never calls `VolumesSpace`. A `FULL` backup may,
+including when the cache file is missing or a volume is not listed, and the
+result is written back so the next backup of the same job reuses it; the two
+previous bodies stay. A flatten and the monitor make no API call of their
+own. A disk on another cluster of the multi-cluster is read from that
+cluster's cache file (the cluster is the first two fields of the volume's
+globalId) and never triggers a call.
 
 **The SIZE of a backup** (`oneimage show`, the datastore quota):
 
@@ -150,13 +152,15 @@ the first two fields of the volume's globalId) and never triggers a call.
   cloned from included) but not unwritten space, so it is at most the sum of
   the virtual sizes. A disk missing from the cache counts its virtual size.
 * A later increment in local mode is the data written since the disks'
-  previous snapshot: the sum of `storedSize` of the same volumes, exactly
-  what the group snapshot takes over. The datastore `backup` action refreshes the cache with
-  one plain `VolumesSpace` call only when the file is older than the VM's
-  previous backup (so that the figure is relative to the right snapshot) or
-  when a volume is not listed, and writes the result back for the next
-  backups; a backup job of many VMs shares one refresh. A disk still missing
-  counts nothing.
+  previous snapshot, and it does not refresh the cache. If the cached
+  `SnapshotsSpace` lists this backup's disk and NVRAM snapshots, SIZE is the
+  sum of their `storedSize`, which is exact from the moment of the snapshot.
+  Otherwise it is the volumes' `storedSize` from the newest kept
+  `VolumesSpace` body whose call started after the previous backup's epoch
+  and ended before this one (the current body and two earlier ones, each
+  stamped with the start and end of the call that produced it); that misses
+  the writes after that call. When neither figure is available the
+  increment's SIZE is 0. A disk still missing counts nothing.
 * In remote mode every backup, increment or not, is its full content: the
   cluster keeps no snapshot of the previous backup (the exported transient
   is gone once the copy lands), so the change since it cannot be measured

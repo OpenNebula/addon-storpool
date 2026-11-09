@@ -323,8 +323,16 @@ for i in "${!DS_ID_ARRAY[@]}"; do
         fi
         if [[ ${skipCall} -eq 0 ]]; then
             if [[ ! -f ${tempJson} ]]; then
+                fetchStart="$(date +%s)"
                 if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 storpoolRetry "${apicall}"; then
-                    cp "${DATA_JSON}" "${tempJson}"
+                    fetchEnd="$(date +%s)"
+                    if [[ "${apicall}" == "VolumesSpace" ]]; then
+                        # the stamp belongs to this call; a reuse of tempJson below must not take a new date
+                        spSpaceStampResponses "${DATA_JSON}" "${tempJson}" "${fetchStart}" "${fetchEnd}" \
+                            || cp "${DATA_JSON}" "${tempJson}"
+                    else
+                        cp "${DATA_JSON}" "${tempJson}"
+                    fi
                     ret=$?
                     if boolTrue "DEBUG_MONITOR_HELPER_SYNC" || [[ ${ret} -ne 0 ]]; then
                         splog "cp ${DATA_JSON} ${tempJson} (${ret})"
@@ -344,17 +352,25 @@ for i in "${!DS_ID_ARRAY[@]}"; do
                 continue
             fi
             # split the json file per StorPool cluster
-            ret=-1
-            while read -r -u 4 clusterId; do
-                jq -r -c --arg clusterId "${clusterId}" '.data.clusters[]|select(.clusterId==$clusterId)|.response' "${jsonFile}" > "${jsonFile}-${clusterId}"
-                ret=$?
-                if [[ ${ret} -ne 0 ]]; then
-                    splog "Can't process ${jsonFile} for ${clusterId} (${ret})"
+            if [[ "${apicall}" == "VolumesSpace" ]]; then
+                # .response already carries spFetch from the temp body; the helper keeps the two previous bodies
+                if ! spSpaceSplitVolumes "${jsonFile}"; then
+                    splog "No clusters found in ${jsonFile}. Next"
+                    continue
                 fi
-            done 4< <(jq -r '.data.clusters[]|.clusterId' "${jsonFile}" || true)
-            if [[ ${ret} -eq -1 ]]; then
-                splog "No clusters found in ${jsonFile}. Next"
-                continue
+            else
+                ret=-1
+                while read -r -u 4 clusterId; do
+                    jq -r -c --arg clusterId "${clusterId}" '.data.clusters[]|select(.clusterId==$clusterId)|.response' "${jsonFile}" > "${jsonFile}-${clusterId}"
+                    ret=$?
+                    if [[ ${ret} -ne 0 ]]; then
+                        splog "Can't process ${jsonFile} for ${clusterId} (${ret})"
+                    fi
+                done 4< <(jq -r '.data.clusters[]|.clusterId' "${jsonFile}" || true)
+                if [[ ${ret} -eq -1 ]]; then
+                    splog "No clusters found in ${jsonFile}. Next"
+                    continue
+                fi
             fi
         fi
         if [[ ! -f "${jsonFile}" ]]; then

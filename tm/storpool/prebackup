@@ -203,11 +203,17 @@ fi
 # A remote-mode leftover (a transient export, or copies on the target) is dropped only
 # when its KV family names the target; otherwise it is left for kvchk, since unexporting
 # the transient would let the copy complete with nothing pointing at it.
+REGISTERED_OUT=""
+REGISTERED_RC=0
+REGISTERED_OUT="$(oneBackupRegistered "${VM_ID}")" || REGISTERED_RC=$?
+if [[ ${REGISTERED_RC} -ne 0 ]]; then
+    splog "[E] VM ${VM_ID}: registered backups could not be read (${REGISTERED_RC}), leftover sweep skipped"
+else
 REGISTERED_EPOCHS=" "
 while read -r rEpoch _; do
     [[ -n "${rEpoch}" ]] || continue
     REGISTERED_EPOCHS+="${rEpoch} "
-done < <(oneBackupRegistered "${VM_ID}")
+done <<< "${REGISTERED_OUT}"
 declare -A kvMode kvLoc kvIds kvDropFailed
 while read -r kEpoch kDid kVal; do
     [[ -n "${kEpoch}" ]] || continue
@@ -278,6 +284,7 @@ for kEpoch in "${!kvMode[@]}"; do
         oneBackupKvDel "${VM_ID}" "${kEpoch}"
     fi
 done
+fi
 oneBackupRemoveDir "${KVMHOST}" "${B_DISK_DIR}"
 if [[ "${B_HOST}:${B_DIR}" != "${KVMHOST}:${B_DISK_DIR}" ]]; then
     oneBackupRemoveDir "${B_HOST}" "${B_DIR}"
@@ -324,6 +331,12 @@ fi
 B_SUFFIX="ONEBACKUP-$(date +%s || true)"
 if [[ ${BACKUP_NATIVE} -eq 1 ]]; then
     B_EPOCH="${B_SUFFIX#ONEBACKUP-}"
+    if ! printf '%s\n' "${B_EPOCH}" > "${B_LOCAL}/epoch"; then
+        msg="VM ${VM_ID}: cannot record backup epoch ${B_EPOCH} under ${B_LOCAL}"
+        splog "[E] ${msg}"
+        error_message "${msg}"
+        exit 1
+    fi
     SVC_VOL="${ONE_PX}-sys-${VM_ID}-SVC-${B_EPOCH}"
     SVC_UID=""
     # vm.xml is in the service tar for every StorPool backup. vTPM state and a

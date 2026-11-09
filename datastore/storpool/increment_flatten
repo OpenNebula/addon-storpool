@@ -58,24 +58,32 @@ for i in "${!INC_IDS_A[@]}"; do
     srcById["${INC_IDS_A[${i}]}"]="${INC_SRC_A[${i}]}"
 done
 
-RET=0
+DROPPED=""
 FAILED=""
 for incId in ${BF_DROP_IDS}; do
     if ! oneBackupSourceParse "${srcById[${incId}]}" quiet; then
         splog "[E] image ${ID} increment ${incId}: not a StorPool backup SOURCE '${srcById[${incId}]}'"
-        RET=1
-        FAILED+="${incId} "
-        continue
+        FAILED="${incId}"
+        break
     fi
     splog "[I] image ${ID} increment ${incId}: dropping backup epoch ${BS_EPOCH}"
     if ! oneBackupEpochDrop "${srcById[${incId}]}" "${BASE_PATH}"; then
-        RET=1
-        FAILED+="${incId} "
+        splog "[E] image ${ID} increment ${incId}: not dropped"
+        FAILED="${incId}"
+        break
+    fi
+    DROPPED+="${incId} "
+done
+if [[ -n "${BF_DROP_IDS}" && -z "${DROPPED}" ]]; then
+    failWith "Error removing the increment ${FAILED} of image ${ID}"
+fi
+BF_DROP_IDS="${DROPPED% }"
+for i in "${!INC_IDS_A[@]}"; do
+    if [[ " ${DROPPED}" != *" ${INC_IDS_A[${i}]} "* ]]; then
+        BF_BASE_ID="${INC_IDS_A[${i}]}"
+        break
     fi
 done
-if [[ ${RET} -ne 0 ]]; then
-    failWith "Error removing the increment(s) ${FAILED% } of image ${ID}"
-fi
 
 CHAIN=""
 keep=0

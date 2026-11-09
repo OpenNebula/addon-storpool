@@ -63,7 +63,13 @@ oneDsDriverAction
 if [[ "${DATASTORE_TYPE}" == "3" ]]; then
     RET=0
     N=0
-    FAILED=""
+    LINES=""
+    if ! LINES="$(oneBackupImageSources "${BACKUP_INC_IDS}" "${BACKUP_INC_SOURCES}" "${SOURCE}")"; then
+        msg="rm: image ${ID} increment ids and sources do not match"
+        error_message "${msg}"
+        splog "${msg}"
+        exit 1
+    fi
     while read -r incId incSrc; do
         [[ -n "${incSrc}" ]] || continue
         N=$((N + 1))
@@ -74,18 +80,20 @@ if [[ "${DATASTORE_TYPE}" == "3" ]]; then
             error_message "${msg}"
             splog "${msg}"
             RET=1
-            continue
+            break
         fi
         if ! oneBackupEpochDrop "${incSrc}" "${BASE_PATH}"; then
+            msg="Error removing the backup ${incSrc} of image ${ID}"
+            error_message "${msg}"
+            splog "${msg}"
             RET=1
-            FAILED+="${incSrc} "
+            break
         fi
-    done < <(oneBackupImageSources "${BACKUP_INC_IDS}" "${BACKUP_INC_SOURCES}" "${SOURCE}")
+    done <<< "${LINES}"
     if [[ ${RET} -eq 0 ]]; then
         splog "END image ${ID}: ${N} backup(s) removed"
     else
-        [[ -z "${FAILED}" ]] || error_message "Error removing the backup(s) ${FAILED% } of image ${ID}"
-        splog "END image ${ID}: ${N} backup(s), not every one removed (${RET})"
+        splog "END image ${ID}: stopped, ${N} backup(s) considered (${RET})"
     fi
     exit "${RET}"
 fi

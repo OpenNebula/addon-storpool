@@ -827,6 +827,11 @@ function oneCallXml()
         fi
         if [[ ${_onetry} -lt 1 ]]; then
             splog "'${_onecmd[*]} ${_id}' retry:${_onetry} Error: Timeout"
+            # oneBackupRegistered sets this so a failed show can be told from a gone image.
+            # Every other caller still exits.
+            if [[ "${ONE_CALL_RETURN:-0}" == "1" ]]; then
+                return "${_ret}"
+            fi
             exit "${_ret}"
         fi
         _onetry=$((_onetry-1))
@@ -4957,7 +4962,7 @@ function oneBackupSourceParse()
     return 0
 }
 
-# oneBackupSelectSource "inc ids" "inc SOURCEs" IMAGE_SOURCE INC_ID -> the SOURCE of increment INC_ID, of the last increment or of a FULL image for -1
+# oneBackupSelectSource "inc ids" "inc SOURCEs" IMAGE_SOURCE INC_ID -> the SOURCE of increment INC_ID, of the last increment, or of a FULL image for -1 and for 0
 function oneBackupSelectSource()
 {
     local _ids="$1" _sources="$2" _img_src="$3" _inc="${4:--1}"
@@ -4965,13 +4970,18 @@ function oneBackupSelectSource()
     local _i=""
     read -r -a _ids_a <<< "${_ids}"
     read -r -a _src_a <<< "${_sources}"
+    # read -a drops empty fields, so a short SOURCE list is the only signal of a hole
+    if [[ ${#_ids_a[*]} -ne ${#_src_a[*]} ]]; then
+        splog "[E] backup image lists ${#_ids_a[*]} increment ids and ${#_src_a[*]} sources"
+        return 1
+    fi
     if [[ ${#_ids_a[*]} -eq 0 ]]; then
-        if [[ "${_inc}" != "-1" ]]; then
-            splog "[E] increment ${_inc} requested from a backup image without increments"
-            return 1
+        if [[ "${_inc}" == "-1" || "${_inc}" == "0" ]]; then
+            echo "${_img_src}"
+            return 0
         fi
-        echo "${_img_src}"
-        return 0
+        splog "[E] increment ${_inc} requested from a backup image without increments"
+        return 1
     fi
     if [[ "${_inc}" == "-1" ]]; then
         echo "${_src_a[${#_src_a[*]}-1]}"
@@ -4979,7 +4989,7 @@ function oneBackupSelectSource()
     fi
     for _i in "${!_ids_a[@]}"; do
         if [[ "${_ids_a[${_i}]}" == "${_inc}" ]]; then
-            echo "${_src_a[${_i}]:-}"
+            echo "${_src_a[${_i}]}"
             return 0
         fi
     done
@@ -4995,12 +5005,16 @@ function oneBackupImageSources()
     local _i=""
     read -r -a _ids_a <<< "${_ids}"
     read -r -a _src_a <<< "${_sources}"
+    if [[ ${#_ids_a[*]} -ne ${#_src_a[*]} ]]; then
+        splog "[E] backup image lists ${#_ids_a[*]} increment ids and ${#_src_a[*]} sources"
+        return 1
+    fi
     if [[ ${#_ids_a[*]} -eq 0 ]]; then
         echo "- ${_img_src}"
         return 0
     fi
     for _i in "${!_ids_a[@]}"; do
-        echo "${_ids_a[${_i}]} ${_src_a[${_i}]:-}"
+        echo "${_ids_a[${_i}]} ${_src_a[${_i}]}"
     done
 }
 
@@ -5027,31 +5041,139 @@ function oneBackupFlattenPlan()
     return 0
 }
 
-# oneBackupRegistered VM_ID -> lines "epoch image_id SOURCE" of every increment of the VM's StorPool backup images (BACKUP_IDS_A from oneVmVolumes)
+# oneBackupStorpoolDsLoad -> SP_BDS_IDS_A the ids of StorPool backup datastores (TYPE 3, DS_MAD storpool); one onedatastore list per call
+function oneBackupStorpoolDsLoad()
+{
+    local _xml="${TMPDIR:-/tmp}/oneBackupRegistered-ds.XML" _rows="" _id="" _type="" _mad="" _rc=0
+    local ONE_CALL_RETURN=1
+    unset SP_BDS_IDS_A
+    declare -g -A SP_BDS_IDS_A
+    if ! oneCallXml onedatastore list "" "${_xml}" >/dev/null; then
+        splog "[E] onedatastore list failed, StorPool backup datastores are unknown"
+        return 1
+    fi
+    if ! "${SPXML}" val <"${_xml}" >/dev/null; then
+        splog "[E] datastore list could not be read"
+        return 1
+    fi
+    # one line per datastore; a missing DS_MAD stays an empty field
+    _rows="$("${SPXML}" sel -t -m /DATASTORE_POOL/DATASTORE -v ID -o ' ' -v TYPE -o ' ' -v DS_MAD -n <"${_xml}")" || _rc=$?
+    if [[ ${_rc} -ne 0 ]]; then
+        if "${SPXML}" sel -t -m /DATASTORE_POOL/DATASTORE -v ID -n <"${_xml}" >/dev/null; then
+            splog "[E] datastore list could not be read"
+            return 1
+        fi
+        return 0
+    fi
+    while read -r _id _type _mad; do
+        [[ -n "${_id}" && "${_type}" == "3" && "${_mad}" == "storpool" ]] || continue
+        SP_BDS_IDS_A["${_id}"]=1
+    done <<< "${_rows}"
+    return 0
+}
+
+# oneBackupRegistered VM_ID -> lines "epoch image_id size SOURCE" of every increment of the VM's StorPool backup images (BACKUP_IDS_A from oneVmVolumes)
+#   size is the increment's SIZE, or the image SIZE of a FULL image; SOURCE is last and has no spaces
+#   fails when a StorPool backup image cannot be read; a gone image and a non-StorPool image leave the set
 function oneBackupRegistered()
 {
-    local _vm="$1" _img="" _src="" _tmpXML="" _inc="" _ids="" _sources="" _element="" xfh=""
+    local _vm="$1" _img="" _src="" _tmpXML="" _inc="" _ids="" _sources="" _element="" _lines="" xfh=""
+    local _dsid="" _xrc=0 _xout="" _vm_checked=0 _vm_ok=0 _vm_ids=" " _vmxml="" _buf=""
+    local _imgsize="" _incsizes="" _sz="" _n=0
+    local -a _inc_ids_a=() _inc_sz_a=()
+    local ONE_CALL_RETURN=1
+    local _ds_loaded=0
     for _img in "${BACKUP_IDS_A[@]}"; do
         [[ -n "${_img}" ]] || continue
         _tmpXML="${TMPDIR:-/tmp}/oneBackupRegistered-${_img}.XML"
-        oneCallXml oneimage show "${_img}" "${_tmpXML}" >/dev/null || continue
+        if ! oneCallXml oneimage show "${_img}" "${_tmpXML}" >/dev/null; then
+            if [[ ${_vm_checked} -eq 0 ]]; then
+                _vm_checked=1
+                _vmxml="${TMPDIR:-/tmp}/oneBackupRegistered-vm-${_vm}.XML"
+                if oneCallXml onevm show "${_vm}" "${_vmxml}" >/dev/null; then
+                    if _vm_ids="$("${SPXML}" list /VM/BACKUPS/BACKUP_IDS/ID <"${_vmxml}")"; then
+                        _vm_ok=1
+                        _vm_ids=" ${_vm_ids//;/ } "
+                    fi
+                fi
+            fi
+            if [[ ${_vm_ok} -eq 1 && "${_vm_ids}" != *" ${_img} "* ]]; then
+                splog "[I] backup image ${_img} of VM ${_vm} is gone"
+                continue
+            fi
+            splog "[E] backup image ${_img} of VM ${_vm} cannot be read"
+            return 1
+        fi
+        _xout="${TMPDIR:-/tmp}/oneBackupRegistered-${_img}.xpath"
+        _xrc=0
+        "${SPXML}" get "/IMAGE/DATASTORE_ID" "/IMAGE/SOURCE" \
+            "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/ID" \
+            "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/SOURCE" \
+            "/IMAGE/SIZE" <"${_tmpXML}" >"${_xout}" || _xrc=$?
         unset i XPATH_ELEMENTS
         while IFS='' read -r -u "${xfh}" -d '' _element; do
             XPATH_ELEMENTS[i++]="${_element}"
-        done {xfh}< <("${SPXML}" get <"${_tmpXML}" "/IMAGE/SOURCE" \
-            "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/ID" "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/SOURCE" || true)
+        done {xfh}< "${_xout}"
         exec {xfh}<&-
         unset i
+        _dsid="${XPATH_ELEMENTS[i++]}"
         _src="${XPATH_ELEMENTS[i++]}"
         _ids="${XPATH_ELEMENTS[i++]}"
         _sources="${XPATH_ELEMENTS[i++]}"
+        _imgsize="${XPATH_ELEMENTS[i++]:-}"
+        if [[ ${_ds_loaded} -eq 0 ]]; then
+            _ds_loaded=1
+            oneBackupStorpoolDsLoad || return 1
+        fi
+        if [[ -z "${_dsid}" ]]; then
+            splog "[E] backup image ${_img} of VM ${_vm} has no datastore"
+            return 1
+        fi
+        if [[ -z "${SP_BDS_IDS_A[${_dsid}]:-}" ]]; then
+            continue
+        fi
+        if [[ ${_xrc} -ne 0 ]]; then
+            splog "[E] backup image ${_img} of VM ${_vm} could not be parsed"
+            return 1
+        fi
+        if ! _lines="$(oneBackupImageSources "${_ids}" "${_sources}" "${_src}")"; then
+            splog "[E] backup image ${_img} of VM ${_vm}: increment ids and sources do not match"
+            return 1
+        fi
+        _inc_ids_a=()
+        _inc_sz_a=()
+        if [[ -n "${_ids}" ]]; then
+            _incsizes="$("${SPXML}" list /IMAGE/BACKUP_INCREMENTS/INCREMENT/SIZE <"${_tmpXML}")" || {
+                splog "[E] backup image ${_img} of VM ${_vm} could not be parsed"
+                return 1
+            }
+            read -r -a _inc_ids_a <<< "${_ids}"
+            IFS=';' read -r -a _inc_sz_a <<< "${_incsizes}"
+            if [[ ${#_inc_ids_a[@]} -ne ${#_inc_sz_a[@]} ]]; then
+                splog "[E] backup image ${_img} of VM ${_vm}: increment ids and sizes do not match"
+                return 1
+            fi
+        fi
+        _n=0
         while read -r _inc _src; do
+            if [[ "${_inc}" == "-" ]]; then
+                _sz="${_imgsize}"
+            else
+                _sz="${_inc_sz_a[_n]:-}"
+                _n=$((_n + 1))
+            fi
             [[ -n "${_src}" ]] || continue
             oneBackupSourceParse "${_src}" quiet || continue
             [[ "${BS_VM_ID}" == "${_vm}" ]] || continue
-            echo "${BS_EPOCH} ${_img} ${_src}"
-        done < <(oneBackupImageSources "${_ids}" "${_sources}" "${_src}")
+            if [[ -z "${_sz}" || -n "${_sz//[[:digit:]]/}" ]]; then
+                splog "[E] backup image ${_img} of VM ${_vm}: increment ${_inc} has no SIZE"
+                return 1
+            fi
+            _buf+="${BS_EPOCH} ${_img} ${_sz} ${_src}"$'\n'
+        done <<< "${_lines}"
     done
+    printf '%s' "${_buf}"
+    return 0
 }
 
 # oneBackupEpochDrop SOURCE BASE_PATH: remove the snapshots (local) or copies (remote) of one backup manifest, its KV records and its front-end directory
@@ -5280,38 +5402,189 @@ function storpoolBackupWait()
     done
 }
 
-# oneBackupInflight VM_ID MODE "disk ids" [TIMEOUT]: the backup in progress of the VM
+# oneBackupEpochQuiet VM EPOCH -> 0 when no transient, export or remote copy of EPOCH is listed and every listing succeeded
+function oneBackupEpochQuiet()
+{
+    local _vm="$1" _epoch="$2" _jq=0
+    if ! DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null; then
+        return 1
+    fi
+    _jq=0
+    jq -e --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" --arg epoch "${_epoch}" \
+        '[(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+          | select(.deleted==false and .transient==true and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")==$epoch)]
+         | length > 0' "${TMPDIR}/SnapshotsList.json" >/dev/null 2>&1 || _jq=$?
+    [[ ${_jq} -eq 1 ]] || return 1
+    if ! DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ExportsList >/dev/null; then
+        return 1
+    fi
+    _jq=0
+    jq -e --arg epoch "${_epoch}" \
+        '[.data.exports[]? | select((.tags.bkp // "")==$epoch)] | length > 0' \
+        "${TMPDIR}/ExportsList.json" >/dev/null 2>&1 || _jq=$?
+    [[ ${_jq} -eq 1 ]] || return 1
+    if ! DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
+        return 1
+    fi
+    _jq=0
+    jq -e --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" --arg epoch "${_epoch}" \
+        '[.data.snapshots[]? | select((.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")==$epoch)]
+         | length > 0' "${TMPDIR}/SnapshotsRemoteList.json" >/dev/null 2>&1 || _jq=$?
+    [[ ${_jq} -eq 1 ]] || return 1
+    return 0
+}
+
+# oneBackupPinnedScan VM MODE "disk ids" TIMEOUT EPOCH -> lines "id DID GID" of the pinned epoch, once it is listed
+function oneBackupPinnedScan()
+{
+    local _vm="$1" _mode="$2" _disks="$3" _timeout="${4:-0}" _pinned="$5"
+    local _start=0 _now=0 _absent=0 _found=0 _epoch="" _gid="" _did="" _img="" _src="" _loc=""
+    local _unmatched="" _matched=0 _n=0 _map="" _key=""
+    local -A _hit=() _want=()
+    _start="$(date +%s || true)"
+    if [[ "${_mode}" != "local" ]]; then
+        for _map in ${vmDisksMap}; do
+            _did="${_map#*:}"
+            _img="${_map%:*}"
+            [[ -n "${_did}" ]] || continue
+            [[ " ${_disks//:/ } " == *" ${_did} "* ]] || continue
+            kvGetUid "${_img}" || continue
+            _want["${SP_UID#\~}"]="${_did}"
+        done
+        if [[ -n "${T_OS_NVRAM}" ]] && kvGetUid "${ONE_PX}-sys-${_vm}-NVRAM"; then
+            _want["${SP_UID#\~}"]="nvram"
+        fi
+    fi
+    while true; do
+        _found=0
+        if [[ "${_mode}" == "local" ]]; then
+            if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null; then
+                _hit=()
+                while read -r _epoch _gid _did _img; do
+                    [[ "${_epoch}" == "${_pinned}" ]] || continue
+                    _found=1
+                    if [[ "${_did}" == "-" ]]; then
+                        case "${_img}" in
+                            "${ONE_PX}-sys-${_vm}-NVRAM") _did="nvram" ;;
+                            "${ONE_PX}-sys-${_vm}-SVC-"*) _did="svc" ;;
+                            *) splog "[W] VM ${_vm} backup snapshot ${_gid} (${_img}) has no diskid tag, skipped"; continue ;;
+                        esac
+                    fi
+                    _hit["${_did}"]="${_gid}"
+                done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" --arg epoch "${_pinned}" \
+                    '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
+                     | select(.deleted==false and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and .tags.bkp==$epoch)
+                     | "\(.tags.bkp) \(.globalId) \(.tags.diskid // "-") \(.tags.img // "-")"' "${TMPDIR}/SnapshotsList.json" || true)
+                if [[ ${_found} -eq 1 ]]; then
+                    for _did in "${!_hit[@]}"; do
+                        echo "id ${_did} ${_hit[${_did}]}"
+                    done
+                    return 0
+                fi
+            fi
+        elif DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
+            _hit=()
+            _unmatched=""
+            _matched=0
+            while read -r _epoch _gid _src _loc; do
+                [[ "${_epoch}" == "${_pinned}" ]] || continue
+                _found=1
+                if [[ -n "${_want[${_src}]+found}" ]]; then
+                    _hit["${_want[${_src}]}"]="${_gid}"
+                    _matched=$((_matched + 1))
+                else
+                    _unmatched+="${_gid} "
+                fi
+            done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" --arg epoch "${_pinned}" \
+                '.data.snapshots[]
+                 | select((.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and .tags.bkp==$epoch)
+                 | "\(.tags.bkp) \(.remoteId) \(.createdFromGlobalId // "-") \(.location)"' "${TMPDIR}/SnapshotsRemoteList.json" || true)
+            _n="$(wc -w <<< "${_unmatched}")"
+            if [[ ${_found} -eq 1 && ${_n} -gt 1 ]]; then
+                splog "[E] VM ${_vm} backup epoch ${_pinned}: ${_n} remote copies match no disk or NVRAM volume (${_unmatched})"
+                return 1
+            fi
+            if [[ ${_found} -eq 1 && ${_matched} -eq ${#_want[*]} && ${_n} -eq 1 ]]; then
+                _hit["svc"]="${_unmatched% }"
+                for _did in "${!_hit[@]}"; do
+                    echo "id ${_did} ${_hit[${_did}]}"
+                done
+                return 0
+            fi
+        fi
+        _now="$(date +%s || true)"
+        if oneBackupEpochQuiet "${_vm}" "${_pinned}"; then
+            if [[ ${_absent} -eq 0 ]]; then
+                _absent="${_now}"
+            elif [[ $((_now - _absent)) -ge ${BACKUP_DROP_WAIT:-30} ]]; then
+                splog "[E] VM ${_vm} backup epoch ${_pinned} is gone (no transient, export or copy) after ${BACKUP_DROP_WAIT:-30}s"
+                return 1
+            fi
+        else
+            _absent=0
+        fi
+        if [[ ${_timeout} -gt 0 && $((_now - _start)) -ge ${_timeout} ]]; then
+            splog "[E] VM ${_vm} backup epoch ${_pinned} not listed within ${_timeout}s"
+            return 1
+        fi
+        if boolTrue "DEBUG_BACKUP"; then
+            splog "[D] VM ${_vm} waiting for backup epoch ${_pinned} ($((_now - _start))s)"
+        fi
+        sleep "${BACKUP_WAIT_SLEEP:-3}"
+    done
+}
+
+# oneBackupInflight VM_ID MODE "disk ids" [TIMEOUT]: the backup pinned under ${B_LOCAL}/epoch
 #   BI_EPOCH BI_FROM(kv|tags) BI_SVC_UID(~id|-) BI_IDS_A[did]=bare id (local snapshot, or remoteId in remote mode)
+#   BI_REGISTERED: the oneBackupRegistered lines (epoch image_id size SOURCE) when the scan succeeded
+#   BI_REGISTERED_UNREADABLE=1 when the image set could not be read; the pinned epoch is still returned
 function oneBackupInflight()
 {
     local _vm="$1" _mode="$2" _disks="$3" _timeout="${4:-0}"
-    local _epoch="" _did="" _val="" _img="" _gid="" _src="" _loc="" _best="" _map="" _registered=" "
-    local _start=0 _now=0 _unmatched="" _matched=0 _svc="" _n=0
+    local _epoch="" _did="" _val="" _pinned="" _registered=" " _reg_out="" _reg_rc=0
+    local _tf="" _scan_rc=0 _key="" _rest=""
     unset BI_IDS_A
     declare -g -A BI_IDS_A
     BI_EPOCH=""
     BI_FROM=""
     BI_SVC_UID="-"
     BI_LOCATION=""
-    export BI_EPOCH BI_FROM BI_SVC_UID BI_LOCATION
-    while read -r _epoch _img _src; do
-        [[ -n "${_epoch}" ]] || continue
-        _registered+="${_epoch} "
-    done < <(oneBackupRegistered "${_vm}")
+    BI_REGISTERED=""
+    BI_REGISTERED_UNREADABLE=0
+    export BI_EPOCH BI_FROM BI_SVC_UID BI_LOCATION BI_REGISTERED BI_REGISTERED_UNREADABLE
+    if [[ -n "${B_LOCAL:-}" && -f "${B_LOCAL}/epoch" ]]; then
+        read -r _pinned < "${B_LOCAL}/epoch" || true
+    fi
+    if [[ -z "${_pinned}" || -n "${_pinned//[[:digit:]]/}" ]]; then
+        splog "[E] VM ${_vm}: no backup epoch pinned under ${B_LOCAL:-<unset>}/epoch"
+        return 1
+    fi
+    if _reg_out="$(oneBackupRegistered "${_vm}")"; then
+        BI_REGISTERED="${_reg_out}"
+        while read -r _epoch _did _val; do
+            [[ -n "${_epoch}" ]] || continue
+            _registered+="${_epoch} "
+        done <<< "${_reg_out}"
+    else
+        _reg_rc=$?
+        splog "[E] VM ${_vm}: registered backups could not be read (${_reg_rc})"
+        BI_REGISTERED=""
+        BI_REGISTERED_UNREADABLE=1
+    fi
+    if [[ "${BI_REGISTERED_UNREADABLE}" != "1" && "${_registered}" == *" ${_pinned} "* ]]; then
+        splog "[I] VM ${_vm} backup epoch ${_pinned} is already in a backup image"
+        return 1
+    fi
     if boolTrue "BACKUP_KV_INDEX"; then
         local -A _kv_epochs=()
         while read -r _epoch _did _val; do
             [[ -n "${_epoch}" ]] || continue
-            [[ "${_registered}" == *" ${_epoch} "* ]] && continue
+            [[ "${BI_REGISTERED_UNREADABLE}" != "1" && "${_registered}" == *" ${_epoch} "* ]] && continue
             _kv_epochs["${_epoch}"]=1
         done < <(oneBackupKvFamily "${_vm}")
-        if [[ ${#_kv_epochs[*]} -gt 0 ]]; then
-            _best="$(printf '%s\n' "${!_kv_epochs[@]}" | sort -n | tail -n 1)"
-            if [[ ${#_kv_epochs[*]} -gt 1 ]]; then
-                splog "[W] VM ${_vm} has ${#_kv_epochs[*]} unregistered backup epochs in the KV (${!_kv_epochs[*]}), using ${_best}"
-            fi
+        if [[ -n "${_kv_epochs[${_pinned}]:-}" ]]; then
             while read -r _epoch _did _val; do
-                [[ "${_epoch}" == "${_best}" ]] || continue
+                [[ "${_epoch}" == "${_pinned}" ]] || continue
                 if [[ "${_did}" == "-" ]]; then
                     BI_LOCATION="$(oneBackupKvField "${_val}" loc)"
                     [[ "${BI_LOCATION}" != "-" ]] || BI_LOCATION=""
@@ -5320,120 +5593,39 @@ function oneBackupInflight()
                     BI_IDS_A["${_did}"]="${_val#\~}"
                 fi
             done < <(oneBackupKvFamily "${_vm}")
-            BI_EPOCH="${_best}"
+            BI_EPOCH="${_pinned}"
             BI_FROM="kv"
+            if boolTrue "DEBUG_BACKUP"; then
+                splog "[D] VM ${_vm} backup in progress from the KV: epoch ${BI_EPOCH} svc ${BI_SVC_UID} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
+            fi
+            return 0
+        fi
+        if [[ ${#_kv_epochs[*]} -gt 0 ]]; then
+            splog "[W] VM ${_vm} KV backup epoch(s) (${!_kv_epochs[*]}) are not the pinned epoch ${_pinned}"
         fi
     fi
-    if [[ -n "${BI_EPOCH}" ]]; then
-        if boolTrue "DEBUG_BACKUP"; then
-            splog "[D] VM ${_vm} backup in progress from the KV: epoch ${BI_EPOCH} svc ${BI_SVC_UID} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
-        fi
-        return 0
+    _tf="$(mktemp "${TMPDIR:-/tmp}/oneBackupPinned-XXXXXX")"
+    _scan_rc=0
+    if [[ -n "${SP_EXIT_ON_SIGNAL-}" ]]; then
+        signalWait oneBackupPinnedScan "${_vm}" "${_mode}" "${_disks}" "${_timeout}" "${_pinned}" >"${_tf}" || _scan_rc=$?
+    else
+        oneBackupPinnedScan "${_vm}" "${_mode}" "${_disks}" "${_timeout}" "${_pinned}" >"${_tf}" || _scan_rc=$?
     fi
+    if [[ ${_scan_rc} -ne 0 ]]; then
+        rm -f "${_tf}"
+        return "${_scan_rc}"
+    fi
+    while read -r _key _rest; do
+        [[ "${_key}" == "id" ]] || continue
+        BI_IDS_A["${_rest%% *}"]="${_rest#* }"
+    done < "${_tf}"
+    rm -f "${_tf}"
+    BI_EPOCH="${_pinned}"
     BI_FROM="tags"
-    local -A _tag_epochs=()
-    if [[ "${_mode}" == "local" ]]; then
-        DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" _SOFT_FAIL=1 storpoolRetry SnapshotsList >/dev/null || return 1
-        while read -r _epoch _gid _did _img; do
-            [[ -n "${_epoch}" ]] || continue
-            [[ "${_registered}" == *" ${_epoch} "* ]] && continue
-            _tag_epochs["${_epoch}"]=1
-        done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
-            '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
-             | select(.deleted==false and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
-             | "\(.tags.bkp) \(.globalId) \(.tags.diskid // "-") \(.tags.img // "-")"' "${TMPDIR}/SnapshotsList.json" || true)
-        [[ ${#_tag_epochs[*]} -gt 0 ]] || return 1
-        _best="$(printf '%s\n' "${!_tag_epochs[@]}" | sort -n | tail -n 1)"
-        if [[ ${#_tag_epochs[*]} -gt 1 ]]; then
-            splog "[W] VM ${_vm} has ${#_tag_epochs[*]} unregistered backup epochs tagged (${!_tag_epochs[*]}), using ${_best}"
-        fi
-        while read -r _epoch _gid _did _img; do
-            [[ "${_epoch}" == "${_best}" ]] || continue
-            if [[ "${_did}" == "-" ]]; then
-                case "${_img}" in
-                    "${ONE_PX}-sys-${_vm}-NVRAM") _did="nvram" ;;
-                    "${ONE_PX}-sys-${_vm}-SVC-"*) _did="svc" ;;
-                    *) splog "[W] VM ${_vm} backup snapshot ${_gid} (${_img}) has no diskid tag, skipped"; continue ;;
-                esac
-            fi
-            BI_IDS_A["${_did}"]="${_gid}"
-        done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
-            '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
-             | select(.deleted==false and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
-             | "\(.tags.bkp) \(.globalId) \(.tags.diskid // "-") \(.tags.img // "-")"' "${TMPDIR}/SnapshotsList.json" || true)
-        BI_EPOCH="${_best}"
-        if boolTrue "DEBUG_BACKUP"; then
-            splog "[D] VM ${_vm} backup in progress by tags: epoch ${BI_EPOCH} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
-        fi
-        return 0
+    if boolTrue "DEBUG_BACKUP"; then
+        splog "[D] VM ${_vm} backup in progress by tags: epoch ${BI_EPOCH} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
     fi
-    local -A _want=()
-    for _map in ${vmDisksMap}; do
-        _did="${_map#*:}"
-        _img="${_map%:*}"
-        [[ -n "${_did}" ]] || continue
-        [[ " ${_disks//:/ } " == *" ${_did} "* ]] || continue
-        kvGetUid "${_img}" || continue
-        _want["${SP_UID#\~}"]="${_did}"
-    done
-    if [[ -n "${T_OS_NVRAM}" ]] && kvGetUid "${ONE_PX}-sys-${_vm}-NVRAM"; then
-        _want["${SP_UID#\~}"]="nvram"
-    fi
-    _start="$(date +%s || true)"
-    while true; do
-        _tag_epochs=()
-        if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
-            while read -r _epoch _gid _src _loc; do
-                [[ -n "${_epoch}" ]] || continue
-                [[ "${_registered}" == *" ${_epoch} "* ]] && continue
-                _tag_epochs["${_epoch}"]=1
-            done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
-                '.data.snapshots[]
-                 | select((.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
-                 | "\(.tags.bkp) \(.remoteId) \(.createdFromGlobalId // "-") \(.location)"' "${TMPDIR}/SnapshotsRemoteList.json" || true)
-        fi
-        if [[ ${#_tag_epochs[*]} -gt 0 ]]; then
-            _best="$(printf '%s\n' "${!_tag_epochs[@]}" | sort -n | tail -n 1)"
-            unset BI_IDS_A
-            declare -g -A BI_IDS_A
-            _unmatched=""
-            _matched=0
-            while read -r _epoch _gid _src _loc; do
-                [[ "${_epoch}" == "${_best}" ]] || continue
-                if [[ -n "${_want[${_src}]+found}" ]]; then
-                    BI_IDS_A["${_want[${_src}]}"]="${_gid}"
-                    _matched=$((_matched + 1))
-                else
-                    _unmatched+="${_gid} "
-                fi
-            done < <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${_vm}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
-                '.data.snapshots[]
-                 | select((.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and (.tags.bkp // "")!="")
-                 | "\(.tags.bkp) \(.remoteId) \(.createdFromGlobalId // "-") \(.location)"' "${TMPDIR}/SnapshotsRemoteList.json" || true)
-            _n="$(wc -w <<< "${_unmatched}")"
-            if [[ ${_n} -gt 1 ]]; then
-                splog "[E] VM ${_vm} backup epoch ${_best}: ${_n} remote copies match no disk or NVRAM volume (${_unmatched})"
-                return 1
-            fi
-            if [[ ${_matched} -eq ${#_want[*]} ]] && [[ ${_n} -eq 1 ]]; then
-                BI_IDS_A["svc"]="${_unmatched% }"
-                BI_EPOCH="${_best}"
-                if [[ ${#_tag_epochs[*]} -gt 1 ]]; then
-                    splog "[W] VM ${_vm} has ${#_tag_epochs[*]} unregistered backup epochs listed remotely (${!_tag_epochs[*]}), using ${_best}"
-                fi
-                if boolTrue "DEBUG_BACKUP"; then
-                    splog "[D] VM ${_vm} backup in progress by remote tags: epoch ${BI_EPOCH} ${!BI_IDS_A[*]} = ${BI_IDS_A[*]}"
-                fi
-                return 0
-            fi
-        fi
-        _now="$(date +%s || true)"
-        if [[ ${_timeout} -gt 0 ]] && [[ $((_now - _start)) -ge ${_timeout} ]]; then
-            splog "[E] VM ${_vm} backup in progress not found remotely within ${_timeout}s (epoch ${_best:-none}, ${_matched} of ${#_want[*]} disks matched, unmatched: ${_unmatched:-none})"
-            return 1
-        fi
-        sleep "${BACKUP_WAIT_SLEEP:-3}"
-    done
+    return 0
 }
 
 # storpoolBackupSnapshotDrop GID: unexport, detach and delete a backup snapshot of this cluster, a missing one tolerated
@@ -5575,19 +5767,150 @@ function spSpaceEntries()
     jq -c --arg c "${2:-}" 'if (.data|type)=="array" then .data[] else .data.clusters[]?|select($c=="" or .clusterId==$c)|.response.data[]? end' "$1" 2>/dev/null || true
 }
 
+# spSpaceLoad FILE CLUSTER_ID -> one {globalId: storedSize, spaceUsed, size} map for this file, the first entry of a repeated globalId
+function spSpaceLoad()
+{
+    local _file="$1" _cluster="$2" _sig="" _mkey="" _gid="" _s="" _u="" _z=""
+    [[ -n "${_file}" && -f "${_file}" ]] || return 1
+    if [[ -z "${SP_SPACE_READY:-}" ]]; then
+        declare -g -A SP_SPACE_MAP_DONE=()
+        declare -g -A SP_SPACE_SEEN=()
+        declare -g -A SP_SPACE_STORED=()
+        declare -g -A SP_SPACE_USED=()
+        declare -g -A SP_SPACE_SIZE=()
+        SP_SPACE_READY=1
+    fi
+    _sig="$(stat -c '%i %Y %s' "${_file}" 2>/dev/null || echo 0)"
+    _mkey="${_file}|${_cluster}|${_sig}"
+    [[ -z "${SP_SPACE_MAP_DONE[${_mkey}]+set}" ]] || return 0
+    SP_SPACE_MAP_DONE["${_mkey}"]=1
+    while IFS=$'\t' read -r _gid _s _u _z; do
+        [[ -n "${_gid}" ]] || continue
+        [[ -z "${SP_SPACE_SEEN[${_mkey}|${_gid}]+set}" ]] || continue
+        SP_SPACE_SEEN["${_mkey}|${_gid}"]=1
+        SP_SPACE_STORED["${_mkey}|${_gid}"]="${_s}"
+        SP_SPACE_USED["${_mkey}|${_gid}"]="${_u}"
+        SP_SPACE_SIZE["${_mkey}|${_gid}"]="${_z}"
+    done < <(spSpaceEntries "${_file}" "${_cluster}" | jq -r '[.globalId, (.storedSize // ""), (.spaceUsed // ""), (.size // "")] | @tsv' 2>/dev/null || true)
+}
+
 # spSpaceFigure FILE CLUSTER_ID GLOBAL_ID FIELD -> the FIELD (storedSize, spaceUsed, size) of one volume or snapshot of a cached space call, nothing when absent
 function spSpaceFigure()
 {
-    local _file="$1" _cluster="$2" _gid="${3#\~}" _field="$4"
-    [[ -n "${_file}" ]] || return 1
-    spSpaceEntries "${_file}" "${_cluster}" | jq -r --arg g "${_gid}" --arg f "${_field}" 'select(.globalId==$g)|.[$f] // empty' 2>/dev/null | head -n 1 | grep -E '^[0-9]+$' || return 1
+    local _file="$1" _cluster="$2" _gid="${3#\~}" _field="$4" _val="" _sig="" _mkey=""
+    [[ -n "${_file}" && -f "${_file}" ]] || return 1
+    spSpaceLoad "${_file}" "${_cluster}" || return 1
+    _sig="$(stat -c '%i %Y %s' "${_file}" 2>/dev/null || echo 0)"
+    _mkey="${_file}|${_cluster}|${_sig}"
+    case "${_field}" in
+        storedSize) _val="${SP_SPACE_STORED[${_mkey}|${_gid}]:-}" ;;
+        spaceUsed) _val="${SP_SPACE_USED[${_mkey}|${_gid}]:-}" ;;
+        size) _val="${SP_SPACE_SIZE[${_mkey}|${_gid}]:-}" ;;
+        *) return 1 ;;
+    esac
+    [[ "${_val}" =~ ^[0-9]+$ ]] || return 1
+    echo "${_val}"
 }
 
-# spSpaceCacheFresh CALL CLUSTER_ID MIN_MTIME -> the per-cluster cache file of CALL, refreshed with one plain call when it is missing or older than MIN_MTIME (epoch seconds) and written back for the next backups; the call's own copy when it cannot be written back
+# spSpaceInstall FILE TMP -> keep FILE, FILE.1 and FILE.2, then move TMP onto FILE (mode 0660)
+#   flock on FILE.lock; mv FILE.1 to FILE.2, hardlink FILE to FILE.1, atomic mv of TMP
+function spSpaceInstall()
+{
+    local _file="$1" _tmp="$2" _lock=""
+    [[ -n "${_file}" && -f "${_tmp}" ]] || return 1
+    mkdir -p "$(dirname "${_file}")" || return 1
+    _lock="${_file}.lock"
+    (
+        flock -x 9 || exit 1
+        if [[ -f "${_file}.1" ]]; then
+            mv -f "${_file}.1" "${_file}.2" || exit 1
+        fi
+        if [[ -f "${_file}" ]]; then
+            ln -f "${_file}" "${_file}.1" || exit 1
+        fi
+        mv -f "${_tmp}" "${_file}" || exit 1
+        chmod 0660 "${_file}" || exit 1
+    ) 9>"${_lock}"
+}
+
+# spSpaceStampResponses SRC DST START END -> DST is the all-clusters body with spFetch on each cluster .response
+function spSpaceStampResponses()
+{
+    local _src="$1" _dst="$2" _start="$3" _end="$4"
+    jq --argjson s "${_start}" --argjson e "${_end}" \
+        '.data.clusters |= map(if (.response | type) == "object" then .response.spFetch = {start: $s, end: $e} else . end)' \
+        "${_src}" > "${_dst}"
+}
+
+# spSpaceStampBody SRC DST START END -> DST is the plain per-cluster body plus spFetch
+function spSpaceStampBody()
+{
+    local _src="$1" _dst="$2" _start="$3" _end="$4"
+    jq --argjson s "${_start}" --argjson e "${_end}" \
+        '.spFetch = {start: $s, end: $e}' \
+        "${_src}" > "${_dst}"
+}
+
+# spSpaceSplitVolumes FILE -> install each cluster .response of an all-clusters VolumesSpace file, keeping the stamp already on it
+function spSpaceSplitVolumes()
+{
+    local _file="$1" _cid="" _part="" _n=0
+    [[ -f "${_file}" ]] || return 1
+    while read -r _cid; do
+        [[ -n "${_cid}" ]] || continue
+        _part="$(mktemp "${_file}.part.XXXXXX")" || return 1
+        if jq -e -c --arg clusterId "${_cid}" \
+            '.data.clusters[] | select(.clusterId == $clusterId) | .response | select(type == "object")' \
+            "${_file}" > "${_part}"; then
+            spSpaceInstall "${_file}-${_cid}" "${_part}" || { rm -f "${_part}"; return 1; }
+            _n=$((_n + 1))
+        else
+            rm -f "${_part}"
+        fi
+    done < <(jq -r '.data.clusters[]?.clusterId' "${_file}" || true)
+    [[ ${_n} -gt 0 ]]
+}
+
+# spApiClusterId -> top-level clusterId of the cached ClustersList, or nothing when the file or the field is missing (does not call the API)
+function spApiClusterId()
+{
+    local _f="" _id=""
+    _f="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}/json-ClustersList-${SP_API_HTTP_HOST:-0.0.0.0}"
+    [[ -f "${_f}" ]] || return 0
+    _id="$(jq -r '.clusterId // empty' "${_f}" 2>/dev/null || true)"
+    [[ -n "${_id}" && "${_id}" != "null" ]] || return 0
+    echo "${_id}"
+}
+
+# spSpaceWindowBody CALL CLUSTER PREV_EPOCH BI_EPOCH -> the newest kept body whose call started after PREV_EPOCH and ended before BI_EPOCH
+function spSpaceWindowBody()
+{
+    local _call="$1" _cluster="$2" _prev="${3:-0}" _epoch="${4:-0}"
+    local _base="" _suf="" _f="" _start="" _end="" _best="" _best_end=-1
+    _base="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}/json-${_call}-${SP_API_HTTP_HOST:-0.0.0.0}${_cluster:+-${_cluster}}"
+    for _suf in "" .1 .2; do
+        _f="${_base}${_suf}"
+        [[ -f "${_f}" ]] || continue
+        _start="$(jq -r '.spFetch.start // empty' "${_f}" 2>/dev/null || true)"
+        _end="$(jq -r '.spFetch.end // empty' "${_f}" 2>/dev/null || true)"
+        [[ "${_start}" =~ ^[0-9]+$ && "${_end}" =~ ^[0-9]+$ ]] || continue
+        [[ ${_start} -gt ${_prev} && ${_end} -lt ${_epoch} ]] || continue
+        if [[ ${_end} -gt ${_best_end} ]]; then
+            _best="${_f}"
+            _best_end="${_end}"
+        fi
+    done
+    [[ -n "${_best}" ]] || return 1
+    echo "${_best}"
+}
+
+# spSpaceCacheFresh CALL CLUSTER_ID MIN_MTIME -> the per-cluster cache file of CALL
+#   a VolumesSpace refresh goes through spSpaceInstall, so the previous bodies stay
+#   refresh only when CLUSTER_ID is this API's cluster; a response from another cluster is not stored
 function spSpaceCacheFresh()
 {
     local _call="$1" _cluster="$2" _min="${3:-0}"
-    local _dir="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}" _f="" _mtime=0 _tmp="" _age=""
+    local _dir="${SP_FE_JSON_PATH:-/var/cache/addon-storpool-monitor}" _f="" _mtime=0 _tmp="" _age="" _own="" _got="" _t0=0 _t1=0
     _f="${_dir}/json-${_call}-${SP_API_HTTP_HOST:-0.0.0.0}${_cluster:+-${_cluster}}"
     if [[ -f "${_f}" ]]; then
         _mtime="$(stat --format %Y "${_f}" 2>/dev/null || echo 0)"
@@ -5597,57 +5920,179 @@ function spSpaceCacheFresh()
         fi
         _age="$(( $(date +%s) - _mtime ))s old"
     fi
+    if [[ -n "${_cluster}" ]]; then
+        _own="$(spApiClusterId)"
+        if [[ -n "${_own}" && "${_own}" != "${_cluster}" ]]; then
+            [[ -f "${_f}" ]] || return 1
+            splog "[W] ${_call} ${_cluster} is not this API's cluster ${_own}, not refreshed"
+            echo "${_f}"
+            return 0
+        fi
+    fi
+    _t0="$(date +%s)"
     if ! DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry "${_call}" >/dev/null; then
         [[ -f "${_f}" ]] || return 1
         splog "[W] ${_call} not refreshed, using ${_f} (${_age})"
         echo "${_f}"
         return 0
     fi
-    _tmp="${_f}.$$"
-    if [[ -n "${_cluster}" ]] && cp "${TMPDIR}/${_call}.json" "${_tmp}" 2>/dev/null && mv -f "${_tmp}" "${_f}" 2>/dev/null; then
-        splog "[I] ${_call} refreshed into ${_f}${_age:+ (was ${_age})}"
-        echo "${_f}"
-    else
-        rm -f "${_tmp}" 2>/dev/null
-        echo "${TMPDIR}/${_call}.json"
+    _t1="$(date +%s)"
+    _got="$(jq -r '.clusterId // empty' "${TMPDIR}/${_call}.json" 2>/dev/null || true)"
+    if [[ -z "${_got}" || "${_got}" == "null" || -z "${_cluster}" || "${_got}" != "${_cluster}" ]]; then
+        splog "[E] ${_call} response cluster ${_got:-missing} is not ${_cluster}"
+        return 1
     fi
+    mkdir -p "${_dir}" || return 1
+    _tmp="$(mktemp "${_dir}/.${_call}.XXXXXX")" || return 1
+    if ! spSpaceStampBody "${TMPDIR}/${_call}.json" "${_tmp}" "${_t0}" "${_t1}"; then
+        rm -f "${_tmp}"
+        return 1
+    fi
+    if [[ "${_call}" == "VolumesSpace" ]]; then
+        if ! spSpaceInstall "${_f}" "${_tmp}"; then
+            rm -f "${_tmp}"
+            echo "${TMPDIR}/${_call}.json"
+            return 0
+        fi
+    elif ! mv -f "${_tmp}" "${_f}"; then
+        rm -f "${_tmp}"
+        echo "${TMPDIR}/${_call}.json"
+        return 0
+    else
+        chmod 0660 "${_f}" || true
+    fi
+    splog "[I] ${_call} refreshed into ${_f}${_age:+ (was ${_age})}"
+    echo "${_f}"
     return 0
 }
 
-# oneBackupSizeMb VM_XML "did:~gid ..." KIND PREV_EPOCH -> the SIZE (MiB) of a backup from the cached VolumesSpace: the volumes' logical content (spaceUsed) when KIND is full, the data since their previous snapshot (storedSize) when KIND is increment; the cache is refreshed once when older than PREV_EPOCH or when a volume is missing; a volume still missing counts its virtual SIZE (full) or nothing (increment)
+# oneBackupIncrementSizeMb VM_XML "did:~gid ..." PREV_EPOCH BI_EPOCH "did:~snapid ..."
+#   rule 1: sum of storedSize of the snapshots when SnapshotsSpace lists every one of them
+#   rule 2: the volumes' storedSize from the newest VolumesSpace body inside (PREV_EPOCH, BI_EPOCH)
+#   rule 3: 0. An increment does not refresh VolumesSpace. A volume with no globalId counts nothing.
+function oneBackupIncrementSizeMb()
+{
+    local _vols="$2" _prev="${3:-0}" _epoch="${4:-0}" _snaps="${5:-}"
+    local _pair="" _did="" _gid="" _cluster="" _file="" _val="" _sum=0 _ok=1 _n=0 _miss="" _rule3=0
+    local -A _bodies=()
+    if [[ -n "${_snaps// }" ]]; then
+        for _pair in ${_snaps}; do
+            _gid="${_pair#*:}"
+            _gid="${_gid#\~}"
+            _cluster="${_gid%.*}"
+            if [[ -z "${_gid}" || "${_cluster}" != *.* ]]; then
+                _ok=0
+                break
+            fi
+            _file="$(spSpaceCacheFile SnapshotsSpace "${_cluster}" || true)"
+            _val="$(spSpaceFigure "${_file}" "" "${_gid}" storedSize || true)"
+            if [[ -z "${_val}" ]]; then
+                _ok=0
+                break
+            fi
+            _sum=$((_sum + _val))
+            _n=$((_n + 1))
+        done
+        if [[ ${_ok} -eq 1 && ${_n} -gt 0 ]]; then
+            echo $(( (_sum + 1048575) / 1048576 ))
+            return 0
+        fi
+    fi
+    _sum=0
+    for _pair in ${_vols}; do
+        _did="${_pair%%:*}"
+        _gid="${_pair#*:}"
+        _gid="${_gid#\~}"
+        if [[ -z "${_gid}" ]]; then
+            _miss+="${_did} "
+            continue
+        fi
+        _cluster="${_gid%.*}"
+        if [[ "${_cluster}" != *.* ]]; then
+            _rule3=1
+            break
+        fi
+        if [[ -z "${_bodies[${_cluster}]+set}" ]]; then
+            _bodies["${_cluster}"]="$(spSpaceWindowBody VolumesSpace "${_cluster}" "${_prev}" "${_epoch}" || true)"
+        fi
+        _file="${_bodies[${_cluster}]}"
+        if [[ -z "${_file}" ]]; then
+            _rule3=1
+            break
+        fi
+        _val="$(spSpaceFigure "${_file}" "" "${_gid}" storedSize || true)"
+        if [[ -n "${_val}" ]]; then
+            _sum=$((_sum + _val))
+        else
+            _miss+="${_did} "
+        fi
+    done
+    if [[ ${_rule3} -eq 1 ]]; then
+        splog "[W] increment SIZE is 0: no VolumesSpace body started after ${_prev} and ended before ${_epoch}"
+        echo 0
+        return 0
+    fi
+    if [[ -n "${_miss}" ]]; then
+        splog "[W] ${_miss% } not in the VolumesSpace cache, counted 0M (the virtual size of a FULL backup's disks, nothing for an increment)"
+    fi
+    echo $(( (_sum + 1048575) / 1048576 ))
+}
+
+# oneBackupSizeMb VM_XML "did:~gid ..." KIND PREV_EPOCH [BI_EPOCH] ["did:~snapid ..."]
+#   FULL and remote: spaceUsed of the current VolumesSpace, refreshed when this API's cluster is asked and the file is older than PREV_EPOCH or a volume is missing
+#   a later local increment: oneBackupIncrementSizeMb, which does not refresh
+#   a volume with no globalId, or one still missing, counts its virtual SIZE (full) or nothing (increment)
 function oneBackupSizeMb()
 {
-    local _xml="$1" _vols="$2" _kind="$3" _prev="${4:-0}"
-    local _local="" _cluster="" _file="" _pair="" _did="" _gid="" _field="spaceUsed" _val="" _sum=0 _virt=0 _miss="" _retry=1
-    local -A _files=()
-    [[ "${_kind}" != "increment" ]] || _field="storedSize"
+    local _xml="$1" _vols="$2" _kind="$3" _prev="${4:-0}" _epoch="${5:-0}" _snaps="${6:-}"
+    local _local="" _cluster="" _file="" _pair="" _did="" _gid="" _val="" _sum=0 _virt=0 _miss="" _retry=1 _rc=0
+    local -A _files=() _noretry=()
+    if [[ "${_kind}" == "increment" ]]; then
+        oneBackupIncrementSizeMb "${_xml}" "${_vols}" "${_prev}" "${_epoch}" "${_snaps}"
+        return
+    fi
     _local="$(spCacheClusterId)"
     for _pair in ${_vols}; do
         _did="${_pair%%:*}"
         _gid="${_pair#*:}"
         _gid="${_gid#\~}"
+        if [[ -z "${_gid}" ]]; then
+            _miss+="${_did} "
+            if [[ -z "${_did//[[:digit:]]/}" ]]; then
+                _virt=$(( _virt + $(oneBackupDiskSizeSum "${_xml}" "${_did}") ))
+            fi
+            continue
+        fi
         _cluster="${_gid%.*}"
         [[ "${_cluster}" == *.* ]] || _cluster="${_local}"
         if [[ -z "${_files[${_cluster}]+set}" ]]; then
             if [[ "${_cluster}" == "${_local}" ]]; then
-                _files["${_cluster}"]="$(spSpaceCacheFresh VolumesSpace "${_cluster}" "${_prev}" || true)"
+                _rc=0
+                _files["${_cluster}"]="$(spSpaceCacheFresh VolumesSpace "${_cluster}" "${_prev}")" || _rc=$?
+                if [[ ${_rc} -ne 0 ]]; then
+                    _files["${_cluster}"]=""
+                    _noretry["${_cluster}"]=1
+                fi
             else
                 _files["${_cluster}"]="$(spSpaceCacheFile VolumesSpace "${_cluster}" || true)"
             fi
         fi
         _file="${_files[${_cluster}]}"
-        _val="$(spSpaceFigure "${_file}" "${_cluster}" "${_gid}" "${_field}" || true)"
-        if [[ -z "${_val}" ]] && [[ ${_retry} -eq 1 ]] && [[ "${_cluster}" == "${_local}" ]]; then
+        _val="$(spSpaceFigure "${_file}" "${_cluster}" "${_gid}" spaceUsed || true)"
+        if [[ -z "${_val}" && ${_retry} -eq 1 && "${_cluster}" == "${_local}" && -z "${_noretry[${_cluster}]:-}" ]]; then
             _retry=0
-            _files["${_cluster}"]="$(spSpaceCacheFresh VolumesSpace "${_cluster}" "$(( $(date +%s) + 1 ))" || true)"
-            _file="${_files[${_cluster}]}"
-            _val="$(spSpaceFigure "${_file}" "${_cluster}" "${_gid}" "${_field}" || true)"
+            _rc=0
+            _file="$(spSpaceCacheFresh VolumesSpace "${_cluster}" "$(( $(date +%s) + 1 ))")" || _rc=$?
+            if [[ ${_rc} -eq 0 && -n "${_file}" ]]; then
+                _files["${_cluster}"]="${_file}"
+                _val="$(spSpaceFigure "${_file}" "${_cluster}" "${_gid}" spaceUsed || true)"
+            fi
         fi
         if [[ -n "${_val}" ]]; then
             _sum=$((_sum + _val))
         else
             _miss+="${_did} "
-            if [[ "${_kind}" != "increment" ]] && [[ -z "${_did//[[:digit:]]/}" ]]; then
+            if [[ -z "${_did//[[:digit:]]/}" ]]; then
                 _virt=$(( _virt + $(oneBackupDiskSizeSum "${_xml}" "${_did}") ))
             fi
         fi

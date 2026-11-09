@@ -140,29 +140,54 @@ for map in ${vmDisksMap}; do
     did="${map#*:}"
     [[ -n "${did}" ]] || continue
     [[ " ${DISKS//:/ } " == *" ${did} "* ]] || continue
-    kvGetUid "${img}" || continue
-    VOLS+="${did}:${SP_UID} "
+    if kvGetUid "${img}"; then
+        VOLS+="${did}:${SP_UID} "
+    else
+        VOLS+="${did}: "
+    fi
 done
-if [[ -n "${T_OS_NVRAM}" ]] && kvGetUid "${ONE_PX}-sys-${VM_ID}-NVRAM"; then
-    VOLS+="nvram:${SP_UID} "
+if [[ -n "${T_OS_NVRAM}" ]]; then
+    if kvGetUid "${ONE_PX}-sys-${VM_ID}-NVRAM"; then
+        VOLS+="nvram:${SP_UID} "
+    else
+        VOLS+="nvram: "
+    fi
 fi
 SIZE_KIND="full"
 PREV_EPOCH=0
+SNAPS=""
 if [[ "${SP_BACKUP_MODE}" == "local" ]] && [[ "${BACKUP_MODE^^}" == "INCREMENT" ]] && [[ "${BACKUP_INCREMENTAL_ID:--1}" != "-1" ]]; then
     SIZE_KIND="increment"
-    while read -r rEpoch _; do
-        [[ -n "${rEpoch}" ]] || continue
-        if [[ ${rEpoch} -lt ${BI_EPOCH} ]] && [[ ${rEpoch} -gt ${PREV_EPOCH} ]]; then
-            PREV_EPOCH="${rEpoch}"
-        fi
-    done < <(oneBackupRegistered "${VM_ID}")
-    [[ ${PREV_EPOCH} -eq 0 ]] || PREV_EPOCH=$((PREV_EPOCH + 1))
+    if [[ "${BI_REGISTERED_UNREADABLE:-0}" == "1" ]]; then
+        splog "[W] VM ${VM_ID}: registered backups could not be read, the increment SIZE is 0"
+    else
+        while read -r rEpoch _; do
+            [[ -n "${rEpoch}" ]] || continue
+            if [[ ${rEpoch} -lt ${BI_EPOCH} ]] && [[ ${rEpoch} -gt ${PREV_EPOCH} ]]; then
+                PREV_EPOCH="${rEpoch}"
+            fi
+        done <<< "${BI_REGISTERED:-}"
+    fi
+    for did in $(printf '%s\n' "${!BI_IDS_A[@]}" | sort); do
+        case "${did}" in
+            svc) continue ;;
+        esac
+        [[ -n "${BI_IDS_A[${did}]:-}" ]] || continue
+        SNAPS+="${did}:~${BI_IDS_A[${did}]} "
+    done
 fi
-SIZE="$(oneBackupSizeMb "${VM_XML}" "${VOLS}" "${SIZE_KIND}" "${PREV_EPOCH}")"
+if [[ "${BI_REGISTERED_UNREADABLE:-0}" == "1" && "${SIZE_KIND}" == "increment" ]]; then
+    SIZE=0
+else
+    SIZE="$(oneBackupSizeMb "${VM_XML}" "${VOLS}" "${SIZE_KIND}" "${PREV_EPOCH}" "${BI_EPOCH}" "${SNAPS}")"
+fi
 
 echo "${SOURCE} ${SIZE} raw"
 splog "[I] VM ${VM_ID} backup registered: ${SOURCE} ${SIZE}M (${SIZE_KIND}) raw (${B_PATH})$(oneBackupIncrementNote)"
-rm -rf "${B_LOCAL}"
+if ! rm -rf "${B_LOCAL}"; then
+    splog "[E] VM ${VM_ID}: ${B_LOCAL} not removed, the backup is not handed over"
+    exit 1
+fi
 
 splog "END ${VM_ID}"
 exit 0
