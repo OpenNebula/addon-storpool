@@ -35,16 +35,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ "${INC_ID}" != "-1" ]]; then
-    msg="ls: increments are not supported on a StorPool backup datastore (-i ${INC_ID})"
+DRV_ACTION="$(base64 -w0)"
+export DRV_ACTION
+oneDsDriverAction
+
+if ! SOURCE="$(oneBackupSelectSource "${BACKUP_INC_IDS}" "${BACKUP_INC_SOURCES}" "${SOURCE}" "${INC_ID}")"; then
+    msg="ls: no increment ${INC_ID} in the backup image"
     error_message "${msg}"
     splog "${msg}"
     exit 1
 fi
-
-DRV_ACTION="$(base64 -w0)"
-export DRV_ACTION
-oneDsDriverAction
 
 if ! oneBackupSourceParse "${SOURCE}"; then
     msg="ls: not a StorPool backup SOURCE '${SOURCE}'"

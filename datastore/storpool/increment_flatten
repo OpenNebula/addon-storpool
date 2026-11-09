@@ -26,12 +26,71 @@ source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
 splog "$0 $*"
 
-cat >/dev/null
+if [[ -n "$2" ]]; then
+    DRV_ACTION="$1"
+    ID="$2"
+else
+    DRV_ACTION="$(cat)"
+    ID="$1"
+fi
+export DRV_ACTION
+oneDsDriverAction
 
-msg="${0##*/}: increments are not supported on a StorPool backup datastore"
-error_message "${msg}"
-splog "${msg}"
+if [[ "${DATASTORE_TYPE}" != "3" ]]; then
+    failWith "${0##*/}: datastore ${DATASTORE_ID} is not a backup datastore"
+fi
 
-splog "END"
+declare -a INC_IDS_A INC_SRC_A INC_SIZE_A
+read -r -a INC_IDS_A <<< "${BACKUP_INC_IDS}"
+read -r -a INC_SRC_A <<< "${BACKUP_INC_SOURCES}"
+read -r -a INC_SIZE_A <<< "${BACKUP_INC_SIZES}"
+if [[ ${#INC_IDS_A[*]} -eq 0 ]]; then
+    failWith "${0##*/}: image ${ID} has no increments"
+fi
+if [[ ${#INC_SRC_A[*]} -ne ${#INC_IDS_A[*]} ]]; then
+    failWith "${0##*/}: image ${ID} lists ${#INC_IDS_A[*]} increments but ${#INC_SRC_A[*]} sources"
+fi
 
-exit 1
+oneBackupFlattenPlan "${BACKUP_INC_IDS}" "${KEEP_LAST}"
+splog "[I] image ${ID} increments ${BACKUP_INC_IDS} KEEP_LAST=${KEEP_LAST}: drop '${BF_DROP_IDS}', base ${BF_BASE_ID}"
+
+declare -A srcById sizeById
+for i in "${!INC_IDS_A[@]}"; do
+    srcById["${INC_IDS_A[${i}]}"]="${INC_SRC_A[${i}]}"
+    sizeById["${INC_IDS_A[${i}]}"]="${INC_SIZE_A[${i}]:-0}"
+done
+
+RET=0
+FAILED=""
+for incId in ${BF_DROP_IDS}; do
+    if ! oneBackupSourceParse "${srcById[${incId}]}" quiet; then
+        splog "[E] image ${ID} increment ${incId}: not a StorPool backup SOURCE '${srcById[${incId}]}'"
+        RET=1
+        FAILED+="${incId} "
+        continue
+    fi
+    splog "[I] image ${ID} increment ${incId}: dropping backup epoch ${BS_EPOCH}"
+    if ! oneBackupEpochDrop "${srcById[${incId}]}" "${BASE_PATH}"; then
+        RET=1
+        FAILED+="${incId} "
+    fi
+done
+if [[ ${RET} -ne 0 ]]; then
+    failWith "Error removing the increment(s) ${FAILED% } of image ${ID}"
+fi
+
+CHAIN=""
+keep=0
+for i in "${!INC_IDS_A[@]}"; do
+    incId="${INC_IDS_A[${i}]}"
+    if [[ ${keep} -eq 0 ]]; then
+        [[ "${incId}" == "${BF_BASE_ID}" ]] || continue
+        keep=1
+    fi
+    CHAIN+="${CHAIN:+,}${incId}:${INC_SRC_A[${i}]}"
+done
+SIZE="${sizeById[${BF_BASE_ID}]:-0}"
+
+echo "${SIZE} ${CHAIN}"
+splog "END image ${ID}: increment(s) '${BF_DROP_IDS}' dropped, base ${BF_BASE_ID}: ${SIZE} ${CHAIN}"
+exit 0

@@ -61,33 +61,31 @@ oneDsDriverAction
 # Remove a backup from a StorPool backup datastore
 #-------------------------------------------------------------------------------
 if [[ "${DATASTORE_TYPE}" == "3" ]]; then
-    if ! oneBackupSourceParse "${SOURCE}"; then
-        msg="rm: not a StorPool backup SOURCE '${SOURCE}' (image ${ID})"
-        error_message "${msg}"
-        splog "${msg}"
-        exit 1
-    fi
     RET=0
-    for key in ${BS_DISK_IDS} nvram svc; do
-        sId="${BS_IDS_A[${key}]:-}"
-        [[ -n "${sId}" ]] || continue
-        if [[ "${BS_LOCATION}" == "local" ]]; then
-            storpoolBackupSnapshotDrop "${sId}"
-            if ! storpoolBackupSnapshotGone "${sId}"; then
-                splog "[E] image ${ID} backup epoch ${BS_EPOCH} ${key}: snapshot ~${sId} still exists"
-                RET=1
-            fi
-        else
-            storpoolBackupCopyDrop "${sId}" "${BS_LOCATION}" || RET=$?
+    N=0
+    FAILED=""
+    while read -r incId incSrc; do
+        [[ -n "${incSrc}" ]] || continue
+        N=$((N + 1))
+        if ! oneBackupSourceParse "${incSrc}" quiet; then
+            incNote=""
+            [[ "${incId}" == "-" ]] || incNote=", increment ${incId}"
+            msg="rm: not a StorPool backup SOURCE '${incSrc}' (image ${ID}${incNote})"
+            error_message "${msg}"
+            splog "${msg}"
+            RET=1
+            continue
         fi
-    done
+        if ! oneBackupEpochDrop "${incSrc}" "${BASE_PATH}"; then
+            RET=1
+            FAILED+="${incSrc} "
+        fi
+    done < <(oneBackupImageSources "${BACKUP_INC_IDS}" "${BACKUP_INC_SOURCES}" "${SOURCE}")
     if [[ ${RET} -eq 0 ]]; then
-        oneBackupKvDel "${BS_VM_ID}" "${BS_EPOCH}"
-        rm -rf "${BASE_PATH:?}/${BS_VM_ID:?}/${BS_EPOCH:?}"
-        splog "END image ${ID} backup ${SOURCE} removed"
+        splog "END image ${ID}: ${N} backup(s) removed"
     else
-        error_message "Error removing the backup ${SOURCE} of image ${ID}"
-        splog "END image ${ID} backup ${SOURCE} not removed (${RET})"
+        [[ -z "${FAILED}" ]] || error_message "Error removing the backup(s) ${FAILED% } of image ${ID}"
+        splog "END image ${ID}: ${N} backup(s), not every one removed (${RET})"
     fi
     exit "${RET}"
 fi

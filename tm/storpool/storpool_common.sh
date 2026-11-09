@@ -2942,6 +2942,8 @@ function oneBackupImageInfo()
         "/IMAGE/SOURCE"
         "/IMAGE/DATASTORE_ID"
         "%m%/IMAGE/BACKUP_DISK_IDS/ID"
+        "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/ID"
+        "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/SOURCE"
     )
     unset i XPATH_ELEMENTS
     while IFS='' read -r -u "${xfh}" -d '' _element; do
@@ -2955,6 +2957,8 @@ function oneBackupImageInfo()
     B_DATASTORE_ID="${XPATH_ELEMENTS[i++]}"
     _BACKUP_DISK_IDS="${XPATH_ELEMENTS[i++]}"
     read -r -a BACKUP_DISK_IDS <<< "${_BACKUP_DISK_IDS}"
+    B_INC_IDS="${XPATH_ELEMENTS[i++]}"
+    B_INC_SOURCES="${XPATH_ELEMENTS[i++]}"
 
     boolTrue "DEBUG_oneBackupImageInfo" || return 0
     local _DBGMSG="[D] oneBackupImageInfo"
@@ -2963,6 +2967,7 @@ function oneBackupImageInfo()
     _DBGMSG+=" B_IMAGE_SOURCE:${B_IMAGE_SOURCE}"
     _DBGMSG+=" B_DATASTORE_ID:${B_DATASTORE_ID}"
     _DBGMSG+=" BACKUP_DISK_IDS:${BACKUP_DISK_IDS[*]}"
+    _DBGMSG+=" B_INC_IDS:${B_INC_IDS} B_INC_SOURCES:${B_INC_SOURCES}"
     splog "${_DBGMSG}"
 }
 
@@ -3660,6 +3665,11 @@ function oneDsDriverAction()
         "/DS_DRIVER_ACTION_DATA/IMAGE/SIZE"
         "/DS_DRIVER_ACTION_DATA/IMAGE/UID"
         "/DS_DRIVER_ACTION_DATA/IMAGE/GID"
+        "%m%/DS_DRIVER_ACTION_DATA/IMAGE/BACKUP_INCREMENTS/INCREMENT/ID"
+        "%m%/DS_DRIVER_ACTION_DATA/IMAGE/BACKUP_INCREMENTS/INCREMENT/SOURCE"
+        "%m%/DS_DRIVER_ACTION_DATA/IMAGE/BACKUP_INCREMENTS/INCREMENT/SIZE"
+        "/DS_DRIVER_ACTION_DATA/EXTRA_DATA/KEEP_LAST"
+        "/DS_DRIVER_ACTION_DATA/TEMPLATE/INCREMENT_ID"
         "/DS_DRIVER_ACTION_DATA/MONITOR_VM_DISKS"
     )
 
@@ -3736,6 +3746,11 @@ function oneDsDriverAction()
     SIZE="${XPATH_ELEMENTS[i++]}"
     IMAGE_UID="${XPATH_ELEMENTS[i++]}"
     IMAGE_GID="${XPATH_ELEMENTS[i++]}"
+    BACKUP_INC_IDS="${XPATH_ELEMENTS[i++]}"
+    BACKUP_INC_SOURCES="${XPATH_ELEMENTS[i++]}"
+    BACKUP_INC_SIZES="${XPATH_ELEMENTS[i++]}"
+    KEEP_LAST="${XPATH_ELEMENTS[i++]}"
+    INCREMENT_ID="${XPATH_ELEMENTS[i++]:--1}"
     MONITOR_VM_DISKS="${XPATH_ELEMENTS[i++]}"
     }
 
@@ -3809,6 +3824,11 @@ ${REMOTE_BACKUP_DELETE:+REMOTE_BACKUP_DELETE=${REMOTE_BACKUP_DELETE} }\
 ${SP_BACKUP_LOCATION:+SP_BACKUP_LOCATION=${SP_BACKUP_LOCATION} }\
 ${SP_BACKUP_TIMEOUT:+SP_BACKUP_TIMEOUT=${SP_BACKUP_TIMEOUT} }\
 ${SP_BACKUP_REMOTE_DELETE:+SP_BACKUP_REMOTE_DELETE=${SP_BACKUP_REMOTE_DELETE} }\
+${BACKUP_INC_IDS:+BACKUP_INC_IDS=${BACKUP_INC_IDS} }\
+${BACKUP_INC_SOURCES:+BACKUP_INC_SOURCES=${BACKUP_INC_SOURCES} }\
+${BACKUP_INC_SIZES:+BACKUP_INC_SIZES=${BACKUP_INC_SIZES} }\
+${KEEP_LAST:+KEEP_LAST=${KEEP_LAST} }\
+${INCREMENT_ID:+INCREMENT_ID=${INCREMENT_ID} }\
 ${MONITOR_VM_DISKS:+MONITOR_VM_DISKS=${MONITOR_VM_DISKS} }\
 ${IMAGE_SP_QOSCLASS:+IMAGE_SP_QOSCLASS=${IMAGE_SP_QOSCLASS} }\
 ${DS_SP_QOSCLASS:+DS_SP_QOSCLASS=${DS_SP_QOSCLASS} }\
@@ -4007,6 +4027,8 @@ function oneVmVolumes()
         "/VM/BACKUPS/BACKUP_CONFIG/BACKUP_VOLATILE"
         "/VM/BACKUPS/BACKUP_CONFIG/FS_FREEZE"
         "/VM/BACKUPS/BACKUP_CONFIG/MODE"
+        "/VM/BACKUPS/BACKUP_CONFIG/LAST_INCREMENT_ID"
+        "/VM/BACKUPS/BACKUP_CONFIG/INCREMENTAL_BACKUP_ID"
         "/VM/TEMPLATE/TPM/MODEL"
         "/VM/BACKUPS/BACKUP_CONFIG/LAST_DATASTORE_ID"
         "/VM/BACKUPS/BACKUP_IDS/ID"
@@ -4052,6 +4074,8 @@ function oneVmVolumes()
     BACKUP_VOLATILE="${XPATH_ELEMENTS[i++]}"
     BACKUP_FS_FREEZE="${XPATH_ELEMENTS[i++]}"
     BACKUP_MODE="${XPATH_ELEMENTS[i++]}"
+    BACKUP_LAST_INCREMENT_ID="${XPATH_ELEMENTS[i++]:--1}"
+    BACKUP_INCREMENTAL_ID="${XPATH_ELEMENTS[i++]:--1}"
     TPM_MODEL="${XPATH_ELEMENTS[i++]}"
     BACKUP_DS_ID="${XPATH_ELEMENTS[i++]}"
     IFS=';' read -r -a BACKUP_IDS_A <<< "${XPATH_ELEMENTS[i++]}"
@@ -4212,6 +4236,8 @@ function oneVmVolumes()
         _DBGMSG+="${BACKUP_VOLATILE:+ BACKUP_VOLATILE=${BACKUP_VOLATILE}}"
         _DBGMSG+="${BACKUP_FS_FREEZE:+ BACKUP_FS_FREEZE=${BACKUP_FS_FREEZE}}"
         _DBGMSG+="${BACKUP_MODE:+ BACKUP_MODE=${BACKUP_MODE}}"
+        _DBGMSG+="${BACKUP_LAST_INCREMENT_ID:+ BACKUP_LAST_INCREMENT_ID=${BACKUP_LAST_INCREMENT_ID}}"
+        _DBGMSG+="${BACKUP_INCREMENTAL_ID:+ BACKUP_INCREMENTAL_ID=${BACKUP_INCREMENTAL_ID}}"
         _DBGMSG+="${BACKUP_DS_ID:+ BACKUP_DS_ID=${BACKUP_DS_ID}}${BACKUP_IDS_A[*]:+ BACKUP_IDS=${BACKUP_IDS_A[*]}}"
         _DBGMSG+="${TPM_MODEL:+ TPM_MODEL=${TPM_MODEL}}"
         _DBGMSG+="${oneVmVolumesNotStorPool:+ oneVmVolumesNotStorPool=${oneVmVolumesNotStorPool}}"
@@ -4858,6 +4884,14 @@ function oneBackupDsInfo()
     fi
 }
 
+# failWith MESSAGE: log it, hand it to oned and exit 1
+function failWith()
+{
+    splog "[E] $*"
+    error_message "$*"
+    exit 1
+}
+
 # local or remote, from SP_BACKUP_LOCATION
 function oneBackupModeName()
 {
@@ -4868,15 +4902,25 @@ function oneBackupModeName()
     fi
 }
 
-# oneBackupSourceBuild LOCATION VM_ID EPOCH "did=id ..." -> the backup image SOURCE
+# oneBackupIncrementNote -> " increment N[ of image I]" of a backup in INCREMENT mode (BACKUP_MODE, BACKUP_LAST_INCREMENT_ID, BACKUP_INCREMENTAL_ID from oneVmVolumes), else nothing
+function oneBackupIncrementNote()
+{
+    local _note=""
+    [[ "${BACKUP_MODE^^}" == "INCREMENT" ]] || return 0
+    _note=" increment $((${BACKUP_LAST_INCREMENT_ID:--1} + 1))"
+    [[ "${BACKUP_INCREMENTAL_ID:--1}" == "-1" ]] || _note+=" of image ${BACKUP_INCREMENTAL_ID}"
+    echo "${_note}"
+}
+
+# oneBackupSourceBuild LOCATION VM_ID EPOCH "did=id ..." -> the backup SOURCE manifest (no ':' or ',', oned splits the increment chain on them)
 function oneBackupSourceBuild()
 {
     local _loc="$1" _vm="$2" _epoch="$3" _entries="$4"
     local _e="" _list=""
     for _e in ${_entries}; do
-        _list+="${_list:+,}${_e}"
+        _list+="/${_e}"
     done
-    echo "${_loc}:${_vm}:${_epoch}:${_list}"
+    echo "${_loc}/${_vm}/${_epoch}${_list}"
 }
 
 # oneBackupSourceParse SOURCE [quiet] -> BS_LOCATION BS_VM_ID BS_EPOCH BS_DISK_IDS BS_IDS_A[did]=id
@@ -4890,13 +4934,13 @@ function oneBackupSourceParse()
     BS_VM_ID=""
     BS_EPOCH=""
     BS_DISK_IDS=""
-    IFS=':' read -r BS_LOCATION BS_VM_ID BS_EPOCH _rest <<< "${_src}"
+    IFS='/' read -r BS_LOCATION BS_VM_ID BS_EPOCH _rest <<< "${_src}"
     if [[ -z "${BS_LOCATION}" || -z "${BS_VM_ID}" || -z "${BS_EPOCH}" || -z "${_rest}" ]] \
-        || [[ -n "${BS_EPOCH//[[:digit:]]/}" ]] || [[ -n "${BS_VM_ID//[[:digit:]]/}" ]]; then
+        || [[ -n "${BS_EPOCH//[[:digit:]]/}" ]] || [[ -n "${BS_VM_ID//[[:digit:]]/}" ]] || [[ "${_src}" == *[[:space:]]* ]]; then
         [[ -n "${_quiet}" ]] || splog "[E] not a StorPool backup SOURCE: '${_src}'"
         return 1
     fi
-    for _e in ${_rest//,/ }; do
+    for _e in ${_rest//\// }; do
         if [[ "${_e}" != *=* ]] || [[ -z "${_e%%=*}" ]] || [[ -z "${_e#*=}" ]]; then
             [[ -n "${_quiet}" ]] || splog "[E] bad entry '${_e}' in backup SOURCE '${_src}'"
             return 1
@@ -4913,19 +4957,131 @@ function oneBackupSourceParse()
     return 0
 }
 
-# oneBackupRegistered VM_ID -> lines "epoch image_id SOURCE" of the VM's StorPool backup images (BACKUP_IDS_A from oneVmVolumes)
+# oneBackupSelectSource "inc ids" "inc SOURCEs" IMAGE_SOURCE INC_ID -> the SOURCE of increment INC_ID, of the last increment or of a FULL image for -1
+function oneBackupSelectSource()
+{
+    local _ids="$1" _sources="$2" _img_src="$3" _inc="${4:--1}"
+    local -a _ids_a=() _src_a=()
+    local _i=""
+    read -r -a _ids_a <<< "${_ids}"
+    read -r -a _src_a <<< "${_sources}"
+    if [[ ${#_ids_a[*]} -eq 0 ]]; then
+        if [[ "${_inc}" != "-1" ]]; then
+            splog "[E] increment ${_inc} requested from a backup image without increments"
+            return 1
+        fi
+        echo "${_img_src}"
+        return 0
+    fi
+    if [[ "${_inc}" == "-1" ]]; then
+        echo "${_src_a[${#_src_a[*]}-1]}"
+        return 0
+    fi
+    for _i in "${!_ids_a[@]}"; do
+        if [[ "${_ids_a[${_i}]}" == "${_inc}" ]]; then
+            echo "${_src_a[${_i}]:-}"
+            return 0
+        fi
+    done
+    splog "[E] no increment ${_inc} in the backup image (increments ${_ids})"
+    return 1
+}
+
+# oneBackupImageSources "inc ids" "inc SOURCEs" IMAGE_SOURCE -> lines "inc_id SOURCE" of the increments, or "- SOURCE" of a FULL image
+function oneBackupImageSources()
+{
+    local _ids="$1" _sources="$2" _img_src="$3"
+    local -a _ids_a=() _src_a=()
+    local _i=""
+    read -r -a _ids_a <<< "${_ids}"
+    read -r -a _src_a <<< "${_sources}"
+    if [[ ${#_ids_a[*]} -eq 0 ]]; then
+        echo "- ${_img_src}"
+        return 0
+    fi
+    for _i in "${!_ids_a[@]}"; do
+        echo "${_ids_a[${_i}]} ${_src_a[${_i}]:-}"
+    done
+}
+
+# oneBackupFlattenPlan "inc ids" KEEP_LAST: BF_DROP_IDS = the oldest increments beyond KEEP_LAST, BF_BASE_ID = the increment that becomes the FULL one
+function oneBackupFlattenPlan()
+{
+    local _ids="$1" _keep="${2:-0}"
+    local -a _ids_a=()
+    local _drop=0 _i=0
+    BF_DROP_IDS=""
+    BF_BASE_ID=""
+    read -r -a _ids_a <<< "${_ids}"
+    [[ ${#_ids_a[*]} -gt 0 ]] || return 1
+    [[ -n "${_keep}" && -z "${_keep//[[:digit:]]/}" ]] || _keep=0
+    if [[ ${_keep} -gt 0 ]] && [[ ${#_ids_a[*]} -gt ${_keep} ]]; then
+        _drop=$((${#_ids_a[*]} - _keep))
+    fi
+    for ((_i = 0; _i < _drop; _i++)); do
+        BF_DROP_IDS+="${_ids_a[${_i}]} "
+    done
+    BF_DROP_IDS="${BF_DROP_IDS% }"
+    BF_BASE_ID="${_ids_a[${_drop}]}"
+    export BF_DROP_IDS BF_BASE_ID
+    return 0
+}
+
+# oneBackupRegistered VM_ID -> lines "epoch image_id SOURCE" of every increment of the VM's StorPool backup images (BACKUP_IDS_A from oneVmVolumes)
 function oneBackupRegistered()
 {
-    local _vm="$1" _img="" _src="" _tmpXML=""
+    local _vm="$1" _img="" _src="" _tmpXML="" _inc="" _ids="" _sources="" _element="" xfh=""
     for _img in "${BACKUP_IDS_A[@]}"; do
         [[ -n "${_img}" ]] || continue
         _tmpXML="${TMPDIR:-/tmp}/oneBackupRegistered-${_img}.XML"
         oneCallXml oneimage show "${_img}" "${_tmpXML}" >/dev/null || continue
-        _src="$("${SPXML}" get /IMAGE/SOURCE <"${_tmpXML}" 2>/dev/null | tr -d '\0' || true)"
-        oneBackupSourceParse "${_src}" quiet || continue
-        [[ "${BS_VM_ID}" == "${_vm}" ]] || continue
-        echo "${BS_EPOCH} ${_img} ${_src}"
+        unset i XPATH_ELEMENTS
+        while IFS='' read -r -u "${xfh}" -d '' _element; do
+            XPATH_ELEMENTS[i++]="${_element}"
+        done {xfh}< <("${SPXML}" get <"${_tmpXML}" "/IMAGE/SOURCE" \
+            "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/ID" "%m%/IMAGE/BACKUP_INCREMENTS/INCREMENT/SOURCE" || true)
+        exec {xfh}<&-
+        unset i
+        _src="${XPATH_ELEMENTS[i++]}"
+        _ids="${XPATH_ELEMENTS[i++]}"
+        _sources="${XPATH_ELEMENTS[i++]}"
+        while read -r _inc _src; do
+            [[ -n "${_src}" ]] || continue
+            oneBackupSourceParse "${_src}" quiet || continue
+            [[ "${BS_VM_ID}" == "${_vm}" ]] || continue
+            echo "${BS_EPOCH} ${_img} ${_src}"
+        done < <(oneBackupImageSources "${_ids}" "${_sources}" "${_src}")
     done
+}
+
+# oneBackupEpochDrop SOURCE BASE_PATH: remove the snapshots (local) or copies (remote) of one backup manifest, its KV records and its front-end directory
+function oneBackupEpochDrop()
+{
+    local _src="$1" _base="$2" _key="" _sId="" _ret=0
+    if ! oneBackupSourceParse "${_src}"; then
+        return 1
+    fi
+    for _key in ${BS_DISK_IDS} nvram svc; do
+        _sId="${BS_IDS_A[${_key}]:-}"
+        [[ -n "${_sId}" ]] || continue
+        if [[ "${BS_LOCATION}" == "local" ]]; then
+            storpoolBackupSnapshotDrop "${_sId}"
+            if ! storpoolBackupSnapshotGone "${_sId}"; then
+                splog "[E] backup epoch ${BS_EPOCH} ${_key}: snapshot ~${_sId} still exists"
+                _ret=1
+            fi
+        else
+            storpoolBackupCopyDrop "${_sId}" "${BS_LOCATION}" || _ret=$?
+        fi
+    done
+    if [[ ${_ret} -eq 0 ]]; then
+        oneBackupKvDel "${BS_VM_ID}" "${BS_EPOCH}"
+        rm -rf "${_base:?}/${BS_VM_ID:?}/${BS_EPOCH:?}"
+        splog "[I] backup ${_src} removed"
+    else
+        splog "[E] backup ${_src} not removed (${_ret})"
+    fi
+    return "${_ret}"
 }
 
 function oneBackupKvKey()

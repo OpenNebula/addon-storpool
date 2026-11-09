@@ -184,13 +184,11 @@ if [[ "${0##*/}" == "prebackup_live" ]]; then
     BACKUP_LIVE=1
 fi
 
-if [[ ${BACKUP_INTERACTIVE} -eq 1 ]] || [[ ${BACKUP_NATIVE} -eq 1 ]]; then
-    if [[ "${BACKUP_MODE^^}" == "INCREMENT" ]]; then
-        msg="Backup of VM ${VM_ID}: only full backups are supported on StorPool (MODE=${BACKUP_MODE})"
-        splog "${msg}"
-        error_message "${msg}"
-        exit 1
-    fi
+if [[ ${BACKUP_INTERACTIVE} -eq 1 ]] && [[ "${BACKUP_MODE^^}" == "INCREMENT" ]]; then
+    msg="Backup of VM ${VM_ID}: only full interactive backups are supported on StorPool (MODE=${BACKUP_MODE})"
+    splog "${msg}"
+    error_message "${msg}"
+    exit 1
 fi
 
 SNAPSHOTS_LIST="${B_LOCAL}/.storpool_snapshots"
@@ -408,7 +406,7 @@ if [[ ${BACKUP_NATIVE} -eq 1 ]]; then
         exit 1
     fi
     oneBackupKvPut "${VM_ID}" "${B_EPOCH}" "${SP_BACKUP_MODE}" "${SVC_UID:--}" "${entries}"
-    splog "[I] VM ${VM_ID} ${SP_BACKUP_MODE} backup epoch ${B_EPOCH}${SP_BACKUP_LOCATION:+ to ${SP_BACKUP_LOCATION}}: ${entries}"
+    splog "[I] VM ${VM_ID} ${SP_BACKUP_MODE} backup epoch ${B_EPOCH}$(oneBackupIncrementNote)${SP_BACKUP_LOCATION:+ to ${SP_BACKUP_LOCATION}}: ${entries}"
     if [[ -n "${SVC_UID}" ]]; then
         trapDel "backupServiceVolumeDrop"
         if backupServiceVolumeDrop; then

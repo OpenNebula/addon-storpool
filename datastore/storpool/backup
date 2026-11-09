@@ -25,13 +25,6 @@ source "${DRIVER_PATH}/../../scripts_common.sh"
 # shellcheck source=tm/storpool/storpool_common.sh
 source "${DRIVER_PATH}/../../tm/storpool/storpool_common.sh"
 
-function failWith()
-{
-    splog "[E] $*"
-    error_message "$*"
-    exit 1
-}
-
 if [[ -t 0 ]]; then
     failWith "Interactive mode not supported"
 fi
@@ -143,7 +136,7 @@ SOURCE="$(oneBackupSourceBuild "${LOCATION}" "${VM_ID}" "${BI_EPOCH}" "${ENTRIES
 SIZE="$(oneBackupDiskSizeSum "${VM_XML}" "${DISKS}")"
 
 echo "${SOURCE} ${SIZE} raw"
-splog "[I] VM ${VM_ID} backup registered: ${SOURCE} ${SIZE}M raw (${B_PATH})"
+splog "[I] VM ${VM_ID} backup registered: ${SOURCE} ${SIZE}M raw (${B_PATH})$(oneBackupIncrementNote)"
 rm -rf "${B_LOCAL}"
 
 splog "END ${VM_ID}"

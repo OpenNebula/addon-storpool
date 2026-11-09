@@ -325,7 +325,11 @@ oneDatastoreInfo "${B_DATASTORE_ID:?}"
 
 BS_EPOCH=""
 if [[ "${DS_DS_MAD}" == "storpool" ]]; then
-    oneBackupSourceParse "${B_IMAGE_SOURCE}" quiet || true
+    if ! B_INC_SOURCE="$(oneBackupSelectSource "${B_INC_IDS}" "${B_INC_SOURCES}" "${B_IMAGE_SOURCE}" "${INC_ID}")"; then
+        error_message "No increment ${INC_ID} in the backup image ${IMG_ID}"
+        exit 1
+    fi
+    oneBackupSourceParse "${B_INC_SOURCE}" quiet || true
 fi
 
 SP_QOSCLASS="${VM_DISK_SP_QOSCLASS:-${VM_SP_QOSCLASS:-${DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}}"

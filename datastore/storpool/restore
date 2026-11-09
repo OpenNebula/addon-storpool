@@ -63,18 +63,22 @@ begin
 
     ds_id     = xml.elements['DATASTORE/ID'].text.to_i
     base_path = xml.elements['DATASTORE/BASE_PATH'].text
-    source    = xml.elements['IMAGE/SOURCE'].text
     username  = xml.elements['TEMPLATE/USERNAME'].text
     dst_ds_id = xml.elements['DESTINATION_DS_ID'].text.to_i
+    inc_id    = xml.elements['TEMPLATE/INCREMENT_ID']&.text
 rescue StandardError => e
     fail_with "Missing datastore or image attributes: #{e.message}"
 end
 
-m = source.match(/\A(?<loc>[^:\s]+):(?<vm>\d+):(?<epoch>\d+):(?<entries>[^:\s]+)\z/)
+# the increment to restore: the requested one, else the last increment (the SOURCE of a FULL image)
+source = inc_id.nil? ? image.last : image.selected
+fail_with "No increment #{inc_id} in the backup image" if source.nil?
+
+m = source.match(%r{\A(?<loc>[^/\s]+)/(?<vm>\d+)/(?<epoch>\d+)/(?<entries>[^\s]+)\z})
 fail_with "Not a StorPool backup SOURCE: #{source}" unless m
 
 ids = {}
-m[:entries].split(',').each do |e|
+m[:entries].split('/').each do |e|
     k, v = e.split('=', 2)
     fail_with "Bad entry '#{e}' in the backup SOURCE #{source}" if k.nil? || k.empty? || v.nil? || v.empty?
 
