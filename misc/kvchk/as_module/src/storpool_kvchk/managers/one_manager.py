@@ -53,21 +53,21 @@ def is_storpool_tm_mad(tm_mad: Optional[str]) -> bool:
 
 
 BACKUP_SOURCE_RE = re.compile(
-    r"^(?P<location>[^:\s]+):(?P<vm_id>\d+):(?P<epoch>\d+):(?P<entries>[^:\s]+)$"
+    r"^(?P<location>[^/\s]+)/(?P<vm_id>\d+)/(?P<epoch>\d+)/(?P<entries>[^\s]+)$"
 )
 
 
 def parse_backup_source(source: Optional[str]) -> Optional[Dict[str, Any]]:
-    """The manifest of a StorPool backup image SOURCE
-    (<location|local>:<vm_id>:<epoch>:<did>=<id>,...), None for any
-    other backup driver's SOURCE"""
+    """The manifest of a StorPool backup SOURCE (of a FULL image or of
+    one increment: <location|local>/<vm_id>/<epoch>/<did>=<id>/...),
+    None for any other backup driver's SOURCE"""
     if not isinstance(source, str):
         return None
     match = BACKUP_SOURCE_RE.match(source)
     if not match:
         return None
     ids: Dict[str, str] = {}
-    for entry in match.group("entries").split(","):
+    for entry in match.group("entries").split("/"):
         key, sep, value = entry.partition("=")
         if not sep or not key or not value:
             return None
@@ -679,26 +679,51 @@ class oneManager(BaseManager):
         self.dbg(2, f"self.ds_images = \n{pprint.pformat(self.ds_images)}")
 
     def _add_backup_image(self, img_e: Any) -> None:
-        """A BACKUP image of a StorPool backup datastore: its SOURCE is
-        the manifest of the kept snapshots (or remote copies)"""
-        manifest: Optional[Dict[str, Any]] = parse_backup_source(
-            getattr(img_e, "SOURCE", None)
+        """A BACKUP image of a StorPool backup datastore: the manifest of
+        the kept snapshots (or remote copies) is the SOURCE of a FULL
+        image, or the SOURCE of each increment of an INCREMENT image
+        (the image SOURCE is increment 0's, stale once it is flattened)"""
+        increments: List[Dict[str, Any]] = []
+        inc_list: Any = getattr(
+            getattr(img_e, "BACKUP_INCREMENTS", None), "INCREMENT", None
         )
-        if manifest is None:
+        if not isinstance(inc_list, (list, tuple)):
+            inc_list = []
+        for inc_e in inc_list:
+            manifest: Optional[Dict[str, Any]] = parse_backup_source(
+                getattr(inc_e, "SOURCE", None)
+            )
+            if manifest is None:
+                self.dbg(
+                    3,
+                    f"IMG {img_e.ID} ({img_e.NAME}) increment {inc_e.ID}"
+                    " SOURCE of another driver - skipping",
+                )
+                continue
+            manifest["increment"] = int(inc_e.ID)
+            increments.append(manifest)
+        if not inc_list:
+            full: Optional[Dict[str, Any]] = parse_backup_source(
+                getattr(img_e, "SOURCE", None)
+            )
+            if full is not None:
+                full["increment"] = None
+                increments.append(full)
+        if not increments:
             self.dbg(
                 3,
                 f"IMG {img_e.ID} ({img_e.NAME}) BACKUP image of another"
                 " driver - skipping",
             )
             return
-        manifest.update({
+        self.backup_images[int(img_e.ID)] = {
             "image_id": int(img_e.ID),
             "name": img_e.NAME,
             "datastore_id": int(img_e.DATASTORE_ID),
             "state": int(img_e.STATE),
-        })
-        self.backup_images[int(img_e.ID)] = manifest
-        self.dbg(4, f"backup image {img_e.ID}: {manifest}")
+            "increments": increments,
+        }
+        self.dbg(4, f"backup image {img_e.ID}: {increments}")
 
     def _get_disk_symlink(
         self,

@@ -220,12 +220,20 @@ class DataProcessing(BaseManager):
             return False
         return True
 
+    def _backup_manifests(self) -> List[Dict[str, Any]]:
+        """The manifests of every StorPool backup image: one per FULL
+        image, one per increment of an INCREMENT image"""
+        manifests: List[Dict[str, Any]] = []
+        for image in self.one.backup_images.values():
+            manifests.extend(image.get("increments") or [])
+        return manifests
+
     def _kept_backups(self) -> Tuple[set, Dict[int, set]]:
-        """The (epoch, id) pairs every StorPool backup image SOURCE
-        carries, and the epochs per VM"""
+        """The (epoch, id) pairs every StorPool backup manifest carries,
+        and the epochs per VM"""
         pairs: set = set()
         epochs: Dict[int, set] = {}
-        for manifest in self.one.backup_images.values():
+        for manifest in self._backup_manifests():
             epoch: int = int(manifest["epoch"])
             vm_id: int = int(manifest["vm_id"])
             epochs.setdefault(vm_id, set()).add(epoch)
@@ -1370,7 +1378,7 @@ class DataProcessing(BaseManager):
             )
             families.setdefault(family, {})[match.group("did") or ""] = value
         sources: Dict[Tuple[int, int], Dict[str, str]] = {}
-        for manifest in self.one.backup_images.values():
+        for manifest in self._backup_manifests():
             sources[(int(manifest["vm_id"]), int(manifest["epoch"]))] = (
                 manifest["ids"]
             )

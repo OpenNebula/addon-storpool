@@ -87,35 +87,74 @@ def _snap(gid, **tags):
     }
 
 
-def _backup_image(vm_id=4, epoch=EPOCH, location="local", ids=None):
+def _manifest(vm_id=4, epoch=EPOCH, location="local", ids=None, increment=None):
     ids = ids or {"0": "fir.b.btbe", "nvram": "fir.b.btbj", "svc": "fir.b.btbk"}
     return {
-        "image_id": 8, "name": "4 backup", "datastore_id": 105,
-        "state": 1, "location": location, "vm_id": vm_id,
-        "epoch": epoch, "ids": ids,
+        "location": location, "vm_id": vm_id, "epoch": epoch, "ids": ids,
+        "increment": increment,
     }
+
+
+def _backup_image(vm_id=4, epoch=EPOCH, location="local", ids=None, increments=None):
+    """A FULL image (one manifest), or an INCREMENT image with the given manifests"""
+    increments = increments or [_manifest(vm_id, epoch, location, ids)]
+    return {
+        "image_id": 8, "name": "4 backup", "datastore_id": 105,
+        "state": 1, "increments": increments,
+    }
+
+
+def _image_xml(source, increments=()):
+    """A pyone-like image: ID, NAME, SOURCE and BACKUP_INCREMENTS.INCREMENT[]"""
+    incs = [Mock(ID=i, SOURCE=src) for i, src in increments]
+    return Mock(ID=8, NAME="4 backup", DATASTORE_ID=105, STATE=1, SOURCE=source,
+                BACKUP_INCREMENTS=Mock(INCREMENT=incs))
 
 
 class TestBackupSource:
 
     def test_parse_local(self):
-        m = parse_backup_source("local:4:1793976561:0=fir.b.btbe,nvram=fir.b.btbj,svc=fir.b.btbk")
+        m = parse_backup_source("local/4/1793976561/0=fir.b.btbe/nvram=fir.b.btbj/svc=fir.b.btbk")
         assert m == {
             "location": "local", "vm_id": 4, "epoch": 1793976561,
             "ids": {"0": "fir.b.btbe", "nvram": "fir.b.btbj", "svc": "fir.b.btbk"},
         }
 
     def test_parse_remote_strips_tilde(self):
-        m = parse_backup_source("devA1:3:1793977538:0=~fir.b.btbh,svc=fir.b.btb7")
+        m = parse_backup_source("devA1/3/1793977538/0=~fir.b.btbh/svc=fir.b.btb7")
         assert m["location"] == "devA1"
         assert m["ids"] == {"0": "fir.b.btbh", "svc": "fir.b.btb7"}
 
     def test_other_drivers_source(self):
         assert parse_backup_source("102/7/1762400000") is None
+        assert parse_backup_source("a1b2c3") is None
         assert parse_backup_source("") is None
         assert parse_backup_source(None) is None
-        assert parse_backup_source("local:4:abc:0=x") is None
-        assert parse_backup_source("local:4:1793976561:0=") is None
+        assert parse_backup_source("local/4/abc/0=x") is None
+        assert parse_backup_source("local/4/1793976561/0=") is None
+        assert parse_backup_source("local:4:1793976561:0=fir.b.btbe,svc=fir.b.btbk") is None
+
+    def test_full_image(self, processor):
+        processor.one._add_backup_image(_image_xml("local/4/1793976561/0=fir.b.btbe/svc=fir.b.btbk"))
+        assert processor.one.backup_images[8]["increments"] == [
+            _manifest(ids={"0": "fir.b.btbe", "svc": "fir.b.btbk"}),
+        ]
+
+    def test_increment_image(self, processor):
+        """Every increment is a manifest; the image SOURCE (increment 0's, stale after a flatten) is not used"""
+        processor.one._add_backup_image(_image_xml(
+            "local/4/1793976561/0=fir.b.btbe/svc=fir.b.btbk",
+            increments=[(1, "local/4/1793976661/0=fir.b.btc1/svc=fir.b.btc2"),
+                        (2, "local/4/1793976761/0=fir.b.btc3/svc=fir.b.btc4")],
+        ))
+        assert processor.one.backup_images[8]["increments"] == [
+            _manifest(epoch=1793976661, ids={"0": "fir.b.btc1", "svc": "fir.b.btc2"}, increment=1),
+            _manifest(epoch=1793976761, ids={"0": "fir.b.btc3", "svc": "fir.b.btc4"}, increment=2),
+        ]
+
+    def test_other_driver_image(self, processor):
+        processor.one._add_backup_image(_image_xml("a1b2c3", increments=[(0, "a1b2c3"), (1, "d4e5f6")]))
+        assert processor.one.backup_images == {}
 
 
 class TestKeptBackupSnapshots:
@@ -129,6 +168,24 @@ class TestKeptBackupSnapshots:
         processor.analyze_hanging()
         out = capsys.readouterr().out
         assert "hanging" not in out
+
+    def test_kept_by_an_increment(self, processor, capsys):
+        """The snapshots of every increment are kept, those of a flattened increment are not"""
+        processor.one.one_vms = {4: {"lcm_state": 3}}
+        processor.one.backup_images = {8: _backup_image(increments=[
+            _manifest(epoch=EPOCH + 100, ids={"0": "fir.b.btc1"}, increment=1),
+            _manifest(epoch=EPOCH + 200, ids={"0": "fir.b.btc3"}, increment=2),
+        ])}
+        processor.sp.data = {
+            "~fir.b.btbe": _snap("fir.b.btbe", bkp=str(EPOCH), diskid="0", img="one-img-3-4-0"),
+            "~fir.b.btc1": _snap("fir.b.btc1", bkp=str(EPOCH + 100), diskid="0", img="one-img-3-4-0"),
+            "~fir.b.btc3": _snap("fir.b.btc3", bkp=str(EPOCH + 200), diskid="0", img="one-img-3-4-0"),
+        }
+        processor.analyze_hanging()
+        out = capsys.readouterr().out
+        assert "hanging snapshot ~fir.b.btbe" in out
+        assert "hanging snapshot ~fir.b.btc1" not in out
+        assert "hanging snapshot ~fir.b.btc3" not in out
 
     def test_left_behind(self, processor, capsys):
         processor.one.one_vms = {4: {"lcm_state": 3}}
@@ -246,6 +303,18 @@ class TestBackupKv:
             f"one-bak-4-{EPOCH}-0": "~fir.b.btbe",
             f"one-bak-4-{EPOCH}-nvram": "~fir.b.btbj",
             f"one-bak-4-{EPOCH}-svc": "~fir.b.btbk",
+        }
+        processor.analyze_backup_kv()
+        assert "[Issue]" not in capsys.readouterr().out
+
+    def test_increment_family(self, processor, capsys):
+        processor.one.backup_images = {8: _backup_image(increments=[
+            _manifest(epoch=EPOCH, ids={"0": "fir.b.btbe"}, increment=3),
+            _manifest(epoch=EPOCH + 100, ids={"0": "fir.b.btc1"}, increment=4),
+        ])}
+        processor.etcd.data["bkName"] = {
+            f"one-bak-4-{EPOCH + 100}": "mode=local svc=-",
+            f"one-bak-4-{EPOCH + 100}-0": "~fir.b.btc1",
         }
         processor.analyze_backup_kv()
         assert "[Issue]" not in capsys.readouterr().out
