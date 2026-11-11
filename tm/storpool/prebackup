@@ -251,7 +251,7 @@ if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList >
         SKIP_KV_DATA=1 storpoolSnapshotDelete "${sName}"
     done {spfh}< <(jq -r --arg vmtag "${VM_TAG}" --arg vmid "${VM_ID}" --arg loctag "${LOC_TAG}" --arg locval "${LOC_TAG_VAL}" \
         '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
-         | select(.deleted==false and .tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and ((.tags.bak // "")!="" or (.tags.bkp // "")!="") and .tags.snap==null)
+         | select(.deleted==false and (.backup // false)==false and .tags.virt=="one" and (.tags[$loctag] // $locval)==$locval and .tags[$vmtag]==$vmid and ((.tags.bak // "")!="" or (.tags.bkp // "")!="") and .tags.snap==null)
          | "\(.name) \(.tags.bak // "-") \(.tags.bkp // "-") \(.globalId) \(.transient)"' "${TMPDIR}/SnapshotsList.json" || true)
     exec {spfh}<&-
 else
