@@ -200,6 +200,9 @@ globalId) and never triggers a call.
   datastores show; `DATASTORE_CAPACITY_CHECK=NO` keeps them from gating a
   backup.
 
+Which schedules keep these figures usable, and which cache settings make
+them useless, is in [Backup size reporting](backup_size_reporting.md).
+
 ## The etcd index
 
 `prebackup` records the backup in the etcd KV store under its own prefix
