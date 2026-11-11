@@ -52,6 +52,19 @@ IS_DISK="$(is_disk "${DST_PATH}")"
 
 oneDatastoreInfo "${DS_ID}"
 
+# rc 2 is etcd itself, not a missing name. A non-zero exit leaves the disk
+# for oned to retry; treating the lookup as "absent" drops it and keeps the volume.
+kvGetUidOrExit()
+{
+    kvGetUid "$1"
+    local _r=$?
+    if [[ ${_r} -eq 2 ]]; then
+        splog "[E] $1 not deleted, KV lookup failed (${_r})"
+        exit 2
+    fi
+    return "${_r}"
+}
+
 if boolTrue "IS_DISK"; then
     oneVmInfo "${VM_ID}" "${DISK_ID}"
     SP_VOL="${SOURCE##*/}"
@@ -74,7 +87,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 fi
             fi
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${DISK_ID_ARRAY[i]}"
-            if kvGetUid "${SP_VOL}"; then
+            if kvGetUidOrExit "${SP_VOL}"; then
                 VOL_UID="${SP_UID}"
                 storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
@@ -116,7 +129,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
             splog "VM ${VM_ID} TPM_MODEL=${TPM_MODEL}"
             if [[ -n "${TPM_MODEL}" ]]; then
                 SP_VOL="${ONE_PX}-sys-${VM_ID}-SWTPM"
-                if kvGetUid "${SP_VOL}"; then
+                if kvGetUidOrExit "${SP_VOL}"; then
                     VOL_UID="${SP_UID}"
                     storpoolDelete "${VOL_UID}" "force" "snaps" "" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
                 fi
@@ -125,7 +138,7 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         DELAY_DELETE=
         if [[ -n "${CONTEXT_DISK_ID}" ]]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-${CONTEXT_DISK_ID}"
-            if kvGetUid "${SP_VOL}"; then
+            if kvGetUidOrExit "${SP_VOL}"; then
                 VOL_UID="${SP_UID}"
                 storpoolDelete "${VOL_UID}" "force" "snaps" "" "\"img\":\"${SP_VOL}\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
@@ -140,13 +153,13 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
         fi
         if boolTrue "SP_CHECKPOINT_BD"; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
-            if kvGetUid "${SP_VOL}"; then
+            if kvGetUidOrExit "${SP_VOL}"; then
                 storpoolDelete "${SP_UID}" "force" "" "" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
             fi
         fi
         if [[ -n "${T_OS_NVRAM}" ]]; then
             SP_VOL="${ONE_PX}-sys-${VM_ID}-NVRAM"
-            if kvGetUid "${SP_VOL}"; then
+            if kvGetUidOrExit "${SP_VOL}"; then
                 VOL_UID="${SP_UID}"
                 storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
@@ -202,7 +215,7 @@ _restore_vol="${SP_VOL}"
 
 if boolTrue "CLONE"; then
     SP_VOL+="-${VM_ID}-${DISK_ID}"
-    if kvGetUid "${SP_VOL}"; then
+    if kvGetUidOrExit "${SP_VOL}"; then
         VOL_UID="${SP_UID}"
         log "Deleting ${DST_PATH} ${VOL_UID} (${SP_VOL})"
         storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
@@ -212,7 +225,7 @@ elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
         # DISK/TYPE="CDROM"
         # backward compatibility
         if boolTrue "CDROM_BACKWARD_COMPATIBILITY"; then #TBD
-            if kvGetUid "${SP_VOL}"; then
+            if kvGetUidOrExit "${SP_VOL}"; then
                 VOL_UID="${SP_UID}"
                 storpoolDetach "${VOL_UID}" "force" "${DST_HOST}" "" "${READONLY}"
                 storpoolVolumeTag "${VOL_UID}" "diskid;${VM_TAG};vc-policy;qc" ";;;${DEFAULT_QOSCLASS}"
@@ -226,13 +239,13 @@ elif boolTrue "IMMUTABLE" "${IMMUTABLE}"; then
     log "${_LOGMSG}"
     DELAY_DELETE=
     SP_VOL+="-${VM_ID}-${DISK_ID}"
-    if kvGetUid "${SP_VOL}"; then
+    if kvGetUidOrExit "${SP_VOL}"; then
         VOL_UID="${SP_UID}"
         # For CDROM, we'll handle both snap types later in combined call
         storpoolDelete "${VOL_UID}" "force" "" "" "\"img\":\"${SP_VOL}\",\"type\":\"CDROM\",\"reason\":\"tm_delete\""
     fi
 else # image persist
-    if kvGetUid "${SP_VOL}"; then
+    if kvGetUidOrExit "${SP_VOL}"; then
         msg="Not CLONE ${DST_PATH} PERSISTENT ${SP_UID} (${SP_VOL})"
         log "${msg}"
         splog "${msg}"

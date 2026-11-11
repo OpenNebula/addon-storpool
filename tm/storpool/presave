@@ -39,7 +39,11 @@ if boolTrue "SP_CHECKPOINT_BD"; then
 
     SP_VOL="${ONE_PX}-sys-${VM_ID}-rawcheckpoint"
 
-    if kvGetUid "${SP_VOL}"; then
+    _kvret=0
+    kvGetUid "${SP_VOL}" || _kvret=$?
+    if [[ ${_kvret} -eq 2 ]]; then
+        exit 2
+    elif [[ ${_kvret} -eq 0 ]]; then
         storpoolDelete "${SP_UID}" "force" "" "" "\"sys\":\"${SP_VOL}\""
     fi
     VM_MEMORY=$("${SPXML}" get -b /VMM_DRIVER_ACTION_DATA/VM/TEMPLATE/MEMORY <<< "${DRV_ACTION}" | tr -d '\0')
@@ -47,11 +51,16 @@ if boolTrue "SP_CHECKPOINT_BD"; then
     oneVmInfo "${VM_ID}"
 
     SP_TEMPLATE="$(spVolumeTemplateName "${DS_ID}")"
+    _ret=0
     storpoolVolumeCreate "${SP_VOL}" "$((VM_MEMORY*1024*1024*2))" "${SP_TEMPLATE}" \
             "virt;${LOC_TAG:-nloc};${VM_TAG};${VC_POLICY:+vc-policy};type" \
-            "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT"
-    kvGetUid "${SP_VOL}" fatal
+            "one;${LOC_TAG_VAL};${VM_ID};${VC_POLICY};CHKPNT" || _ret=$?
+    if [[ ${_ret} -ne 0 ]] || [[ -z "${SP_UID}" ]]; then
+        splog "[E] Failed to create checkpoint volume ${SP_VOL} (${_ret:-1})"
+        exit "${_ret:-1}"
+    fi
     trapAdd "storpoolDelete \"${SP_UID}\" \"force\""
+    kvGetUid "${SP_VOL}" fatal
 
     oneHostInfo "${HVHOST}"
     DO_REMOTE="~${HOST_SP_CLUSTER_ID}" storpoolAttach "${SP_UID}" "${HVHOST}"

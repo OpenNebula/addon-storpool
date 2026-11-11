@@ -125,9 +125,14 @@ if [[ -n "${OLD_UID}" ]]; then
     CREATE_VOL="${SP_VOL}-repl-$(mktemp --dry-run XXXXXXXX)"
 fi
 
+_ret=0
 storpoolVolumeCreate "${CREATE_VOL}" "$((SIZE*1024*1024))" "${SP_TEMPLATE}" \
     "diskid;${VM_TAG};fs;type;${VC_POLICY:+vc-policy};${SP_QOSCLASS:+qc}" \
-    "${DISK_ID};${VM_ID};${FS};VOL${FSTYPE^^};${VC_POLICY};${SP_QOSCLASS}"
+    "${DISK_ID};${VM_ID};${FS};VOL${FSTYPE^^};${VC_POLICY};${SP_QOSCLASS}" || _ret=$?
+if [[ ${_ret} -ne 0 ]] || [[ -z "${SP_UID}" ]]; then
+    splog "[E] Failed to create volume ${CREATE_VOL} (${_ret:-1})"
+    exit "${_ret:-1}"
+fi
 
 VOL_UID="${SP_UID}"
 if [[ -n "${OLD_UID}" ]]; then

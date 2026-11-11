@@ -1682,7 +1682,7 @@ function spMonitorTemplateName()
 function storpoolVolumeCreate()
 {
     local _SP_VOL="$1" _SP_SIZE="$2" _SP_TEMPLATE="$3" _TAG_KEY="$4" _TAG_VAL="$5"
-    local _RET=1 _DATA="" _TAGS=""
+    local _RET=1 _DATA="" _TAGS="" _created=""
     _TAGS="$(tagsHelper "img;${LOC_TAG};virt${_TAG_KEY:+;${_TAG_KEY}}" "${_SP_VOL};${LOC_TAG_VAL};one${_TAG_VAL:+;${_TAG_VAL}}")"
     _DATA="\"size\":\"${_SP_SIZE}\",\"tags\":{${_TAGS}}"
     [[ -z "${_SP_TEMPLATE}" ]] || _DATA+=",\"template\":\"${_SP_TEMPLATE}\""
@@ -1694,6 +1694,15 @@ function storpoolVolumeCreate()
     if [[ -n ${SP_UID} ]]; then
         kvPut "${_SP_VOL}" "${SP_UID}"
         _RET=$?
+        if [[ ${_RET} -ne 0 ]]; then
+            # the name was not stored; drop the volume and any half-written key
+            _created="${SP_UID}"
+            ONLY_DELETE=volume _SOFT_FAIL=1 storpoolDelete "${_created}" force "" "" "" 1 || \
+                splog "[E] ${_SP_VOL} (${_created}) left after kvPut failed (${_RET})"
+            kvDel "${_SP_VOL}" "${_created}" || \
+                splog "[E] ${_SP_VOL} (${_created}) left in KV after kvPut failed (${_RET})"
+            unset SP_UID
+        fi
     fi
     return "${_RET}"
 }
