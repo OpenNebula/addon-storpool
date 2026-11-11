@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StorPool</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 15px/1.45 sans-serif; margin: 0; padding: 1rem 1.25rem 2rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+    h2 { font-size: 1.15rem; margin: 0; }
+    h3 { font-size: 1rem; margin: 1rem 0 0.25rem; }
+    p.lead, p.note, p.sub { margin: 0.2rem 0 0.8rem; color: #555; }
+    p.error { color: #a30; }
+    .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0 0 0.8rem; }
+    .filters button {
+      font: inherit; padding: 0.25rem 0.7rem; cursor: pointer;
+      border: 1px solid #bbb; border-radius: 4px; background: transparent; color: inherit;
+    }
+    .filters button[aria-pressed="true"] { background: rgba(25, 118, 210, 0.18); border-color: #1976d2; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 0.35rem 0.55rem; border-bottom: 1px solid #ccc; vertical-align: top; }
+    th { font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.none td { color: #777; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover, tr.clickable:focus { background: rgba(127, 127, 127, 0.14); }
+    tr.selected { background: rgba(25, 118, 210, 0.12); }
+    tr.part td { color: #555; font-size: 0.92em; }
+    .tip-label { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+    td.has-tip { cursor: help; }
+    tr.clickable td.has-tip { cursor: pointer; }
+    #tip {
+      position: fixed; z-index: 5; max-width: 28rem;
+      padding: 0.55rem 0.75rem; border-radius: 6px;
+      background: #222; color: #fff; font-size: 0.85rem; line-height: 1.4;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+    }
+    #shade {
+      position: fixed; inset: 0; z-index: 2;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex; justify-content: center; align-items: flex-start;
+      padding: 1.25rem; overflow: auto;
+    }
+    #shade[hidden] { display: none; }
+    #panel {
+      background: Canvas; color: CanvasText;
+      width: min(960px, 100%);
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+    #panel header {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+      padding: 0.9rem 1rem 0.4rem;
+      position: sticky; top: 0; background: Canvas;
+      border-bottom: 1px solid #ddd; border-radius: 8px 8px 0 0;
+    }
+    #panel header p { margin: 0.15rem 0 0.45rem; }
+    #dlg-close {
+      font: inherit; padding: 0.3rem 0.7rem; cursor: pointer;
+      border: 1px solid #bbb; border-radius: 4px; background: Canvas; color: CanvasText;
+    }
+    #dlg-body { padding: 0.4rem 1rem 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>Backups</h1>
+  <p class="lead">Recorded size is what OpenNebula stored when the backup finished. Live storedSize is what those snapshots hold in the StorPool cache now.</p>
+  <p class="note" id="cache"></p>
+  <div class="filters" id="filters"><span id="filter-label">Show</span></div>
+  <div id="out"></div>
+  <div id="tip" hidden></div>
+  <div id="shade" hidden>
+    <div id="panel" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+      <header>
+        <div>
+          <h2 id="dlg-title"></h2>
+          <p class="sub" id="dlg-sub"></p>
+        </div>
+        <button type="button" id="dlg-close">Close</button>
+      </header>
+      <div id="dlg-body"></div>
+    </div>
+  </div>
+  <script>
+    var out = document.getElementById("out");
+    var cacheLine = document.getElementById("cache");
+    var shade = document.getElementById("shade");
+    var dlgTitle = document.getElementById("dlg-title");
+    var dlgSub = document.getElementById("dlg-sub");
+    var dlgBody = document.getElementById("dlg-body");
+    var loadGen = 0;
+    var selectedRow = null;
+    var tipBox = document.getElementById("tip");
+    var TIPS = {
+      vm: "OpenNebula VM id and name.",
+      owner: "User that owns the VM.",
+      group: "Group that owns the VM.",
+      filter: "Which VMs to ask OpenNebula for. These are the FireEdge list filters, and oned still applies this login's ACLs. All is every VM the user may see: their own, their groups', VMs shared through other, and ACL rules that name them. oneadmin's All is the whole pool. Mine is VMs this user owns. Group is those plus VMs owned by the user's groups. Primary group is the user's primary group only.",
+      state: "OpenNebula state. ACTIVE / RUNNING means the VM is powered on and the guest is up.",
+      backups: "How many backup images this VM has. An incremental chain is one image.",
+      points: "Restore points in those images. Each full backup and each later increment is one point.",
+      recordedSum: "Sum of the SIZE values OpenNebula stored on the backup images when each backup finished. OpenNebula does not update them afterwards.",
+      liveSum: "Sum of the snapshots' storedSize in the StorPool monitor cache: the bytes each snapshot holds beyond its parent. A * means a snapshot was missing from the cache, so the total is incomplete.",
+      difference: "Live storedSize minus the recorded size. The two numbers measure different things, so a gap is expected.",
+      diskN: "Disk number from the VM template (DISK_ID).",
+      diskGid: "StorPool global id of the volume attached as this disk. It comes from VolumesSpace, matched by the VM and disk tags.",
+      image: "OpenNebula image this disk was cloned from.",
+      virtual: "Addressable size of the disk, the VM template DISK/SIZE. This is the size the guest sees, separate from how much StorPool has written.",
+      volStored: "Bytes written on this volume since its parent snapshot, from VolumesSpace storedSize. The parent is the latest snapshot of the disk.",
+      volSpace: "Bytes StorPool would free if this volume were deleted, from VolumesSpace spaceUsed. The count includes data the volume still shares with its parent snapshots, so it is larger than the guest's used space and larger than the bytes written since the last snapshot.",
+      backupImage: "The OpenNebula backup image. The name is the VM id and the time the chain started. One incremental chain is one image with several restore points.",
+      imageRecorded: "The backup image SIZE. It is the sum of the per-point SIZE values OpenNebula froze when each backup finished.",
+      imageLive: "Sum of this image's snapshot storedSize values from the monitor cache. A * means one of those snapshots was not in the cache.",
+      incId: "Increment number inside the backup image. 0 is the first point of the chain.",
+      incType: "Full is the first point of the chain. Increment is a later point. The recorded size of a full point is the volume's spaceUsed at that moment, how full the disk was. The recorded size of an increment is the volume's storedSize from a monitor sample taken after the previous backup and before this one, rounded up to the next MiB. When no sample fell in that gap, OpenNebula stores 0. It does not correct either number later.",
+      when: "When this backup finished, shown in your local timezone.",
+      pointRecorded: "This restore point's SIZE, in MiB, frozen when the backup finished. For the full point that is the volume spaceUsed then. For an increment it is the volume storedSize from a sample between the previous backup and this one, rounded up to 1 MiB, or 0 when there was no such sample.",
+      snapStored: "Bytes this snapshot holds beyond its parent snapshot, from SnapshotsSpace storedSize.",
+      snapFreed: "Bytes freed if this snapshot is deleted, from SnapshotsSpace spaceUsed. Blocks still used by a later snapshot or by the live volume stay.",
+      partRole: "This disk, NVRAM, or service-file piece of the restore point. Service files are left out of the size totals.",
+      snapId: "StorPool global id of this snapshot, taken from the backup SOURCE.",
+      volId: "StorPool global id of the volume this snapshot sits on. For a disk this is the same id as in the Disks table.",
+      cache: "The monitor files on this front-end that the live figures were read from. The time is the oldest of those files."
+    };
+
+    function tip(el, key, label) {
+      el.dataset.tip = key;
+      el.classList.add("has-tip");
+      if (label) {
+        el.classList.add("tip-label");
+        if (el.tabIndex < 0) el.tabIndex = 0;
+      }
+    }
+
+    function showTip(el) {
+      var text = TIPS[el.dataset.tip];
+      if (!text) return;
+      tipBox.textContent = text;
+      tipBox.hidden = false;
+      tipBox.style.left = "0px";
+      tipBox.style.top = "0px";
+      var rect = el.getBoundingClientRect();
+      var x = rect.left;
+      var y = rect.bottom + 6;
+      var width = tipBox.offsetWidth;
+      var height = tipBox.offsetHeight;
+      if (x + width > window.innerWidth - 8) x = window.innerWidth - width - 8;
+      if (x < 8) x = 8;
+      if (y + height > window.innerHeight - 8) y = rect.top - height - 6;
+      if (y < 8) y = 8;
+      tipBox.style.left = x + "px";
+      tipBox.style.top = y + "px";
+    }
+
+    function hideTip() {
+      tipBox.hidden = true;
+    }
+
+    function tipTarget(node) {
+      return node && node.closest ? node.closest("[data-tip]") : null;
+    }
+
+    function apiBase() {
+      if (location.pathname.indexOf("/storpool/api") === 0) return "/storpool/api";
+      return "/api";
+    }
+
+    function fmtBytes(n) {
+      if (n === null || n === undefined) return "\u2014";
+      var units = ["B", "KiB", "MiB", "GiB", "TiB"];
+      var value = n;
+      var i = 0;
+      while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i += 1;
+      }
+      var text = i === 0 ? String(value) : value.toFixed(value >= 10 ? 1 : 2);
+      return text + " " + units[i];
+    }
+
+    function fmtMiB(n) {
+      if (n === null || n === undefined) return "\u2014";
+      return fmtBytes(n * 1048576);
+    }
+
+    function when(epoch) {
+      if (!epoch) return "\u2014";
+      return new Date(epoch * 1000).toLocaleString();
+    }
+
+    function cell(row, text, cls, tipKey) {
+      var td = document.createElement("td");
+      td.textContent = text;
+      if (cls) td.className = cls;
+      if (tipKey) tip(td, tipKey);
+      row.appendChild(td);
+      return td;
+    }
+
+    function addHead(table, cols) {
+      var head = document.createElement("tr");
+      cols.forEach(function (col) {
+        var th = document.createElement("th");
+        th.textContent = col.label;
+        if (col.num) th.className = "num";
+        if (col.tip) tip(th, col.tip, true);
+        head.appendChild(th);
+      });
+      table.appendChild(head);
+    }
+
+    function roleLabel(role) {
+      var text = role == null ? "" : String(role);
+      if (/^\d+$/.test(text)) return "Disk " + text;
+      if (text === "nvram") return "NVRAM";
+      if (text === "svc") return "Service files";
+      return text;
+    }
+
+    function typeLabel(kind) {
+      if (kind === "FULL") return "Full";
+      if (kind === "INCREMENT") return "Increment";
+      return kind || "";
+    }
+
+    function markSelected(tr) {
+      if (selectedRow) selectedRow.classList.remove("selected");
+      selectedRow = tr;
+      if (tr) tr.classList.add("selected");
+    }
+
+    function closeDialog() {
+      shade.hidden = true;
+      loadGen += 1;
+      markSelected(null);
+    }
+
+    function openDialog(vm, tr) {
+      loadGen += 1;
+      var gen = loadGen;
+      markSelected(tr);
+      dlgTitle.textContent = "VM " + (vm.id != null ? vm.id : "") + (vm.name ? " " + vm.name : "");
+      tip(dlgTitle, "vm", true);
+      dlgSub.textContent = vm.state || "";
+      tip(dlgSub, "state", true);
+      dlgBody.replaceChildren();
+      var loading = document.createElement("p");
+      loading.textContent = "Loading backups\u2026";
+      dlgBody.appendChild(loading);
+      shade.hidden = false;
+      document.getElementById("dlg-close").focus();
+      fetch(apiBase() + "/vm/" + vm.id, { credentials: "same-origin" }).then(function (res) {
+        return res.json().then(function (data) {
+          if (gen !== loadGen) return;
+          if (!res.ok) {
+            showError(data.error || ("HTTP " + res.status));
+            return;
+          }
+          renderDetail(data);
+        });
+      }).catch(function () {
+        if (gen !== loadGen) return;
+        showError("The backup-space service did not answer.");
+      });
+    }
+
+    function showError(text) {
+      var p = document.createElement("p");
+      p.className = "error";
+      p.textContent = text;
+      dlgBody.replaceChildren(p);
+    }
+
+    function idLine(word, id, tipKey) {
+      var line = document.createElement("div");
+      var name = document.createElement("span");
+      name.className = "tip-label";
+      name.textContent = word + " ";
+      line.appendChild(name);
+      line.appendChild(document.createTextNode(id));
+      tip(line, tipKey);
+      return line;
+    }
+
+    function fillIds(td, part) {
+      td.appendChild(idLine("snapshot", part.global_id || part.source_id || "\u2014", "snapId"));
+      if (part.volume_global_id) {
+        var diskRole = /^\d+$/.test(String(part.role == null ? "" : part.role));
+        td.appendChild(idLine(diskRole ? "disk" : "volume", part.volume_global_id, "volId"));
+      }
+    }
+
+    function renderDisks(disks) {
+      if (!disks || !disks.length) return;
+      var title = document.createElement("h3");
+      title.textContent = "Disks";
+      dlgBody.appendChild(title);
+      var table = document.createElement("table");
+      addHead(table, [
+        { label: "Disk", tip: "diskN" },
+        { label: "Global id", tip: "diskGid" },
+        { label: "Image", tip: "image" },
+        { label: "Virtual", tip: "virtual", num: true },
+        { label: "Live storedSize", tip: "volStored", num: true },
+        { label: "spaceUsed", tip: "volSpace", num: true }
+      ]);
+      disks.forEach(function (disk) {
+        var tr = document.createElement("tr");
+        cell(tr, disk.disk_id != null ? String(disk.disk_id) : "", "", "diskN");
+        cell(tr, disk.global_id || "\u2014", "", "diskGid");
+        cell(tr, disk.image || disk.source || "", "", "image");
+        cell(tr, fmtMiB(disk.virtual_mb), "num", "virtual");
+        cell(tr, disk.in_cache ? fmtBytes(disk.stored_bytes) : "\u2014", "num", "volStored");
+        cell(tr, disk.in_cache ? fmtBytes(disk.space_used_bytes) : "\u2014", "num", "volSpace");
+        table.appendChild(tr);
+      });
+      dlgBody.appendChild(table);
+    }
+
+    function renderPoint(table, point) {
+      var tr = document.createElement("tr");
+      var live = fmtBytes(point.comparable_stored_bytes);
+      if (point.stored_partial && point.comparable_stored_bytes != null) live += " *";
+      if (point.stored_partial && point.comparable_stored_bytes == null) live = "incomplete";
+      cell(tr, point.increment_id != null ? String(point.increment_id) : "", "", "incId");
+      cell(tr, typeLabel(point.type), "", "incType");
+      cell(tr, when(point.date), "", "when");
+      cell(tr, fmtMiB(point.recorded_mb), "num", "pointRecorded");
+      cell(tr, live, "num", "snapStored");
+      cell(tr, fmtBytes(point.comparable_space_used_bytes), "num", "snapFreed");
+      table.appendChild(tr);
+      (point.parts || []).forEach(function (part) {
+        var sub = document.createElement("tr");
+        sub.className = "part";
+        var stored = part.in_cache ? fmtBytes(part.stored_bytes) : "missing";
+        var space = part.in_cache ? fmtBytes(part.space_used_bytes) : "missing";
+        cell(sub, "");
+        cell(sub, roleLabel(part.role) + (part.excluded_from_size ? " (not in the total)" : ""), "", "partRole");
+        fillIds(cell(sub, ""), part);
+        cell(sub, "", "num");
+        cell(sub, stored, "num", "snapStored");
+        cell(sub, space, "num", "snapFreed");
+        table.appendChild(sub);
+      });
+    }
+
+    function renderBackup(backup) {
+      var title = document.createElement("h3");
+      title.textContent = "Backup image " + backup.image_id + (backup.name ? " \u00b7 " + backup.name : "");
+      tip(title, "backupImage", true);
+      dlgBody.appendChild(title);
+      if (backup.error) {
+        var err = document.createElement("p");
+        err.className = "error";
+        err.textContent = backup.error;
+        dlgBody.appendChild(err);
+        return;
+      }
+      var summary = document.createElement("p");
+      summary.className = "note";
+      var live = fmtBytes(backup.stored_bytes);
+      if (backup.stored_partial && backup.stored_bytes != null) live += " *";
+      var recordedBit = document.createElement("span");
+      recordedBit.textContent = "Recorded " + fmtMiB(backup.recorded_mb) + ". ";
+      tip(recordedBit, "imageRecorded", true);
+      var liveBit = document.createElement("span");
+      liveBit.textContent = "Live storedSize " + live + ".";
+      tip(liveBit, "imageLive", true);
+      summary.appendChild(recordedBit);
+      summary.appendChild(liveBit);
+      dlgBody.appendChild(summary);
+      var table = document.createElement("table");
+      addHead(table, [
+        { label: "#", tip: "incId" },
+        { label: "Type", tip: "incType" },
+        { label: "When", tip: "when" },
+        { label: "Recorded", tip: "pointRecorded", num: true },
+        { label: "Live storedSize", tip: "snapStored", num: true },
+        { label: "Freed if deleted", tip: "snapFreed", num: true }
+      ]);
+      (backup.points || []).forEach(function (point) { renderPoint(table, point); });
+      dlgBody.appendChild(table);
+      var seen = {};
+      (backup.points || []).forEach(function (point) {
+        if (!point.note || seen[point.note]) return;
+        seen[point.note] = true;
+        var note = document.createElement("p");
+        note.className = "note";
+        note.textContent = point.note;
+        dlgBody.appendChild(note);
+      });
+    }
+
+    function renderDetail(data) {
+      dlgBody.replaceChildren();
+      renderDisks(data.disks);
+      var backups = data.backups || [];
+      if (!backups.length) {
+        var empty = document.createElement("p");
+        empty.textContent = "This virtual machine has no backups.";
+        dlgBody.appendChild(empty);
+        return;
+      }
+      backups.forEach(renderBackup);
+    }
+
+    function render(data) {
+      var files = (data.cache && data.cache.files) || [];
+      if (data.cache && data.cache.missing) {
+        cacheLine.textContent = "The monitor cache directory is missing. Live bytes are empty.";
+        tip(cacheLine, "cache", true);
+      } else if (!files.length) {
+        cacheLine.textContent = "No VolumesSpace or SnapshotsSpace file in the cache.";
+        tip(cacheLine, "cache", true);
+      } else {
+        var oldest = files.reduce(function (min, file) {
+          return file.mtime && (min === null || file.mtime < min) ? file.mtime : min;
+        }, null);
+        cacheLine.textContent = "Cache on this front-end. Oldest file " + when(oldest) + ".";
+        tip(cacheLine, "cache", true);
+      }
+
+      var table = document.createElement("table");
+      var head = document.createElement("tr");
+      [
+        { label: "VM", tip: "vm" },
+        { label: "Name", tip: "vm" },
+        { label: "Owner", tip: "owner" },
+        { label: "Group", tip: "group" },
+        { label: "State", tip: "state" },
+        { label: "Backups", tip: "backups", num: true },
+        { label: "Points", tip: "points", num: true },
+        { label: "Recorded", tip: "recordedSum", num: true },
+        { label: "Live storedSize", tip: "liveSum", num: true },
+        { label: "Difference", tip: "difference", num: true }
+      ].forEach(function (col) {
+        var th = document.createElement("th");
+        th.textContent = col.label;
+        if (col.num) th.className = "num";
+        tip(th, col.tip, true);
+        head.appendChild(th);
+      });
+      table.appendChild(head);
+
+      (data.vms || []).forEach(function (vm) {
+        var tr = document.createElement("tr");
+        tr.className = vm.backup_images ? "clickable" : "clickable none";
+        tr.tabIndex = 0;
+        var live = fmtBytes(vm.stored_bytes);
+        if (vm.stored_partial && vm.stored_bytes != null) live += " *";
+        if (vm.stored_partial && vm.stored_bytes == null && vm.backup_images) live = "incomplete";
+        var gap = "\u2014";
+        if (vm.recorded_mb != null && vm.stored_bytes != null) {
+          gap = fmtBytes(vm.stored_bytes - vm.recorded_mb * 1048576);
+        }
+        [
+          [vm.id != null ? String(vm.id) : "", "", "vm"],
+          [vm.name || "", "", "vm"],
+          [vm.owner || "", "", "owner"],
+          [vm.group || "", "", "group"],
+          [vm.state || "", "", "state"],
+          [String(vm.backup_images || 0), "num", "backups"],
+          [vm.backup_images ? String(vm.restore_points || 0) : "\u2014", "num", "points"],
+          [fmtMiB(vm.recorded_mb), "num", "recordedSum"],
+          [live, "num", "liveSum"],
+          [gap, "num", "difference"]
+        ].forEach(function (pair) { cell(tr, pair[0], pair[1], pair[2]); });
+        tr.addEventListener("click", function () { openDialog(vm, tr); });
+        tr.addEventListener("keydown", function (ev) {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            openDialog(vm, tr);
+          }
+        });
+        table.appendChild(tr);
+      });
+      out.replaceChildren(table);
+      if (!(data.vms || []).length) {
+        var empty = document.createElement("p");
+        empty.textContent = "No virtual machines.";
+        out.appendChild(empty);
+      }
+    }
+
+    document.getElementById("dlg-close").addEventListener("click", closeDialog);
+    shade.addEventListener("click", function (ev) {
+      if (ev.target === shade) closeDialog();
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !shade.hidden) closeDialog();
+    });
+    document.addEventListener("mouseover", function (ev) {
+      var el = tipTarget(ev.target);
+      if (el) showTip(el);
+    });
+    document.addEventListener("mouseout", function (ev) {
+      var el = tipTarget(ev.target);
+      if (!el) return;
+      if (tipTarget(ev.relatedTarget) === el) return;
+      hideTip();
+    });
+    document.addEventListener("focusin", function (ev) {
+      var el = tipTarget(ev.target);
+      if (el) showTip(el);
+    });
+    document.addEventListener("focusout", hideTip);
+    document.addEventListener("scroll", hideTip, true);
+
+    var FILTERS = [
+      { id: "all", label: "All" },
+      { id: "mine", label: "Mine" },
+      { id: "group", label: "Group" },
+      { id: "primary", label: "Primary group" }
+    ];
+    var FILTER_KEY = "storpool-pool-filter";
+    var filterBar = document.getElementById("filters");
+
+    function savedFilter() {
+      var saved = "";
+      try { saved = sessionStorage.getItem(FILTER_KEY) || ""; } catch (err) {}
+      return FILTERS.some(function (item) { return item.id === saved; }) ? saved : "all";
+    }
+
+    function markFilter(filter) {
+      Array.prototype.forEach.call(filterBar.children, function (button) {
+        button.setAttribute("aria-pressed", button.dataset.filter === filter ? "true" : "false");
+      });
+    }
+
+    function loadList(filter) {
+      try { sessionStorage.setItem(FILTER_KEY, filter); } catch (err) {}
+      markFilter(filter);
+      fetch(apiBase() + "/vms?filter=" + encodeURIComponent(filter), { credentials: "same-origin" }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) {
+            var p = document.createElement("p");
+            p.className = "error";
+            p.textContent = data.error || ("HTTP " + res.status);
+            out.replaceChildren(p);
+            return;
+          }
+          render(data);
+        });
+      }).catch(function () {
+        var p = document.createElement("p");
+        p.className = "error";
+        p.textContent = "The backup-space service did not answer.";
+        out.replaceChildren(p);
+      });
+    }
+
+    tip(document.getElementById("filter-label"), "filter", true);
+    FILTERS.forEach(function (item) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.dataset.filter = item.id;
+      button.textContent = item.label;
+      button.addEventListener("click", function () { loadList(item.id); });
+      filterBar.appendChild(button);
+    });
+    loadList(savedFilter());
+  </script>
+</body>
+</html>

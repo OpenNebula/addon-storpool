@@ -1,0 +1,5 @@
+---
+# /etc/one/fireedge/sunstone/views/user/storpool-tab.yaml
+# The sidebar route is shown when resource_name matches the first path segment.
+resource_name: "STORPOOL"
+actions: {}

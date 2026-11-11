@@ -1,0 +1,9 @@
+# /etc/one/fireedge/sunstone/tabs/storpool-tab.yaml
+# The path stays /storpool so the view resource_name STORPOOL matches.
+# /storpool/api/ is nginx, not this route: a click is client-side.
+- title: StorPool
+  path: /storpool
+  sidebar: true
+  icon: DatabaseStats
+  Component: StorPoolBackups
+  moduleId: StorpoolModule

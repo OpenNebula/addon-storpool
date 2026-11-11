@@ -1,0 +1,14 @@
+[Unit]
+Description=StorPool backup space page for FireEdge
+After=opennebula.service
+
+[Service]
+Type=simple
+User=oneadmin
+Group=oneadmin
+Environment=SP_BACKUP_SPACE_CACHE=/var/cache/addon-storpool-monitor
+ExecStart=/usr/bin/python3 /var/lib/one/remotes/misc/backup-space/backup_space.py serve
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
