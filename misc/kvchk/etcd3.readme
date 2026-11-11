@@ -55,7 +55,8 @@ EnvironmentFile=-/etc/default/etcd3
 User=etcd
 ExecStart=/bin/bash -c "GOMAXPROCS=\$(nproc) /usr/local/bin/etcd"
 SyslogIdentifier=etcd3
-Restart=on-failure
+Restart=always
+RestartSec=1s
 
 [Install]
 WantedBy=multi-user.target
