@@ -1,6 +1,7 @@
 # Installation and upgrade
 
 The installation instructions are for OpenNebula 6.4+.
+On OpenNebula before 6.6 set `VMSNAPSHOT_KEEP_ON_RECREATE=1` in `addon-storpoolrc` (see [Keep VM snapshots on recreate](advanced_configuration.md#keep-vm-snapshots-on-recreate)).
 
 If you are upgrading addon-storpool please read first the Upgrade notes section below!
 

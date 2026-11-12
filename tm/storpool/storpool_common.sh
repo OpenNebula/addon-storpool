@@ -83,6 +83,8 @@ export VMSNAPSHOT_TAG="ONESNAP"
 export VMSNAPSHOT_FSFREEZE=0
 # Delete VM snapshots when terminating a VM
 export VMSNAPSHOT_DELETE_ON_TERMINATE=1
+# keep the VM snapshots on `onevm recover --recreate` (OpenNebula before 6.6 keeps their records)
+export VMSNAPSHOT_KEEP_ON_RECREATE=0
 # block creating new VM Snapshots when the limit is reached
 export VMSNAPSHOT_LIMIT=""
 # re-create the libvirt domain after a VM snapshot revert (the VM stays RUNNING)

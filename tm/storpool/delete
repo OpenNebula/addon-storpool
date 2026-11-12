@@ -65,6 +65,11 @@ kvGetUidOrExit()
     return "${_r}"
 }
 
+vmSnapshotsKeptOnRecreate()
+{
+    [[ ${LCM_STATE} -eq 15 ]] && boolTrue "VMSNAPSHOT_KEEP_ON_RECREATE"
+}
+
 if boolTrue "IS_DISK"; then
     oneVmInfo "${VM_ID}" "${DISK_ID}"
     SP_VOL="${SOURCE##*/}"
@@ -91,11 +96,11 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 VOL_UID="${SP_UID}"
                 storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                    if [[ ${LCM_STATE} -ne 15 ]]; then
+                    if ! vmSnapshotsKeptOnRecreate; then
                         # Combined deletion: both regular "snap" and VM "ONESNAP" snapshots
                         storpoolSnapshotsDelete "${SP_VOL}" "snap,${VMSNAPSHOT_TAG}"
                     else
-                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=${LCM_STATE}"
+                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=${LCM_STATE} VMSNAPSHOT_KEEP_ON_RECREATE=${VMSNAPSHOT_KEEP_ON_RECREATE}"
                     fi
                 fi
             fi
@@ -109,18 +114,30 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
     done
 
     if boolTrue "IS_DISK"; then
+        declare -A keptVmSnaps=()
+        if vmSnapshotsKeptOnRecreate; then
+            while read -r -u "${kvfh}" _key; do
+                read -r -u "${kvfh}" _uid || break
+                [[ "${_key}" != "/byName/${SP_VOL}-${VMSNAPSHOT_TAG}-"* ]] || keptVmSnaps["${_uid}"]="${_key##*/}"
+            done {kvfh}< <(kvGetFamily "${SP_VOL}" KeysAndVals || true)
+            exec {kvfh}<&-
+        fi
         # the volume first, then its derived names (disk/VM snapshots, ...)
         for VOL_UID in $(storpoolVolumeStartswith "${SP_VOL}"); do
+            if [[ -n "${keptVmSnaps["${VOL_UID}"]}" ]]; then
+                splog "VMSNAPSHOT ${keptVmSnaps["${VOL_UID}"]} (${VOL_UID}) not deleted LCM_STATE=${LCM_STATE} VMSNAPSHOT_KEEP_ON_RECREATE=${VMSNAPSHOT_KEEP_ON_RECREATE}"
+                continue
+            fi
             storpoolDelete "${VOL_UID}" "force" "" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
         done
         # sweep by tags once, after the loop: inside the loop it would remove
         # the snapshots the loop still has to visit by their KV entries
         if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-            if [[ ${LCM_STATE} -ne 15 ]]; then
+            if ! vmSnapshotsKeptOnRecreate; then
                 # Combined deletion: both regular "snap" and VM "ONESNAP" snapshots
                 storpoolSnapshotsDelete "${SP_VOL}" "snap,${VMSNAPSHOT_TAG}"
             else
-                splog "VMSNAPSHOT(s) not deleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
+                splog "VMSNAPSHOT(s) not deleted because LCM_STATE=${LCM_STATE} VMSNAPSHOT_KEEP_ON_RECREATE=${VMSNAPSHOT_KEEP_ON_RECREATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
             fi
         fi
     else
@@ -142,11 +159,11 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 VOL_UID="${SP_UID}"
                 storpoolDelete "${VOL_UID}" "force" "snaps" "" "\"img\":\"${SP_VOL}\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                    if [[ ${LCM_STATE} -ne 15 ]]; then
+                    if ! vmSnapshotsKeptOnRecreate; then
                         # Combined deletion: both regular "snap" and VM "ONESNAP" snapshots
                         storpoolSnapshotsDelete "${SP_VOL}" "snap,${VMSNAPSHOT_TAG}"
                     else
-                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}* not deleted LCM_STATE=${LCM_STATE}"
+                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}* not deleted LCM_STATE=${LCM_STATE} VMSNAPSHOT_KEEP_ON_RECREATE=${VMSNAPSHOT_KEEP_ON_RECREATE}"
                     fi
                 fi
             fi
@@ -163,10 +180,10 @@ if [[ "${DS_TEMPLATE_TYPE}" == "SYSTEM_DS" ]]; then
                 VOL_UID="${SP_UID}"
                 storpoolDelete "${VOL_UID}" "force" "snaps" "${REMOTE_BACKUP_DELETE}" "\"img\":\"${SP_VOL}\",\"reason\":\"tm_delete\""
                 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-                    if [[ ${LCM_STATE} -ne 15 ]]; then
+                    if ! vmSnapshotsKeptOnRecreate; then
                         storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
                     else
-                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=${LCM_STATE}"
+                        splog "VMSNAPSHOT ${SP_VOL}-${VMSNAPSHOT_TAG}-* not deleted LCM_STATE=${LCM_STATE} VMSNAPSHOT_KEEP_ON_RECREATE=${VMSNAPSHOT_KEEP_ON_RECREATE}"
                     fi
                 fi
             fi
@@ -273,7 +290,7 @@ else
 fi
 
 if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
-    if [[ ${LCM_STATE} -ne 15 ]]; then
+    if ! vmSnapshotsKeptOnRecreate; then
         # Check if we need to also delete regular snapshots
         if boolTrue "IMMUTABLE" "${IMMUTABLE}" && [[ "${TYPE}" == "CDROM" ]]; then
             # CDROM case: delete both regular "snap" and VM "ONESNAP" snapshots
@@ -283,7 +300,7 @@ if boolTrue "VMSNAPSHOT_DELETE_ON_TERMINATE"; then
             storpoolSnapshotsDelete "${SP_VOL}" "${VMSNAPSHOT_TAG}"
         fi
     else
-        splog "VMSNAPSHOT(s) not deleted because LCM_STATE=${LCM_STATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
+        splog "VMSNAPSHOT(s) not deleted because LCM_STATE=${LCM_STATE} VMSNAPSHOT_KEEP_ON_RECREATE=${VMSNAPSHOT_KEEP_ON_RECREATE} (${SP_VOL}-${VMSNAPSHOT_TAG}-*)"
     fi
 else
     splog "skipped VMSNAPSHOT_DELETE_ON_TERMINATE"

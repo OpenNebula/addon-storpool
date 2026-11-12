@@ -48,6 +48,13 @@ VMSNAPSHOT_FSFREEZE=0
 #
 VMSNAPSHOT_DELETE_ON_TERMINATE=1
 
+# Keep the VM snapshots of the disks on `onevm recover --recreate`.
+# OpenNebula 6.6 and later drop the VM snapshot records on a recreate, so the
+# StorPool snapshots are deleted together with the disks (default).
+# OpenNebula before 6.6 keeps the records: set to 1 to keep the snapshots too.
+#
+#VMSNAPSHOT_KEEP_ON_RECREATE=0
+
 # Restart the libvirt domain after a VM snapshot revert.
 # The revert destroys the domain to revert the volumes. By default the domain
 # stays destroyed and OpenNebula reports the VM in POWEROFF at the next monitor

@@ -129,6 +129,17 @@ not touched until the revert, and when the re-creation fails the VM stays in
 the syslog of the front-end (`vmm_sp_snapshot_revert-storpool`) and of the
 host (`vmm_sp_snapshot_revert_r`).
 
+### Keep VM snapshots on recreate
+
+OpenNebula 6.6 and later drop the VM snapshot records when a VM is recreated
+(`onevm recover --recreate`), so by default the addon deletes the StorPool
+snapshots of the VM snapshots together with the disks. OpenNebula before 6.6
+keeps the records; to keep the StorPool snapshots as well:
+
+```
+echo "VMSNAPSHOT_KEEP_ON_RECREATE=1" >> $ONE_LOCATION/remotes/addon-storpoolrc
+```
+
 ### VM snapshot limits
 
 To enable VM snapshot limits:
