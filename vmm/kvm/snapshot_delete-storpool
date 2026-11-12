@@ -69,6 +69,15 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
         SWTPM_VOL="${ONE_PX}-sys-${VM_ID}-SWTPM"
         diskVolumes["${SWTPM_VOL}"]="${SWTPM_VOL}"
     fi
+
+    declare -A snapNames
+    for v in "${!diskVolumes[@]}"; do
+        kvGetUid "${v}-${SNAP_ID}"
+        _kvret=$?
+        [[ ${_kvret} -ne 2 ]] || failWith "VM ${VM_ID} snapshot ${SNAP_ID} not deleted, KV lookup of ${v}-${SNAP_ID} failed"
+        [[ ${_kvret} -ne 0 ]] || snapNames["${SP_UID}"]="${v}-${SNAP_ID}"
+    done
+
     if DO_MULTICLUSTER=1 DO_ALLCLUSTERS=1 DO_REMOTE="" storpoolRetry SnapshotsList; then
         while read -r -u "${jqfh}" sp_uid img; do
             if boolTrue "DDEBUG_VMSNAPSHOT"; then
@@ -80,13 +89,15 @@ if boolTrue "VMSNAPSHOT_OVERRIDE"; then
                 fi
                 continue
             fi
-            DO_REMOTE="" DO_MULTICLUSTER=1 storpoolRetry SnapshotDelete "${sp_uid}" >/dev/null
-            kvDel "${img}-${SNAP_ID}" "${sp_uid}"
+            snapNames["${sp_uid}"]="${img}-${SNAP_ID}"
         done {jqfh}< <(jq -r --arg snp "${SNAP_ID}" --arg vmtag "${VM_TAG}" --arg vmid "${VM_ID}" \
                     '(if (.data|type)=="array" then .data[] else .data.clusters[].response.data[]? end)
                      |select(.tags[$vmtag]==$vmid)|select(.tags["snap"]==$snp)|select(.deleted==false)|.name+" "+.tags["img"]' \
                     "${TMPDIR}/SnapshotsList.json" || true)
         exec {jqfh}<&-
+        for sp_uid in "${!snapNames[@]}"; do
+            storpoolSnapshotDelete "${sp_uid}" || failWith "VM ${VM_ID} snapshot ${SNAP_ID}: ${sp_uid} deleted, KV entry ${snapNames["${sp_uid}"]} not removed"
+        done
         splog "END VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID}"
     else
         splog "END ($?) VM_ID=${VM_ID} VMHOST=${VMHOST} SNAP_ID=${SNAP_ID}"
