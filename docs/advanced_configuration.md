@@ -20,13 +20,14 @@ It is possible to use the OpenNebula's Cluster configuration to manage hosts tha
 
 The monitor reads the volume-template status of one StorPool cluster. Set `SP_CLUSTER_ID` on the datastore when the API serves more than one cluster and the front end is not a member of the cluster this datastore should use. Otherwise the monitor helper records it: from `SP_REMOTE_LOCATION` when that is set, from the only cluster in the API response, or from the front end's `SP_CLUSTER_ID` when that id is one of the clusters in the response.
 
-Cloning an image (`oneimage clone <image> <name> --datastore <id>`) to a datastore in another StorPool location sends the image's snapshot through the StorPool bridge. The front end exports the snapshot from the source cluster to the destination location (`SnapshotExport`), pulls it on the destination (`SnapshotFromRemote`, on the destination datastore's template or the cluster's default template from `MgmtConfig`), creates the new image from it and removes the export again. No host attaches either volume, so such a destination datastore needs neither hosts nor a `BRIDGE_LIST`. The requirements are:
+Cloning an image (`oneimage clone <image> <name> --datastore <id>`) to a datastore on another StorPool cluster sends the image's snapshot through the StorPool bridge. The front end exports the snapshot from the source cluster to the destination location (`SnapshotExport`), pulls it on the destination cluster (`SnapshotFromRemote`, on the destination datastore's template or the cluster's default template from `MgmtConfig`), creates the new image from it and removes the export again. No host attaches either volume, so such a destination datastore needs neither hosts nor a `BRIDGE_LIST`. The requirements are:
 
-* the front end reaches the API of both clusters (the remote one through the datastore's `SP_API_HTTP_HOST`, `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN`);
-* the bridges of the two locations are connected;
+* the front end reaches the API of the destination cluster. A datastore in another location needs its own `SP_API_HTTP_HOST`, `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN`. A datastore on another cluster of the same location can keep the front end's API and set only `SP_CLUSTER_ID`; the calls for that cluster then go through `RemoteCommand`;
+* the bridges of the two clusters are connected;
+* the destination cluster has a default template when the datastore has no template of its own;
 * `CLONE_EXPORT_WAIT` (in `addon-storpoolrc`, default 60) is the number of seconds to wait until the destination lists the exported snapshot.
 
-A clone between two clusters of the same location still copies the data with `dd` through a `BRIDGE_LIST` host of each datastore (or `SP_CLONE_GW`).
+Within one location the new volume is rebased to no parent (`VolumeRebase`) before the pulled snapshot is deleted, so nothing on the destination cluster refers to the source snapshot and the source image can be deleted. When the source snapshot is already on the destination cluster (the multi-cluster moved it there), the clone is a plain StorPool clone on that cluster.
 
 There are rare cases when the driver could not determine the StorPool node ID. To resolve this issue, set in the OpenNebula's **Host** template the `SP_OURID` variable (see [Identification and voting](https://kb.storpool.com/admin_guide/conf_file/conf_file_id_voting.html)).
 

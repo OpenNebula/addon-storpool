@@ -1264,7 +1264,7 @@ function storpoolWrapper()
             fi
             ;;
         # POST API/NAME {JSON} // ${TMPDIR}/${cmd}.json
-        VolumeDelete|VolumeFreeze|VolumeUpdate|SnapshotUpdate|SnapshotDelete)
+        VolumeDelete|VolumeFreeze|VolumeUpdate|VolumeRebase|SnapshotUpdate|SnapshotDelete)
             export DATA_JSON="${TMPDIR}/${method}.json"
             shift
             res="$(storpoolApi "${cmd}/$1" "{$2}" "${SP_API_TIMEOUT:-300}" | tee "${DATA_JSON}")"
@@ -5347,7 +5347,7 @@ function storpoolBackupTargetKind()
 function storpoolRemoteCopies()
 {
     local _ids="$1" _id=""
-    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null || return $?
+    DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null || return $?
     for _id in ${_ids}; do
         jq -r --arg g "${_id#\~}" '.data.snapshots[]|select(.remoteId==$g)|"\(.remoteId) \(.location) \(.size|tostring) \(.createdFromGlobalId // "-") \(.tags.bkp // "-")"' \
             "${TMPDIR}/SnapshotsRemoteList.json" 2>/dev/null | head -n 1 || true
@@ -6204,7 +6204,7 @@ function spBackupPullTemplate()
         _name="$(spDefaultTemplateName "${_json}" "${SP_CLUSTER_ID}")"
         [[ -z "${_name}" ]] || break
     done
-    if [[ -z "${_name}" ]] && DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry MgmtConfig >/dev/null; then
+    if [[ -z "${_name}" ]] && DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry MgmtConfig >/dev/null; then
         _name="$(spDefaultTemplateName "${TMPDIR}/MgmtConfig.json" "")"
     fi
     if [[ -z "${_name}" ]]; then
@@ -6221,7 +6221,7 @@ function storpoolPulledSnapshotInfo()
 {
     local _uid="$1" _ret=1
     unset X_NAME X_SIZE X_GLOBALID X_TEMPLATENAME X_RECOVERING
-    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry Snapshot "${_uid}" >/dev/null
+    DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry Snapshot "${_uid}" >/dev/null
     _ret=$?
     if [[ ${_ret} -eq 0 ]]; then
         IFS=';' read -r X_SIZE X_GLOBALID X_NAME X_TEMPLATENAME X_RECOVERING <<< "$(jq -r \
@@ -6240,7 +6240,7 @@ function storpoolVolumeFromPulledSnapshot()
     _tags="$(tagsHelper "${_tag_k}" "${_tag_v}")"
     _json="\"parent\":\"${_snap}\",\"tags\":{${_tags}}"
     [[ -z "${_template}" ]] || _json+=",\"template\":\"${_template}\""
-    SP_UID="$(DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry VolumeCreate "${_json}")"
+    SP_UID="$(DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry VolumeCreate "${_json}")"
     _ret=$?
     export SP_UID
     splog "[I] pulled snapshot ${_snap} -> created volume ${SP_UID} ${_vol} (${_ret})"
@@ -6258,7 +6258,7 @@ function storpoolVolumeFromPulledSnapshot()
 function storpoolPulledSnapshotDrop()
 {
     local _uid="$1" _ret=0
-    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotDelete "${_uid}" >/dev/null
+    DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotDelete "${_uid}" >/dev/null
     _ret=$?
     [[ ${_ret} -ne 2 ]] || _ret=0
     if [[ ${_ret} -ne 0 ]]; then
@@ -6267,19 +6267,21 @@ function storpoolPulledSnapshotDrop()
     return "${_ret}"
 }
 
-# storpoolSnapshotPullRemote NAME REMOTE_ID LOCATION TEMPLATE "tagkeys" "tagvals": SnapshotFromRemote, then wait until recovered; SP_UID is set
+# storpoolSnapshotPullRemote NAME REMOTE_ID LOCATION TEMPLATE "tagkeys" "tagvals": SnapshotFromRemote, then wait until recovered; SP_UID and SP_PULL_NAME are set
 function storpoolSnapshotPullRemote()
 {
     local _name="$1" _rid="${2#\~}" _loc="$3" _template="$4" _tag_key="$5" _tag_val="$6"
     local _json="" _tags="" _state="" _ret=1 _gid="" _start=0 _local=""
     SP_UID=""
     SP_PULL_REUSED=""
-    export SP_PULL_REUSED
-    if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
+    SP_PULL_NAME=""
+    export SP_PULL_REUSED SP_PULL_NAME
+    if DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteList >/dev/null; then
         _local="$(jq -r --arg g "${_rid}" '[.data.snapshots[]|select(.remoteId==$g)|.localSnapshot // empty]|first // empty' "${TMPDIR}/SnapshotsRemoteList.json" 2>/dev/null || true)"
         if [[ -n "${_local}" ]] && storpoolPulledSnapshotInfo "~${_rid}" && [[ "${X_RECOVERING}" == "false" ]]; then
             SP_UID="~${_rid}"
             SP_PULL_REUSED=1
+            SP_PULL_NAME="${X_NAME}"
             export SP_UID
             splog "[I] ${_rid} from ${_loc} is already pulled as ${X_NAME}, reusing it"
             return 0
@@ -6287,7 +6289,7 @@ function storpoolSnapshotPullRemote()
     fi
     _tags="$(tagsHelper "${_tag_key}" "${_tag_val}")"
     _json="\"remoteId\":\"${_rid}\",\"remoteLocation\":\"${_loc}\",\"name\":\"${_name}\",\"template\":\"${_template}\"${_tags:+,\"tags\":{${_tags}}}"
-    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 storpoolRetry SnapshotFromRemote "${_json}" >/dev/null
+    DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 storpoolRetry SnapshotFromRemote "${_json}" >/dev/null
     _ret=$?
     if [[ ${_ret} -ne 0 ]]; then
         splog "[E] SnapshotFromRemote ${_rid} from ${_loc} as ${_name} failed (${_ret})"
@@ -6298,7 +6300,7 @@ function storpoolSnapshotPullRemote()
     _start="$(date +%s || true)"
     while true; do
         _state=""
-        if DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_gid}" >/dev/null; then
+        if DO_MULTICLUSTER="" DO_REMOTE="${SP_PULL_REMOTE-}" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry Snapshot "~${_gid}" >/dev/null; then
             _state="$(jq -r '.data[0].recoveringFromRemote' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
             [[ "${_state}" != "false" ]] || break
             _start="$(date +%s || true)"
@@ -6312,6 +6314,7 @@ function storpoolSnapshotPullRemote()
         sleep "${BACKUP_WAIT_SLEEP}"
     done
     SP_UID="~${_gid}"
+    SP_PULL_NAME="${_name}"
     export SP_UID
     splog "[I] pulled ${_rid} from ${_loc} as ${_name} (${SP_UID}) on template ${_template}"
     return 0
@@ -6332,12 +6335,12 @@ function spLocationName()
     jq -r --arg id "${_id}" '[.data.locations[]|select(.id==$id)|.name]|first // empty' "${TMPDIR}/LocationsList.json" 2>/dev/null || true
 }
 
-# storpoolSnapshotExported UID LOCATION -> 0 when ExportsList of the current API has the snapshot exported to LOCATION
+# storpoolSnapshotExported UID LOCATION [REMOTE] -> 0 when ExportsList of the current API (or RemoteCommand/REMOTE) has the snapshot exported to LOCATION (not an automatic multi-cluster export)
 function storpoolSnapshotExported()
 {
-    local _gid="${1#\~}" _loc="$2"
-    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ExportsList >/dev/null || return 2
-    jq -e --arg g "${_gid}" --arg l "${_loc}" '[(.data.exports // [])[]|select(.globalId==$g and .location==$l)]|length>0' \
+    local _gid="${1#\~}" _loc="$2" _remote="${3-}"
+    DO_MULTICLUSTER="" DO_REMOTE="${_remote}" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ExportsList >/dev/null || return 2
+    jq -e --arg g "${_gid}" --arg l "${_loc}" '[(.data.exports // [])[]|select(.globalId==$g and .location==$l and ((.mcAutoExport // false)|not))]|length>0' \
         "${TMPDIR}/ExportsList.json" >/dev/null 2>&1
 }
 
