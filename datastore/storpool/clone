@@ -75,6 +75,123 @@ fi
 
 echo "${SP_DST}"
 
+function cloneApi()
+{
+    local _i=0
+    local -a _names=(SP_API_HTTP_HOST SP_API_HTTP_PORT SP_AUTH_TOKEN SP_CLUSTER_ID) _vals=()
+    if [[ "$1" == "SRC" ]]; then
+        _vals=("${SRC_SP_API_HTTP_HOST}" "${SRC_SP_API_HTTP_PORT}" "${SRC_SP_AUTH_TOKEN}" "${SRC_SP_CLUSTER_ID}")
+    else
+        _vals=("${DST_SP_API_HTTP_HOST}" "${DST_SP_API_HTTP_PORT}" "${DST_SP_AUTH_TOKEN}" "${DST_SP_CLUSTER_ID}")
+    fi
+    for _i in "${!_names[@]}"; do
+        if [[ -n "${_vals[_i]}" ]]; then
+            export "${_names[_i]}=${_vals[_i]}"
+        else
+            unset "${_names[_i]}"
+        fi
+    done
+}
+
+function cloneFail()
+{
+    splog "[E] $1"
+    log_error "$1"
+    error_message "$1"
+    exit 255
+}
+
+function cloneBridgeUnexport()
+{
+    cloneApi SRC
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotUnexport \
+        "\"snapshot\":\"${PARENT_UID}\",\"location\":\"${DST_LOCATION}\"" >/dev/null \
+        || splog "[W] ${PARENT_UID} not unexported from ${DST_LOCATION} ($?)"
+    cloneApi DST
+}
+
+function cloneBridgePullDrop()
+{
+    [[ -n "${PULLED_UID}" ]] || return 0
+    cloneApi DST
+    storpoolPulledSnapshotDrop "${PULLED_UID}" && PULLED_UID=""
+}
+
+function cloneViaBridge()
+{
+    local _lock="/var/lock/one/sp-clone-${PARENT_UID#\~}.lock" _ret=0 _exported=""
+    cloneApi SRC
+    SRC_LOCATION="$(spLocationName "${SRC_SP_CLUSTER_ID%%.*}")"
+    DST_LOCATION="$(spLocationName "${DST_SP_CLUSTER_ID%%.*}")"
+    if [[ -z "${SRC_LOCATION}" ]] || [[ -z "${DST_LOCATION}" ]]; then
+        cloneFail "Can't resolve the StorPool locations of ${SRC_SP_CLUSTER_ID} and ${DST_SP_CLUSTER_ID}"
+    fi
+    splog "[I] ${PARENT_UID} ${SRC_LOCATION} --> ${DST_LOCATION} via the StorPool bridge as ${SP_VOL}"
+    if exec {CLONE_LOCK_FD}>"${_lock}"; then
+        flock -x "${CLONE_LOCK_FD}"
+    else
+        splog "[W] can't open ${_lock}, concurrent clones of ${PARENT_UID} are not serialized"
+    fi
+
+    storpoolSnapshotExported "${PARENT_UID}" "${DST_LOCATION}"
+    _ret=$?
+    case ${_ret} in
+        0)
+            splog "[I] ${PARENT_UID} is already exported to ${DST_LOCATION}, left exported"
+            ;;
+        1)
+            DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotExport \
+                "\"snapshot\":\"${PARENT_UID}\",\"location\":\"${DST_LOCATION}\"" >/dev/null \
+                || cloneFail "Can't export ${PARENT_UID} to ${DST_LOCATION}"
+            _exported=1
+            trapAdd "cloneBridgeUnexport"
+            ;;
+        *)
+            cloneFail "Can't list the StorPool exports of ${SRC_LOCATION}"
+            ;;
+    esac
+
+    oneDsDriverAction
+    IMAGE_DS_SP_QOSCLASS="${DS_SP_QOSCLASS}"
+    SP_QOSCLASS="${IMAGE_SP_QOSCLASS:-${IMAGE_DS_SP_QOSCLASS:-${DEFAULT_QOSCLASS}}}"
+    debug_sp_qosclass
+    cloneApi DST
+
+    storpoolRemoteCopiesWait "${PARENT_UID}" "${CLONE_EXPORT_WAIT:-60}" \
+        || cloneFail "${PARENT_UID} exported by ${SRC_LOCATION} is not listed in ${DST_LOCATION}"
+    PULL_TEMPLATE="$(spBackupPullTemplate "${SP_TEMPLATE}")"
+    [[ -n "${PULL_TEMPLATE}" ]] || cloneFail "No StorPool template in ${DST_LOCATION} for the pull of ${PARENT_UID}"
+    PULL_NAME="${SP_VOL}-pull-$(mktemp --dry-run XXXXXXXX)"
+    storpoolSnapshotPullRemote "${PULL_NAME}" "${PARENT_UID}" "${SRC_LOCATION}" "${PULL_TEMPLATE}" \
+        "img;${LOC_TAG:-nloc};virt" "${PULL_NAME};${LOC_TAG_VAL};one" \
+        || cloneFail "Can't pull ${PARENT_UID} from ${SRC_LOCATION} to ${DST_LOCATION}"
+    if [[ -z "${SP_PULL_REUSED}" ]]; then
+        PULLED_UID="${SP_UID}"
+        trapAdd "cloneBridgePullDrop"
+    fi
+
+    storpoolVolumeFromPulledSnapshot "${SP_UID}" "${SP_VOL}" "${PULL_TEMPLATE}" \
+        || cloneFail "Can't create ${SP_VOL} from the pulled ${PARENT_UID}"
+    DST_VOL_UID="${SP_UID}"
+    if [[ -n "${PULLED_UID}" ]]; then
+        trapDel "cloneBridgePullDrop"
+        cloneBridgePullDrop || splog "[W] pulled snapshot ${PULLED_UID} not deleted ($?)"
+    fi
+
+    _SOFT_FAIL=1 storpoolVolumeFreeze "${DST_VOL_UID}" "volume" "virt;${LOC_TAG:-nloc};qc" "one;${LOC_TAG_VAL};${SP_QOSCLASS}"
+    _ret=$?
+    if [[ ${_ret} -ne 0 ]]; then
+        DELAY_DELETE="" _SOFT_FAIL=1 storpoolDelete "${DST_VOL_UID}" "force"
+        cloneFail "${DST_VOL_UID} (${SP_VOL}) pulled but not frozen (${_ret})"
+    fi
+
+    if [[ -n "${_exported}" ]]; then
+        trapDel "cloneBridgeUnexport"
+        cloneBridgeUnexport
+    fi
+    splog "DS ${SRC_DS_ID} (${SRC_LOCATION}) --> ${DATASTORE_ID} (${DST_LOCATION}), ${PARENT_UID} -> ${SP_UID} via the StorPool bridge"
+}
+
 #-------------------------------------------------------------------------------
 # Clone Image
 #-------------------------------------------------------------------------------
@@ -84,9 +201,10 @@ SRC_DS_ID="${SRC_DS_ID##*-}"
 
 if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
     #DST_BRIDGE_LIST="${SP_BRIDGE_LIST}"  # TBD: refactor to not use BRIDGE_LIST use the hosts if available
-    #DST_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
-    #DST_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
+    DST_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
+    DST_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
     DST_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"
+    DST_SP_CLUSTER_ID="${SP_CLUSTER_ID}"
     #DST_SP_REPLICATION="${SP_REPLICATION}"
     #DST_SP_PLACEALL="${SP_PLACEALL}"
     #DST_SP_PLACETAIL="${SP_PLACETAIL}"
@@ -100,6 +218,7 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
     SRC_SP_API_HTTP_HOST="${SP_API_HTTP_HOST}"
     SRC_SP_API_HTTP_PORT="${SP_API_HTTP_PORT}"
     SRC_SP_AUTH_TOKEN="${SP_AUTH_TOKEN}"
+    SRC_SP_CLUSTER_ID="${SP_CLUSTER_ID}"
     #SRC_SP_REPLICATION="${SP_REPLICATION}"
     #SRC_SP_PLACEALL="${SP_PLACEALL}"
     #SRC_SP_PLACETAIL="${SP_PLACETAIL}"
@@ -114,6 +233,18 @@ if [[ "${SRC_DS_ID}" -ne "${DATASTORE_ID}" ]]; then
     fi
 
     if [[ ${SRC_SP_AUTH_TOKEN} != "${DST_SP_AUTH_TOKEN}" ]]; then
+        cloneApi SRC
+        SRC_SP_CLUSTER_ID="${SRC_SP_CLUSTER_ID:-$(storpoolApiClusterId)}"
+        cloneApi DST
+        DST_SP_CLUSTER_ID="${DST_SP_CLUSTER_ID:-$(storpoolApiClusterId)}"
+        if [[ -z "${SRC_SP_CLUSTER_ID}" ]] || [[ -z "${DST_SP_CLUSTER_ID}" ]]; then
+            cloneFail "Can't get the StorPool clusters of datastores ${SRC_DS_ID} and ${DATASTORE_ID}"
+        fi
+        if [[ "${SRC_SP_CLUSTER_ID%%.*}" != "${DST_SP_CLUSTER_ID%%.*}" ]]; then
+            cloneViaBridge
+            exit 0
+        fi
+        cloneApi SRC
         #attach SRC volume to BRIDGE_LIST or here
         if [[ -n "${BRIDGE_LIST}" ]]; then
             SRC_HOST="$(get_destination_host "${ID}")"

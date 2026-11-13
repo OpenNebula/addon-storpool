@@ -1114,7 +1114,7 @@ function storpoolWrapper()
     fi
     case "${method}" in
         # POST API {JSON}
-        VolumesReassignWait|SnapshotUnexport|SnapshotsRemoteUnexport)
+        VolumesReassignWait|SnapshotExport|SnapshotUnexport|SnapshotsRemoteUnexport)
             shift
             res="$(storpoolApi "${cmd}" "{$1}" "${SP_API_TIMEOUT:-300}")"
             ret=$?
@@ -6315,6 +6315,30 @@ function storpoolSnapshotPullRemote()
     export SP_UID
     splog "[I] pulled ${_rid} from ${_loc} as ${_name} (${SP_UID}) on template ${_template}"
     return 0
+}
+
+# storpoolApiClusterId -> SP_CLUSTER_ID of the cluster serving the current API (ServicesList)
+function storpoolApiClusterId()
+{
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ServicesList >/dev/null || return $?
+    jq -r '.data.clusterId // empty' "${TMPDIR}/ServicesList.json" 2>/dev/null || true
+}
+
+# spLocationName LOCATION_ID -> the name of the location from LocationsList of the current API
+function spLocationName()
+{
+    local _id="$1"
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry LocationsList >/dev/null || return $?
+    jq -r --arg id "${_id}" '[.data.locations[]|select(.id==$id)|.name]|first // empty' "${TMPDIR}/LocationsList.json" 2>/dev/null || true
+}
+
+# storpoolSnapshotExported UID LOCATION -> 0 when ExportsList of the current API has the snapshot exported to LOCATION
+function storpoolSnapshotExported()
+{
+    local _gid="${1#\~}" _loc="$2"
+    DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry ExportsList >/dev/null || return 2
+    jq -e --arg g "${_gid}" --arg l "${_loc}" '[(.data.exports // [])[]|select(.globalId==$g and .location==$l)]|length>0' \
+        "${TMPDIR}/ExportsList.json" >/dev/null 2>&1
 }
 
 # oneBackupNvramPath VM_XML VMDIR -> the UEFI vars file of the VM on its host (empty when none or a StorPool NVRAM volume)

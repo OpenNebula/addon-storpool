@@ -20,6 +20,14 @@ It is possible to use the OpenNebula's Cluster configuration to manage hosts tha
 
 The monitor reads the volume-template status of one StorPool cluster. Set `SP_CLUSTER_ID` on the datastore when the API serves more than one cluster and the front end is not a member of the cluster this datastore should use. Otherwise the monitor helper records it: from `SP_REMOTE_LOCATION` when that is set, from the only cluster in the API response, or from the front end's `SP_CLUSTER_ID` when that id is one of the clusters in the response.
 
+Cloning an image (`oneimage clone <image> <name> --datastore <id>`) to a datastore in another StorPool location sends the image's snapshot through the StorPool bridge. The front end exports the snapshot from the source cluster to the destination location (`SnapshotExport`), pulls it on the destination (`SnapshotFromRemote`, on the destination datastore's template or the cluster's default template from `MgmtConfig`), creates the new image from it and removes the export again. No host attaches either volume, so such a destination datastore needs neither hosts nor a `BRIDGE_LIST`. The requirements are:
+
+* the front end reaches the API of both clusters (the remote one through the datastore's `SP_API_HTTP_HOST`, `SP_API_HTTP_PORT` and `SP_AUTH_TOKEN`);
+* the bridges of the two locations are connected;
+* `CLONE_EXPORT_WAIT` (in `addon-storpoolrc`, default 60) is the number of seconds to wait until the destination lists the exported snapshot.
+
+A clone between two clusters of the same location still copies the data with `dd` through a `BRIDGE_LIST` host of each datastore (or `SP_CLONE_GW`).
+
 There are rare cases when the driver could not determine the StorPool node ID. To resolve this issue, set in the OpenNebula's **Host** template the `SP_OURID` variable (see [Identification and voting](https://kb.storpool.com/admin_guide/conf_file/conf_file_id_voting.html)).
 
 * `SP_OURID`: The node id in the StorPool's configuration. Number.
