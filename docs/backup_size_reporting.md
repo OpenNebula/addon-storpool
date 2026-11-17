@@ -36,6 +36,9 @@ The datastore `backup` action reports one size per backup, in mebibytes.
 Restores use the backup manifest and `vm.xml`. `KEEP_LAST` counts increments
 or images. Neither looks at the size.
 
+The optional proof-of-concept [FireEdge tab](backup_space.md) shows the
+current StorPool figures of each backup next to the recorded size.
+
 ## The cache interval
 
 `VolumesSpace` and `SnapshotsSpace` are cluster-wide, so the drivers read the

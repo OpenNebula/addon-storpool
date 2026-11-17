@@ -144,6 +144,10 @@ never do. Which backup
 schedules keep the sizes usable is in
 [Backup size reporting](backup_size_reporting.md).
 
+An optional proof-of-concept FireEdge tab shows the current StorPool figures
+of each backup next to the size OpenNebula recorded; see
+[StorPool backups tab for FireEdge](backup_space.md).
+
 ## Cancel and failures
 
 `onevm backup-cancel` stops the backup and removes its snapshots, including
