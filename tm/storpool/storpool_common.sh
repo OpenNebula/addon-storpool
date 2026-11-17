@@ -166,6 +166,10 @@ export BACKUP_SKIP_OTHER_DISKS=0
 # save the VM's vTPM data
 export ONE_TPM_SAVE=1
 export BACKUP_KV_INDEX=1
+export BACKUP_WAIT_SLEEP=3
+export BACKUP_DROP_WAIT=30
+export BACKUP_PULL_GRACE=120
+export SP_BACKUP_DELETE_AFTER=60
 
 DRV_ACTION="${DRV_ACTION:-}"
 
@@ -5366,7 +5370,7 @@ function storpoolRemoteCopiesWait()
             splog "[W] ${_listed} of $(wc -w <<< "${_ids}") copies listed by SnapshotsRemoteList after ${_timeout}s"
             return 1
         fi
-        sleep "${BACKUP_WAIT_SLEEP:-3}"
+        sleep "${BACKUP_WAIT_SLEEP}"
     done
 }
 
@@ -5409,7 +5413,7 @@ function storpoolBackupWait()
         if boolTrue "DEBUG_BACKUP"; then
             splog "[D] waiting for the backup transfer (exporting: ${_left:-none}${_missing:+; ${_missing}}) $((_now - _start))s"
         fi
-        sleep "${BACKUP_WAIT_SLEEP:-3}"
+        sleep "${BACKUP_WAIT_SLEEP}"
     done
 }
 
@@ -5527,8 +5531,8 @@ function oneBackupPinnedScan()
         if oneBackupEpochQuiet "${_vm}" "${_pinned}"; then
             if [[ ${_absent} -eq 0 ]]; then
                 _absent="${_now}"
-            elif [[ $((_now - _absent)) -ge ${BACKUP_DROP_WAIT:-30} ]]; then
-                splog "[E] VM ${_vm} backup epoch ${_pinned} is gone (no transient, export or copy) after ${BACKUP_DROP_WAIT:-30}s"
+            elif [[ $((_now - _absent)) -ge ${BACKUP_DROP_WAIT} ]]; then
+                splog "[E] VM ${_vm} backup epoch ${_pinned} is gone (no transient, export or copy) after ${BACKUP_DROP_WAIT}s"
                 return 1
             fi
         else
@@ -5541,7 +5545,7 @@ function oneBackupPinnedScan()
         if boolTrue "DEBUG_BACKUP"; then
             splog "[D] VM ${_vm} waiting for backup epoch ${_pinned} ($((_now - _start))s)"
         fi
-        sleep "${BACKUP_WAIT_SLEEP:-3}"
+        sleep "${BACKUP_WAIT_SLEEP}"
     done
 }
 
@@ -5687,11 +5691,11 @@ function storpoolBackupCopyDrop()
                     splog "[I] no copy of ~${_rid} on ${SP_BACKUP_LOCATION}"
                     return 0
                 fi
-                if [[ $(( $(date +%s || true) - _start )) -ge ${BACKUP_DROP_WAIT:-30} ]]; then
+                if [[ $(( $(date +%s || true) - _start )) -ge ${BACKUP_DROP_WAIT} ]]; then
                     splog "[E] a copy of ~${_rid} is listed by SnapshotsRemoteList but none on ${SP_BACKUP_LOCATION} has backupOfGlobalId ${_rid}"
                     return 1
                 fi
-                sleep "${BACKUP_WAIT_SLEEP:-3}"
+                sleep "${BACKUP_WAIT_SLEEP}"
             done
             DO_MULTICLUSTER="" DO_REMOTE="${SP_BACKUP_LOCATION}" SP_LOCATION="" NO_MC_RETRY=1 _SOFT_FAIL=1 _QUIET_FAIL=1 storpoolRetry SnapshotUnexport \
                 "\"snapshot\":\"~${_copy}\",\"all\":true,\"force\":true" >/dev/null || true
@@ -5708,7 +5712,7 @@ function storpoolBackupCopyDrop()
         remote)
             _json="\"remoteSnapshots\":[{\"globalSnapshotId\":\"${_rid}\",\"location\":\"${_loc}\""
             if [[ "${SP_BACKUP_REMOTE_DELETE^^}" != "NO" ]]; then
-                _json+=",\"deleteAfter\":${SP_BACKUP_DELETE_AFTER:-60}"
+                _json+=",\"deleteAfter\":${SP_BACKUP_DELETE_AFTER}"
             fi
             _json+="}]"
             DO_MULTICLUSTER="" DO_REMOTE="" NO_MC_RETRY=1 _SOFT_FAIL=1 storpoolRetry SnapshotsRemoteUnexport "${_json}" >/dev/null
@@ -6298,14 +6302,14 @@ function storpoolSnapshotPullRemote()
             _state="$(jq -r '.data[0].recoveringFromRemote' "${TMPDIR}/Snapshot.json" 2>/dev/null || true)"
             [[ "${_state}" != "false" ]] || break
             _start="$(date +%s || true)"
-        elif [[ $(( $(date +%s || true) - _start )) -ge ${BACKUP_PULL_GRACE:-120} ]]; then
-            splog "[E] pull of ${_rid} from ${_loc} as ${_name}: snapshot ~${_gid} not found for ${BACKUP_PULL_GRACE:-120}s after SnapshotFromRemote"
+        elif [[ $(( $(date +%s || true) - _start )) -ge ${BACKUP_PULL_GRACE} ]]; then
+            splog "[E] pull of ${_rid} from ${_loc} as ${_name}: snapshot ~${_gid} not found for ${BACKUP_PULL_GRACE}s after SnapshotFromRemote"
             return 1
         fi
         if boolTrue "DEBUG_BACKUP"; then
             splog "[D] pull of ${_rid} from ${_loc} as ${_name} (~${_gid}): recoveringFromRemote=${_state:-not listed}"
         fi
-        sleep "${BACKUP_WAIT_SLEEP:-3}"
+        sleep "${BACKUP_WAIT_SLEEP}"
     done
     SP_UID="~${_gid}"
     export SP_UID

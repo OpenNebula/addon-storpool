@@ -116,6 +116,27 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #BACKUP_KV_INDEX=1
 
+# Seconds between the checks of a StorPool backup datastore remote transfer.
+# Default: 3
+#
+#BACKUP_WAIT_SLEEP=3
+
+# Seconds to wait for a remote copy of a backup to be listed before it is removed.
+# Default: 30
+#
+#BACKUP_DROP_WAIT=30
+
+# Seconds to wait for a snapshot pulled back from a remote backup target.
+# Default: 120
+#
+#BACKUP_PULL_GRACE=120
+
+# Seconds the remote cluster is asked to wait before it deletes the copy of a
+# deleted backup (the remote minimumDeleteDelay is the floor).
+# Default: 60
+#
+#SP_BACKUP_DELETE_AFTER=60
+
 # Optional common arguments to OpenNebula shell tools
 #ONE_ARGS=
 
