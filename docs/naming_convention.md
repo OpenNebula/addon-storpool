@@ -167,4 +167,16 @@ qc=${SP_QOSCLASS}        # when a QoS class is resolved for the VM
 ```
 It has no `diskid` tag. It is listed in the `oneVmVolumes` maps with an empty
 `DISK_ID`, so VM snapshots (`${ONE_PX}-sys-${VM_ID}-NVRAM-ONESNAP-<id>-<ts>`),
-migration and terminate handle it like a VM disk; backups skip it.
+migration and terminate handle it like a VM disk. Backups to a file-based
+backup datastore skip it; the StorPool backup datastore includes it.
+
+## Backups
+
+A backup in a StorPool backup datastore is a set of anonymous StorPool
+snapshots taken together: one per backed-up disk, one of the NVRAM volume
+when the VM has one, and one of the service volume `${ONE_PX}-sys-${VM_ID}-SVC-${EPOCH}`. The service
+volume holds the backup's `vm.xml` and, when the VM has them, the vTPM state
+and the UEFI vars file; it is deleted right after the snapshot, which keeps
+its data. `${EPOCH}` is the time of the backup in seconds since 1970. The
+snapshots are registered in the KV store under
+`bkName/${ONE_PX}-bak-${VM_ID}-${EPOCH}[-${DISK_ID}]` unless `BACKUP_KV_INDEX=0`.
