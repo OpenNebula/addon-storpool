@@ -74,6 +74,7 @@ Optional:
 * Support for [UEFI Normal/Secure boot](docs/uefi_boot.md) with persistent UEFI NVRAM stored on StorPool backed block device.
 * [Interactive backups](docs/interactive_backup.md) through OneBEX for third-party backup applications (Veeam), a Technology Preview: the StorPool exporter serves the backup snapshot straight from the hypervisor, full backups only.
 * [StorPool backup datastore](docs/backup_datastore.md): OpenNebula backups (FULL or INCREMENT) kept as StorPool snapshots, on the cluster or sent to another StorPool cluster/location, with the vTPM state and the UEFI NVRAM; restores are clones of the snapshots.
+* [Clone images to a datastore on another StorPool cluster](docs/advanced_configuration.md#clone-images-to-another-storpool-cluster) through the StorPool bridge.
 * Support CDROM hotplug.
 * Use CPU tune parameters instead/or in addition/ of CPU shares.
 
