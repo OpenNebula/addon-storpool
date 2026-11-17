@@ -85,7 +85,7 @@ Optional:
 * VM snapshotting is not possible because it is handled internally by libvirt, which does not support RAW disks. It is possible to reconfigure the 'VM snapshot' interface of OpenNebula to do atomic disk snapshots in a single StorPool transaction when only StorPool backed datastores are used.
 * Backups to a file-based backup datastore (rsync, restic) are FULL only; the StorPool backup datastore takes FULL and INCREMENT backups.
 * The interactive (OneBEX/Veeam) backups are a Technology Preview that needs an OpenNebula change not in a release yet (see [Interactive backups](docs/interactive_backup.md#limitations)).
-* The StorPool backup datastore refuses VMs with non-StorPool disks, needs `DATASTORE_CAPACITY_CHECK=NO`, and a remote site deletes the copies of removed backups only with `minimumDeleteDelay` set on its bridge entry (see [the limitations](docs/backup_datastore.md#limitations)).
+* The StorPool backup datastore has [its own limitations](docs/backup_datastore.md#limitations).
 * Persistent Images with SHAREABLE attribute are not supported.
 * Persistent Images with IMMUTABLE attribute are not supported.
 * Tested only with KVM hypervisor and Alma Linux 8/Ubuntu 24.04. Should work on other Linux OS.
