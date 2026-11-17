@@ -183,7 +183,7 @@ function cloneViaBridge()
     debug_sp_qosclass
     cloneApi DST
 
-    storpoolRemoteCopiesWait "${PARENT_UID}" "${CLONE_EXPORT_WAIT:-60}" \
+    storpoolRemoteCopiesWait "${PARENT_UID}" "${CLONE_EXPORT_WAIT}" \
         || cloneFail "${PARENT_UID} exported by ${SRC_LOCATION} is not listed in ${DST_LOCATION}"
     PULL_TEMPLATE="$(SP_CLUSTER_ID="${DST_SP_CLUSTER_ID}" spBackupPullTemplate "${SP_TEMPLATE}")"
     [[ -n "${PULL_TEMPLATE}" ]] || cloneFail "No StorPool template in ${DST_SP_CLUSTER_ID} for the pull of ${PARENT_UID}: set the default template of that cluster (MgmtConfig)"

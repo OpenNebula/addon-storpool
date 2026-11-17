@@ -137,6 +137,12 @@ VMSNAPSHOT_ENABLE_LIMIT=1
 #
 #SP_BACKUP_DELETE_AFTER=60
 
+# Seconds an image clone to another StorPool cluster waits until the
+# destination lists the exported snapshot.
+# Default: 60
+#
+#CLONE_EXPORT_WAIT=60
+
 # Optional common arguments to OpenNebula shell tools
 #ONE_ARGS=
 
