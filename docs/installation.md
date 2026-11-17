@@ -47,10 +47,6 @@ dnf -y install --enablerepo=epel jq pigz python3-lxml tar
 apt -y install jq pigz python3-lxml tar
 ```
 
-SELinux and AppArmor policy is not installed by `install.sh` and is not
-copied by `onehost sync`. The front-end steps and the per-host steps are
-in [SELinux and AppArmor](selinux_apparmor.md).
-
 ## sudoers for mkfs before OpenNebula 7.4.1
 
 Backward compatibility only. OpenNebula 7.4.1 and later grant `oneadmin`
