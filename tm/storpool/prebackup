@@ -98,7 +98,7 @@ EOF
     fi
     _size=$(( (_tar_size + 16 * 1048576 + 1048575) / 1048576 * 1048576 ))
     [[ ${_size} -ge $((32 * 1048576)) ]] || _size=$((32 * 1048576))
-    storpoolVolumeCreate "${SVC_VOL}" "${_size}" "$(spVolumeTemplateName "${SYSDS_ID}")" "type;${VM_TAG}" "SVC;${VM_ID}"
+    storpoolVolumeCreate "${SVC_VOL}" "${_size}" "$(spVolumeTemplateName "${SYSDS_ID}")" "type;${VM_TAG};vc-policy" "SVC;${VM_ID};no"
     SVC_UID="${SP_UID}"
     if [[ -z "${SVC_UID}" ]]; then
         _msg="Error creating the service volume ${SVC_VOL} of VM ${VM_ID}"
