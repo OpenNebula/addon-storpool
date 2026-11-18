@@ -137,6 +137,8 @@ Cases that push a job down a band even when **T** and **Avol** look fine:
   already present, so a mixed nightly run does not do this by itself.
 * The helper has never seen that StorPool cluster, so the per-cluster file
   is missing.
+* VolumeCare also snapshots the VM's disks between the backups. See
+  [VolumeCare on the same VMs](#volumecare-on-the-same-vms).
 
 ### Flatten of a local chain
 
@@ -187,6 +189,36 @@ older chain) merges those blocks into the oldest kept backup. `USED_MB`
 follows on the next refresh. The image `SIZE` does not, because OpenNebula
 will not resize it. Over a long life the quota drifts low relative to the
 blocks that snapshot then holds.
+
+## VolumeCare on the same VMs
+
+A VM with a VolumeCare policy (`VC_POLICY`, see [VolumeCare](volumecare.md))
+gets VolumeCare snapshots on its disks between its backups. VolumeCare does
+not see or delete the backup snapshots, so the backups and their restores
+are not affected. The sizes are:
+
+* **Local full, increment 0, and remote mode:** unchanged. `spaceUsed`
+  counts the data held by every parent snapshot, VolumeCare's included.
+* **Later local increment:** low. `storedSize`, of the volume or of the
+  backup snapshot, counts the writes since the volume's newest snapshot.
+  When that snapshot is VolumeCare's, the writes between the previous backup
+  and that VolumeCare snapshot are left out. The increment records at most
+  the writes of one VolumeCare interval, whatever **T** is. It is close to
+  0 when a VolumeCare snapshot falls just before the cache sample.
+* **Flatten:** low. The new base assumes the dropped backup snapshot's
+  child is the next backup. With a VolumeCare snapshot between them,
+  StorPool merges the dropped blocks into the VolumeCare snapshot. The new
+  base then misses the data written between the dropped backup and the next
+  VolumeCare snapshot.
+* **`USED_MB`:** the backup snapshots' `storedSize` counts only the blocks
+  they hold themselves. Blocks a VolumeCare snapshot holds are not counted.
+  When VolumeCare deletes an expired snapshot, StorPool merges its blocks
+  into the next snapshot. If that is a backup snapshot, `USED_MB` grows on
+  the next refresh. The image `SIZE` stays as recorded.
+
+A local incremental chain is a lower bound on such a VM. Its sizes are
+right only for the increments with no VolumeCare snapshot between them and
+the previous backup. Local `FULL` backups keep their sizes.
 
 ## Practical schemes
 
@@ -350,6 +382,7 @@ track growth.
 | Local incremental at ≤ **Avol** | Not feasible (size 0) | **Avol** ≤ **T/8**, and **T** above the 4 min helper | **T** ≤ **Avol**. A 15 min job cannot get there |
 | Remote daily full | Ok as "one VM per restore point" | Same as local full, for that reading | You needed the bytes on the target. A non-cluster location shows 0 |
 | Remote daily incremental | Quota ≈ `KEEP_LAST` full copies | Never, for a delta or a single-copy bill | Any cache setting. `KEEP_LAST=1` is a single full copy and no history |
+| Local incremental, the VM also has a VolumeCare policy | Low: the writes before the last VolumeCare snapshot are missing | No VolumeCare snapshot falls between two backups | A VolumeCare interval shorter than **T**: each increment holds at most one VolumeCare interval of writes |
 
 The backup works on every row. The size is worth showing to users, and worth
 a quota, on local full at a daily or weekly pace, and on local daily
